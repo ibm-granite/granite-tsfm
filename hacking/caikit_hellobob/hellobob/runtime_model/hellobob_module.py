@@ -20,7 +20,7 @@ from transformers import pipeline  # pylint: disable=import-error
 
 # Local
 from caikit.core import ModuleBase, ModuleLoader, ModuleSaver, TaskBase, module, task
-from text_sentiment.data_model.classification import ClassificationPrediction, ClassInfo
+from hellobob.data_model.classification import ClassificationPrediction, ClassInfo
 
 
 @task(

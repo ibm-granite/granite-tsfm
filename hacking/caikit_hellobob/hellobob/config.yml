@@ -13,4 +13,4 @@
 # limitations under the License.
 
 runtime:
-    library: text_sentiment
+    library: hellobob

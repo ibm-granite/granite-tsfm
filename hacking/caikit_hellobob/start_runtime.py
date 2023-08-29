@@ -30,7 +30,7 @@ if __name__ == "__main__":
             "merge_strategy": "merge",
             "runtime": {
                 "local_models_dir": models_directory,
-                "library": "text_sentiment",
+                "library": "hellobob",
                 "grpc": {"enabled": True},
                 "http": {"enabled": True},
             },
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     sys.path.append(
         path.abspath(path.join(path.dirname(__file__), "../"))
     )  # Here we assume that `start_runtime` file is at the same level of the
-    # `text_sentiment` package
+    # `hellobob` package
 
     alog.configure(default_level="debug")
 

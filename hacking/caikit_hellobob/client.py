@@ -29,7 +29,7 @@ if __name__ == "__main__":
         config_dict={
             "merge_strategy": "merge",
             "runtime": {
-                "library": "text_sentiment",
+                "library": "hellobob",
                 "grpc": {"enabled": True},
                 "http": {"enabled": True},
             },
@@ -40,7 +40,7 @@ if __name__ == "__main__":
         ServicePackageFactory.ServiceType.INFERENCE,
     )
 
-    model_id = "text_sentiment"
+    model_id = "hellobob"
 
     if get_config().runtime.grpc.enabled:
         # Setup the client
