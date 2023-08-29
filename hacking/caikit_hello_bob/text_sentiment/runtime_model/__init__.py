@@ -13,4 +13,4 @@
 # limitations under the License.
 # # Local
 # Local
-from .hf_module import HelloBobModule
+from .hellobob_module import HelloBobModule
