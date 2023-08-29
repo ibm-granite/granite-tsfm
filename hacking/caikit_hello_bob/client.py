@@ -50,10 +50,10 @@ if __name__ == "__main__":
 
         # Run inference for two sample prompts
         for text in ["I am not feeling well today!", "Today is a nice sunny day"]:
-            request = inference_service.messages.HuggingFaceSentimentTaskRequest(
+            request = inference_service.messages.HelloBobTaskRequest(
                 text_input=text
             )
-            response = client_stub.HuggingFaceSentimentTaskPredict(
+            response = client_stub.HelloBobTaskPredict(
                 request, metadata=[("mm-model-id", model_id)], timeout=1
             )
             print("Text:", text)

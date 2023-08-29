@@ -27,17 +27,17 @@ from text_sentiment.data_model.classification import ClassificationPrediction, C
     required_parameters={"text_input": str},
     output_type=ClassificationPrediction,
 )
-class HuggingFaceSentimentTask(TaskBase):
+class HelloBobTask(TaskBase):
     pass
 
 
 @module(
-    "8f72161-c0e4-49b0-8fd0-7587b3017a35",
-    "HuggingFaceSentimentModule",
+    "845780bb-cca1-4e5c-9bfb-4f09710ba3f8",
+    "HelloBobModule",
     "0.0.1",
-    HuggingFaceSentimentTask,
+    HelloBobTask,
 )
-class HuggingFaceSentimentModule(ModuleBase):
+class HelloBobModule(ModuleBase):
     """Class to wrap sentiment analysis pipeline from HuggingFace"""
 
     def __init__(self, model_path) -> None:

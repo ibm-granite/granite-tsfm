@@ -13,4 +13,4 @@
 # limitations under the License.
 # # Local
 # Local
-from .hf_module import HuggingFaceSentimentModule
+from .hf_module import HelloBobModule

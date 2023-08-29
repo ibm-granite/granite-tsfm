@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-module_id: 8f72161-c0e4-49b0-8fd0-7587b3017a35
-name: HuggingFaceSentimentModule
+module_id: 845780bb-cca1-4e5c-9bfb-4f09710ba3f8
+name: HelloBobModule
 version: 0.0.1
