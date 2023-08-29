@@ -1,0 +1,9 @@
+caikit[runtime-grpc, runtime-http]
+
+# Only needed for HuggingFace
+scipy
+torch
+transformers~=4.27.2
+
+# For http client
+requests
