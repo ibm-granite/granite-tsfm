@@ -49,7 +49,17 @@ if __name__ == "__main__":
 
         hello_input = HelloInput()
         hello_input.name ="Bob"
-        response: HelloOutput = client_stub.HelloBobTaskPredict(hello_input)
+        # response: HelloOutput = client_stub.HelloBobTaskPredict(hello_input.to_proto()).from_proto()
+
+
+        request = inference_service.messages.HelloBobTaskRequest(
+            hello_input=hello_input.to_proto()
+        )
+        
+        response: HelloOutput = client_stub.HelloBobTaskPredict(
+            request, metadata=[("mm-model-id", "hellobob")]
+        )
+
         print(f"response from service: {response}")
         
 
