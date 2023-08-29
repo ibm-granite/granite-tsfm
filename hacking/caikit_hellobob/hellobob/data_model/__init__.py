@@ -13,4 +13,4 @@
 # limitations under the License.
 
 # Local
-from .classification import ClassificationPrediction, ClassInfo
+from .name_echo import HelloInput, HelloOutput

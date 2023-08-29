@@ -22,6 +22,7 @@ import requests
 # Local
 from caikit.config.config import get_config
 from caikit.runtime.service_factory import ServicePackageFactory
+from hellobob.data_model.name_echo import HelloOutput, HelloInput
 import caikit
 
 if __name__ == "__main__":
@@ -31,7 +32,7 @@ if __name__ == "__main__":
             "runtime": {
                 "library": "hellobob",
                 "grpc": {"enabled": True},
-                "http": {"enabled": True},
+                "http": {"enabled": False},
             },
         }
     )
@@ -40,24 +41,17 @@ if __name__ == "__main__":
         ServicePackageFactory.ServiceType.INFERENCE,
     )
 
-    model_id = "hellobob"
-
     if get_config().runtime.grpc.enabled:
         # Setup the client
         port = 8085
         channel = grpc.insecure_channel(f"localhost:{port}")
         client_stub = inference_service.stub_class(channel)
 
-        # Run inference for two sample prompts
-        for text in ["I am not feeling well today!", "Today is a nice sunny day"]:
-            request = inference_service.messages.HelloBobTaskRequest(
-                text_input=text
-            )
-            response = client_stub.HelloBobTaskPredict(
-                request, metadata=[("mm-model-id", model_id)], timeout=1
-            )
-            print("Text:", text)
-            print("RESPONSE from gRPC:", response)
+        hello_input = HelloInput()
+        hello_input.name ="Bob"
+        response: HelloOutput = client_stub.HelloBobTaskPredict(hello_input)
+        print(f"response from service: {response}")
+        
 
     if get_config().runtime.http.enabled:
         port = 8080

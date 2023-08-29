@@ -15,17 +15,14 @@
 # Standard
 import os
 
-# Third Party
-from transformers import pipeline  # pylint: disable=import-error
-
 # Local
 from caikit.core import ModuleBase, ModuleLoader, ModuleSaver, TaskBase, module, task
-from hellobob.data_model.classification import ClassificationPrediction, ClassInfo
+from hellobob.data_model.name_echo import HelloInput, HelloOutput
 
 
 @task(
-    required_parameters={"text_input": str},
-    output_type=ClassificationPrediction,
+    required_parameters={"hello_input": HelloInput},
+    output_type=HelloOutput,
 )
 class HelloBobTask(TaskBase):
     pass
@@ -44,39 +41,23 @@ class HelloBobModule(ModuleBase):
         super().__init__()
         loader = ModuleLoader(model_path)
         config = loader.config
-        model = pipeline(model=config.hf_artifact_path, task="sentiment-analysis")
-        self.sentiment_pipeline = model
 
     def run(  # pylint: disable=arguments-differ
-        self, text_input: str
-    ) -> ClassificationPrediction:
-        """Run HF sentiment analysis
-        Args:
-            text_input: str
-        Returns:
-            ClassificationPrediction: predicted classes with their confidence score.
+        self, hello_input: HelloInput
+    ) -> HelloOutput:
+        """The actual implementation
         """
-        raw_results = self.sentiment_pipeline([text_input])
+        answer = HelloOutput()
+        answer.message = "Hello " + hello_input.name
+        return answer
 
-        class_info = []
-        for result in raw_results:
-            class_info.append(
-                ClassInfo(class_name=result["label"], confidence=result["score"])
-            )
-        return ClassificationPrediction(class_info)
-
+    """
     @classmethod
     def bootstrap(
         cls, model_path="distilbert-base-uncased-finetuned-sst-2-english"
     ):  # pylint: disable=arguments-differ
-        """Load a HuggingFace based caikit model
-        Args:
-            model_path: str
-                Path to HuggingFace model
-        Returns:
-            HuggingFaceModel
-        """
         return cls(model_path)
+    """
 
     def save(self, model_path, **kwargs):  # pylint: disable=arguments-differ
         module_saver = ModuleSaver(

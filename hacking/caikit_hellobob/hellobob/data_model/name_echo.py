@@ -21,15 +21,12 @@ from caikit.core.data_model import dataobject
 
 
 @dataobject(package="hellobob.data_model")
-class ClassInfo(DataObjectBase):
+class HelloInput(DataObjectBase):
     """A single classification prediction."""
-
-    class_name: str  # (required) Predicted relevant class name
-    confidence: float  # (required) The confidence-like score of this prediction in [0, 1]
+    name: str  # (required) Predicted relevant class name
 
 
 @dataobject(package="hellobob.data_model")
-class ClassificationPrediction(DataObjectBase):
+class HelloOutput(DataObjectBase):
     """The result of a classification prediction."""
-
-    classes: List[ClassInfo]
+    message: str
