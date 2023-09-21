@@ -1,0 +1,26 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+requires-python = ">=3.9"
+
+
+[tool.poetry]
+name = "tsfmservices"
+version = "0.0.1"
+authors = ["IBM"]
+description = "Services and notebooks for TSFM"
+readme = "README.md"
+license = "Proprietary"
+
+packages = [ 
+    {include = "tsfmservices"}, 
+    {include = "tsfmservices/toolkit"}
+]
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+pandas = ">1.4"
+transformers = {git = "https://github.com/namctin/transformers.git", branch = "add-patchtst", extras=["torch"]}
+# "transformers[torch] @ git+https://github.com/namctin/transformers.git@add-patchtst",
