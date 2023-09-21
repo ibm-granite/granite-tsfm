@@ -1,4 +1,4 @@
-caikit[runtime-grpc, runtime-http]
+# caikit[runtime-grpc, runtime-http]
 
 # Only needed for HuggingFace
 # scipy
