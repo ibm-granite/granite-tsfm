@@ -1,26 +1,33 @@
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=66", "wheel", "Cython"]
 
 [project]
-requires-python = ">=3.9"
-
-
-[tool.poetry]
 name = "tsfmservices"
+requires-python = ">=3.9,<3.11"
 version = "0.0.1"
-authors = ["IBM"]
+authors = [{ name = "IBM" }]
 description = "Services and notebooks for TSFM"
 readme = "README.md"
-license = "Proprietary"
+license = { text = "Proprietary" }
+classifiers = ["Private :: Do Not Upload"]
 
-packages = [ 
-    {include = "tsfmservices"}, 
-    {include = "tsfmservices/toolkit"}
+dependencies = [
+    "pandas>=1.4",
+    "scikit-learn",
+    "transformers[torch] @ git+https://github.com/namctin/transformers.git@85baa5e",
+    "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-pandas = ">1.4"
-transformers = {git = "https://github.com/namctin/transformers.git", branch = "add-patchtst", extras=["torch"]}
-# "transformers[torch] @ git+https://github.com/namctin/transformers.git@add-patchtst",
+[tool.setuptools]
+packages = ["tsfmservices", "tsfmservices.toolkit"]
+
+[project.optional-dependencies]
+
+notebooks = ["jupyter", "matplotlib", "datasets"]
+testing = ["pytest", "tsfmservices[notebooks]"]
+dev = ["pre-commit", "tsfmservices[testing]", "isort", "black[jupyter]"]
+all = ["tsfmservices[notebooks,testing,dev]"]
+ogv = ["datasets"]
+
+
+# ###################################################
