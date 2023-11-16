@@ -16,14 +16,12 @@
 import json
 
 # Third Party
-import grpc
-import requests
-
-# Local
 from caikit.config.config import get_config
 from caikit.runtime.service_factory import ServicePackageFactory
-from hellobob.data_model.name_echo import HelloOutput, HelloInput
+from hellobob.data_model.name_echo import HelloInput, HelloOutput
 import caikit
+import grpc
+import requests
 
 if __name__ == "__main__":
     caikit.config.configure(
@@ -48,20 +46,18 @@ if __name__ == "__main__":
         client_stub = inference_service.stub_class(channel)
 
         hello_input = HelloInput()
-        hello_input.name ="Bob"
+        hello_input.name = "Bob"
         # response: HelloOutput = client_stub.HelloBobTaskPredict(hello_input.to_proto()).from_proto()
-
 
         request = inference_service.messages.HelloBobTaskRequest(
             hello_input=hello_input.to_proto()
         )
-        
+
         response: HelloOutput = client_stub.HelloBobTaskPredict(
             request, metadata=[("mm-model-id", "hellobob")]
         )
 
         print(f"response from service: {response}")
-        
 
     if get_config().runtime.http.enabled:
         port = 8080

@@ -14,19 +14,21 @@
 #
 # <div> <img src="./figures/patchTST.png" alt="Drawing" style="width: 600px;"/></div>
 
-# %%
-import pandas as pd
-
-from tsfmservices.toolkit.dataset import PretrainDFDataset
-from tsfmservices.toolkit.util import select_by_index
-from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
-
+# Third Party
 from transformers import (
     PatchTSTConfig,
     PatchTSTForPretraining,
     Trainer,
     TrainingArguments,
 )
+
+# %%
+import pandas as pd
+
+# First Party
+from tsfmservices.toolkit.dataset import PretrainDFDataset
+from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+from tsfmservices.toolkit.util import select_by_index
 
 # %%[markdown]
 # ## Load and prepare datasets

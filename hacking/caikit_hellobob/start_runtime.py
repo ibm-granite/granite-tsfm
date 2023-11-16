@@ -16,11 +16,9 @@
 from os import path
 import sys
 
-# First Party
-import alog
-
-# Local
+# Third Party
 from caikit.runtime.__main__ import main
+import alog
 import caikit
 
 if __name__ == "__main__":

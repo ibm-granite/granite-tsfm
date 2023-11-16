@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -e
+USE_CYTHON="${USE_CYTHON:=1}"
+DO_WHEEL_INSTALL="${DO_WHEEL_INSTALL:1}"
+
+pip install build pytest isort "black[jupyter]"
+
+# we now enforce basis formatting requirements
+# we do this here instead of travis_script because it's most
+# likely to fail and do not want to suffer the long cython compile
+# plus tsfm install step only to hit this after
+
+if ! PATH=$PATH:$HOME/.local/bin black --check .; then echo "black formatting checking failed"; exit 1; fi
+if ! PATH=$PATH:$HOME/.local/bin isort -c .; then echo "isort formatting checking failed"; exit 1; fi
+
+# @todo CYTHON BUILD NOT YET ENABLED FOR tsfm-services
+# but may not be necessary
+USE_CYTHON=$USE_CYTHON python -m build -w
+
+WHEEL_FILE=$(find dist -name "*.whl")
+if [ "$DO_WHEEL_INSTALL" == "1" ]; then
+    pip install "${WHEEL_FILE}[dev]"
+fi
+

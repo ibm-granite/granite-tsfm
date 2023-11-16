@@ -15,7 +15,7 @@
 # Standard
 import os
 
-# Local
+# Third Party
 from caikit.core import ModuleBase, ModuleLoader, ModuleSaver, TaskBase, module, task
 from hellobob.data_model.name_echo import HelloInput, HelloOutput
 
@@ -45,8 +45,7 @@ class HelloBobModule(ModuleBase):
     def run(  # pylint: disable=arguments-differ
         self, hello_input: HelloInput
     ) -> HelloOutput:
-        """The actual implementation
-        """
+        """The actual implementation"""
         answer = HelloOutput()
         answer.message = "Hello " + hello_input.name
         return answer

@@ -4,18 +4,21 @@
 #
 # Maybe add a picture of the PatchTST with forecasting head?
 
-# %%
-import pandas as pd
-
-from tsfmservices.toolkit.dataset import ForecastDFDataset
-from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
-from tsfmservices.toolkit.util import select_by_index
+# Third Party
 from transformers import (
     PatchTSTConfig,
     PatchTSTForPrediction,
     Trainer,
     TrainingArguments,
 )
+
+# %%
+import pandas as pd
+
+# First Party
+from tsfmservices.toolkit.dataset import ForecastDFDataset
+from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+from tsfmservices.toolkit.util import select_by_index
 
 # %%[markdown]
 # ## Load and prepare datasets

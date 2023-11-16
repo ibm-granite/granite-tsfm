@@ -15,7 +15,7 @@
 # Standard
 from typing import List
 
-# Local
+# Third Party
 from caikit.core import DataObjectBase
 from caikit.core.data_model import dataobject
 
@@ -23,10 +23,12 @@ from caikit.core.data_model import dataobject
 @dataobject(package="hellobob.data_model")
 class HelloInput(DataObjectBase):
     """A single classification prediction."""
+
     name: str  # (required) Predicted relevant class name
 
 
 @dataobject(package="hellobob.data_model")
 class HelloOutput(DataObjectBase):
     """The result of a classification prediction."""
+
     message: str

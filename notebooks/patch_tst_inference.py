@@ -3,21 +3,21 @@
 # Inference (forecasting)
 
 
+# Third Party
+from IPython.display import Image
+from plotly.subplots import make_subplots
+from transformers.models.patchtst import PatchTSTForPrediction
+
 # %%
 import pandas as pd
 import plotly.graph_objs as go
-from plotly.subplots import make_subplots
-from IPython.display import Image
 
-from transformers.models.patchtst import PatchTSTForPrediction
-
-
-from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+# First Party
 from tsfmservices.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
+from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 from tsfmservices.toolkit.util import select_by_index
-
 
 # %%[markdown]
 # ## Load model and construct forecasting pipeline
@@ -78,12 +78,12 @@ test_data = tsp.preprocess(test_data)
 forecasts = forecast_pipeline(test_data)
 forecasts.head()
 
+# Third Party
 # %%[markdown]
 # ## Evaluate performance
 #
 # %%
 from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
-
 
 labels_ = forecasts[id_columns + [timestamp_column] + forecast_columns]
 forecasts_ = forecasts.drop(columns=forecast_columns)
