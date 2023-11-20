@@ -6,5 +6,13 @@
       "source.organizeImports": true
     }
   },
-  "isort.args": ["--profile", "black"]
+  "isort.args": [
+    "--profile",
+    "black"
+  ],
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }

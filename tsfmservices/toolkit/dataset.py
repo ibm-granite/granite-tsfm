@@ -31,6 +31,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self,
         data_df: pd.DataFrame,
         datetime_col: str = None,
+        id_columns: List[str] = [],
         group_id: Optional[Union[List[int], List[str]]] = None,
         x_cols: list = [],
         y_cols: list = [],
@@ -65,6 +66,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
 
         self.data_df = data_df
         self.datetime_col = datetime_col
+        self.id_columns = id_columns
         self.x_cols = x_cols
         self.y_cols = y_cols
         self.drop_cols = drop_cols
@@ -74,15 +76,16 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self.timestamps = None
         self.group_id = group_id
 
-        # pad zero to the data_df if the len is shorter than seq_len+pred_len
-        # this breaks IDs and timestamps
-        if zero_padding:
-            data_df = self.pad_zero(data_df)
-
         # sort the data by datetime
         if datetime_col in list(data_df.columns):
             data_df[datetime_col] = pd.to_datetime(data_df[datetime_col])
             data_df = data_df.sort_values(datetime_col, ignore_index=True)
+
+        # pad zero to the data_df if the len is shorter than seq_len+pred_len
+        if zero_padding:
+            data_df = self.pad_zero(data_df)
+
+        if datetime_col in list(data_df.columns):
             self.timestamps = data_df[datetime_col].values
 
         # get the input data
@@ -107,7 +110,13 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self.n_targets = len(y_cols) if len(y_cols) > 0 else 0
 
     def pad_zero(self, data_df):
-        return zero_padding_to_df(data_df, self.seq_len + self.pred_len)
+        # return zero_padding_to_df(data_df, self.seq_len + self.pred_len)
+        return ts_padding(
+            data_df,
+            timestamp_column=self.datetime_col,
+            id_columns=self.id_columns,
+            context_length=self.seq_len + self.pred_len,
+        )
 
     def __len__(self):
         return len(self.X) - self.seq_len - self.pred_len + 1
@@ -142,9 +151,9 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         self,
         data_df: pd.DataFrame,
         datetime_col: str = None,
+        id_columns: List[str] = [],
         x_cols: list = [],
         y_cols: list = [],
-        id_columns: List[str] = [],
         seq_len: int = 1,
         num_workers: int = 1,
         pred_len: int = 0,
@@ -156,10 +165,10 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
             ), f"{id_columns} is not in the data_df columns"
 
         self.datetime_col = datetime_col
+        self.id_columns = id_columns
         self.x_cols = x_cols
         self.y_cols = y_cols
         self.seq_len = seq_len
-        self.id_columns = id_columns
         self.num_workers = num_workers
         self.cls = cls
         self.pred_len = pred_len
@@ -200,6 +209,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     group,
                     group_id,
                     self.datetime_col,
+                    self.id_columns,
                     self.x_cols,
                     self.y_cols,
                     self.drop_cols,
@@ -220,6 +230,7 @@ def get_group_data(
     group,
     group_id,
     datetime_col: str,
+    id_columns: List[str],
     x_cols: list,
     y_cols: list,
     drop_cols: list,
@@ -230,6 +241,7 @@ def get_group_data(
         data_df=group,
         group_id=group_id,
         datetime_col=datetime_col,
+        id_columns=id_columns,
         x_cols=x_cols,
         y_cols=y_cols,
         drop_cols=drop_cols,
@@ -264,8 +276,8 @@ class PretrainDFDataset(BaseConcatDFDataset):
         super().__init__(
             data_df=data,
             datetime_col=timestamp_column,
-            x_cols=input_columns,
             id_columns=id_columns,
+            x_cols=input_columns,
             seq_len=context_length,
             num_workers=num_workers,
             cls=self.BasePretrainDFDataset,
@@ -278,6 +290,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             data_df: pd.DataFrame,
             datetime_col: Optional[str] = None,
             group_id: Optional[Union[List[int], List[str]]] = None,
+            id_columns: List[str] = [],
             x_cols: list = [],
             y_cols: list = [],
             drop_cols: list = [],
@@ -287,6 +300,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             super().__init__(
                 data_df=data_df,
                 datetime_col=datetime_col,
+                id_columns=id_columns,
                 group_id=group_id,
                 x_cols=x_cols,
                 y_cols=y_cols,
@@ -361,6 +375,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             data_df: pd.DataFrame,
             datetime_col: str = None,
             group_id: Optional[Union[List[int], List[str]]] = None,
+            id_columns: List[str] = [],
             x_cols: list = [],
             y_cols: list = [],
             drop_cols: list = [],
@@ -371,6 +386,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 data_df=data_df,
                 datetime_col=datetime_col,
                 group_id=group_id,
+                id_columns=id_columns,
                 x_cols=x_cols,
                 y_cols=y_cols,
                 drop_cols=drop_cols,
@@ -402,11 +418,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return len(self.X) - self.seq_len - self.pred_len + 1
 
 
-def np_to_torch(np, float_type=np.float32):
-    if np.dtype == "float":
-        return torch.from_numpy(np.astype(float_type))
-    elif np.dtype == "int":
-        return torch.from_numpy(np)
+def np_to_torch(data: np.array, float_type=np.float32):
+    if data.dtype == "float":
+        return torch.from_numpy(data.astype(float_type))
+    elif data.dtype == "int":
+        return torch.from_numpy(data)
+    return torch.from_numpy(data)
 
 
 def _torch(*nps):
@@ -430,6 +447,69 @@ def zero_padding_to_df(df: pd.DataFrame, seq_len: int) -> pd.DataFrame:
     zeros_df = pd.DataFrame(np.zeros([fill_len, df.shape[1]]), columns=df.columns)
     # combine the data
     new_df = pd.concat([zeros_df, df])
+    return new_df
+
+
+def ts_padding(
+    df: pd.DataFrame,
+    id_columns: Optional[List[str]] = None,
+    timestamp_column: Optional[str] = None,
+    context_length: int = 1,
+) -> pd.DataFrame:
+    """
+    Pad a dataframe, which is aware of time series conventions.
+
+    Check if df has length >= context_length.
+    If not, then fill (prepending) while preserving types and properly handling IDs and dates/timestamps. When
+    prepending dates, the sampling interval will be estimated, to create proper preceeding dates.
+
+    The assumption is the provided data contains only one id across the provided ID columns, the value will be
+    replicated in the prepended rows.
+
+    Args:
+        df (_type_): data frame
+        id_columns: List of strings representing columns containing ID information.
+        timestamp_column: str for column name containing timestamps.
+        context_length (int): required length
+
+    Returns:
+        Padded data frame
+    """
+    l = len(df)
+    if l >= context_length:
+        return df
+    fill_length = context_length - l  # why did we previously have + 1 here?
+
+    # create dataframe
+    pad_df = pd.DataFrame(np.zeros([fill_length, df.shape[1]]), columns=df.columns)
+
+    for c in df.columns:
+        if (id_columns and c in id_columns) or (c == timestamp_column):
+            continue
+        pad_df[c] = pad_df[c].astype(df.dtypes[c], copy=False)
+
+    if timestamp_column:
+        if df[timestamp_column].dtype in ["<M8[ns]", "datetime64", "int"]:
+            last_timestamp = df.iloc[0][timestamp_column]
+            period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
+            prepended_timestamps = [
+                last_timestamp + offset * period for offset in range(-fill_length, 0)
+            ]
+            pad_df[timestamp_column] = prepended_timestamps
+        else:
+            pad_df[timestamp_column] = None
+        # Ensure same type
+        pad_df[timestamp_column] = pad_df[timestamp_column].astype(
+            df[timestamp_column].dtype
+        )
+
+    if id_columns:
+        id_values = df.iloc[0][id_columns].to_list()
+        for id_column_name, id_column_value in zip(id_columns, id_values):
+            pad_df[id_column_name] = id_column_value
+
+    # combine the data
+    new_df = pd.concat([pad_df, df])
     return new_df
 
 
