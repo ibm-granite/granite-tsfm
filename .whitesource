@@ -1,3 +1,19 @@
 {
-  "settingsInheritedFrom": "whitesource-config/whitesource-config@python3.9"
+  "settingsInheritedFrom": "whitesource-config/whitesource-config@master",
+  "scanSettings": {
+    "configMode": "LOCAL"
+    }
 }
+
+python.path=python3.9
+python.pipPath=pip3
+python.invokePipAsModule=true
+python.resolveDependencies = true
+python.ignorePipInstallErrors=true
+python.installVirtualenv=true
+python.resolveSetupFiles=true
+python.runPipenvPreStep=true
+python.pipenvDevDependencies=true
+python.IgnorePipenvInstallErrors=true
+python.runPoetryPreStep=true
+python.requirementsFileIncludes=pyproject.toml
