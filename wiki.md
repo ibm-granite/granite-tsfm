@@ -11,17 +11,17 @@ PatchTST: https://huggingface.co/docs/transformers/main/en/model_doc/patchtst
 
 **Publications**
 
-4 KDD, 1 ICLR, 1 AAAI, 1 ICML, 2 preprints, Total citations: 500
+4 KDD, 1 ICLR, 1 AAAI, 1 ICML, 2 preprints, Total citations: 724
 
-* **TST:** Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., & Eickhoff, C. (2021, August). A transformer-based framework for multivariate time series representation learning. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining (pp. 2114-2124). **(citations: 412)**
+* **TST:** Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., & Eickhoff, C. (2021, August). A transformer-based framework for multivariate time series representation learning. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining (pp. 2114-2124). **(citations: 504)**
 
-* **PatchTST:** Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2022). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers, ICLR 2023, arXiv preprint arXiv:2211.14730 **(citations: 46)**
+* **PatchTST:** Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2022). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers, ICLR 2023, arXiv preprint arXiv:2211.14730 **(citations: 118)**
 
-* **PatchTSMixer:** Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong, Jayant Kalgnanam. TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting, 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '23), Research Track, August 6-10, 2023, Long Beach, CA, USA https://arxiv.org/abs/2306.09364 (New ones, citations: 3)
+* **PatchTSMixer:** Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong, Jayant Kalgnanam. TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting, 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '23), Research Track, August 6-10, 2023, Long Beach, CA, USA https://arxiv.org/abs/2306.09364 (New ones, citations: 8)
 
 * **NPF:** Ekambaram, V., Manglik, K., Mukherjee, S., Sajja, S. S. K., Dwivedi, S., & Raykar, V. (2020, August). Attention based multi-modal new product sales time-series forecasting. In Proceedings of the 26th ACM SIGKDD international conference on knowledge discovery & data mining (pp. 3110-3118). **(citations: 45)**
 
-* **TLAE:** Nguyen, N., & Quanz, B. (2021, May). Temporal latent auto-encoder: A method for probabilistic multivariate time series forecasting. In Proceedings of the AAAI Conference on Artificial Intelligence (Vol. 35, No. 10, pp. 9117-9125). **(citations: 44)**
+* **TLAE:** Nguyen, N., & Quanz, B. (2021, May). Temporal latent auto-encoder: A method for probabilistic multivariate time series forecasting. In Proceedings of the AAAI Conference on Artificial Intelligence (Vol. 35, No. 10, pp. 9117-9125). **(citations: 48)**
 
 * **HPRO:** Arindam  Jati, Vijay Ekambaram, Shaonli Pal, Brian Quanz, Wesley M. Gifford, Pavithra Harsha, Stuart Siegel, Sumanta Mukherjee, Chandra Narayanaswami "Hierarchy-guided Model Selection for Time Series Forecasting, 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '23), Research Track, August 6-10, 2023, Long Beach, CA, USA, KDD 23 https://arxiv.org/abs/2211.15092 (New ones, citations: 1)
 
