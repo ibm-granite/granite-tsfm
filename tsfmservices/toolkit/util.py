@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Basic functions and utilities"""
+
 # Standard
 from datetime import datetime
 from distutils.util import strtobool

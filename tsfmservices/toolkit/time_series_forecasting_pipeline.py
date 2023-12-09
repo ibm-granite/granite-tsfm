@@ -1,4 +1,7 @@
+# Copyright contributors to the TSFM project
+#
 """Hugging Face Pipeline for Time Series Tasks"""
+
 # Standard
 from typing import Any, Dict, List, Union
 
@@ -163,10 +166,15 @@ class TimeSeriesForecastingPipeline(Pipeline):
         readable pandas format.
         """
         out = {}
+
+        model_output_key = (
+            "prediction_outputs"
+            if "prediction_outputs" in input.keys()
+            else "prediction_logits"
+        )
+
         for i, c in enumerate(kwargs["output_columns"]):
-            out[f"{c}_prediction"] = (
-                input["prediction_outputs"][:, :, i].numpy().tolist()
-            )
+            out[f"{c}_prediction"] = input[model_output_key][:, :, i].numpy().tolist()
         for i, c in enumerate(kwargs["input_columns"]):
             out[c] = input["future_values"][:, :, i].numpy().tolist()
 

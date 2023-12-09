@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Tools for building torch datasets"""
+
 # Standard
 from itertools import starmap
 from typing import List, Optional, Tuple, Union

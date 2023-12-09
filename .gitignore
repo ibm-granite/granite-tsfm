@@ -128,3 +128,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 notebooks/thinklab/checkpoint/**
+
+# Mac personalization files
+*.DS_Store
+
+# Models for demo
+/tsfmhfdemos/neurips/models/
+
+# Checkpoints
+*.checkpoint-*/

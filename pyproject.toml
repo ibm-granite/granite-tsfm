@@ -14,12 +14,12 @@ classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "pandas>=1.4",
     "scikit-learn",
-    "transformers[torch] @ git+https://github.com/namctin/transformers.git@85baa5e",
+    "transformers[torch] @ git+https://github.com/namctin/transformers.git@de65ec5a37889f77464d44f71518a26fca1d9e4c",
     "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
 ]
 
 [tool.setuptools]
-packages = ["tsfmservices", "tsfmservices.toolkit"]
+packages = ["tsfmservices", "tsfmservices.toolkit", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
@@ -30,4 +30,13 @@ all = ["tsfmservices[notebooks,testing,dev]"]
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
 ogv = ["datasets", "plotly", "kaleido"]
+demos = [
+    "tsfmservices[notebooks]",
+    "streamlit",
+    "altair<5",
+    "plotly",
+    "streamlit-aggrid",
+    "kaleido",
+    "toml"
+]
 # ###################################################

@@ -1,0 +1,200 @@
+# Copyright contributors to the TSFM project
+#
+
+# These are top-level (app.py) globals
+
+title = "IBM Research Foundation Models for Time Series Forecasting"
+intro = """
+This demo highlights the use of two popular Time Series FM backbones developed at IBM Research, 
+the first patched time-series transformer (PatchTST, ICLR 23),
+and the first patched MLP-Mixer for time series (PatchTSMixer, KDD 23). 
+Our line of work not only attempts to improve the state-of-the-art accuracies (SOTA), but also 
+focuses on achieving it with extremely reduced memory and compute requirements.
+
+This demo focusses on demonstraing the usefulness of first pre-training a model on related but
+independent data and then using that model in conjunction with various tunning approaches on different target datasets. 
+Each pre-trained model has been pretrained on the hourly aggregated electricity dataset from the UCI repository (https://zenodo.org/records/4656140).
+Then, we tune that model using the selected dataset and tuning approach. Forecasts and performance evaluation of the tuned model are shown below.
+"""
+
+# These are the leader board metric to report
+INFERENCE_METRICS = ["mse", "mae", "smape"]
+
+## Model cards for documentation tab
+[MODEL_DOCS.PatchTST]
+
+Abstract = """
+We propose an efficient design of Transformer-based models for multivariate time series forecasting and self-supervised representation learning. 
+It is based on two key components: (i) segmentation of time series into subseries-level patches which are served as input tokens to Transformer; 
+(ii) channel-independence where each channel contains a single univariate time series that shares the same embedding and Transformer weights across all the series. 
+Patching design naturally has three-fold benefit: local semantic information is retained in the embedding; 
+computation and memory usage of the attention maps are quadratically reduced given the same look-back window; 
+and the model can attend longer history. 
+Our channel-independent patch time series Transformer (PatchTST) can improve the long-term forecasting accuracy significantly 
+when compared with that of SOTA Transformer-based models. 
+We also apply our model to self-supervised pre-training tasks and attain excellent fine-tuning performance, 
+which outperforms supervised training on large datasets. 
+Transferring of masked pre-trained representation on one dataset to others also produces SOTA forecasting accuracy.
+"""
+
+"Model Architecture" = """
+For more details, please see our paper: https://arxiv.org/abs/2211.14730
+"""
+
+figure = {image = "backends/v1/figures/patchTST.png", caption = "PatchTST Model Architecture", use_column_width="auto"}
+
+# "Secondary use" = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+# Limitations = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+# "Training data" = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+        
+"Citation Info" = """
+@inproceedings{Yuqietal-2023-PatchTST,
+  title     = {A Time Series is Worth 64 Words: Long-term Forecasting with Transformers},
+  author    = {Nie, Yuqi and
+               H. Nguyen, Nam and
+               Sinthong, Phanwadee and 
+               Kalagnanam, Jayant},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2023}
+}
+"""
+
+[MODEL_DOCS.PatchTSMixer]
+
+
+Abstract = """
+Transformers have gained popularity in time series forecasting for their ability to capture long-sequence interactions. 
+However, their memory and compute-intensive requirements pose a critical bottleneck for long-term forecasting, 
+despite numerous advancements in compute-aware self-attention modules. 
+To address this, we propose TSMixer, a lightweight neural architecture exclusively composed of multi-layer perceptron (MLP) modules. 
+TSMixer is designed for multivariate forecasting and representation learning on patched time series, 
+providing an efficient alternative to Transformers. Our model draws inspiration from the success of MLP-Mixer models in computer vision. 
+We demonstrate the challenges involved in adapting Vision MLP-Mixer for time series 
+and introduce empirically validated components to enhance accuracy. 
+This includes a novel design paradigm of attaching online reconciliation heads to the MLP-Mixer backbone, 
+for explicitly modeling the time-series properties such as hierarchy and channel-correlations. 
+We also propose a Hybrid channel modeling approach to effectively handle noisy channel interactions and generalization across diverse datasets, 
+a common challenge in existing patch channel-mixing methods. 
+Additionally, a simple gated attention mechanism is introduced in the backbone to prioritize important features. 
+By incorporat- ing these lightweight components, we significantly enhance the learning capability of simple MLP structures, 
+outperforming complex Transformer models with minimal computing usage. 
+Moreover, TSMixer’s modular design enables compatibility with both supervised and masked self-supervised learning methods, 
+making it a promising building block for time-series Foundation Models. 
+TSMixer outperforms state-of-the-art MLP and Transformer models in forecasting by a considerable margin of 8-60%. 
+It also outperforms the latest strong benchmarks of Patch-Transformer models (by 1-2%) with a significant reduction in memory and runtime (2- 3X).
+"""
+
+"Model Architecture" = """
+For more details, please see our paper: https://arxiv.org/abs/2306.09364
+"""
+figure = {image = "backends/v1/figures/patchTSMixer.png", caption = "PatchTSMixer Model Architecture", use_column_width="auto"}
+
+# "Secondary use" = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+# Limitations = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+# "Training data" = """
+# Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor 
+# incididunt ut labore et dolore magna aliqua. Vulputate mi sit amet mauris commodo 
+# quis imperdiet. Augue eget arcu dictum varius duis at consectetur lorem donec. 
+# Volutpat diam ut venenatis tellus in metus. Interdum velit.
+# """
+        
+"Citation Info" = """
+@inproceedings{Ekambaram_2023, series={KDD ’23},
+   title={TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting},
+   url={http://dx.doi.org/10.1145/3580305.3599533},
+   DOI={10.1145/3580305.3599533},
+   booktitle={Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
+   publisher={ACM},
+   author={Ekambaram, Vijay and Jati, Arindam and Nguyen, Nam and Sinthong, Phanwadee and Kalagnanam, Jayant},
+   year={2023},
+   month=aug, collection={KDD ’23} }
+"""
+
+# Mapping of models and associated inference/training
+# parameters. Note that first level keys of this mapping will
+# be rendered in the UI
+# model paths need to conform to HF conventions
+# and it seems they MUST be relative to the same directory as
+# app.py (e.g., they can't refer to directories under backends)
+
+[MODELS.PatchTST]
+    
+card = "PatchTST"
+pretrained_model_path = "models/patchtst/electricity/model"
+# finetuned_model_path = "model/forecasting"
+preprocessor_path = "models/patchtst/electricity/preprocessor"
+
+[MODELS.PatchTSMixer]
+
+card = "PatchTSMixer"
+pretrained_model_path = "models/patchtsmixer/electricity/model"
+# finetuned_model_path = "model/forecasting"
+preprocessor_path = "models/patchtsmixer/electricity/preprocessor"
+
+
+# The data sets in play. These keys will render in the demo page
+[DATASETS."ETTh1"]
+dataset_name="ETTh1"
+uri="https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
+timestamp_column="date"
+id_columns=[]
+forecast_columns=["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+channel_plots=["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"] # ["HUFL", "HULL", "MUFL", "OT"]
+periodicity="1h"
+test_start_index = 11520 # 12 * 30 * 24 + 4 * 30 * 24
+test_end_index = 14400   # 12 * 30 * 24 + 8 * 30 * 24
+
+
+[DATASETS."ETTh2"]
+dataset_name="ETTh2"
+uri="https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
+timestamp_column="date"
+id_columns=[]
+forecast_columns=["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+channel_plots=["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+periodicity="1h"
+test_start_index = 11520 # 12 * 30 * 24 + 4 * 30 * 24
+test_end_index = 14400   # 12 * 30 * 24 + 8 * 30 * 24
+
+
+
+[INFERENCE_APPROACHES]
+
+[INFERENCE_APPROACHES."Zero shot"]
+approach = "zero_shot"
+
+# [INFERENCE_APPROACHES."Few shot"]
+# approach = "few_shot"
+
+[INFERENCE_APPROACHES."Linear probe"]
+approach = "linear_probe"
+
+[INFERENCE_APPROACHES."Fine tuning"]
+approach = "fine_tuning"
+
+

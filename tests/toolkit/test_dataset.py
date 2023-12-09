@@ -1,3 +1,6 @@
+# Copyright contributors to the TSFM project
+#
+
 """Tests basic dataset functions"""
 
 # Standard

@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Preprocessor for time series data preparation"""
+
 # Standard
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
