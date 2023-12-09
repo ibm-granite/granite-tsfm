@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 # First Party
-from tsfmservices.toolkit.util import select_by_index, select_by_timestamp
+from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
 
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"

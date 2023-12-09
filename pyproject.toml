@@ -2,11 +2,11 @@
 requires = ["setuptools>=66", "wheel", "Cython"]
 
 [project]
-name = "tsfmservices"
+name = "tsfm_public"
 requires-python = ">=3.9,<3.11"
 version = "0.0.1"
 authors = [{ name = "IBM" }]
-description = "Services and notebooks for TSFM"
+description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
 license = { text = "Proprietary" }
 classifiers = ["Private :: Do Not Upload"]
@@ -19,19 +19,19 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["tsfmservices", "tsfmservices.toolkit", "tsfmhfdemos"]
+packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
 notebooks = ["jupyter", "matplotlib", "datasets"]
-testing = ["pytest", "tsfmservices[notebooks]"]
-dev = ["pre-commit", "tsfmservices[testing]", "isort", "black[jupyter]"]
-all = ["tsfmservices[notebooks,testing,dev]"]
+testing = ["pytest", "tsfm_public[notebooks]"]
+dev = ["pre-commit", "tsfm_public[testing]", "isort", "black[jupyter]"]
+all = ["tsfm_public[notebooks,testing,dev]"]
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
 ogv = ["datasets", "plotly", "kaleido"]
 demos = [
-    "tsfmservices[notebooks]",
+    "tsfm_public[notebooks]",
     "streamlit",
     "altair<5",
     "plotly",

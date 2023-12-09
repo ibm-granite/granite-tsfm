@@ -19,12 +19,12 @@ import streamlit as st
 # First Party
 from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
 
-from tsfmservices.toolkit.time_series_forecasting_pipeline import (
+from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
-from tsfmservices.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
-from tsfmservices.toolkit.util import select_by_index
-from tsfmservices.toolkit.visualization import plot_ts_forecasting
+from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+from tsfm_public.toolkit.util import select_by_index
+from tsfm_public.toolkit.visualization import plot_ts_forecasting
 
 # A dictionary containing datasets mapped to their location
 # Note that keys of this dictionary get rendered in the UI

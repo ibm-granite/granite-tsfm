@@ -13,7 +13,7 @@ import pytest
 import pandas as pd
 
 # Local
-from tsfmservices.toolkit.dataset import PretrainDFDataset, ts_padding
+from tsfm_public.toolkit.dataset import PretrainDFDataset, ts_padding
 
 
 @pytest.fixture(scope="module")
