@@ -4,8 +4,10 @@
 
 # Standard
 import logging
+import re
 
 # Third Party
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -189,9 +191,6 @@ def tsforecasting_with_fmdls():
             \cline{2-15} 
 		    \end{tabular}
         """
-
-        import numpy as np
-        import re
 
         out = re.sub(r"\\textbf{([^&]*)}", r"\1", table_source)
         out = re.sub(r"\\uline{([^&]*)}", r"\1", out)

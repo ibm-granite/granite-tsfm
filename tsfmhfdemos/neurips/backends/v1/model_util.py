@@ -3,22 +3,21 @@
 """Utilities for the demo app"""
 
 # Standard
+from typing import List
 import copy
 import logging
 import os
-from typing import List
 
 # Third Party
 from plotly import figure_factory as ff
 from plotly.graph_objs import graph_objs
 from transformers import AutoModelForTimeSeriesPrediction
+from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-# First Party
-from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
-
+# Local
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
