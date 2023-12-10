@@ -16,7 +16,7 @@ cd tsfm
 ```
 
 ## Notebooks Installation
-Several notebooks are provided in the `notebooks` folder. The allow you to perform pre-training and finetuning on the models.
+Several notebooks are provided in the `notebooks` folder. They allow you to perform pre-training and finetuning on the models.
 To install use `pip`:
 
 ```bash
@@ -24,7 +24,7 @@ pip install ".[notebooks]"
 ```
 
 ## Demos Installation
-The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and fine-tuned models in place (we plan to release these at later date). To install the requirements use `pip`:
+The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at later date). To install the requirements use `pip`:
 
 ```bash
 pip install ".[demos]"
