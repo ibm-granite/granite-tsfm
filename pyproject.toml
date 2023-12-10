@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=66", "wheel", "Cython"]
+
+[project]
+name = "tsfm_public"
+requires-python = ">=3.9,<3.11"
+version = "0.0.1"
+authors = [{ name = "IBM" }]
+description = "Public notebooks and utilities for TSFM"
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apache Software License"]
+
+dependencies = [
+    "pandas>=1.4",
+    "scikit-learn",
+    "transformers[torch] @ git+https://github.com/namctin/transformers.git@de65ec5a37889f77464d44f71518a26fca1d9e4c",
+]
+
+[tool.setuptools]
+packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
+
+[project.optional-dependencies]
+
+notebooks = ["jupyter", "matplotlib", "datasets"]
+testing = ["pytest", "tsfm_public[notebooks]"]
+dev = ["pre-commit", "tsfm_public[testing]", "isort", "black[jupyter]"]
+evaluation = [
+    "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
+]
+all = ["tsfm_public[notebooks,testing,dev]"]
+# ogv deployments will already have jupyter
+# and we don't want to mess with RH's tested version
+ogv = ["datasets", "plotly", "kaleido"]
+demos = [
+    "tsfm_public[notebooks]",
+    "streamlit",
+    "altair<5",
+    "plotly",
+    "streamlit-aggrid",
+    "kaleido",
+    "toml"
+]
+# ###################################################
