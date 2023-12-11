@@ -23,6 +23,12 @@ To install use `pip`:
 pip install ".[notebooks]"
 ```
 
+### Notebooks links
+- Getting started with `PatchTSMixer` [[Try it out]](https://github.com/IBM/tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_getting_started.ipynb)
+- Transfer learning with `PatchTSMixer` [[Try it out]](https://github.com/IBM/tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_transfer.ipynb)
+- Transfer learning with `PatchTST` [[Try it out]](https://github.com/IBM/tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
+
+
 ## Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at later date). To install the requirements use `pip`:
 
