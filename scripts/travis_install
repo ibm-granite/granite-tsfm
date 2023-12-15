@@ -14,8 +14,6 @@ pip install build pytest isort "black[jupyter]"
 if ! PATH=$PATH:$HOME/.local/bin black --check .; then echo "black formatting checking failed"; exit 1; fi
 if ! PATH=$PATH:$HOME/.local/bin isort -c .; then echo "isort formatting checking failed"; exit 1; fi
 
-# @todo CYTHON BUILD NOT YET ENABLED FOR tsfm-services
-# but may not be necessary
 USE_CYTHON=$USE_CYTHON python -m build -w
 
 WHEEL_FILE=$(find dist -name "*.whl")

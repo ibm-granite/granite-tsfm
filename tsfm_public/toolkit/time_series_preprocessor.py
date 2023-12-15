@@ -18,7 +18,7 @@ from transformers.utils import TensorType
 import numpy as np
 import pandas as pd
 
-# First Party
+# Local
 from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
 
 INTERNAL_ID_COLUMN = "__id"
