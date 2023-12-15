@@ -102,6 +102,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
+        scale_outputs: bool = False,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         **kwargs,
     ):
@@ -120,6 +121,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.prediction_length = prediction_length
         self.scaling = scaling
         self.time_series_task = time_series_task
+        self.scale_outputs = scale_outputs
         self.scaler_dict = dict()
 
         kwargs["processor_class"] = self.__class__.__name__
@@ -237,6 +239,16 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             g = g.sort_values(by=self.timestamp_column)
             yield name, g
 
+    def _get_columns_to_scale(
+        self,
+    ):
+        cols_to_scale = copy.copy(self.input_columns)
+        if self.scale_outputs:
+            cols_to_scale.extend(
+                [c for c in self.output_columns if c not in self.input_columns]
+            )
+        return cols_to_scale
+
     def train(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -251,7 +263,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns: self
 
         """
-        cols_to_scale = self.input_columns
+        cols_to_scale = self._get_columns_to_scale()
 
         df = self._standardize_dataframe(dataset)
 
@@ -272,7 +284,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # 1) lists of references to datasets
         # 2) incremental / batch based processing of datasets to minimize memory impact
 
-        cols_to_scale = self.input_columns
+        if not self.scaling:
+            return dataset
+
+        cols_to_scale = self._get_columns_to_scale()
 
         if self.scaling and len(self.scaler_dict) == 0:
             # trying to get output, but we never trained the scaler
@@ -302,7 +317,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             scale_func,
             id_columns=id_columns,
         )
-
         return df_out
 
         # batch based processing for use as a proper "tokenizer"
