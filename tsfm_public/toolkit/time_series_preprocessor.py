@@ -241,7 +241,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def _get_columns_to_scale(
         self,
-    ):
+    ) -> List[str]:
+        """ Returns the columns to perform scaling on, based on the options specified during 
+        preprocessor init.
+
+        Returns:
+            List[str]: List of column names
+        """
         cols_to_scale = copy.copy(self.input_columns)
         if self.scale_outputs:
             cols_to_scale.extend(
@@ -263,6 +269,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns: self
 
         """
+
+        if not self.scaling:
+            return self
+
         cols_to_scale = self._get_columns_to_scale()
 
         df = self._standardize_dataframe(dataset)
@@ -318,25 +328,3 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             id_columns=id_columns,
         )
         return df_out
-
-        # batch based processing for use as a proper "tokenizer"
-        # rec_dict = self._prepare_single_time_series(name, g)
-        # for _, item in enumerate(rec_dict):
-        #     if self.id_columns:
-        #         ids = "_".join(item["id_columns"])
-        #         key = f"{ids}_{item['timestamp_column']}"
-        #     else:
-        #         key = f"{item['timestamp_column']}"
-
-        #     return BatchFeature(item, tensor_type=return_tensors)
-
-    # def pad(self, x, **kwargs):
-    #     """TO BE IMPLEMENTED"""
-    #     return x
-
-    # def __call__(
-    #     self,
-    #     batch,
-    #     return_tensors: Optional[Union[str, TensorType]] = None,
-    # ) -> BatchFeature:
-    #     return BatchFeature(batch, tensor_type=return_tensors)
