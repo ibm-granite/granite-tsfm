@@ -14,7 +14,7 @@ classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apa
 dependencies = [
     "pandas>=1.4",
     "scikit-learn",
-    "transformers[torch] @ git+https://github.com/namctin/transformers.git@de65ec5a37889f77464d44f71518a26fca1d9e4c",
+    "transformers[torch]>=4.36.1"
 ]
 
 [tool.setuptools]
