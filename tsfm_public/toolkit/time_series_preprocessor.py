@@ -102,6 +102,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
+        scale_outputs: bool = False,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         **kwargs,
     ):
@@ -120,6 +121,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.prediction_length = prediction_length
         self.scaling = scaling
         self.time_series_task = time_series_task
+        self.scale_outputs = scale_outputs
         self.scaler_dict = dict()
 
         kwargs["processor_class"] = self.__class__.__name__
@@ -237,6 +239,22 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             g = g.sort_values(by=self.timestamp_column)
             yield name, g
 
+    def _get_columns_to_scale(
+        self,
+    ) -> List[str]:
+        """ Returns the columns to perform scaling on, based on the options specified during 
+        preprocessor init.
+
+        Returns:
+            List[str]: List of column names
+        """
+        cols_to_scale = copy.copy(self.input_columns)
+        if self.scale_outputs:
+            cols_to_scale.extend(
+                [c for c in self.output_columns if c not in self.input_columns]
+            )
+        return cols_to_scale
+
     def train(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -251,7 +269,11 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns: self
 
         """
-        cols_to_scale = self.input_columns
+
+        if not self.scaling:
+            return self
+
+        cols_to_scale = self._get_columns_to_scale()
 
         df = self._standardize_dataframe(dataset)
 
@@ -272,7 +294,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # 1) lists of references to datasets
         # 2) incremental / batch based processing of datasets to minimize memory impact
 
-        cols_to_scale = self.input_columns
+        if not self.scaling:
+            return dataset
+
+        cols_to_scale = self._get_columns_to_scale()
 
         if self.scaling and len(self.scaler_dict) == 0:
             # trying to get output, but we never trained the scaler
@@ -302,27 +327,4 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             scale_func,
             id_columns=id_columns,
         )
-
         return df_out
-
-        # batch based processing for use as a proper "tokenizer"
-        # rec_dict = self._prepare_single_time_series(name, g)
-        # for _, item in enumerate(rec_dict):
-        #     if self.id_columns:
-        #         ids = "_".join(item["id_columns"])
-        #         key = f"{ids}_{item['timestamp_column']}"
-        #     else:
-        #         key = f"{item['timestamp_column']}"
-
-        #     return BatchFeature(item, tensor_type=return_tensors)
-
-    # def pad(self, x, **kwargs):
-    #     """TO BE IMPLEMENTED"""
-    #     return x
-
-    # def __call__(
-    #     self,
-    #     batch,
-    #     return_tensors: Optional[Union[str, TensorType]] = None,
-    # ) -> BatchFeature:
-    #     return BatchFeature(batch, tensor_type=return_tensors)
