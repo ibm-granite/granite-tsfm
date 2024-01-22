@@ -21,15 +21,17 @@ def select_by_timestamp(
         raise ValueError(
             "At least one of start_timestamp or end_timestamp must be specified."
         )
-    elif not start_timestamp:
+
+    if not start_timestamp:
         return df[df[timestamp_column] < end_timestamp]
-    elif not end_timestamp:
+
+    if not end_timestamp:
         return df[df[timestamp_column] >= start_timestamp]
-    else:
-        return df[
-            (df[timestamp_column] >= start_timestamp)
-            & (df[timestamp_column] < end_timestamp)
-        ]
+
+    return df[
+        (df[timestamp_column] >= start_timestamp)
+        & (df[timestamp_column] < end_timestamp)
+    ]
 
 
 def select_by_index(
@@ -39,7 +41,7 @@ def select_by_index(
     end_index: Optional[int] = None,
 ):
     if not start_index and not end_index:
-        raise ValueError("At least one of start_index or stop_index must be specified.")
+        raise ValueError("At least one of start_index or end_index must be specified.")
 
     def _split_group_by_index(
         group_df: pd.DataFrame,
@@ -48,10 +50,11 @@ def select_by_index(
     ):
         if not start_index:
             return group_df.iloc[:end_index,]
-        elif not end_index:
+
+        if not end_index:
             return group_df.iloc[start_index:,]
-        else:
-            return group_df.iloc[start_index:end_index, :]
+
+        return group_df.iloc[start_index:end_index, :]
 
     if not id_columns:
         return _split_group_by_index(
@@ -60,9 +63,70 @@ def select_by_index(
 
     groups = df.groupby(id_columns)
     result = []
-    for name, group in groups:
+    for _, group in groups:
         result.append(
             _split_group_by_index(group, start_index=start_index, end_index=end_index)
+        )
+
+    return pd.concat(result)
+
+
+def select_by_relative_fraction(
+    df: pd.DataFrame,
+    id_columns: Optional[List[str]] = None,
+    start_fraction: Optional[float] = None,
+    start_offset: Optional[int] = 0,
+    end_fraction: Optional[float] = None,
+):
+    if not start_fraction and not end_fraction:
+        raise ValueError(
+            "At least one of start_fraction or end_fraction must be specified."
+        )
+
+    def _split_group_by_fraction(
+        group_df: pd.DataFrame,
+        start_fraction: Optional[float] = None,
+        start_offset: Optional[int] = 0,
+        end_fraction: Optional[float] = None,
+    ):
+        length = len(group_df)
+
+        if start_fraction is not None:
+            start_index = int(length * start_fraction) - start_offset
+        else:
+            start_index = None
+
+        if end_fraction is not None:
+            end_index = int(length * end_fraction)
+        else:
+            end_index = None
+
+        if not start_fraction:
+            return group_df.iloc[:end_index,]
+
+        if not end_fraction:
+            return group_df.iloc[start_index:,]
+
+        return group_df.iloc[start_index:end_index, :]
+
+    if not id_columns:
+        return _split_group_by_fraction(
+            df,
+            start_fraction=start_fraction,
+            end_fraction=end_fraction,
+            start_offset=start_offset,
+        ).copy()
+
+    groups = df.groupby(id_columns if len(id_columns) > 1 else id_columns[0])
+    result = []
+    for _, group in groups:
+        result.append(
+            _split_group_by_fraction(
+                group,
+                start_fraction=start_fraction,
+                end_fraction=end_fraction,
+                start_offset=start_offset,
+            )
         )
 
     return pd.concat(result)
