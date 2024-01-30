@@ -2,11 +2,12 @@
 #
 """Preprocessor for time series data preparation"""
 
+# Standard
 import copy
 import enum
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
@@ -19,8 +20,6 @@ from transformers.feature_extraction_utils import FeatureExtractionMixin
 
 from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
 
-
-# Local
 
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
@@ -290,7 +289,16 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _standardize_dataframe(
         self,
         dataset: Union[Dataset, pd.DataFrame],
-    ):
+    ) -> pd.DataFrame:
+        """For given supported inputs, appropriately converts to a pandas dataframe. Adds an ID column
+        if needed.
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Input dataset
+
+        Returns:
+            pd.DataFrame: Converted dataframe with ID column.
+        """
         if isinstance(dataset, Dataset):
             df = dataset.to_pandas()
         else:
@@ -304,7 +312,15 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _get_groups(
         self,
         dataset: pd.DataFrame,
-    ):
+    ) -> Generator[Tuple[Any, pd.DataFrame], None, None]:
+        """Get groups of the time series dataset (multi-time series) based on the ID columns.
+
+        Args:
+            dataset (pd.DataFrame): Input dataset
+
+        Yields:
+            Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
+        """
         if self.id_columns:
             group_by_columns = (
                 self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
@@ -314,7 +330,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         grps = dataset.groupby(by=group_by_columns)
         for name, g in grps:
-            g = g.sort_values(by=self.timestamp_column)
+            # g = g.sort_values(by=self.timestamp_column)
             yield name, g
 
     def _get_other_columns_to_scale(
@@ -380,7 +396,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def train(
         self,
         dataset: Union[Dataset, pd.DataFrame],
-    ):
+    ) -> "TimeSeriesPreprocessor":
         """Train data transformation operations
 
         Currently iterates over groups defined by id_columns to train the scaler, if enabled.
