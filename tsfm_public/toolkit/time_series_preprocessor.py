@@ -2,24 +2,19 @@
 #
 """Preprocessor for time series data preparation"""
 
-# Standard
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
 import copy
-import datetime
 import enum
 import json
+from dataclasses import field
+from typing import Any, Dict, List, Optional, Union
 
-# Third Party
+import pandas as pd
 from datasets import Dataset
 from sklearn.preprocessing import StandardScaler
-from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from transformers.utils import TensorType
-import numpy as np
-import pandas as pd
+from transformers.feature_extraction_utils import FeatureExtractionMixin
+
 
 # Local
-from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
 
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
@@ -242,7 +237,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _get_columns_to_scale(
         self,
     ) -> List[str]:
-        """ Returns the columns to perform scaling on, based on the options specified during 
+        """Returns the columns to perform scaling on, based on the options specified during
         preprocessor init.
 
         Returns:
