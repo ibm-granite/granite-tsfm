@@ -24,7 +24,7 @@ packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
 
 notebooks = ["jupyter", "matplotlib", "datasets", "ipywidgets", "plotly", "kaleido"]
 testing = ["pytest", "tsfm_public[notebooks]"]
-dev = ["pre-commit", "tsfm_public[testing]", "isort", "black[jupyter]"]
+dev = ["pre-commit", "tsfm_public[testing]", "ruff"]
 evaluation = [
     "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
 ]
@@ -42,3 +42,31 @@ demos = [
     "toml"
 ]
 # ###################################################
+
+
+[tool.ruff]
+# Never enforce `E501` (line length violations).
+ignore = ["C901", "E501", "E741", "F402", "F823" ]
+select = ["C", "E", "F", "I", "W"]
+line-length = 119
+
+# Ignore import violations in all `__init__.py` files.
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403", "F811"]
+
+[tool.ruff.isort]
+lines-after-imports = 2
+known-first-party = ["tsfm_public"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
