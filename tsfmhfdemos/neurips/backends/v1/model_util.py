@@ -2,21 +2,17 @@
 #
 """Utilities for the demo app"""
 
-# Standard
-from typing import List, Type
 import copy
 import logging
 import os
+from typing import List, Type
 
-# Third Party
-from plotly import figure_factory as ff
-from plotly.graph_objs import graph_objs
-from transformers import AutoConfig
-from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
-import numpy as np
 import pandas as pd
 import streamlit as st
 import transformers
+from plotly.graph_objs import graph_objs
+from transformers import AutoConfig
+from tsevaluate.multivalue_timeseries_evaluator import CrossTimeSeriesEvaluator
 
 # Local
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
@@ -25,6 +21,7 @@ from tsfm_public.toolkit.time_series_forecasting_pipeline import (
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 from tsfm_public.toolkit.util import select_by_index
 from tsfm_public.toolkit.visualization import plot_ts_forecasting
+
 
 # A dictionary containing datasets mapped to their location
 # Note that keys of this dictionary get rendered in the UI
@@ -106,11 +103,13 @@ def csv_to_df(metainfo: dict) -> pd.DataFrame:
     """
     return pd.read_csv(metainfo["uri"], parse_dates=[metainfo["timestamp_column"]])
 
+
 def get_model_class(model_path: str) -> Type:
     conf = AutoConfig.from_pretrained(model_path)
     model_class = getattr(transformers, conf.architectures[0])
 
     return model_class
+
 
 def get_model_path(**kwargs) -> str:
     if kwargs["approach"] == "zero_shot":
@@ -194,7 +193,7 @@ def create_figure(**kwargs) -> graph_objs.Figure:
     timestamp_column = kwargs["timestamp_column"]
 
     model_class = get_model_class(model_path)
-    
+
     model = model_class.from_pretrained(
         model_path, num_input_channels=len(forecast_columns)
     )

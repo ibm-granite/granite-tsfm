@@ -2,18 +2,15 @@
 #
 """Utilities for plotting time series data"""
 
-# Standard
-from datetime import timedelta
 import logging
 
-# Third Party
-from IPython.display import Image
-from plotly.subplots import make_subplots
 import pandas as pd
 import plotly.graph_objs as go
+from IPython.display import Image
+from plotly.subplots import make_subplots
+
 
 try:
-    # Third Party
     import matplotlib.pyplot as plt
     import seaborn as sns
 
@@ -97,13 +94,13 @@ def plot_ts_forecasting(
     #     )
 
     if not periodicity:
-        logging.warning(f"Please specify periodicity.")
+        logging.warning("Please specify periodicity.")
 
     if not context_length:
-        logging.warning(f"Please specify context_length.")
+        logging.warning("Please specify context_length.")
 
     if not prediction_length:
-        logging.warning(f"Please specify prediction_length.")
+        logging.warning("Please specify prediction_length.")
 
     plot_range = range(test_data_updated.shape[0])[plot_start:plot_end]
 
