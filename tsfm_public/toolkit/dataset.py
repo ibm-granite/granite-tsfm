@@ -42,7 +42,11 @@ class BaseDFDataset(torch.utils.data.Dataset):
         context_length: int = 1,
         prediction_length: int = 0,
         zero_padding: bool = True,
+<<<<<<< HEAD
         stride: int = 1,
+=======
+        fill_value: Union[float, int] = 0.0,
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -71,6 +75,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self.context_length = context_length
         self.prediction_length = prediction_length
         self.zero_padding = zero_padding
+        self.fill_value = fill_value
         self.timestamps = None
         self.group_id = group_id
         self.stride = stride
@@ -154,6 +159,11 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         context_length: int = 1,
         prediction_length: int = 1,
         num_workers: int = 1,
+<<<<<<< HEAD
+=======
+        pred_len: int = 0,
+        fill_value: Union[float, int] = 0.0,
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
         cls=BaseDFDataset,
         stride: int = 1,
         **kwargs,
@@ -167,10 +177,16 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         # self.y_cols = y_cols
         self.context_length = context_length
         self.num_workers = num_workers
+<<<<<<< HEAD
         self.cls = cls
         self.prediction_length = prediction_length
         self.stride = stride
         self.extra_kwargs = kwargs
+=======
+        self.pred_len = pred_len
+        self.fill_value = fill_value
+        self.cls = cls
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
 
         # create groupby object
         if len(id_columns) == 1:
@@ -212,8 +228,14 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     self.context_length,
                     self.prediction_length,
                     self.drop_cols,
+<<<<<<< HEAD
                     self.stride,
                     self.extra_kwargs,
+=======
+                    self.seq_len,
+                    self.pred_len,
+                    self.fill_value,
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
                 )
                 for group_id, group in group_df
             ],
@@ -228,6 +250,7 @@ def get_group_data(
     cls,
     group,
     group_id,
+<<<<<<< HEAD
     id_columns: List[str] = [],
     timestamp_column: Optional[str] = None,
     context_length: int = 1,
@@ -235,6 +258,16 @@ def get_group_data(
     drop_cols: Optional[List[str]] = None,
     stride: int = 1,
     extra_kwargs: Dict[str, Any] = {},
+=======
+    datetime_col: str,
+    id_columns: List[str],
+    x_cols: list,
+    y_cols: list,
+    drop_cols: list,
+    seq_len: int,
+    pred_len: int,
+    fill_value: Union[float, int],
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
 ):
     return cls(
         data_df=group,
@@ -244,8 +277,14 @@ def get_group_data(
         context_length=context_length,
         prediction_length=prediction_length,
         drop_cols=drop_cols,
+<<<<<<< HEAD
         stride=stride,
         **extra_kwargs,
+=======
+        seq_len=seq_len,
+        pred_len=pred_len,
+        fill_value=fill_value,
+>>>>>>> f75400d (add filling missing and observed mask for forecasting)
     )
 
 
@@ -359,6 +398,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         frequency_token: Optional[int] = None,
         autoregressive_modeling: bool = True,
         stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -369,6 +409,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             num_workers=num_workers,
             context_length=context_length,
             prediction_length=prediction_length,
+            fill_value=fill_value,
             cls=self.BaseForecastDFDataset,
             stride=stride,
             # extra_args
@@ -406,6 +447,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
             stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -446,6 +488,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 group_id=group_id,
                 drop_cols=drop_cols,
                 stride=stride,
+                fill_value=fill_value,
             )
 
         def __getitem__(self, index):
@@ -465,9 +508,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
-                "past_values": np_to_torch(seq_x),
-                "future_values": np_to_torch(seq_y),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
+                "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
             }
+
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
 
@@ -598,6 +644,8 @@ def np_to_torch(data: np.array, float_type=np.float32):
     if data.dtype == "float":
         return torch.from_numpy(data.astype(float_type))
     elif data.dtype == "int":
+        return torch.from_numpy(data)
+    elif data.dtype == "bool":
         return torch.from_numpy(data)
     return torch.from_numpy(data)
 
