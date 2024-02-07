@@ -266,6 +266,18 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             )
         return cols_to_scale
 
+    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
+        """Basic checks for input dataset.
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Input time series data.
+
+        Raises:
+            ValueError: Raised if the dataset is empty.
+        """
+        if dataset is None or len(dataset) == 0:
+            raise ValueError("Input dataset must not be null or zero length.")
+
     def train(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -280,6 +292,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns: self
 
         """
+
+        self._check_dataset(dataset)
 
         if not self.scaling:
             return self
@@ -304,6 +318,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # eventually we need a strategy for dealing with:
         # 1) lists of references to datasets
         # 2) incremental / batch based processing of datasets to minimize memory impact
+
+        self._check_dataset(dataset)
 
         if not self.scaling:
             return dataset
