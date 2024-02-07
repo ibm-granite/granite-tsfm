@@ -16,7 +16,25 @@ def select_by_timestamp(
     timestamp_column: str = "timestamp",
     start_timestamp: Optional[Union[str, datetime]] = None,
     end_timestamp: Optional[Union[str, datetime]] = None,
-):
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on timestamps.
+    Note that the range selected is inclusive of the starting timestamp.
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        timestamp_column (str, optional): Timestamp column in the dataset. Defaults to "timestamp".
+        start_timestamp (Optional[Union[str, datetime]], optional): Timestamp of the starting point.
+            Defaults to None. Use None to specify the start of the data.
+        end_timestamp (Optional[Union[str, datetime]], optional): Timestamp of the ending point.
+            Use None to specify the end of the data. Defaults to None.
+
+    Raises:
+        ValueError: User must specify either start_timestamp or end_timestamp.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
+
     if not start_timestamp and not end_timestamp:
         raise ValueError(
             "At least one of start_timestamp or end_timestamp must be specified."
@@ -39,15 +57,39 @@ def select_by_index(
     id_columns: Optional[List[str]] = None,
     start_index: Optional[int] = None,
     end_index: Optional[int] = None,
-):
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on integer indices into the data.
+    Note that the range selected is inclusive of the starting index. When ID columns are specified
+    the selection is done per-time series (i.e., the indices are used relative to each time series).
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
+        start_index (Optional[int], optional): Index of the starting point.
+            Defaults to None. Use None to specify the start of the data.
+        end_index (Optional[Union[str, datetime]], optional): Index of the ending point.
+            Use None to specify the end of the data. Defaults to None.
+
+    Raises:
+        ValueError: User must specify either start_index or end_index.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
     if not start_index and not end_index:
         raise ValueError("At least one of start_index or end_index must be specified.")
 
     def _split_group_by_index(
         group_df: pd.DataFrame,
+        name: Optional[str] = None,
         start_index: Optional[int] = None,
         end_index: Optional[int] = None,
     ):
+        if start_index and (start_index >= len(group_df)):
+            msg = "Selection would result in an empty time series, please check start_index and time series length"
+            msg = msg + f" (id = {name})" if name else msg
+            raise ValueError(msg)
+
         if not start_index:
             return group_df.iloc[:end_index,]
 
@@ -61,11 +103,13 @@ def select_by_index(
             df, start_index=start_index, end_index=end_index
         ).copy()
 
-    groups = df.groupby(id_columns)
+    groups = df.groupby(_get_groupby_columns(id_columns))
     result = []
-    for _, group in groups:
+    for name, group in groups:
         result.append(
-            _split_group_by_index(group, start_index=start_index, end_index=end_index)
+            _split_group_by_index(
+                group, name=name, start_index=start_index, end_index=end_index
+            )
         )
 
     return pd.concat(result)
@@ -77,14 +121,42 @@ def select_by_relative_fraction(
     start_fraction: Optional[float] = None,
     start_offset: Optional[int] = 0,
     end_fraction: Optional[float] = None,
-):
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on relative fractions of the data.
+    Note that the range selected is inclusive of the starting index. When ID columns are specified
+    the selection is done per-time series (i.e., the fractions are used relative to each time series length).
+
+    The indices are computed as:
+    index_start_i = floor(length_i * start_fraction) - start_offset
+    index_end_i = floor(length_i * end_fraction)
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
+        start_fraction (Optional[float], optional): The fraction to specify the start of the selection. Use None to specify the start of the dataset. Defaults to None.
+        start_offset (Optional[int], optional): An optional offset to apply to the starting point of
+            each subseries. A non-negative value should be used. Defaults to 0.
+        end_fraction (Optional[float], optional): The fraction to specify the end of the selection.
+            Use None to specify the end of the dataset. Defaults to None.
+
+    Raises:
+        ValueError: Raised when the user does not specify either start_index or end_index. Also raised
+            when a negative value of start_offset is provided.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
     if not start_fraction and not end_fraction:
         raise ValueError(
             "At least one of start_fraction or end_fraction must be specified."
         )
 
+    if start_offset < 0:
+        raise ValueError("The value of start_offset should ne non-negative.")
+
     def _split_group_by_fraction(
         group_df: pd.DataFrame,
+        name: Optional[str] = None,
         start_fraction: Optional[float] = None,
         start_offset: Optional[int] = 0,
         end_fraction: Optional[float] = None,
@@ -93,6 +165,12 @@ def select_by_relative_fraction(
 
         if start_fraction is not None:
             start_index = int(length * start_fraction) - start_offset
+            if start_index < 0:
+                if name:
+                    msg = f"Computed starting_index for id={name} is negative, please check individual time series lengths, start_fraction, and start_offset."
+                else:
+                    msg = "Computed starting_index is negative, please check time series length, start_fraction, and start_offset."
+                raise ValueError(msg)
         else:
             start_index = None
 
@@ -117,12 +195,13 @@ def select_by_relative_fraction(
             start_offset=start_offset,
         ).copy()
 
-    groups = df.groupby(id_columns if len(id_columns) > 1 else id_columns[0])
+    groups = df.groupby(_get_groupby_columns(id_columns))
     result = []
-    for _, group in groups:
+    for name, group in groups:
         result.append(
             _split_group_by_fraction(
                 group,
+                name=name,
                 start_fraction=start_fraction,
                 end_fraction=end_fraction,
                 start_offset=start_offset,
@@ -130,6 +209,17 @@ def select_by_relative_fraction(
         )
 
     return pd.concat(result)
+
+
+def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
+
+    if not isinstance(id_columns, (List)):
+        raise ValueError("id_columns must be a list")
+
+    if len(id_columns) == 1:
+        return id_columns[0]
+
+    return id_columns
 
 
 def convert_tsf_to_dataframe(
