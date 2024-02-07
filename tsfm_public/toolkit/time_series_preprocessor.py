@@ -3,20 +3,21 @@
 """Preprocessor for time series data preparation"""
 
 # Standard
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
 import copy
 import datetime
 import enum
 import json
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
 
 # Third Party
 from datasets import Dataset
 from sklearn.preprocessing import StandardScaler
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from transformers.utils import TensorType
-import numpy as np
-import pandas as pd
 
 # Local
 from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
@@ -79,6 +80,62 @@ class TimeSeriesScaler(StandardScaler):
             setattr(t, k, v)
 
         return t
+
+
+class SKLearnFeatureExtractionBase:
+    """Simple wrapper class to adapt Sklearn fucntions to work with the HF
+    serialization approach.
+    """
+
+    init_param_names = []  # "copy", "with_mean", "with_std"]
+
+    def __init__(self):
+        ...
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary of parameters from which we can reconstruct"""
+        output = {}
+        for k, v in vars(self).items():
+            try:
+                json.dumps(v)
+                output[k] = v
+            except TypeError:
+                output[k] = v.tolist()
+        return output
+
+    @classmethod
+    def from_dict(
+        cls, feature_extractor_dict: Dict[str, Any], **kwargs
+    ) -> "SKLearnFeatureExtractionBase":
+        """ """
+
+        # certain params are passed during init
+        init_params = {}
+        for k, v in [
+            (k, v)
+            for k, v in feature_extractor_dict.items()
+            if k in cls.init_param_names
+        ]:
+            init_params[k] = v
+
+        t = cls(**init_params)
+
+        # set remaining params
+        for k, v in [
+            (k, v)
+            for k, v in feature_extractor_dict.items()
+            if k not in cls.init_param_names
+        ]:
+            setattr(t, k, v)
+
+        return t
+
+
+from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
+
+
+class OrdinalEncoder(OrdinalEncoder_, SKLearnFeatureExtractionBase):
+    init_param_names = []  # "copy", "with_mean", "with_std"]
 
 
 class TimeSeriesTask(enum.Enum):
@@ -242,7 +299,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _get_columns_to_scale(
         self,
     ) -> List[str]:
-        """ Returns the columns to perform scaling on, based on the options specified during 
+        """Returns the columns to perform scaling on, based on the options specified during
         preprocessor init.
 
         Returns:
