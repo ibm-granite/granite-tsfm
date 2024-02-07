@@ -2,22 +2,17 @@
 #
 """Hugging Face Pipeline for Time Series Tasks"""
 
-# Standard
-from typing import Any, Dict, List, Union
+from typing import Dict, Union
 
-# Third Party
-from transformers.pipelines.base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
-from transformers.utils import (
-    add_end_docstrings,
-    is_torch_available,
-    logging,
-    requires_backends,
-)
 import pandas as pd
 import torch
+from transformers.pipelines.base import GenericTensor, Pipeline
+from transformers.utils import (
+    logging,
+)
 
-# Local
 from .dataset import ForecastDFDataset
+
 
 # Eventually we should support all time series models
 # MODEL_FOR_TIME_SERIES_FORECASTING_MAPPING_NAMES = OrderedDict(
