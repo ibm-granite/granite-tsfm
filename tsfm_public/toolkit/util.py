@@ -79,25 +79,6 @@ def select_by_index(
     if not start_index and not end_index:
         raise ValueError("At least one of start_index or end_index must be specified.")
 
-    def _split_group_by_index(
-        group_df: pd.DataFrame,
-        name: Optional[str] = None,
-        start_index: Optional[int] = None,
-        end_index: Optional[int] = None,
-    ):
-        if start_index and (start_index >= len(group_df)):
-            msg = "Selection would result in an empty time series, please check start_index and time series length"
-            msg = msg + f" (id = {name})" if name else msg
-            raise ValueError(msg)
-
-        if not start_index:
-            return group_df.iloc[:end_index,]
-
-        if not end_index:
-            return group_df.iloc[start_index:,]
-
-        return group_df.iloc[start_index:end_index, :]
-
     if not id_columns:
         return _split_group_by_index(
             df, start_index=start_index, end_index=end_index
@@ -154,39 +135,6 @@ def select_by_relative_fraction(
     if start_offset < 0:
         raise ValueError("The value of start_offset should ne non-negative.")
 
-    def _split_group_by_fraction(
-        group_df: pd.DataFrame,
-        name: Optional[str] = None,
-        start_fraction: Optional[float] = None,
-        start_offset: Optional[int] = 0,
-        end_fraction: Optional[float] = None,
-    ):
-        length = len(group_df)
-
-        if start_fraction is not None:
-            start_index = int(length * start_fraction) - start_offset
-            if start_index < 0:
-                if name:
-                    msg = f"Computed starting_index for id={name} is negative, please check individual time series lengths, start_fraction, and start_offset."
-                else:
-                    msg = "Computed starting_index is negative, please check time series length, start_fraction, and start_offset."
-                raise ValueError(msg)
-        else:
-            start_index = None
-
-        if end_fraction is not None:
-            end_index = int(length * end_fraction)
-        else:
-            end_index = None
-
-        if not start_fraction:
-            return group_df.iloc[:end_index,]
-
-        if not end_fraction:
-            return group_df.iloc[start_index:,]
-
-        return group_df.iloc[start_index:end_index, :]
-
     if not id_columns:
         return _split_group_by_fraction(
             df,
@@ -220,6 +168,58 @@ def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
         return id_columns[0]
 
     return id_columns
+
+
+def _split_group_by_index(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    start_index: Optional[int] = None,
+    end_index: Optional[int] = None,
+) -> pd.DataFrame:
+    if start_index and (start_index >= len(group_df)):
+        msg = "Selection would result in an empty time series, please check start_index and time series length"
+        msg = msg + f" (id = {name})" if name else msg
+        raise ValueError(msg)
+
+    # Also check that end_index <= len(group_df)?
+
+    if not start_index:
+        return group_df.iloc[:end_index,]
+
+    if not end_index:
+        return group_df.iloc[start_index:,]
+
+    return group_df.iloc[start_index:end_index, :]
+
+
+def _split_group_by_fraction(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    start_fraction: Optional[float] = None,
+    start_offset: Optional[int] = 0,
+    end_fraction: Optional[float] = None,
+) -> pd.DataFrame:
+    length = len(group_df)
+
+    if start_fraction is not None:
+        start_index = int(length * start_fraction) - start_offset
+        if start_index < 0:
+            if name:
+                msg = f"Computed starting_index for id={name} is negative, please check individual time series lengths, start_fraction, and start_offset."
+            else:
+                msg = "Computed starting_index is negative, please check time series length, start_fraction, and start_offset."
+            raise ValueError(msg)
+    else:
+        start_index = None
+
+    if end_fraction is not None:
+        end_index = int(length * end_fraction)
+    else:
+        end_index = None
+
+    return _split_group_by_index(
+        group_df=group_df, start_index=start_index, end_index=end_index
+    )
 
 
 def convert_tsf_to_dataframe(
