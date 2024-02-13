@@ -211,3 +211,39 @@ def convert_tsf_to_dataframe(
             contain_missing_values,
             contain_equal_length,
         )
+
+
+
+def convert_tsf(filename: str) -> pd.DataFrame:
+    """Converts a tsf format file into a pandas dataframe.
+    Returns the result in canonical multi-time series format, with an ID column, and timestamp.
+
+    Args:
+        filename (str): Input file name.
+
+    Returns:
+        pd.DataFrame: Converted time series 
+    """
+    (
+        loaded_data,
+        frequency,
+        forecast_horizon,
+        contain_missing_values,
+        contain_equal_length,
+    ) = convert_tsf_to_dataframe(filename)
+
+    dfs = []
+    for index, item in loaded_data.iterrows():
+        # todo: use actual dates for timestamp
+        dfs.append(
+            pd.DataFrame(
+                {
+                    "id": item.series_name,
+                    "timestamp": range(len(item.series_value)),
+                    "value": item.series_value,
+                }
+            )
+        )
+
+    df = pd.concat(dfs)
+    return df

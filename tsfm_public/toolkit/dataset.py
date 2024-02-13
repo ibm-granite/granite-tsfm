@@ -3,15 +3,16 @@
 """Tools for building torch datasets"""
 
 # Standard
+import multiprocessing as mp
 from itertools import starmap
 from typing import List, Optional, Tuple, Union
-import multiprocessing as mp
 
-# Third Party
-from torch import Tensor
 import numpy as np
 import pandas as pd
 import torch
+
+# Third Party
+from torch import Tensor
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
@@ -43,6 +44,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         seq_len: int = 1,
         pred_len: int = 0,
         zero_padding: bool = True,
+        frequency_token: Optional[int] = None,
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -79,6 +81,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self.zero_padding = zero_padding
         self.timestamps = None
         self.group_id = group_id
+        self.frequency_token = frequency_token
 
         # sort the data by datetime
         if datetime_col in list(data_df.columns):
@@ -162,6 +165,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         num_workers: int = 1,
         pred_len: int = 0,
         cls=BaseDFDataset,
+        frequency_token: Optional[int] = None,
     ):
         if len(id_columns) > 0:
             assert is_cols_in_df(
@@ -176,6 +180,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         self.num_workers = num_workers
         self.cls = cls
         self.pred_len = pred_len
+        self.frequency_token = frequency_token
 
         # create groupby object
         if len(id_columns) == 1:
@@ -219,6 +224,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     self.drop_cols,
                     self.seq_len,
                     self.pred_len,
+                    self.frequency_token,
                 )
                 for group_id, group in group_df
             ],
@@ -240,6 +246,7 @@ def get_group_data(
     drop_cols: list,
     seq_len: int,
     pred_len: int,
+    frequency_token: Optional[int] = None,
 ):
     return cls(
         data_df=group,
@@ -251,6 +258,7 @@ def get_group_data(
         drop_cols=drop_cols,
         seq_len=seq_len,
         pred_len=pred_len,
+        frequency_token=frequency_token,
     )
 
 
@@ -348,11 +356,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
         context_length: int = 1,
         prediction_length: int = 1,
         num_workers: int = 1,
+        frequency_token: Optional[int] = None,
     ):
-        if output_columns == []:
-            output_columns_tmp = input_columns
-        else:
-            output_columns_tmp = output_columns
+        output_columns_tmp = input_columns if output_columns == [] else output_columns
 
         super().__init__(
             data_df=data,
@@ -363,6 +369,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             seq_len=context_length,
             pred_len=prediction_length,
             num_workers=num_workers,
+            frequency_token=frequency_token,
             cls=self.BaseForecastDFDataset,
         )
         self.n_inp = 2
@@ -385,6 +392,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             drop_cols: list = [],
             seq_len: int = 1,
             pred_len: int = 1,
+            frequency_token: Optional[int] = None,
         ):
             super().__init__(
                 data_df=data_df,
@@ -396,6 +404,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 seq_len=seq_len,
                 pred_len=pred_len,
+                frequency_token=frequency_token,
             )
 
         def __getitem__(self, time_id):
@@ -415,6 +424,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             if self.group_id:
                 ret["id"] = self.group_id
+
+            if self.frequency_token is not None:
+                ret["freq_token"] = self.frequency_token
 
             return ret
 
