@@ -3,15 +3,25 @@
 
 """Tests basic dataset functions"""
 
-# Standard
-from datetime import datetime, timedelta
 
-# Third Party
+from datetime import datetime, timedelta
+from itertools import chain, repeat
+
+import numpy as np
 import pandas as pd
 import pytest
 
-# Local
-from tsfm_public.toolkit.dataset import PretrainDFDataset, ts_padding
+from tsfm_public.toolkit.dataset import (
+    ForecastDFDataset,
+    PretrainDFDataset,
+    ts_padding,
+)
+from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+
+
+def nreps(iterable, n):
+    "Returns each element in the sequence repeated n times."
+    return chain.from_iterable((repeat(i, n) for i in iterable))
 
 
 @pytest.fixture(scope="module")
@@ -27,6 +37,22 @@ def ts_data():
     )
     df["time_date"] = df["time_int"] * timedelta(days=1) + datetime(2020, 1, 1)
     return df
+
+
+@pytest.fixture(scope="module")
+def ts_data_with_categorical():
+    return pd.DataFrame(
+        {
+            "id": nreps(["A", "B", "C"], 50),
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)]
+            * 3,
+            "value1": range(150),
+            "value2": np.arange(150) / 3 + 10,
+            "value3": np.arange(150) / 50 - 6,
+            "color": nreps(["Blue", "Green", "Yellow"], 50),
+            "material": nreps(["SUS316", "SUS314", "AL6061"], 50),
+        }
+    )
 
 
 def test_ts_padding(ts_data):
@@ -81,3 +107,56 @@ def test_pretrain_df_dataset(ts_data):
     assert len(ds) == 1
 
     assert ds[0]["timestamp"] == ts_data.iloc[-1]["time_date"]
+
+
+def test_forecasting_df_dataset(ts_data_with_categorical):
+
+    prediction_length = 2
+    static_categorical_columns = ["color", "material"]
+    target_columns = ["value1"]
+    observable_columns = ["value3"]
+    conditional_columns = ["value2"]
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=[
+            "value1",
+        ],
+        observable_columns=["value3"],
+        conditional_columns=["value2"],
+        static_categorical_columns=["color", "material"],
+    )
+
+    df = tsp.train(ts_data_with_categorical).preprocess(ts_data_with_categorical)
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        observable_columns=observable_columns,
+        conditional_columns=conditional_columns,
+        static_categorical_columns=static_categorical_columns,
+        context_length=10,
+        prediction_length=prediction_length,
+        frequency_token=2,
+    )
+
+    # check that we produce outputs for static categorical
+    assert "static_categorical_values" in ds[0]
+    assert ds[0]["static_categorical_values"].shape == (
+        len(static_categorical_columns),
+    )
+
+    # check that frequency token is present
+    assert "freq_token" in ds[0]
+
+    # check shape of future
+    assert ds[0]["future_values"].shape == (
+        prediction_length,
+        len(target_columns + observable_columns + conditional_columns),
+    )
+
+    # check future values zeroed out for conditional variables
+    assert np.all(ds[0]["future_values"][:, 2].numpy() == 0)
