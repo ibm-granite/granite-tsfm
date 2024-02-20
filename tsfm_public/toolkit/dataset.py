@@ -281,6 +281,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             timestamp_column=timestamp_column,
             num_workers=num_workers,
             context_length=context_length,
+            prediction_length=0,
             cls=self.BasePretrainDFDataset,
             target_columns=target_columns,
         )
