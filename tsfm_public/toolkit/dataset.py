@@ -5,7 +5,7 @@
 # Standard
 import multiprocessing as mp
 from itertools import starmap
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -35,16 +35,15 @@ class BaseDFDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         data_df: pd.DataFrame,
-        datetime_col: str = None,
         id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
         group_id: Optional[Union[List[int], List[str]]] = None,
         x_cols: list = [],
         y_cols: list = [],
         drop_cols: list = [],
-        seq_len: int = 1,
-        pred_len: int = 0,
+        context_length: int = 1,
+        prediction_length: int = 0,
         zero_padding: bool = True,
-        frequency_token: Optional[int] = None,
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -62,46 +61,45 @@ class BaseDFDataset(torch.utils.data.Dataset):
                 data_df, y_cols
             ), f"one or more {y_cols} is not in the list of data_df columns"
 
-        if datetime_col:
-            assert datetime_col in list(
+        if timestamp_column:
+            assert timestamp_column in list(
                 data_df.columns
-            ), f"{datetime_col} is not in the list of data_df columns"
+            ), f"{timestamp_column} is not in the list of data_df columns"
             assert (
-                datetime_col not in x_cols
-            ), f"{datetime_col} should not be in the list of x_cols"
+                timestamp_column not in x_cols
+            ), f"{timestamp_column} should not be in the list of x_cols"
 
         self.data_df = data_df
-        self.datetime_col = datetime_col
+        self.datetime_col = timestamp_column
         self.id_columns = id_columns
         self.x_cols = x_cols
         self.y_cols = y_cols
         self.drop_cols = drop_cols
-        self.seq_len = seq_len
-        self.pred_len = pred_len
+        self.context_length = context_length
+        self.prediction_length = prediction_length
         self.zero_padding = zero_padding
         self.timestamps = None
         self.group_id = group_id
-        self.frequency_token = frequency_token
 
         # sort the data by datetime
-        if datetime_col in list(data_df.columns):
-            data_df[datetime_col] = pd.to_datetime(data_df[datetime_col])
-            data_df = data_df.sort_values(datetime_col, ignore_index=True)
+        if timestamp_column in list(data_df.columns):
+            data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
+            data_df = data_df.sort_values(timestamp_column, ignore_index=True)
 
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
         if zero_padding:
             data_df = self.pad_zero(data_df)
 
-        if datetime_col in list(data_df.columns):
-            self.timestamps = data_df[datetime_col].values
+        if timestamp_column in list(data_df.columns):
+            self.timestamps = data_df[timestamp_column].values
 
         # get the input data
         if len(x_cols) > 0:
             self.X = data_df[x_cols]
         else:
             drop_cols = self.drop_cols + y_cols
-            if datetime_col:
-                drop_cols += [datetime_col]
+            if timestamp_column:
+                drop_cols += [timestamp_column]
             self.X = data_df.drop(drop_cols, axis=1) if len(drop_cols) > 0 else data_df
             self.x_cols = list(self.X.columns)
 
@@ -122,11 +120,11 @@ class BaseDFDataset(torch.utils.data.Dataset):
             data_df,
             timestamp_column=self.datetime_col,
             id_columns=self.id_columns,
-            context_length=self.seq_len + self.pred_len,
+            context_length=self.context_length + self.prediction_length,
         )
 
     def __len__(self):
-        return len(self.X) - self.seq_len - self.pred_len + 1
+        return len(self.X) - self.context_length - self.prediction_length + 1
 
     def __getitem__(self, index: int):
         """
@@ -157,30 +155,28 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
     def __init__(
         self,
         data_df: pd.DataFrame,
-        datetime_col: str = None,
         id_columns: List[str] = [],
-        x_cols: list = [],
-        y_cols: list = [],
-        seq_len: int = 1,
+        timestamp_column: Optional[str] = None,
+        context_length: int = 1,
+        prediction_length: int = 1,
         num_workers: int = 1,
-        pred_len: int = 0,
         cls=BaseDFDataset,
-        frequency_token: Optional[int] = None,
+        **kwargs,
     ):
         if len(id_columns) > 0:
             assert is_cols_in_df(
                 data_df, id_columns
             ), f"{id_columns} is not in the data_df columns"
 
-        self.datetime_col = datetime_col
+        self.timestamp_column = timestamp_column
         self.id_columns = id_columns
-        self.x_cols = x_cols
-        self.y_cols = y_cols
-        self.seq_len = seq_len
+        # self.x_cols = x_cols
+        # self.y_cols = y_cols
+        self.context_length = context_length
         self.num_workers = num_workers
         self.cls = cls
-        self.pred_len = pred_len
-        self.frequency_token = frequency_token
+        self.prediction_length = prediction_length
+        self.extra_kwargs = kwargs
 
         # create groupby object
         if len(id_columns) == 1:
@@ -217,14 +213,12 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     self.cls,
                     group,
                     group_id,
-                    self.datetime_col,
                     self.id_columns,
-                    self.x_cols,
-                    self.y_cols,
+                    self.timestamp_column,
+                    self.context_length,
+                    self.prediction_length,
                     self.drop_cols,
-                    self.seq_len,
-                    self.pred_len,
-                    self.frequency_token,
+                    self.extra_kwargs,
                 )
                 for group_id, group in group_df
             ],
@@ -239,26 +233,22 @@ def get_group_data(
     cls,
     group,
     group_id,
-    datetime_col: str,
-    id_columns: List[str],
-    x_cols: list,
-    y_cols: list,
-    drop_cols: list,
-    seq_len: int,
-    pred_len: int,
-    frequency_token: Optional[int] = None,
+    id_columns: List[str] = [],
+    timestamp_column: Optional[str] = None,
+    context_length: int = 1,
+    prediction_length: int = 1,
+    drop_cols: Optional[List[str]] = None,
+    extra_kwargs: Dict[str, Any] = {},
 ):
     return cls(
         data_df=group,
         group_id=group_id,
-        datetime_col=datetime_col,
         id_columns=id_columns,
-        x_cols=x_cols,
-        y_cols=y_cols,
+        timestamp_column=timestamp_column,
+        context_length=context_length,
+        prediction_length=prediction_length,
         drop_cols=drop_cols,
-        seq_len=seq_len,
-        pred_len=pred_len,
-        frequency_token=frequency_token,
+        **extra_kwargs,
     )
 
 
@@ -349,28 +339,37 @@ class ForecastDFDataset(BaseConcatDFDataset):
     def __init__(
         self,
         data: pd.DataFrame,
-        timestamp_column: Optional[str] = None,
-        input_columns: List[str] = [],
-        output_columns: List[str] = [],
         id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        target_columns: List[str] = [],
+        observable_columns: List[str] = [],
+        control_columns: List[str] = [],
+        conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
+        static_columns: List[str] = [],
         context_length: int = 1,
         prediction_length: int = 1,
         num_workers: int = 1,
         frequency_token: Optional[int] = None,
     ):
-        output_columns_tmp = input_columns if output_columns == [] else output_columns
+        # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
         super().__init__(
             data_df=data,
-            datetime_col=timestamp_column,
-            x_cols=input_columns,
-            y_cols=output_columns_tmp,
             id_columns=id_columns,
-            seq_len=context_length,
-            pred_len=prediction_length,
+            timestamp_column=timestamp_column,
             num_workers=num_workers,
-            frequency_token=frequency_token,
+            context_length=context_length,
+            prediction_length=prediction_length,
             cls=self.BaseForecastDFDataset,
+            # extra_args
+            target_columns=target_columns,
+            observable_columns=observable_columns,
+            control_columns=control_columns,
+            conditional_columns=conditional_columns,
+            categorical_columns=categorical_columns,
+            static_columns=static_columns,
+            frequency_token=frequency_token,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -384,54 +383,92 @@ class ForecastDFDataset(BaseConcatDFDataset):
         def __init__(
             self,
             data_df: pd.DataFrame,
-            datetime_col: str = None,
             group_id: Optional[Union[List[int], List[str]]] = None,
-            id_columns: List[str] = [],
-            x_cols: list = [],
-            y_cols: list = [],
+            context_length: int = 1,
+            prediction_length: int = 1,
             drop_cols: list = [],
-            seq_len: int = 1,
-            pred_len: int = 1,
+            id_columns: List[str] = [],
+            timestamp_column: Optional[str] = None,
+            target_columns: List[str] = [],
+            observable_columns: List[str] = [],
+            control_columns: List[str] = [],
+            conditional_columns: List[str] = [],
+            categorical_columns: List[str] = [],
+            static_columns: List[str] = [],
             frequency_token: Optional[int] = None,
         ):
+            self.frequency_token = frequency_token
+            self.target_columns = target_columns
+            self.observable_columns = observable_columns
+            self.control_columns = control_columns
+            self.conditional_columns = conditional_columns
+            self.categorical_columns = categorical_columns
+            self.static_columns = static_columns
+
+            x_cols = (
+                target_columns
+                + (observable_columns if observable_columns is not None else [])
+                + (control_columns if control_columns is not None else [])
+                + (conditional_columns if conditional_columns is not None else [])
+            )
+            y_cols = (
+                target_columns
+                + (observable_columns if observable_columns is not None else [])
+                + (control_columns if control_columns is not None else [])
+                + (conditional_columns if conditional_columns is not None else [])
+            )
+
+            # masking for conditional values which are not observed during future period
+            self.y_mask_conditional = np.array(
+                [c in conditional_columns for c in y_cols]
+            )
+
             super().__init__(
                 data_df=data_df,
-                datetime_col=datetime_col,
-                group_id=group_id,
                 id_columns=id_columns,
+                timestamp_column=timestamp_column,
                 x_cols=x_cols,
                 y_cols=y_cols,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                group_id=group_id,
                 drop_cols=drop_cols,
-                seq_len=seq_len,
-                pred_len=pred_len,
-                frequency_token=frequency_token,
             )
 
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
-            seq_x = self.X[time_id : time_id + self.seq_len].values
+            seq_x = self.X[time_id : time_id + self.context_length].values
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
-                time_id + self.seq_len : time_id + self.seq_len + self.pred_len
+                time_id
+                + self.context_length : time_id
+                + self.context_length
+                + self.prediction_length
             ].values
+
+            seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
                 "past_values": np_to_torch(seq_x),
                 "future_values": np_to_torch(seq_y),
             }
             if self.datetime_col:
-                ret["timestamp"] = self.timestamps[time_id + self.seq_len - 1]
+                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
 
             if self.group_id:
                 ret["id"] = self.group_id
 
             if self.frequency_token is not None:
-                ret["freq_token"] = self.frequency_token
+                ret["freq_token"] = torch.tensor(self.frequency_token, dtype=torch.int)
+
+            if self.categorical_columns:
+                categorical_values = self.data_df[self.categorical_columns].values[0, :]
+                ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             return ret
 
         def __len__(self):
-            return len(self.X) - self.seq_len - self.pred_len + 1
+            return len(self.X) - self.context_length - self.prediction_length + 1
 
 
 class RegressionDFDataset(BaseConcatDFDataset):
