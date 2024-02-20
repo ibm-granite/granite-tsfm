@@ -269,20 +269,20 @@ class PretrainDFDataset(BaseConcatDFDataset):
     def __init__(
         self,
         data: pd.DataFrame,
-        timestamp_column: Optional[str] = None,
-        input_columns: List[str] = [],
         id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        target_columns: List[str] = [],
         context_length: int = 1,
         num_workers: int = 1,
     ):
         super().__init__(
             data_df=data,
-            datetime_col=timestamp_column,
             id_columns=id_columns,
-            x_cols=input_columns,
-            seq_len=context_length,
+            timestamp_column=timestamp_column,
             num_workers=num_workers,
+            context_length=context_length,
             cls=self.BasePretrainDFDataset,
+            target_columns=target_columns,
         )
         self.n_inp = 1
 
@@ -290,32 +290,36 @@ class PretrainDFDataset(BaseConcatDFDataset):
         def __init__(
             self,
             data_df: pd.DataFrame,
-            datetime_col: Optional[str] = None,
             group_id: Optional[Union[List[int], List[str]]] = None,
-            id_columns: List[str] = [],
-            x_cols: list = [],
-            y_cols: list = [],
+            context_length: int = 1,
+            prediction_length: int = 0,
             drop_cols: list = [],
-            seq_len: int = 1,
-            pred_len: int = 0,
+            id_columns: List[str] = [],
+            timestamp_column: Optional[str] = None,
+            target_columns: List[str] = [],
         ):
+            self.target_columns = target_columns
+
+            x_cols = target_columns
+            y_cols = []
+
             super().__init__(
                 data_df=data_df,
-                datetime_col=datetime_col,
                 id_columns=id_columns,
-                group_id=group_id,
+                timestamp_column=timestamp_column,
                 x_cols=x_cols,
                 y_cols=y_cols,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                group_id=group_id,
                 drop_cols=drop_cols,
-                seq_len=seq_len,
-                pred_len=pred_len,
             )
 
         def __getitem__(self, time_id):
-            seq_x = self.X[time_id : time_id + self.seq_len].values
+            seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {"past_values": np_to_torch(seq_x)}
             if self.datetime_col:
-                ret["timestamp"] = self.timestamps[time_id + self.seq_len - 1]
+                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
             if self.group_id:
                 ret["id"] = self.group_id
 
@@ -345,8 +349,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
-        categorical_columns: List[str] = [],
-        static_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
         context_length: int = 1,
         prediction_length: int = 1,
         num_workers: int = 1,
@@ -367,8 +370,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns=observable_columns,
             control_columns=control_columns,
             conditional_columns=conditional_columns,
-            categorical_columns=categorical_columns,
-            static_columns=static_columns,
+            static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
         )
         self.n_inp = 2
@@ -393,8 +395,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns: List[str] = [],
             control_columns: List[str] = [],
             conditional_columns: List[str] = [],
-            categorical_columns: List[str] = [],
-            static_columns: List[str] = [],
+            static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
         ):
             self.frequency_token = frequency_token
@@ -402,8 +403,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.observable_columns = observable_columns
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
-            self.categorical_columns = categorical_columns
-            self.static_columns = static_columns
+            self.static_categorical_columns = static_categorical_columns
 
             x_cols = (
                 target_columns
@@ -461,8 +461,10 @@ class ForecastDFDataset(BaseConcatDFDataset):
             if self.frequency_token is not None:
                 ret["freq_token"] = torch.tensor(self.frequency_token, dtype=torch.int)
 
-            if self.categorical_columns:
-                categorical_values = self.data_df[self.categorical_columns].values[0, :]
+            if self.static_categorical_columns:
+                categorical_values = self.data_df[
+                    self.static_categorical_columns
+                ].values[0, :]
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             return ret
@@ -488,10 +490,11 @@ class RegressionDFDataset(BaseConcatDFDataset):
     def __init__(
         self,
         data: pd.DataFrame,
+        id_columns: List[str] = [],
         timestamp_column: Optional[str] = None,
         input_columns: List[str] = [],
-        output_columns: List[str] = [],
-        id_columns: List[str] = [],
+        target_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
         context_length: int = 1,
         num_workers: int = 1,
     ):
@@ -499,14 +502,16 @@ class RegressionDFDataset(BaseConcatDFDataset):
 
         super().__init__(
             data_df=data,
-            datetime_col=timestamp_column,
-            x_cols=input_columns,
-            y_cols=output_columns,
             id_columns=id_columns,
-            seq_len=context_length,
+            timestamp_column=timestamp_column,
             num_workers=num_workers,
+            context_length=context_length,
             cls=self.BaseRegressionDFDataset,
+            input_columns=input_columns,
+            target_columns=target_columns,
+            static_categorical_columns=static_categorical_columns,
         )
+
         self.n_inp = 2
 
     class BaseRegressionDFDataset(BaseDFDataset):
@@ -517,34 +522,41 @@ class RegressionDFDataset(BaseConcatDFDataset):
         def __init__(
             self,
             data_df: pd.DataFrame,
-            datetime_col: str = None,
             group_id: Optional[Union[List[int], List[str]]] = None,
-            id_columns: List[str] = [],
-            x_cols: list = [],
-            y_cols: list = [],
+            context_length: int = 1,
+            prediction_length: int = 0,
             drop_cols: list = [],
-            seq_len: int = 1,
-            pred_len: int = 0,
+            id_columns: List[str] = [],
+            timestamp_column: Optional[str] = None,
+            target_columns: List[str] = [],
+            input_columns: List[str] = [],
+            static_categorical_columns: List[str] = [],
         ):
-            # self.y_cols = y_cols
+
+            self.target_columns = target_columns
+            self.input_columns = input_columns
+            self.static_categorical_columns = static_categorical_columns
+
+            x_cols = input_columns
+            y_cols = target_columns
 
             super().__init__(
                 data_df=data_df,
-                datetime_col=datetime_col,
-                group_id=group_id,
                 id_columns=id_columns,
+                timestamp_column=timestamp_column,
                 x_cols=x_cols,
                 y_cols=y_cols,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                group_id=group_id,
                 drop_cols=drop_cols,
-                seq_len=seq_len,
-                pred_len=pred_len,
             )
 
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
-            seq_x = self.X[time_id : time_id + self.seq_len].values
+            seq_x = self.X[time_id : time_id + self.context_length].values
             seq_y = self.y[
-                time_id + self.seq_len - 1 : time_id + self.seq_len
+                time_id + self.context_length - 1 : time_id + self.context_length
             ].values.ravel()
             # return _torch(seq_x, seq_y)
 
@@ -553,10 +565,16 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 "target_values": np_to_torch(seq_y),
             }
             if self.datetime_col:
-                ret["timestamp"] = self.timestamps[time_id + self.seq_len - 1]
+                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
 
             if self.group_id:
                 ret["id"] = self.group_id
+
+            if self.static_categorical_columns:
+                categorical_values = self.data_df[
+                    self.static_categorical_columns
+                ].values[0, :]
+                ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             return ret
 
