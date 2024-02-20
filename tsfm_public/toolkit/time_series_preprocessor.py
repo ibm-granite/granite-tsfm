@@ -23,7 +23,13 @@ INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
 
 
-DEFAULT_FREQUENCY_MAPPING = {"oov": 0, "half_hourly": 1, "hourly": 2, "10_minutes": 3, "15_minutes": 4}
+DEFAULT_FREQUENCY_MAPPING = {
+    "oov": 0,
+    "half_hourly": 1,
+    "hourly": 2,
+    "10_minutes": 3,
+    "15_minutes": 4,
+}
 
 
 class SKLearnFeatureExtractionBase:
@@ -34,7 +40,7 @@ class SKLearnFeatureExtractionBase:
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary of parameters from which we can reconstruct"""
         return self.__getstate__()
-    
+
     def to_json(self) -> str:
         return json.dumps(self.to_dict())
 
@@ -76,18 +82,20 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def __init__(
         self,
-        timestamp_column: Optional[str] = None,
-        input_columns: List[str] = [],
-        output_columns: List[str] = [],
         id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        target_columns: List[str] = [],
+        observable_columns: List[str] = [],
+        control_columns: List[str] = [],
+        conditional_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
         scale_outputs: bool = False,
         encode_categorical: bool = True,
-        categorical_columns: List[str] = [],
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
-        frequency_mapping: Dict[str,int] = DEFAULT_FREQUENCY_MAPPING,
+        frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
         **kwargs,
     ):
         # note base class __init__ methods sets all arguments as attributes
@@ -97,25 +105,56 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 f"Invalid argument provided for `id_columns`: {id_columns}"
             )
 
+        self.id_columns = id_columns
         self.timestamp_column = timestamp_column
-        self.input_columns = list(input_columns)
-        self.output_columns = list(output_columns)
-        self.id_columns = list(id_columns)
+        self.target_columns = list(target_columns)
+        self.observable_columns = list(observable_columns)
+        self.control_columns = list(control_columns)
+        self.conditional_columns = list(conditional_columns)
+        self.static_categorical_columns = list(static_categorical_columns)
+
         self.context_length = context_length
         self.prediction_length = prediction_length
         self.scaling = scaling
         self.encode_categorical = encode_categorical
-        self.categorical_columns = list(categorical_columns)
         self.time_series_task = time_series_task
         self.scale_outputs = scale_outputs
 
+        # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = dict()
+        self.target_scaler_dict = dict()
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
 
         kwargs["processor_class"] = self.__class__.__name__
 
+        self._validate_columns()
+
         super().__init__(**kwargs)
+
+    def _validate_columns(self):
+        """Check column specification parameters
+
+        Raises:
+            ValueError: Raised when a given column appears in multiple column specifiers.
+        """
+        from collections import defaultdict
+
+        counter = defaultdict(int)
+
+        for c in (
+            self.target_columns
+            + self.observable_columns
+            + self.control_columns
+            + self.conditional_columns
+            + self.static_categorical_columns
+        ):
+            counter[c] += 1
+
+        if any([v > 1 for v in counter.values()]):
+            raise ValueError(
+                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -129,12 +168,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         for k, v in output["scaler_dict"].items():
             output["scaler_dict"][k] = v.to_dict()
 
+        for k, v in output["target_scaler_dict"].items():
+            output["target_scaler_dict"][k] = v.to_dict()
 
         if self.categorical_encoder:
             output["categorical_encoder"] = output["categorical_encoder"].to_dict()
 
         return output
-    
+
     def to_json_string(self) -> str:
         """
         Serializes this instance to a JSON string.
@@ -146,14 +187,22 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         def recursive_check_ndarray(dictionary):
             for key, value in dictionary.items():
-                if isinstance(value, np.ndarray):
+                if key == "dtype":
+                    # to do: ensure deserializable
+                    dictionary[key] = value.__name__
+                elif isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
                 elif isinstance(value, np.int64):
                     dictionary[key] = int(value)
+                elif isinstance(value, list):
+                    dictionary[key] = [
+                        vv.tolist() if isinstance(vv, np.ndarray) else vv
+                        for vv in value
+                    ]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
             return dictionary
-                    
+
         dictionary = recursive_check_ndarray(dictionary)
 
         # make sure private name "_processor_class" is correctly
@@ -186,10 +235,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
 
         scaler_params = feature_extractor_dict.get("scaler_dict", None)
-
         if scaler_params is not None:
             for k, v in scaler_params.items():
                 scaler_params[k] = StandardScaler.from_dict(v)
+
+        target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
+        if target_scaler_params is not None:
+            for k, v in target_scaler_params.items():
+                target_scaler_params[k] = StandardScaler.from_dict(v)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -261,7 +314,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             g = g.sort_values(by=self.timestamp_column)
             yield name, g
 
-    def _get_columns_to_scale(
+    def _get_other_columns_to_scale(
         self,
     ) -> List[str]:
         """Returns the columns to perform scaling on, based on the options specified during
@@ -270,15 +323,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns:
             List[str]: List of column names
         """
-        cols_to_scale = copy.copy(self.input_columns)
-        if self.scale_outputs:
-            cols_to_scale.extend(
-                [
-                    c
-                    for c in self.output_columns
-                    if c not in self.input_columns and c not in self.categorical_columns
-                ]
-            )
+
+        cols_to_scale = _join_list_without_repeat(
+            self.observable_columns,
+            self.control_columns,
+            self.conditional_columns,
+        )
+
         return cols_to_scale
 
     def _get_columns_to_encode(
@@ -290,17 +341,20 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns:
             List[str]: List of column names
         """
-        cols_to_encode = self.categorical_columns
+        cols_to_encode = self.static_categorical_columns
         return cols_to_encode
 
     def _train_scaler(self, df: pd.DataFrame):
-        cols_to_scale = self._get_columns_to_scale()
+        cols_to_scale = self._get_other_columns_to_scale()
 
         for name, g in self._get_groups(df):
             if self.scaling:
                 # train and transform
                 self.scaler_dict[name] = StandardScaler()
                 self.scaler_dict[name].fit(g[cols_to_scale])
+
+                self.target_scaler_dict[name] = StandardScaler()
+                self.target_scaler_dict[name].fit(g[self.target_columns])
 
     def _train_categorical_encoder(self, df: pd.DataFrame):
         cols_to_encode = self._get_columns_to_encode()
@@ -313,11 +367,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         token = self.frequency_mapping.get(token_name, None)
 
         if token is None:
-            warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+            warn(
+                f"Frequency token {token_name} was not found in the frequncy token mapping."
+            )
             token = self.frequency_mapping["oov"]
 
         return token
-
 
     def train(
         self,
@@ -344,6 +399,39 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return self
 
+    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Dataset:
+        df = self._standardize_dataframe(dataset)
+
+        if not self.scaling or len(self.target_scaler_dict) == 0:
+            # trying to inverse scale but this preprocessor is not set up for scaling
+            raise RuntimeError(
+                "Attempt to perform inverse scaling, but time series preprocess is not configured for scaling or scaler has not yet been trained. Please run the `train` method first."
+            )
+
+        cols_to_scale = self.target_columns
+
+        def inverse_scale_func(grp, id_columns):
+            if isinstance(id_columns, list):
+                name = tuple(grp.iloc[0][id_columns].tolist())
+            else:
+                name = grp.iloc[0][id_columns]
+            grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(
+                grp[cols_to_scale]
+            )
+            return grp
+
+        if self.id_columns:
+            id_columns = (
+                self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+            )
+        else:
+            id_columns = INTERNAL_ID_COLUMN
+
+        return df.groupby(id_columns, group_keys=False).apply(
+            inverse_scale_func,
+            id_columns=id_columns,
+        )
+
     def preprocess(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -357,7 +445,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         df = self._standardize_dataframe(dataset)
 
         if self.scaling:
-            cols_to_scale = self._get_columns_to_scale()
+            other_cols_to_scale = self._get_other_columns_to_scale()
 
             if self.scaling and len(self.scaler_dict) == 0:
                 # trying to get output, but we never trained the scaler
@@ -372,9 +460,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                     name = tuple(grp.iloc[0][id_columns].tolist())
                 else:
                     name = grp.iloc[0][id_columns]
-                grp[cols_to_scale] = self.scaler_dict[name].transform(
-                    grp[cols_to_scale]
+                grp[self.target_columns] = self.target_scaler_dict[name].transform(
+                    grp[self.target_columns]
                 )
+                grp[other_cols_to_scale] = self.scaler_dict[name].transform(
+                    grp[other_cols_to_scale]
+                )
+
                 return grp
 
             if self.id_columns:
@@ -397,7 +489,24 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 )
 
             cols_to_encode = self._get_columns_to_encode()
-
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
+
+
+def _join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
+    """_summary_
+
+    Returns:
+        List[Any]: _description_
+    """
+
+    final = None
+    final_set = set()
+    for alist in lists:
+        if final is None:
+            final = alist
+        else:
+            final = final + [item for item in alist if item not in final_set]
+        final_set = set(final)
+    return final
