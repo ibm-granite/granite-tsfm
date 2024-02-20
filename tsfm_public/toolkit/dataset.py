@@ -651,7 +651,9 @@ def ts_padding(
         pad_df[c] = pad_df[c].astype(df.dtypes[c], copy=False)
 
     if timestamp_column:
-        if df[timestamp_column].dtype in ["<M8[ns]", "datetime64", "int"]:
+        if (df[timestamp_column].dtype.type == np.datetime64) or (
+            df[timestamp_column].dtype == int
+        ):
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
             prepended_timestamps = [
