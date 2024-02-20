@@ -73,7 +73,7 @@ def test_pretrain_df_dataset(ts_data):
     ds = PretrainDFDataset(
         ts_data,
         timestamp_column="time_date",
-        input_columns=["val", "val2"],
+        target_columns=["val", "val2"],
         id_columns=["id", "id2"],
         context_length=12,
     )
