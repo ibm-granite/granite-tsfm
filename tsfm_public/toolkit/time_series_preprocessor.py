@@ -18,8 +18,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import StandardScaler as StandardScaler_
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 
-from tsfm_public.toolkit.util import select_by_index, select_by_timestamp
-
 
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
@@ -369,8 +367,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         for name, g in self._get_groups(df):
             if self.scaling:
                 # train and transform
-                self.scaler_dict[name] = StandardScaler()
-                self.scaler_dict[name].fit(g[cols_to_scale])
+                if cols_to_scale:
+                    self.scaler_dict[name] = StandardScaler()
+                    self.scaler_dict[name].fit(g[cols_to_scale])
 
                 self.target_scaler_dict[name] = StandardScaler()
                 self.target_scaler_dict[name].fit(g[self.target_columns])
@@ -482,7 +481,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if self.scaling:
             other_cols_to_scale = self._get_other_columns_to_scale()
 
-            if self.scaling and len(self.scaler_dict) == 0:
+            if self.scaling and len(self.target_scaler_dict) == 0:
                 # trying to get output, but we never trained the scaler
                 raise RuntimeError(
                     "Attempt to get scaled output, but scaler has not yet been trained. Please run the `train` method first."
@@ -498,9 +497,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 grp[self.target_columns] = self.target_scaler_dict[name].transform(
                     grp[self.target_columns]
                 )
-                grp[other_cols_to_scale] = self.scaler_dict[name].transform(
-                    grp[other_cols_to_scale]
-                )
+                if other_cols_to_scale:
+                    grp[other_cols_to_scale] = self.scaler_dict[name].transform(
+                        grp[other_cols_to_scale]
+                    )
 
                 return grp
 
