@@ -2,7 +2,6 @@
 #
 """Preprocessor for time series data preparation"""
 
-# Standard
 import copy
 import enum
 import json
@@ -392,6 +391,40 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return token
 
+    def _get_real_valued_dynamic_channels(
+        self,
+    ) -> List[str]:
+        """Helper function to return list of the real-valued dynamic channels (columns)"""
+        real_valued_dynamic_columns = (
+            self.target_columns
+            + self.observable_columns
+            + self.control_columns
+            + self.conditional_columns
+        )
+        return real_valued_dynamic_columns
+
+    @property
+    def num_input_channels(
+        self,
+    ) -> int:
+        return len(self._get_real_valued_dynamic_channels())
+
+    @property
+    def exogenous_channel_indices(self) -> List[int]:
+        return [
+            i
+            for i, c in enumerate(self._get_real_valued_dynamic_channels())
+            if c in self.control_columns + self.observable_columns
+        ]
+
+    @property
+    def prediction_channel_indices(self) -> List[int]:
+        return [
+            i
+            for i, c in enumerate(self._get_real_valued_dynamic_channels())
+            if c in self.target_columns
+        ]
+
     def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
         """Basic checks for input dataset.
 
@@ -540,7 +573,7 @@ def _join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
     final_set = set()
     for alist in lists:
         if final is None:
-            final = alist
+            final = copy.copy(alist)
         else:
             final = final + [item for item in alist if item not in final_set]
         final_set = set(final)
