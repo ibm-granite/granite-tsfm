@@ -3,14 +3,11 @@
 """Tools for building torch datasets"""
 
 from itertools import starmap
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 import torch
-
-# Third Party
-from torch import Tensor
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
