@@ -15,6 +15,7 @@ dependencies = [
     "pandas>=1.4",
     "scikit-learn",
     "transformers[torch]>=4.36.1"
+    "datasets"
 ]
 
 [tool.setuptools]
@@ -22,7 +23,7 @@ packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
-notebooks = ["jupyter", "matplotlib", "datasets", "ipywidgets", "plotly", "kaleido"]
+notebooks = ["jupyter", "matplotlib", "ipywidgets", "plotly", "kaleido"]
 testing = ["pytest", "tsfm_public[notebooks]"]
 dev = ["pre-commit", "tsfm_public[testing]", "ruff"]
 evaluation = [
