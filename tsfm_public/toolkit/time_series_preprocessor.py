@@ -331,7 +331,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if isinstance(dataset, Dataset):
             df = dataset.to_pandas()
         else:
-            df = dataset
+            df = dataset.copy()
 
         if not self.id_columns:
             df[INTERNAL_ID_COLUMN] = INTERNAL_ID_VALUE

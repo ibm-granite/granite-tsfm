@@ -79,9 +79,15 @@ def test_ordinal_encoder(sample_data):
 
 def test_time_series_preprocessor_encodes(sample_data):
 
+    static_categorical_columns = ["cat", "cat2"]
+
     tsp = TimeSeriesPreprocessor(
-        input_columns=["val", "val2"], categorical_columns=["cat", "cat2"]
+        input_columns=["val", "val2"],
+        static_categorical_columns=static_categorical_columns,
     )
     tsp.train(sample_data)
 
-    print(tsp.preprocess(sample_data))
+    sample_prep = tsp.preprocess(sample_data)
+
+    for c in static_categorical_columns:
+        assert sample_prep[c].dtype == float
