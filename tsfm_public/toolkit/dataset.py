@@ -419,6 +419,11 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 [c in conditional_columns for c in y_cols]
             )
 
+            # create a mask of x which masks targets which are not conditional
+            self.x_mask_targets = np.array(
+                [(c in target_columns) & (c not in conditional_columns) for c in x_cols]
+            )
+
             super().__init__(
                 data_df=data_df,
                 id_columns=id_columns,
@@ -434,6 +439,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
             seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x[:, self.x_mask_targets] = 0
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id

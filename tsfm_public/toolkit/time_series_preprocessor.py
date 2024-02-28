@@ -141,8 +141,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         counter = defaultdict(int)
 
         for c in (
-            self.target_columns
-            + self.observable_columns
+            self.observable_columns
             + self.control_columns
             + self.conditional_columns
             + self.static_categorical_columns
@@ -151,8 +150,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         if any([v > 1 for v in counter.values()]):
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+                "A column name should appear only once in `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
             )
+
+        # to do: add check on targets, a target can appear in targets as well as conditional
+
+        # if targets is only specified, with no other columns we should add targets to conditional
 
     def to_dict(self) -> Dict[str, Any]:
         """
