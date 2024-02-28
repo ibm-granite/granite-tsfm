@@ -2,7 +2,6 @@
 #
 """Preprocessor for time series data preparation"""
 
-import copy
 import enum
 import json
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
@@ -15,6 +14,8 @@ from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import StandardScaler as StandardScaler_
 from transformers.feature_extraction_utils import FeatureExtractionMixin
+
+from .util import join_list_without_repeat
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -342,7 +343,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             List[str]: List of column names
         """
 
-        cols_to_scale = _join_list_without_repeat(
+        cols_to_scale = join_list_without_repeat(
             self.observable_columns,
             self.control_columns,
             self.conditional_columns,
@@ -397,11 +398,11 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self,
     ) -> List[str]:
         """Helper function to return list of the real-valued dynamic channels (columns)"""
-        real_valued_dynamic_columns = (
-            self.target_columns
-            + self.observable_columns
-            + self.control_columns
-            + self.conditional_columns
+        real_valued_dynamic_columns = join_list_without_repeat(
+            self.target_columns,
+            self.observable_columns,
+            self.control_columns,
+            self.conditional_columns,
         )
         return real_valued_dynamic_columns
 
@@ -562,21 +563,3 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
-
-
-def _join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
-    """_summary_
-
-    Returns:
-        List[Any]: _description_
-    """
-
-    final = None
-    final_set = set()
-    for alist in lists:
-        if final is None:
-            final = copy.copy(alist)
-        else:
-            final = final + [item for item in alist if item not in final_set]
-        final_set = set(final)
-    return final

@@ -2,12 +2,15 @@
 #
 """Tools for building torch datasets"""
 
+import copy
 from itertools import starmap
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 import torch
+
+from .util import join_list_without_repeat
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
@@ -401,27 +404,28 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
 
-            x_cols = (
-                target_columns
-                + (observable_columns if observable_columns is not None else [])
-                + (control_columns if control_columns is not None else [])
-                + (conditional_columns if conditional_columns is not None else [])
+            x_cols = join_list_without_repeat(
+                target_columns,
+                (observable_columns if observable_columns is not None else []),
+                (control_columns if control_columns is not None else []),
+                (conditional_columns if conditional_columns is not None else []),
             )
-            y_cols = (
-                target_columns
-                + (observable_columns if observable_columns is not None else [])
-                + (control_columns if control_columns is not None else [])
-                + (conditional_columns if conditional_columns is not None else [])
-            )
+            y_cols = copy.copy(x_cols)
 
             # masking for conditional values which are not observed during future period
             self.y_mask_conditional = np.array(
-                [c in conditional_columns for c in y_cols]
+                [
+                    (c in conditional_columns) and (c not in target_columns)
+                    for c in y_cols
+                ]
             )
 
             # create a mask of x which masks targets which are not conditional
             self.x_mask_targets = np.array(
-                [(c in target_columns) & (c not in conditional_columns) for c in x_cols]
+                [
+                    (c in target_columns) and (c not in conditional_columns)
+                    for c in x_cols
+                ]
             )
 
             super().__init__(
