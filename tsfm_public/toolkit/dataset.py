@@ -353,6 +353,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         prediction_length: int = 1,
         num_workers: int = 1,
         frequency_token: Optional[int] = None,
+        autoregressive_modeling: bool = True,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -371,6 +372,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             conditional_columns=conditional_columns,
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
+            autoregressive_modeling=autoregressive_modeling,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -396,6 +398,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             conditional_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
+            autoregressive_modeling: bool = True,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -403,30 +406,29 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
+            self.autoregressive_modeling = autoregressive_modeling
 
             x_cols = join_list_without_repeat(
                 target_columns,
-                (observable_columns if observable_columns is not None else []),
-                (control_columns if control_columns is not None else []),
-                (conditional_columns if conditional_columns is not None else []),
+                observable_columns,
+                control_columns,
+                conditional_columns,
             )
             y_cols = copy.copy(x_cols)
 
+            # check non-autoregressive case
+            if len(target_columns) == len(x_cols) and not self.autoregressive_modeling:
+                raise ValueError(
+                    "Non-autoregressive modeling was chosen, but there are no input columns for prediction."
+                )
+
             # masking for conditional values which are not observed during future period
             self.y_mask_conditional = np.array(
-                [
-                    (c in conditional_columns) and (c not in target_columns)
-                    for c in y_cols
-                ]
+                [(c in conditional_columns) for c in y_cols]
             )
 
-            # create a mask of x which masks targets which are not conditional
-            self.x_mask_targets = np.array(
-                [
-                    (c in target_columns) and (c not in conditional_columns)
-                    for c in x_cols
-                ]
-            )
+            # create a mask of x which masks targets
+            self.x_mask_targets = np.array([(c in target_columns) for c in x_cols])
 
             super().__init__(
                 data_df=data_df,
@@ -443,7 +445,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
             seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_x[:, self.x_mask_targets] = 0
+
+            if not self.autoregressive_modeling:
+                seq_x[:, self.x_mask_targets] = 0
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id

@@ -160,3 +160,26 @@ def test_forecasting_df_dataset(ts_data_with_categorical):
 
     # check future values zeroed out for conditional variables
     assert np.all(ds[0]["future_values"][:, 2].numpy() == 0)
+
+
+def test_forecasting_dataset_non_autoregressive(ts_data_with_categorical):
+    prediction_length = 2
+    target_columns = ["value1"]
+    observable_columns = ["value3"]
+    conditional_columns = ["value2"]
+
+    ds = ForecastDFDataset(
+        ts_data_with_categorical,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        observable_columns=observable_columns,
+        conditional_columns=conditional_columns,
+        context_length=10,
+        prediction_length=prediction_length,
+        frequency_token=2,
+        autoregressive_modeling=False,
+    )
+
+    # check that past values of targets are zeroed out
+    assert np.all(ds[0]["past_values"][:, 0].numpy() == 0)
