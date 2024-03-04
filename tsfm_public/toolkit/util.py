@@ -2,12 +2,11 @@
 #
 """Basic functions and utilities"""
 
-# Standard
+import copy
 from datetime import datetime
 from distutils.util import strtobool
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
-# Third Party
 import pandas as pd
 
 
@@ -160,7 +159,6 @@ def select_by_relative_fraction(
 
 
 def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
-
     if not isinstance(id_columns, (List)):
         raise ValueError("id_columns must be a list")
 
@@ -367,7 +365,6 @@ def convert_tsf_to_dataframe(
         )
 
 
-
 def convert_tsf(filename: str) -> pd.DataFrame:
     """Converts a tsf format file into a pandas dataframe.
     Returns the result in canonical multi-time series format, with an ID column, and timestamp.
@@ -376,7 +373,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         filename (str): Input file name.
 
     Returns:
-        pd.DataFrame: Converted time series 
+        pd.DataFrame: Converted time series
     """
     (
         loaded_data,
@@ -401,3 +398,21 @@ def convert_tsf(filename: str) -> pd.DataFrame:
 
     df = pd.concat(dfs)
     return df
+
+
+def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
+    """Join multiple lists in sequence without repeating
+
+    Returns:
+        List[Any]: Combined list.
+    """
+
+    final = None
+    final_set = set()
+    for alist in lists:
+        if final is None:
+            final = copy.copy(alist)
+        else:
+            final = final + [item for item in alist if item not in final_set]
+        final_set = set(final)
+    return final

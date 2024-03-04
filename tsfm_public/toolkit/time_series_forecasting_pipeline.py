@@ -2,14 +2,17 @@
 #
 """Hugging Face Pipeline for Time Series Tasks"""
 
-from typing import Dict, Union
+import datetime
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import torch
-from transformers.pipelines.base import GenericTensor, Pipeline
-from transformers.utils import (
-    logging,
+from transformers.pipelines.base import (
+    GenericTensor,
+    Pipeline,
+    build_pipeline_init_args,
 )
+from transformers.utils import add_end_docstrings, logging
 
 from .dataset import ForecastDFDataset
 
@@ -27,6 +30,11 @@ from .dataset import ForecastDFDataset
 logger = logging.get_logger(__name__)
 
 
+@add_end_docstrings(
+    build_pipeline_init_args(
+        has_tokenizer=False, has_feature_extractor=True, has_image_processor=False
+    )
+)
 class TimeSeriesForecastingPipeline(Pipeline):
     """Hugging Face Pipeline for Time Series Forecasting"""
 
@@ -43,38 +51,110 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         For expected parameters see the call method below.
         """
-        preprocess_kwargs = {}
-        postprocess_kwargs = {}
-        if "id_columns" in kwargs:
-            postprocess_kwargs["id_columns"] = kwargs["id_columns"]
-            preprocess_kwargs["id_columns"] = kwargs["id_columns"]
-        if "timestamp_column" in kwargs:
-            postprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-            preprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-        if "input_columns" in kwargs:
-            preprocess_kwargs["input_columns"] = kwargs["input_columns"]
-            postprocess_kwargs["input_columns"] = kwargs["input_columns"]
-        if "output_columns" in kwargs:
-            preprocess_kwargs["output_columns"] = kwargs["output_columns"]
-            postprocess_kwargs["output_columns"] = kwargs["output_columns"]
-        elif "input_columns" in kwargs:
-            preprocess_kwargs["output_columns"] = kwargs["input_columns"]
-            postprocess_kwargs["output_columns"] = kwargs["input_columns"]
+
+        context_length = kwargs.get("context_length", self.model.config.context_length)
+        prediction_length = kwargs.get(
+            "prediction_length", self.model.config.prediction_length
+        )
+
+        preprocess_kwargs = {
+            "prediction_length": prediction_length,
+            "context_length": context_length,
+        }
+        postprocess_kwargs = {
+            "prediction_length": prediction_length,
+            "context_length": context_length,
+        }
+        # id_columns: List[str] = [],
+        # timestamp_column: Optional[str] = None,
+        # target_columns: List[str] = [],
+        # observable_columns: List[str] = [],
+        # control_columns: List[str] = [],
+        # conditional_columns: List[str] = [],
+        # static_categorical_columns: List[str] = [],
+
+        preprocess_params = [
+            "id_columns",
+            "timestamp_column",
+            "target_columns",
+            "observable_columns",
+            "control_columns",
+            "conditional_columns",
+            "static_categorical_columns",
+            "future_time_series",
+        ]
+        postprocess_params = [
+            "id_columns",
+            "timestamp_column",
+            "target_columns",
+            "observable_columns",
+            "control_columns",
+            "conditional_columns",
+            "static_categorical_columns",
+        ]
+
+        for c in preprocess_params:
+            if c in kwargs:
+                preprocess_kwargs[c] = kwargs[c]
+
+        for c in postprocess_params:
+            if c in kwargs:
+                postprocess_kwargs[c] = kwargs[c]
+
+        # if "id_columns" in kwargs:
+        #     preprocess_kwargs["id_columns"] = kwargs["id_columns"]
+        #     postprocess_kwargs["id_columns"] = kwargs["id_columns"]
+        # if "timestamp_column" in kwargs:
+        #     preprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
+        #     postprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
+        # if "input_columns" in kwargs:
+        #     preprocess_kwargs["input_columns"] = kwargs["input_columns"]
+        #     postprocess_kwargs["input_columns"] = kwargs["input_columns"]
+        # if "output_columns" in kwargs:
+        #     preprocess_kwargs["output_columns"] = kwargs["output_columns"]
+        #     postprocess_kwargs["output_columns"] = kwargs["output_columns"]
+        # elif "input_columns" in kwargs:
+        #     preprocess_kwargs["output_columns"] = kwargs["input_columns"]
+        #     postprocess_kwargs["output_columns"] = kwargs["input_columns"]
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    def __call__(self, time_series: Union["pandas.DataFrame", str], **kwargs):
+    def __call__(
+        self,
+        time_series: Union["pandas.DataFrame", str],
+        **kwargs,
+    ):
         """Main method of the forecasting pipeline. Takes the input time series data (in tabular format) and
         produces predictions.
 
         Args:
             time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe or a referce to a location
-            from where a pandas datarame can be loaded.
+            from where a pandas datarame can be loaded containing the time series on which to perform inference.
+
+            future_time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe or a referce to a location
+            from where a pandas datarame can be loaded containing future values, i.e., exogenous or supporting features
+            which are known in advance.
+
+            To do: describe batch vs. single and the need for future_time_series
+
 
             kwargs
 
+            future_time_series: Optional[Union["pandas.DataFrame", str]] = None,
+            prediction_length
+            context_length
+
             timestamp_column (str): the column containing the date / timestamp
             id_columns (List[str]): the list of columns containing ID information. If no ids are present, pass [].
+
+            "target_columns",
+            "observable_columns",
+            "control_columns",
+            "conditional_columns",
+            "static_categorical_columns",
+
+
+            # OLD
             input_columns (List[str]): the columns that are used as to create the inputs to the forecasting model.
             These values are used to select data in the input dataframe.
             output_columns (List[str]): the column names that are used to label the outputs of the forecasting model.
@@ -90,22 +170,60 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         return super().__call__(time_series, **kwargs)
 
-    def preprocess(self, time_series, **kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(
+        self, time_series, **kwargs
+    ) -> Dict[str, Union[GenericTensor, List[Any]]]:
         """Preprocess step
         Load the data, if not already loaded, and then generate a pytorch dataset.
         """
 
+        prediction_length = kwargs.get("prediction_length")
+        timestamp_column = kwargs.get("timestamp_column")
+        id_columns = kwargs.get("id_columns")
+        # context_length = kwargs.get("context_length")
+
         if isinstance(time_series, str):
             time_series = pd.read_csv(
                 time_series,
-                parse_dates=[kwargs["timestamp_column"]],
+                parse_dates=[timestamp_column],
+            )
+
+        future_time_series = kwargs.pop("future_time_series", None)
+
+        if future_time_series is not None:
+            if isinstance(future_time_series, str):
+                future_time_series = pd.read_csv(
+                    future_time_series,
+                    parse_dates=[timestamp_column],
+                )
+            elif isinstance(future_time_series, pd.DataFrame):
+                pass
+            else:
+                raise ValueError(
+                    f"`future_time_series` of type {type(future_time_series)} is not supported."
+                )
+
+            # stack the time series
+            for c in future_time_series.columns:
+                if c not in time_series.columns:
+                    raise ValueError(
+                        f"Future time series input contains an unknown column {c}"
+                    )
+
+            time_series = pd.concat((time_series, future_time_series), axis=0)
+        else:
+            # not additional exogenous data provided, augment with empty periods
+
+            time_series = augment_time_series(
+                time_series=time_series,
+                timestamp_column=timestamp_column,
+                grouping_columns=id_columns,
+                periods=prediction_length,
             )
 
         # use forecasing dataset to do the preprocessing
         dataset = ForecastDFDataset(
             time_series,
-            context_length=self.model.config.context_length,
-            prediction_length=self.model.config.prediction_length,
             **kwargs,
         )
 
@@ -136,11 +254,13 @@ class TimeSeriesForecastingPipeline(Pipeline):
         # inspect.signature(model_forward).parameters.keys()
         model_input_keys = {
             "past_values",
-            "future_values",
+            "static_categorical_values",
+            "freq_token",
         }  # todo: this should not be hardcoded
         model_inputs_only = {}
         for k in model_input_keys:
-            model_inputs_only[k] = model_inputs[k]
+            if k in model_inputs:
+                model_inputs_only[k] = model_inputs[k]
 
         model_outputs = self.model(**model_inputs_only)
 
@@ -168,9 +288,13 @@ class TimeSeriesForecastingPipeline(Pipeline):
             else "prediction_logits"
         )
 
-        for i, c in enumerate(kwargs["output_columns"]):
+        # name the predictions of target columns
+        # outputs should only have size equal to target columns
+        for i, c in enumerate(kwargs["target_columns"]):
             out[f"{c}_prediction"] = input[model_output_key][:, :, i].numpy().tolist()
-        for i, c in enumerate(kwargs["input_columns"]):
+        # provide the ground truth values for the targets
+        # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
+        for i, c in enumerate(kwargs["target_columns"]):
             out[c] = input["future_values"][:, :, i].numpy().tolist()
 
         if "timestamp_column" in kwargs:
@@ -190,3 +314,62 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         out = out[cols_ordered]
         return out
+
+
+def augment_time_series(
+    time_series: pd.DataFrame,
+    # last_known_timestamp,
+    timestamp_column: str,
+    grouping_columns: List[str],
+    periods: int = 1,
+    # delta: datetime.timedelta = datetime.timedelta(days=1),
+):
+    """Augments the provided time series with empty data for the number of periods specified. For each time series, based
+    on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
+    only timestamps and grouping indicators, remaining fields will be null.
+
+    Args:
+        time_series (pd.DataFrame): _description_
+        start_timestamp (_type_): _description_
+        column_name (str): _description_
+        grouping_columns (List[str]): _description_
+        periods (int, optional): _description_. Defaults to 1.
+        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+    """
+
+    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+
+        last_timestamp = group[timestamp_column].iloc[-1]
+        delta = group[timestamp_column].iloc[-1] - group[timestamp_column].iloc[-2]
+
+        new_data = pd.DataFrame(
+            {
+                timestamp_column: pd.date_range(
+                    last_timestamp + delta,
+                    freq=delta,
+                    periods=periods,
+                )
+            }
+        )
+
+        # for c in grouping_columns:
+        #    new_data[c] = group[c].iloc[0]
+
+        df = pd.concat(
+            (group, new_data),
+            axis=0,
+        )
+        return df.reset_index(drop=True)
+
+    if grouping_columns == []:
+        new_time_series = augment_one_series(time_series)
+    else:
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False
+        )
+        idx_names = list(new_time_series.index.names)
+        idx_names[-1] = "__delete"
+        new_time_series = new_time_series.reset_index(names=idx_names)
+        new_time_series.drop(columns=["__delete"], inplace=True)
+
+    return new_time_series

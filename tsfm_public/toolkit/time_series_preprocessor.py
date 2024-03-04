@@ -2,7 +2,6 @@
 #
 """Preprocessor for time series data preparation"""
 
-import copy
 import enum
 import json
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
@@ -11,10 +10,12 @@ from warnings import warn
 import numpy as np
 import pandas as pd
 from datasets import Dataset
+from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
-from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import StandardScaler as StandardScaler_
 from transformers.feature_extraction_utils import FeatureExtractionMixin
+
+from .util import join_list_without_repeat
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -60,6 +61,12 @@ class StandardScaler(StandardScaler_, SKLearnFeatureExtractionBase):
     """
 
 
+class MinMaxScaler(MinMaxScaler_, SKLearnFeatureExtractionBase):
+    """Simple wrapper class to adapt min/max scaler to work with the HF
+    serialization approach.
+    """
+
+
 class OrdinalEncoder(OrdinalEncoder_, SKLearnFeatureExtractionBase):
     """Simple wrapper class to adapt OrdinalEncoder to work with the HF
     serialization approach.
@@ -73,6 +80,13 @@ class TimeSeriesTask(enum.Enum):
     MASKED_PRETRAINING = "mask_pretraining"
     FORECASTING = "forecasting"
     REGRESSION = "regression"
+
+
+class ScalerType(enum.Enum):
+    """`Enum` for the different kinds of scalers."""
+
+    MINMAX = "minmax"
+    STANDARD = "standard"
 
 
 class TimeSeriesPreprocessor(FeatureExtractionMixin):
@@ -91,6 +105,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         prediction_length: Optional[int] = None,
         scaling: bool = False,
         scale_outputs: bool = False,
+        scaler_type: ScalerType = ScalerType.STANDARD.value,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
@@ -117,6 +132,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.encode_categorical = encode_categorical
         self.time_series_task = time_series_task
         self.scale_outputs = scale_outputs
+        self.scaler_type = scaler_type
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = dict()
@@ -232,15 +248,19 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             parameters.
         """
 
+        scaler_type = feature_extractor_dict.get("scaler_type", None)
+
+        scaler_class = cls._get_scaler_class(scaler_type)
+
         scaler_params = feature_extractor_dict.get("scaler_dict", None)
         if scaler_params is not None:
             for k, v in scaler_params.items():
-                scaler_params[k] = StandardScaler.from_dict(v)
+                scaler_params[k] = scaler_class.from_dict(v)
 
         target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
         if target_scaler_params is not None:
             for k, v in target_scaler_params.items():
-                target_scaler_params[k] = StandardScaler.from_dict(v)
+                target_scaler_params[k] = scaler_class.from_dict(v)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -282,6 +302,16 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     #             "future_values": seq_y,
     #         }
 
+    @classmethod
+    def _get_scaler_class(cls, scaler_type):
+        if scaler_type == ScalerType.MINMAX.value:
+            return MinMaxScaler
+
+        if scaler_type == ScalerType.STANDARD.value:
+            return StandardScaler
+
+        raise ValueError(f"Unknown scaler type {scaler_type} specified.")
+
     def _standardize_dataframe(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -298,7 +328,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if isinstance(dataset, Dataset):
             df = dataset.to_pandas()
         else:
-            df = dataset
+            df = dataset.copy()
 
         if not self.id_columns:
             df[INTERNAL_ID_COLUMN] = INTERNAL_ID_VALUE
@@ -339,7 +369,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             List[str]: List of column names
         """
 
-        cols_to_scale = _join_list_without_repeat(
+        cols_to_scale = join_list_without_repeat(
             self.observable_columns,
             self.control_columns,
             self.conditional_columns,
@@ -361,15 +391,16 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def _train_scaler(self, df: pd.DataFrame):
         cols_to_scale = self._get_other_columns_to_scale()
+        scaler_class = self._get_scaler_class(self.scaler_type)
 
         for name, g in self._get_groups(df):
             if self.scaling:
                 # train and transform
                 if cols_to_scale:
-                    self.scaler_dict[name] = StandardScaler()
+                    self.scaler_dict[name] = scaler_class()
                     self.scaler_dict[name].fit(g[cols_to_scale])
 
-                self.target_scaler_dict[name] = StandardScaler()
+                self.target_scaler_dict[name] = scaler_class()
                 self.target_scaler_dict[name].fit(g[self.target_columns])
 
     def _train_categorical_encoder(self, df: pd.DataFrame):
@@ -394,11 +425,11 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self,
     ) -> List[str]:
         """Helper function to return list of the real-valued dynamic channels (columns)"""
-        real_valued_dynamic_columns = (
-            self.target_columns
-            + self.observable_columns
-            + self.control_columns
-            + self.conditional_columns
+        real_valued_dynamic_columns = join_list_without_repeat(
+            self.target_columns,
+            self.observable_columns,
+            self.control_columns,
+            self.conditional_columns,
         )
         return real_valued_dynamic_columns
 
@@ -559,21 +590,3 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
-
-
-def _join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
-    """_summary_
-
-    Returns:
-        List[Any]: _description_
-    """
-
-    final = None
-    final_set = set()
-    for alist in lists:
-        if final is None:
-            final = copy.copy(alist)
-        else:
-            final = final + [item for item in alist if item not in final_set]
-        final_set = set(final)
-    return final
