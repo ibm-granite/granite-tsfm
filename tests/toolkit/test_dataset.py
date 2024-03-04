@@ -5,7 +5,6 @@
 
 
 from datetime import datetime, timedelta
-from itertools import chain, repeat
 
 import numpy as np
 import pandas as pd
@@ -18,10 +17,7 @@ from tsfm_public.toolkit.dataset import (
 )
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 
-
-def nreps(iterable, n):
-    "Returns each element in the sequence repeated n times."
-    return chain.from_iterable((repeat(i, n) for i in iterable))
+from ..util import nreps
 
 
 @pytest.fixture(scope="module")
