@@ -3,7 +3,7 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import torch
@@ -57,8 +57,14 @@ class TimeSeriesForecastingPipeline(Pipeline):
             "prediction_length", self.model.config.prediction_length
         )
 
-        preprocess_kwargs = {}
-        postprocess_kwargs = {}
+        preprocess_kwargs = {
+            "prediction_length": prediction_length,
+            "context_length": context_length,
+        }
+        postprocess_kwargs = {
+            "prediction_length": prediction_length,
+            "context_length": context_length,
+        }
         # id_columns: List[str] = [],
         # timestamp_column: Optional[str] = None,
         # target_columns: List[str] = [],
@@ -75,8 +81,6 @@ class TimeSeriesForecastingPipeline(Pipeline):
             "control_columns",
             "conditional_columns",
             "static_categorical_columns",
-            "prediction_length",
-            "context_length",
             "future_time_series",
         ]
         postprocess_params = [
@@ -87,8 +91,6 @@ class TimeSeriesForecastingPipeline(Pipeline):
             "control_columns",
             "conditional_columns",
             "static_categorical_columns",
-            "prediction_length",
-            "context_length",
         ]
 
         for c in preprocess_params:
@@ -175,18 +177,30 @@ class TimeSeriesForecastingPipeline(Pipeline):
         Load the data, if not already loaded, and then generate a pytorch dataset.
         """
 
+        prediction_length = kwargs.get("prediction_length")
+        timestamp_column = kwargs.get("timestamp_column")
+        id_columns = kwargs.get("id_columns")
+        # context_length = kwargs.get("context_length")
+
         if isinstance(time_series, str):
             time_series = pd.read_csv(
                 time_series,
-                parse_dates=[kwargs["timestamp_column"]],
+                parse_dates=[timestamp_column],
             )
 
         future_time_series = kwargs.pop("future_time_series", None)
+
         if future_time_series is not None:
             if isinstance(future_time_series, str):
                 future_time_series = pd.read_csv(
                     future_time_series,
-                    parse_dates=[kwargs["timestamp_column"]],
+                    parse_dates=[timestamp_column],
+                )
+            elif isinstance(future_time_series, pd.DataFrame):
+                pass
+            else:
+                raise ValueError(
+                    f"`future_time_series` of type {type(future_time_series)} is not supported."
                 )
 
             # stack the time series
@@ -197,12 +211,19 @@ class TimeSeriesForecastingPipeline(Pipeline):
                     )
 
             time_series = pd.concat((time_series, future_time_series), axis=0)
+        else:
+            # not additional exogenous data provided, augment with empty periods
+
+            time_series = augment_time_series(
+                time_series=time_series,
+                timestamp_column=timestamp_column,
+                grouping_columns=id_columns,
+                periods=prediction_length,
+            )
 
         # use forecasing dataset to do the preprocessing
         dataset = ForecastDFDataset(
             time_series,
-            context_length=self.model.config.context_length,
-            prediction_length=self.model.config.prediction_length,
             **kwargs,
         )
 
@@ -297,32 +318,58 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
 def augment_time_series(
     time_series: pd.DataFrame,
-    start_timestamp,
-    column_name: str,
+    # last_known_timestamp,
+    timestamp_column: str,
     grouping_columns: List[str],
     periods: int = 1,
-    delta: datetime.timedelta = datetime.timedelta(days=1),
+    # delta: datetime.timedelta = datetime.timedelta(days=1),
 ):
+    """Augments the provided time series with empty data for the number of periods specified. For each time series, based
+    on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
+    only timestamps and grouping indicators, remaining fields will be null.
 
-    def augment_one_series(group: pd.Series):
-        return pd.concat(
-            (
-                group,
-                pd.DataFrame(
-                    {
-                        column_name: pd.date_range(
-                            start_timestamp + delta,
-                            freq=delta,
-                            periods=periods,
-                        )
-                    }
-                ),
-            ),
-            axis=0,
+    Args:
+        time_series (pd.DataFrame): _description_
+        start_timestamp (_type_): _description_
+        column_name (str): _description_
+        grouping_columns (List[str]): _description_
+        periods (int, optional): _description_. Defaults to 1.
+        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+    """
+
+    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+
+        last_timestamp = group[timestamp_column].iloc[-1]
+        delta = group[timestamp_column].iloc[-1] - group[timestamp_column].iloc[-2]
+
+        new_data = pd.DataFrame(
+            {
+                timestamp_column: pd.date_range(
+                    last_timestamp + delta,
+                    freq=delta,
+                    periods=periods,
+                )
+            }
         )
 
-    new_time_series = time_series.groupby(group_keys=grouping_columns).apply(
-        augment_one_series
-    )
+        # for c in grouping_columns:
+        #    new_data[c] = group[c].iloc[0]
+
+        df = pd.concat(
+            (group, new_data),
+            axis=0,
+        )
+        return df.reset_index(drop=True)
+
+    if grouping_columns == []:
+        new_time_series = augment_one_series(time_series)
+    else:
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False
+        )
+        idx_names = list(new_time_series.index.names)
+        idx_names[-1] = "__delete"
+        new_time_series = new_time_series.reset_index(names=idx_names)
+        new_time_series.drop(columns=["__delete"], inplace=True)
 
     return new_time_series
