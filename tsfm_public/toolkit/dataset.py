@@ -374,7 +374,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
-            training=training,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -401,7 +400,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
-            training: bool = True,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -410,7 +408,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
-            self.training = training
 
             x_cols = join_list_without_repeat(
                 target_columns,
