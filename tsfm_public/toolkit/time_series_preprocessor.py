@@ -406,8 +406,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _train_categorical_encoder(self, df: pd.DataFrame):
         cols_to_encode = self._get_columns_to_encode()
 
-        self.categorical_encoder = OrdinalEncoder()
-        self.categorical_encoder.fit(df[cols_to_encode])
+        if cols_to_encode:
+            self.categorical_encoder = OrdinalEncoder()
+            self.categorical_encoder.fit(df[cols_to_encode])
 
     def get_frequency_token(self, token_name: str):
 
@@ -580,13 +581,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             )
             df = df_out
 
-        if self.encode_categorical:
+        cols_to_encode = self._get_columns_to_encode()
+        if self.encode_categorical and cols_to_encode:
             if not self.categorical_encoder:
                 raise RuntimeError(
                     "Attempt to encode categorical columns, but the encoder has not been trained yet."
                 )
-
-            cols_to_encode = self._get_columns_to_encode()
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
