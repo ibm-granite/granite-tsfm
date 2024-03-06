@@ -157,7 +157,7 @@ def forecast(**kwargs) -> pd.DataFrame:
         model=model,
         timestamp_column=timestamp_column,
         id_columns=id_columns,
-        input_columns=forecast_columns,
+        target_columns=forecast_columns,
     )
 
     context_length = model.config.context_length
