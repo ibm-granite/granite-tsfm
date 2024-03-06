@@ -590,6 +590,96 @@ class RegressionDFDataset(BaseConcatDFDataset):
             return ret
 
 
+class RegressionDFDataset(BaseConcatDFDataset):
+    """
+    A :class: `RegressionDFDataset` used for regression.
+
+    Args:
+        data_df (DataFrame, required): input data
+        datetime_col (str, optional): datetime column in the data_df. Defaults to None
+        input_columns (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
+        output_columns (list, required): list of columns of y. Defaults to an empty list.
+        id_columns (list, optional): List of columns that specify ids in the dataset. list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
+        context_length (int, required): the sequence length. Defaults to 1
+        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        timestamp_column: Optional[str] = None,
+        input_columns: List[str] = [],
+        output_columns: List[str] = [],
+        id_columns: List[str] = [],
+        context_length: int = 1,
+        num_workers: int = 1,
+    ):
+        # self.y_cols = y_cols
+
+        super().__init__(
+            data_df=data,
+            datetime_col=timestamp_column,
+            x_cols=input_columns,
+            y_cols=output_columns,
+            id_columns=id_columns,
+            seq_len=context_length,
+            num_workers=num_workers,
+            cls=self.BaseRegressionDFDataset,
+        )
+        self.n_inp = 2
+
+    class BaseRegressionDFDataset(BaseDFDataset):
+        """
+        y_{t} = f(X_{:t})
+        """
+
+        def __init__(
+            self,
+            data_df: pd.DataFrame,
+            datetime_col: str = None,
+            group_id: Optional[Union[List[int], List[str]]] = None,
+            id_columns: List[str] = [],
+            x_cols: list = [],
+            y_cols: list = [],
+            drop_cols: list = [],
+            seq_len: int = 1,
+            pred_len: int = 0,
+        ):
+            # self.y_cols = y_cols
+
+            super().__init__(
+                data_df=data_df,
+                datetime_col=datetime_col,
+                group_id=group_id,
+                id_columns=id_columns,
+                x_cols=x_cols,
+                y_cols=y_cols,
+                drop_cols=drop_cols,
+                seq_len=seq_len,
+                pred_len=pred_len,
+            )
+
+        def __getitem__(self, time_id):
+            # seq_x: batch_size x seq_len x num_x_cols
+            seq_x = self.X[time_id : time_id + self.seq_len].values
+            seq_y = self.y[
+                time_id + self.seq_len - 1 : time_id + self.seq_len
+            ].values.ravel()
+            # return _torch(seq_x, seq_y)
+
+            ret = {
+                "past_values": np_to_torch(seq_x),
+                "target_values": np_to_torch(seq_y),
+            }
+            if self.datetime_col:
+                ret["timestamp"] = self.timestamps[time_id + self.seq_len - 1]
+
+            if self.group_id:
+                ret["id"] = self.group_id
+
+            return ret
+
+
 def np_to_torch(data: np.array, float_type=np.float32):
     if data.dtype == "float":
         return torch.from_numpy(data.astype(float_type))
