@@ -2,8 +2,10 @@
 #
 """Preprocessor for time series data preparation"""
 
+import datetime
 import enum
 import json
+from datetime import timedelta
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -104,11 +106,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
-        scale_outputs: bool = False,
+        # scale_outputs: bool = False,
         scaler_type: ScalerType = ScalerType.STANDARD.value,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
+        freq: Optional[Union[int, float, timedelta, pd.Timedelta, str]] = None,
         **kwargs,
     ):
         # note base class __init__ methods sets all arguments as attributes
@@ -131,7 +134,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.scaling = scaling
         self.encode_categorical = encode_categorical
         self.time_series_task = time_series_task
-        self.scale_outputs = scale_outputs
+        # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
@@ -139,6 +142,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.target_scaler_dict = dict()
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
+        self.freq = freq
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -468,6 +472,24 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if dataset is None or len(dataset) == 0:
             raise ValueError("Input dataset must not be null or zero length.")
 
+    def _estimate_frequency(self, df: pd.DataFrame):
+        if self.timestamp_column:
+            if self.id_columns:
+                # to do: be more efficient
+                grps = df.groupby(self.id_columns)
+                _, df_subset = list(grps)[0]
+            else:
+                df_subset = df
+
+            # to do: make more robust
+            self.freq = (
+                df_subset[self.timestamp_column].iloc[-1]
+                - df_subset[self.timestamp_column].iloc[-2]
+            )
+        else:
+            # no timestamp, assume sequential count?
+            self.freq = 1
+
     def train(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -486,6 +508,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self._check_dataset(dataset)
 
         df = self._standardize_dataframe(dataset)
+
+        if self.freq is None:
+            self._estimate_frequency(df)
 
         if self.scaling:
             self._train_scaler(df)
@@ -590,3 +615,91 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
+
+
+def create_timestamps(
+    last_timestamp: Union[datetime.datetime, pd.Timestamp],
+    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]] = None,
+    time_sequence: Optional[
+        Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]
+    ] = None,
+    periods: int = 1,
+):
+    """Simple utility to create a list of timestamps based on start, delta and number of periods"""
+
+    if freq is None and time_sequence is None:
+        raise ValueError(
+            "Neither `freq` nor `time_sequence` provided, cannot determine frequency."
+        )
+
+    if freq is None:
+        # to do: make more robust
+        freq = time_sequence[-1] - time_sequence[-2]
+
+    # more complex logic is required to support all edge cases
+    if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+        return pd.date_range(
+            last_timestamp,
+            freq=freq,
+            periods=periods + 1,
+        ).tolist()[1:]
+    else:
+        # numerical timestamp column
+        return [last_timestamp + i * freq for i in range(1, periods + 1)]
+
+
+def extend_time_series(
+    time_series: pd.DataFrame,
+    # last_known_timestamp,
+    timestamp_column: str,
+    grouping_columns: List[str],
+    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta]] = None,
+    periods: int = 1,
+    # delta: datetime.timedelta = datetime.timedelta(days=1),
+):
+    """Extends the provided time series with empty data for the number of periods specified. For each time series, based
+    on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
+    only timestamps and grouping indicators, remaining fields will be null.
+
+    Args:
+        time_series (pd.DataFrame): _description_
+        start_timestamp (_type_): _description_
+        column_name (str): _description_
+        grouping_columns (List[str]): _description_
+        periods (int, optional): _description_. Defaults to 1.
+        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+    """
+
+    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+
+        last_timestamp = group[timestamp_column].iloc[-1]
+
+        new_data = pd.DataFrame(
+            {
+                timestamp_column: create_timestamps(
+                    last_timestamp,
+                    freq=freq,
+                    time_sequence=group[timestamp_column].values,
+                    periods=periods,
+                )
+            }
+        )
+
+        df = pd.concat(
+            (group, new_data),
+            axis=0,
+        )
+        return df.reset_index(drop=True)
+
+    if grouping_columns == []:
+        new_time_series = augment_one_series(time_series)
+    else:
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False
+        )
+        idx_names = list(new_time_series.index.names)
+        idx_names[-1] = "__delete"
+        new_time_series = new_time_series.reset_index(names=idx_names)
+        new_time_series.drop(columns=["__delete"], inplace=True)
+
+    return new_time_series

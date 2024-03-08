@@ -2,7 +2,8 @@
 #
 """Hugging Face Pipeline for Time Series Tasks"""
 
-from typing import Any, Dict, List, Union
+import inspect
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 import torch
@@ -14,6 +15,7 @@ from transformers.pipelines.base import (
 from transformers.utils import add_end_docstrings, logging
 
 from .dataset import ForecastDFDataset
+from .time_series_preprocessor import create_timestamps, extend_time_series
 
 
 # Eventually we should support all time series models
@@ -37,12 +39,22 @@ logger = logging.get_logger(__name__)
 class TimeSeriesForecastingPipeline(Pipeline):
     """Hugging Face Pipeline for Time Series Forecasting"""
 
-    def __init__(self, *args, **kwargs):
+    # has_feature_extractor means we can pass feature_extractor=TimeSeriesPreprocessor
+
+    def __init__(
+        self,
+        *args,
+        single_forecast: bool = True,
+        freq: Optional[Union[Any]] = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
+        self.single_forecast = single_forecast
+        self.freq = freq
         # self.check_model_type(MODEL_FOR_TIME_SERIES_FORECASTING_MAPPING)
 
     def _sanitize_parameters(self, **kwargs):
@@ -64,13 +76,6 @@ class TimeSeriesForecastingPipeline(Pipeline):
             "prediction_length": prediction_length,
             "context_length": context_length,
         }
-        # id_columns: List[str] = [],
-        # timestamp_column: Optional[str] = None,
-        # target_columns: List[str] = [],
-        # observable_columns: List[str] = [],
-        # control_columns: List[str] = [],
-        # conditional_columns: List[str] = [],
-        # static_categorical_columns: List[str] = [],
 
         preprocess_params = [
             "id_columns",
@@ -196,6 +201,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
                     parse_dates=[timestamp_column],
                 )
             elif isinstance(future_time_series, pd.DataFrame):
+                # do we need to check the timestamp column?
                 pass
             else:
                 raise ValueError(
@@ -206,14 +212,13 @@ class TimeSeriesForecastingPipeline(Pipeline):
             for c in future_time_series.columns:
                 if c not in time_series.columns:
                     raise ValueError(
-                        f"Future time series input contains an unknown column {c}"
+                        f"Future time series input contains an unknown column {c}."
                     )
 
             time_series = pd.concat((time_series, future_time_series), axis=0)
         else:
-            # not additional exogenous data provided, augment with empty periods
-
-            time_series = augment_time_series(
+            # no additional exogenous data provided, extend with empty periods
+            time_series = extend_time_series(
                 time_series=time_series,
                 timestamp_column=timestamp_column,
                 grouping_columns=id_columns,
@@ -251,11 +256,15 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         # Eventually we should use inspection somehow
         # inspect.signature(model_forward).parameters.keys()
-        model_input_keys = {
-            "past_values",
-            "static_categorical_values",
-            "freq_token",
-        }  # todo: this should not be hardcoded
+        # model_input_keys = {
+        #     "past_values",
+        #     "static_categorical_values",
+        #     "freq_token",
+        # }  # todo: this should not be hardcoded
+
+        signature = inspect.signature(self.model.forward)
+        model_input_keys = list(signature.parameters.keys())
+
         model_inputs_only = {}
         for k in model_input_keys:
             if k in model_inputs:
@@ -289,8 +298,12 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         # name the predictions of target columns
         # outputs should only have size equal to target columns
+        prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
-            out[f"{c}_prediction"] = input[model_output_key][:, :, i].numpy().tolist()
+            prediction_columns.append(f"{c}_prediction")
+            out[prediction_columns[-1]] = (
+                input[model_output_key][:, :, i].numpy().tolist()
+            )
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         for i, c in enumerate(kwargs["target_columns"]):
@@ -301,6 +314,27 @@ class TimeSeriesForecastingPipeline(Pipeline):
         for i, c in enumerate(kwargs["id_columns"]):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
+
+        if self.single_forecast:
+            # we made only one forecast per time series, explode results
+            # explode == expand the lists in the dataframe
+            out_explode = []
+            for _, row in out.iterrows():
+                l = len(row[prediction_columns[0]])
+                tmp = {}
+                if "timestamp_column" in kwargs:
+                    tmp[kwargs["timestamp_column"]] = create_timestamps(
+                        row[kwargs["timestamp_column"]], freq=self.freq, periods=l
+                    )  # expand timestamps
+                if "id_columns" in kwargs:
+                    for c in kwargs["id_columns"]:
+                        tmp[c] = row[c]
+                for p in prediction_columns:
+                    tmp[p] = row[p]
+
+                out_explode.append(pd.DataFrame(tmp))
+
+            out = pd.concat(out_explode)
 
         # reorder columns
         cols = out.columns.to_list()
@@ -313,62 +347,3 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         out = out[cols_ordered]
         return out
-
-
-def augment_time_series(
-    time_series: pd.DataFrame,
-    # last_known_timestamp,
-    timestamp_column: str,
-    grouping_columns: List[str],
-    periods: int = 1,
-    # delta: datetime.timedelta = datetime.timedelta(days=1),
-):
-    """Augments the provided time series with empty data for the number of periods specified. For each time series, based
-    on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
-    only timestamps and grouping indicators, remaining fields will be null.
-
-    Args:
-        time_series (pd.DataFrame): _description_
-        start_timestamp (_type_): _description_
-        column_name (str): _description_
-        grouping_columns (List[str]): _description_
-        periods (int, optional): _description_. Defaults to 1.
-        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
-    """
-
-    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
-
-        last_timestamp = group[timestamp_column].iloc[-1]
-        delta = group[timestamp_column].iloc[-1] - group[timestamp_column].iloc[-2]
-
-        new_data = pd.DataFrame(
-            {
-                timestamp_column: pd.date_range(
-                    last_timestamp + delta,
-                    freq=delta,
-                    periods=periods,
-                )
-            }
-        )
-
-        # for c in grouping_columns:
-        #    new_data[c] = group[c].iloc[0]
-
-        df = pd.concat(
-            (group, new_data),
-            axis=0,
-        )
-        return df.reset_index(drop=True)
-
-    if grouping_columns == []:
-        new_time_series = augment_one_series(time_series)
-    else:
-        new_time_series = time_series.groupby(grouping_columns).apply(
-            augment_one_series, include_groups=False
-        )
-        idx_names = list(new_time_series.index.names)
-        idx_names[-1] = "__delete"
-        new_time_series = new_time_series.reset_index(names=idx_names)
-        new_time_series.drop(columns=["__delete"], inplace=True)
-
-    return new_time_series
