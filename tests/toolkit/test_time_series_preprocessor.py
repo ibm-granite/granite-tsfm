@@ -17,21 +17,6 @@ from tsfm_public.toolkit.time_series_preprocessor import (
     extend_time_series,
 )
 
-from ..util import ts_data
-
-
-@pytest.fixture(scope="module")
-def sample_data():
-    df = pd.DataFrame(
-        {
-            "val": range(10),
-            "val2": [x + 100 for x in range(10)],
-            "cat": ["A", "B"] * 5,
-            "cat2": ["CC", "DD"] * 5,
-        }
-    )
-    return df
-
 
 def test_standard_scaler(sample_data):
     scaler = StandardScaler()
