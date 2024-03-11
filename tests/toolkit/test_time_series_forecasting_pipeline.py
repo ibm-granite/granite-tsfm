@@ -2,35 +2,13 @@
 #
 
 """Tests the time series preprocessor and functions"""
-from datetime import datetime, timedelta
-
-import numpy as np
 import pandas as pd
-import pytest
 from transformers import PatchTSTForPrediction
 
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
-    augment_time_series,
 )
 from tsfm_public.toolkit.util import select_by_index
-
-from ..util import nreps
-
-
-@pytest.fixture(scope="module")
-def ts_data():
-    df = pd.DataFrame(
-        {
-            "id": nreps(["A", "B", "C"], 50),
-            "id2": nreps(["XX", "YY", "ZZ"], 50),
-            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)]
-            * 3,
-            "value1": range(150),
-            "value2": np.arange(150) / 3 + 10,
-        }
-    )
-    return df
 
 
 def test_forecasting_pipeline_forecasts():
@@ -48,6 +26,7 @@ def test_forecasting_pipeline_forecasts():
         timestamp_column=timestamp_column,
         id_columns=id_columns,
         target_columns=target_columns,
+        freq="1h",
     )
 
     dataset_path = (
@@ -93,28 +72,15 @@ def test_forecasting_pipeline_forecasts():
         == forecasts.iloc[0]["OT_prediction"]
     )
 
-
-def test_augment_time_series(ts_data):
-
-    periods = 5
-    a = augment_time_series(
-        ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods
+    # test that forecasts are properly exploded
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        explode_forecasts=True,
     )
 
-    # check that length increases by periods for each id
-    assert a.shape[0] == ts_data.shape[0] + 3 * periods
-    assert a.shape[1] == ts_data.shape[1]
-
-    periods = 3
-    a = augment_time_series(
-        ts_data,
-        timestamp_column="timestamp",
-        grouping_columns=["id", "id2"],
-        periods=periods,
-    )
-
-    # check that length increases by periods for each id
-    assert a.shape[0] == ts_data.shape[0] + 3 * periods
-    assert a.shape[1] == ts_data.shape[1]
-
-    1
+    forecasts_exploded = forecast_pipeline(test_data)
+    assert forecasts_exploded.shape == (prediction_length, len(target_columns) + 1)

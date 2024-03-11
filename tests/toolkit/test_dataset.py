@@ -158,7 +158,7 @@ def test_forecasting_df_dataset(ts_data_with_categorical):
     assert np.all(ds[0]["future_values"][:, 2].numpy() == 0)
 
 
-def test_forecasting_dataset_non_autoregressive(ts_data_with_categorical):
+def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
     prediction_length = 2
     target_columns = ["value1"]
     observable_columns = ["value3"]
