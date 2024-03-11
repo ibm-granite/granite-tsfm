@@ -189,7 +189,7 @@ def plot_ts_forecasting(
             height=fig_size[1],
             width=fig_size[0],
             title=title,
-            xaxis=dict(tickangle=-45),
+            xaxis={"tickangle": -45},
         )
         if return_image:
             return Image(fig.to_image(format="png"))

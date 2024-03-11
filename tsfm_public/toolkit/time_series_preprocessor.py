@@ -5,6 +5,7 @@
 import datetime
 import enum
 import json
+from collections import defaultdict
 from datetime import timedelta
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
@@ -15,7 +16,10 @@ from datasets import Dataset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
-from transformers.feature_extraction_utils import FeatureExtractionMixin
+from transformers.feature_extraction_utils import (
+    FeatureExtractionMixin,
+    PreTrainedFeatureExtractor,
+)
 
 from .util import join_list_without_repeat
 
@@ -138,8 +142,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.scaler_type = scaler_type
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
-        self.scaler_dict = dict()
-        self.target_scaler_dict = dict()
+        self.scaler_dict = {}
+        self.target_scaler_dict = {}
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
         self.freq = freq
@@ -156,7 +160,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Raises:
             ValueError: Raised when a given column appears in multiple column specifiers.
         """
-        from collections import defaultdict
 
         counter = defaultdict(int)
 
@@ -169,7 +172,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         ):
             counter[c] += 1
 
-        if any([v > 1 for v in counter.values()]):
+        if max(counter.values()) > 1:
             raise ValueError(
                 "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
             )

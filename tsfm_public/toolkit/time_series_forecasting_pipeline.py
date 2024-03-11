@@ -125,7 +125,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
     def __call__(
         self,
-        time_series: Union["pandas.DataFrame", str],
+        time_series: Union["pd.DataFrame", str],
         **kwargs,
     ):
         """Main method of the forecasting pipeline. Takes the input time series data (in tabular format) and
