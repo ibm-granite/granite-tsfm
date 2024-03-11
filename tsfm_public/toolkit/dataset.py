@@ -50,22 +50,16 @@ class BaseDFDataset(torch.utils.data.Dataset):
             y_cols = [y_cols]
 
         if len(x_cols) > 0:
-            assert is_cols_in_df(
-                data_df, x_cols
-            ), f"one or more {x_cols} is not in the list of data_df columns"
+            assert is_cols_in_df(data_df, x_cols), f"one or more {x_cols} is not in the list of data_df columns"
 
         if len(y_cols) > 0:
-            assert is_cols_in_df(
-                data_df, y_cols
-            ), f"one or more {y_cols} is not in the list of data_df columns"
+            assert is_cols_in_df(data_df, y_cols), f"one or more {y_cols} is not in the list of data_df columns"
 
         if timestamp_column:
             assert timestamp_column in list(
                 data_df.columns
             ), f"{timestamp_column} is not in the list of data_df columns"
-            assert (
-                timestamp_column not in x_cols
-            ), f"{timestamp_column} should not be in the list of x_cols"
+            assert timestamp_column not in x_cols, f"{timestamp_column} should not be in the list of x_cols"
 
         self.data_df = data_df
         self.datetime_col = timestamp_column
@@ -162,9 +156,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         **kwargs,
     ):
         if len(id_columns) > 0:
-            assert is_cols_in_df(
-                data_df, id_columns
-            ), f"{id_columns} is not in the data_df columns"
+            assert is_cols_in_df(data_df, id_columns), f"{id_columns} is not in the data_df columns"
 
         self.timestamp_column = timestamp_column
         self.id_columns = id_columns
@@ -424,9 +416,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 )
 
             # masking for conditional values which are not observed during future period
-            self.y_mask_conditional = np.array(
-                [(c in conditional_columns) for c in y_cols]
-            )
+            self.y_mask_conditional = np.array([(c in conditional_columns) for c in y_cols])
 
             # create a mask of x which masks targets
             self.x_mask_targets = np.array([(c in target_columns) for c in x_cols])
@@ -451,10 +441,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
-                time_id
-                + self.context_length : time_id
-                + self.context_length
-                + self.prediction_length
+                time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
 
             seq_y[:, self.y_mask_conditional] = 0
@@ -473,9 +460,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 ret["freq_token"] = torch.tensor(self.frequency_token, dtype=torch.int)
 
             if self.static_categorical_columns:
-                categorical_values = self.data_df[
-                    self.static_categorical_columns
-                ].values[0, :]
+                categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             return ret
@@ -543,7 +528,6 @@ class RegressionDFDataset(BaseConcatDFDataset):
             input_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
         ):
-
             self.target_columns = target_columns
             self.input_columns = input_columns
             self.static_categorical_columns = static_categorical_columns
@@ -566,9 +550,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
             seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_y = self.y[
-                time_id + self.context_length - 1 : time_id + self.context_length
-            ].values.ravel()
+            seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             # return _torch(seq_x, seq_y)
 
             ret = {
@@ -582,9 +564,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 ret["id"] = self.group_id
 
             if self.static_categorical_columns:
-                categorical_values = self.data_df[
-                    self.static_categorical_columns
-                ].values[0, :]
+                categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             return ret
@@ -661,21 +641,15 @@ def ts_padding(
         pad_df[c] = pad_df[c].astype(df.dtypes[c], copy=False)
 
     if timestamp_column:
-        if (df[timestamp_column].dtype.type == np.datetime64) or (
-            df[timestamp_column].dtype == int
-        ):
+        if (df[timestamp_column].dtype.type == np.datetime64) or (df[timestamp_column].dtype == int):
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
-            prepended_timestamps = [
-                last_timestamp + offset * period for offset in range(-fill_length, 0)
-            ]
+            prepended_timestamps = [last_timestamp + offset * period for offset in range(-fill_length, 0)]
             pad_df[timestamp_column] = prepended_timestamps
         else:
             pad_df[timestamp_column] = None
         # Ensure same type
-        pad_df[timestamp_column] = pad_df[timestamp_column].astype(
-            df[timestamp_column].dtype
-        )
+        pad_df[timestamp_column] = pad_df[timestamp_column].astype(df[timestamp_column].dtype)
 
     if id_columns:
         id_values = df.iloc[0][id_columns].to_list()
@@ -716,6 +690,4 @@ if __name__ == "__main__":
     d6 = PretrainDFDataset(data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2)
     print(f"d6: {d6}")
 
-    d7 = ForecastDFDataset(
-        data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2, pred_len=2
-    )
+    d7 = ForecastDFDataset(data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2, pred_len=2)

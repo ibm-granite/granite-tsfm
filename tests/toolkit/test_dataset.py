@@ -40,8 +40,7 @@ def ts_data_with_categorical():
     return pd.DataFrame(
         {
             "id": nreps(["A", "B", "C"], 50),
-            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)]
-            * 3,
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 3,
             "value1": range(150),
             "value2": np.arange(150) / 3 + 10,
             "value3": np.arange(150) / 50 - 6,
@@ -74,9 +73,7 @@ def test_ts_padding(ts_data):
 
     # test date handled
     # integer
-    assert df_padded.iloc[0]["time_int"] == df.iloc[0]["time_int"] - (
-        context_length - df.shape[0]
-    )
+    assert df_padded.iloc[0]["time_int"] == df.iloc[0]["time_int"] - (context_length - df.shape[0])
 
     # date
     df_padded = ts_padding(
@@ -86,9 +83,9 @@ def test_ts_padding(ts_data):
         context_length=context_length,
     )
 
-    assert df_padded.iloc[0]["time_date"] == df.iloc[0]["time_date"] - (
-        context_length - df.shape[0]
-    ) * timedelta(days=1)
+    assert df_padded.iloc[0]["time_date"] == df.iloc[0]["time_date"] - (context_length - df.shape[0]) * timedelta(
+        days=1
+    )
 
 
 def test_pretrain_df_dataset(ts_data):
@@ -106,7 +103,6 @@ def test_pretrain_df_dataset(ts_data):
 
 
 def test_forecasting_df_dataset(ts_data_with_categorical):
-
     prediction_length = 2
     static_categorical_columns = ["color", "material"]
     target_columns = ["value1"]
@@ -141,9 +137,7 @@ def test_forecasting_df_dataset(ts_data_with_categorical):
 
     # check that we produce outputs for static categorical
     assert "static_categorical_values" in ds[0]
-    assert ds[0]["static_categorical_values"].shape == (
-        len(static_categorical_columns),
-    )
+    assert ds[0]["static_categorical_values"].shape == (len(static_categorical_columns),)
 
     # check that frequency token is present
     assert "freq_token" in ds[0]

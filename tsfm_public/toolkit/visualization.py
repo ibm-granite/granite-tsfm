@@ -83,9 +83,7 @@ def plot_ts_forecasting(
     # plot true data
 
     if not HAVE_SEABORN and plot_type == "seaborn":
-        raise ValueError(
-            "Please install the seaborn package if seaborn plots are needed."
-        )
+        raise ValueError("Please install the seaborn package if seaborn plots are needed.")
 
     # if plot_start > len(test_data_updated):
     #     logging.warning(
@@ -138,9 +136,7 @@ def plot_ts_forecasting(
 
     # index into the predictions so that the end of the prediction coincides with the end of the ground truth
     #
-    predictions_end = (
-        plot_range[-1] - prediction_length - context_length + 1
-    )  #  - context_length - prediction_length
+    predictions_end = plot_range[-1] - prediction_length - context_length + 1  #  - context_length - prediction_length
 
     predictions_start = plot_range[0] - context_length
 
@@ -154,9 +150,7 @@ def plot_ts_forecasting(
         if plot_type == "plotly":
             for i in plot_index:
                 start = forecast_data.iloc[i][timestamp_column]
-                timestamps = pd.date_range(
-                    start, freq=periodicity, periods=prediction_length + 1
-                )
+                timestamps = pd.date_range(start, freq=periodicity, periods=prediction_length + 1)
                 timestamp = timestamps[1:]
                 forecast_val = forecast_data.iloc[i][forecast_name]
                 plot_line(

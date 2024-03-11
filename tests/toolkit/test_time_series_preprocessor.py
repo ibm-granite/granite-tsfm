@@ -26,9 +26,9 @@ def test_standard_scaler(sample_data):
     # check shape preserved
     result = scaler.fit_transform(sample_data[columns])
     assert result.shape == sample_data[columns].shape
-    expected = (
-        sample_data[columns].values - np.mean(sample_data[columns].values, axis=0)
-    ) / np.std(sample_data[columns].values, axis=0)
+    expected = (sample_data[columns].values - np.mean(sample_data[columns].values, axis=0)) / np.std(
+        sample_data[columns].values, axis=0
+    )
     np.testing.assert_allclose(result, expected)
 
     # check serialization
@@ -69,7 +69,6 @@ def test_ordinal_encoder(sample_data):
 
 
 def test_time_series_preprocessor_encodes(sample_data):
-
     static_categorical_columns = ["cat", "cat2"]
 
     tsp = TimeSeriesPreprocessor(
@@ -85,11 +84,8 @@ def test_time_series_preprocessor_encodes(sample_data):
 
 
 def test_augment_time_series(ts_data):
-
     periods = 5
-    a = extend_time_series(
-        ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods
-    )
+    a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)
 
     # check that length increases by periods for each id
     assert a.shape[0] == ts_data.shape[0] + 3 * periods

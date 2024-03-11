@@ -42,9 +42,7 @@ def tsforecasting_with_fmdls():
     )
 
     st.title(GLOBAL_CONFIG["title"])
-    st.write(
-        "<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True
-    )
+    st.write("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
 
     st.write(GLOBAL_CONFIG["intro"])
 
@@ -103,26 +101,20 @@ def tsforecasting_with_fmdls():
             for idx, channel in enumerate(dataset_meta["channel_plots"]):
                 # col = columns[idx % num_cols]
                 st.plotly_chart(
-                    model_util.create_figure(
-                        **dataset_meta, **model_meta, **approach_meta, channel=channel
-                    ),
+                    model_util.create_figure(**dataset_meta, **model_meta, **approach_meta, channel=channel),
                     use_container_width=True,
                     fig_size=(1600, 200),
                 )
 
         with col2:
             st.subheader("Performance")
-            df_perf = model_util.get_performance(
-                metrics=METRICS, **dataset_meta, **model_meta, **approach_meta
-            )
+            df_perf = model_util.get_performance(metrics=METRICS, **dataset_meta, **model_meta, **approach_meta)
 
             df_perf_styled = df_perf.style.set_table_styles(
                 [
                     {"selector": "th", "props": "background-color: whitesmoke;"},
                 ]
-            ).format(
-                precision=3
-            )  # .style.hide(axis="index")
+            ).format(precision=3)  # .style.hide(axis="index")
             st.write(df_perf_styled.to_html(), unsafe_allow_html=True)
             st.write("")
 
@@ -193,9 +185,7 @@ def tsforecasting_with_fmdls():
         out = re.sub(r"\\textbf{([^&]*)}", r"\1", table_source)
         out = re.sub(r"\\uline{([^&]*)}", r"\1", out)
         out = re.sub(r"\s*|\$\\pm\$[^&]*|\\cline{.*}", "", out)
-        vals = np.array([r.split("&")[3:] for r in out.split(r"\\")[2:30]]).astype(
-            float
-        )
+        vals = np.array([r.split("&")[3:] for r in out.split(r"\\")[2:30]]).astype(float)
 
         leaderboard = pd.DataFrame(
             index=pd.MultiIndex.from_product(

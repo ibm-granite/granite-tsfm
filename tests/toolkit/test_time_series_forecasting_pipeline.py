@@ -29,9 +29,7 @@ def test_forecasting_pipeline_forecasts():
         freq="1h",
     )
 
-    dataset_path = (
-        "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
-    )
+    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
     test_end_index = 12 * 30 * 24 + 8 * 30 * 24
     test_start_index = test_end_index - context_length
 
@@ -67,10 +65,7 @@ def test_forecasting_pipeline_forecasts():
     assert forecasts_no_future.shape == (1, 2 * len(target_columns) + 1)
 
     # check forecasts match
-    assert (
-        forecasts_no_future.iloc[0]["OT_prediction"]
-        == forecasts.iloc[0]["OT_prediction"]
-    )
+    assert forecasts_no_future.iloc[0]["OT_prediction"] == forecasts.iloc[0]["OT_prediction"]
 
     # test that forecasts are properly exploded
     forecast_pipeline = TimeSeriesForecastingPipeline(
