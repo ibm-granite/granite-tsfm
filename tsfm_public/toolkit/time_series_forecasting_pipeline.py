@@ -44,7 +44,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
     def __init__(
         self,
         *args,
-        single_forecast: bool = True,
+        explode_forecasts: bool = False,
         freq: Optional[Union[Any]] = None,
         **kwargs,
     ):
@@ -53,7 +53,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
-        self.single_forecast = single_forecast
+        self.explode_forecasts = explode_forecasts
         self.freq = freq
         # self.check_model_type(MODEL_FOR_TIME_SERIES_FORECASTING_MAPPING)
 
@@ -315,7 +315,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
 
-        if self.single_forecast:
+        if self.explode_forecasts:
             # we made only one forecast per time series, explode results
             # explode == expand the lists in the dataframe
             out_explode = []
