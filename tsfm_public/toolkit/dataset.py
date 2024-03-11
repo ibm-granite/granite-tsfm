@@ -47,22 +47,14 @@ class BaseDFDataset(torch.utils.data.Dataset):
             y_cols = [y_cols]
 
         if len(x_cols) > 0:
-            assert is_cols_in_df(
-                data_df, x_cols
-            ), f"one or more {x_cols} is not in the list of data_df columns"
+            assert is_cols_in_df(data_df, x_cols), f"one or more {x_cols} is not in the list of data_df columns"
 
         if len(y_cols) > 0:
-            assert is_cols_in_df(
-                data_df, y_cols
-            ), f"one or more {y_cols} is not in the list of data_df columns"
+            assert is_cols_in_df(data_df, y_cols), f"one or more {y_cols} is not in the list of data_df columns"
 
         if datetime_col:
-            assert datetime_col in list(
-                data_df.columns
-            ), f"{datetime_col} is not in the list of data_df columns"
-            assert (
-                datetime_col not in x_cols
-            ), f"{datetime_col} should not be in the list of x_cols"
+            assert datetime_col in list(data_df.columns), f"{datetime_col} is not in the list of data_df columns"
+            assert datetime_col not in x_cols, f"{datetime_col} should not be in the list of x_cols"
 
         self.data_df = data_df
         self.datetime_col = datetime_col
@@ -160,9 +152,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         cls=BaseDFDataset,
     ):
         if len(id_columns) > 0:
-            assert is_cols_in_df(
-                data_df, id_columns
-            ), f"{id_columns} is not in the data_df columns"
+            assert is_cols_in_df(data_df, id_columns), f"{id_columns} is not in the data_df columns"
 
         self.datetime_col = datetime_col
         self.id_columns = id_columns
@@ -398,9 +388,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             # seq_x: batch_size x seq_len x num_x_cols
             seq_x = self.X[time_id : time_id + self.seq_len].values
             # seq_y: batch_size x pred_len x num_x_cols
-            seq_y = self.y[
-                time_id + self.seq_len : time_id + self.seq_len + self.pred_len
-            ].values
+            seq_y = self.y[time_id + self.seq_len : time_id + self.seq_len + self.pred_len].values
 
             ret = {
                 "past_values": np_to_torch(seq_x),
@@ -490,9 +478,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         def __getitem__(self, time_id):
             # seq_x: batch_size x seq_len x num_x_cols
             seq_x = self.X[time_id : time_id + self.seq_len].values
-            seq_y = self.y[
-                time_id + self.seq_len - 1 : time_id + self.seq_len
-            ].values.ravel()
+            seq_y = self.y[time_id + self.seq_len - 1 : time_id + self.seq_len].values.ravel()
             # return _torch(seq_x, seq_y)
 
             ret = {
@@ -582,16 +568,12 @@ def ts_padding(
         if df[timestamp_column].dtype in ["<M8[ns]", "datetime64", "int"]:
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
-            prepended_timestamps = [
-                last_timestamp + offset * period for offset in range(-fill_length, 0)
-            ]
+            prepended_timestamps = [last_timestamp + offset * period for offset in range(-fill_length, 0)]
             pad_df[timestamp_column] = prepended_timestamps
         else:
             pad_df[timestamp_column] = None
         # Ensure same type
-        pad_df[timestamp_column] = pad_df[timestamp_column].astype(
-            df[timestamp_column].dtype
-        )
+        pad_df[timestamp_column] = pad_df[timestamp_column].astype(df[timestamp_column].dtype)
 
     if id_columns:
         id_values = df.iloc[0][id_columns].to_list()
@@ -632,6 +614,4 @@ if __name__ == "__main__":
     d6 = PretrainDFDataset(data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2)
     print(f"d6: {d6}")
 
-    d7 = ForecastDFDataset(
-        data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2, pred_len=2
-    )
+    d7 = ForecastDFDataset(data_df=df, x_cols=["A", "B"], group_ids=["g1"], seq_len=2, pred_len=2)

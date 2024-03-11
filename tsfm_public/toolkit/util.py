@@ -18,18 +18,13 @@ def select_by_timestamp(
     end_timestamp: Optional[Union[str, datetime]] = None,
 ):
     if not start_timestamp and not end_timestamp:
-        raise ValueError(
-            "At least one of start_timestamp or end_timestamp must be specified."
-        )
+        raise ValueError("At least one of start_timestamp or end_timestamp must be specified.")
     elif not start_timestamp:
         return df[df[timestamp_column] < end_timestamp]
     elif not end_timestamp:
         return df[df[timestamp_column] >= start_timestamp]
     else:
-        return df[
-            (df[timestamp_column] >= start_timestamp)
-            & (df[timestamp_column] < end_timestamp)
-        ]
+        return df[(df[timestamp_column] >= start_timestamp) & (df[timestamp_column] < end_timestamp)]
 
 
 def select_by_index(
@@ -54,16 +49,12 @@ def select_by_index(
             return group_df.iloc[start_index:end_index, :]
 
     if not id_columns:
-        return _split_group_by_index(
-            df, start_index=start_index, end_index=end_index
-        ).copy()
+        return _split_group_by_index(df, start_index=start_index, end_index=end_index).copy()
 
     groups = df.groupby(id_columns)
     result = []
     for name, group in groups:
-        result.append(
-            _split_group_by_index(group, start_index=start_index, end_index=end_index)
-        )
+        result.append(_split_group_by_index(group, start_index=start_index, end_index=end_index))
 
     return pd.concat(result)
 
@@ -95,17 +86,13 @@ def convert_tsf_to_dataframe(
                     if not line.startswith("@data"):
                         line_content = line.split(" ")
                         if line.startswith("@attribute"):
-                            if (
-                                len(line_content) != 3
-                            ):  # Attributes have both name and type
+                            if len(line_content) != 3:  # Attributes have both name and type
                                 raise Exception("Invalid meta-data specification.")
 
                             col_names.append(line_content[1])
                             col_types.append(line_content[2])
                         else:
-                            if (
-                                len(line_content) != 2
-                            ):  # Other meta-data have only values
+                            if len(line_content) != 2:  # Other meta-data have only values
                                 raise Exception("Invalid meta-data specification.")
 
                             if line.startswith("@frequency"):
@@ -113,24 +100,18 @@ def convert_tsf_to_dataframe(
                             elif line.startswith("@horizon"):
                                 forecast_horizon = int(line_content[1])
                             elif line.startswith("@missing"):
-                                contain_missing_values = bool(
-                                    strtobool(line_content[1])
-                                )
+                                contain_missing_values = bool(strtobool(line_content[1]))
                             elif line.startswith("@equallength"):
                                 contain_equal_length = bool(strtobool(line_content[1]))
 
                     else:
                         if len(col_names) == 0:
-                            raise Exception(
-                                "Missing attribute section. Attribute section must come before data."
-                            )
+                            raise Exception("Missing attribute section. Attribute section must come before data.")
 
                         found_data_tag = True
                 elif not line.startswith("#"):
                     if len(col_names) == 0:
-                        raise Exception(
-                            "Missing attribute section. Attribute section must come before data."
-                        )
+                        raise Exception("Missing attribute section. Attribute section must come before data.")
                     elif not found_data_tag:
                         raise Exception("Missing @data tag.")
                     else:
@@ -163,9 +144,7 @@ def convert_tsf_to_dataframe(
                             else:
                                 numeric_series.append(float(val))
 
-                        if numeric_series.count(replace_missing_vals_with) == len(
-                            numeric_series
-                        ):
+                        if numeric_series.count(replace_missing_vals_with) == len(numeric_series):
                             raise Exception(
                                 "All series values are missing. A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series."
                             )
@@ -179,9 +158,7 @@ def convert_tsf_to_dataframe(
                             elif col_types[i] == "string":
                                 att_val = str(full_info[i])
                             elif col_types[i] == "date":
-                                att_val = datetime.strptime(
-                                    full_info[i], "%Y-%m-%d %H-%M-%S"
-                                )
+                                att_val = datetime.strptime(full_info[i], "%Y-%m-%d %H-%M-%S")
                             else:
                                 raise Exception(
                                     "Invalid attribute type."

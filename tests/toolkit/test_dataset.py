@@ -52,9 +52,7 @@ def test_ts_padding(ts_data):
 
     # test date handled
     # integer
-    assert df_padded.iloc[0]["time_int"] == df.iloc[0]["time_int"] - (
-        context_length - df.shape[0]
-    )
+    assert df_padded.iloc[0]["time_int"] == df.iloc[0]["time_int"] - (context_length - df.shape[0])
 
     # date
     df_padded = ts_padding(
@@ -64,9 +62,9 @@ def test_ts_padding(ts_data):
         context_length=context_length,
     )
 
-    assert df_padded.iloc[0]["time_date"] == df.iloc[0]["time_date"] - (
-        context_length - df.shape[0]
-    ) * timedelta(days=1)
+    assert df_padded.iloc[0]["time_date"] == df.iloc[0]["time_date"] - (context_length - df.shape[0]) * timedelta(
+        days=1
+    )
 
 
 def test_pretrain_df_dataset(ts_data):

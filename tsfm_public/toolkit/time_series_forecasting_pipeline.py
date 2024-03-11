@@ -63,7 +63,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    def __call__(self, time_series: Union["pandas.DataFrame", str], **kwargs):
+    def __call__(self, time_series: Union["pd.DataFrame", str], **kwargs):
         """Main method of the forecasting pipeline. Takes the input time series data (in tabular format) and
         produces predictions.
 
@@ -146,11 +146,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         # copy the other inputs
         copy_inputs = True
-        for k in [
-            akey
-            for akey in model_inputs.keys()
-            if (akey not in model_input_keys) or copy_inputs
-        ]:
+        for k in [akey for akey in model_inputs.keys() if (akey not in model_input_keys) or copy_inputs]:
             model_outputs[k] = model_inputs[k]
 
         return model_outputs
@@ -162,11 +158,7 @@ class TimeSeriesForecastingPipeline(Pipeline):
         """
         out = {}
 
-        model_output_key = (
-            "prediction_outputs"
-            if "prediction_outputs" in input.keys()
-            else "prediction_logits"
-        )
+        model_output_key = "prediction_outputs" if "prediction_outputs" in input.keys() else "prediction_logits"
 
         for i, c in enumerate(kwargs["output_columns"]):
             out[f"{c}_prediction"] = input[model_output_key][:, :, i].numpy().tolist()

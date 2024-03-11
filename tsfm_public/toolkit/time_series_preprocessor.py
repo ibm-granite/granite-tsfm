@@ -11,7 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from datasets import Dataset
 from sklearn.preprocessing import StandardScaler
-from transformers.feature_extraction_utils import FeatureExtractionMixin
+from transformers.feature_extraction_utils import (
+    FeatureExtractionMixin,
+    PreTrainedFeatureExtractor,
+)
 
 
 # Local
@@ -37,9 +40,7 @@ class TimeSeriesScaler(StandardScaler):
         return output
 
     @classmethod
-    def from_dict(
-        cls, feature_extractor_dict: Dict[str, Any], **kwargs
-    ) -> "TimeSeriesScaler":
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "TimeSeriesScaler":
         """
         Instantiates a TimeSeriesScaler from a Python dictionary of parameters.
 
@@ -59,18 +60,12 @@ class TimeSeriesScaler(StandardScaler):
         init_param_names = ["copy", "with_mean", "with_std"]
 
         init_params = {}
-        for k, v in [
-            (k, v) for k, v in feature_extractor_dict.items() if k in init_param_names
-        ]:
+        for k, v in [(k, v) for k, v in feature_extractor_dict.items() if k in init_param_names]:
             init_params[k] = v
 
         t = TimeSeriesScaler(**init_params)
 
-        for k, v in [
-            (k, v)
-            for k, v in feature_extractor_dict.items()
-            if k not in init_param_names
-        ]:
+        for k, v in [(k, v) for k, v in feature_extractor_dict.items() if k not in init_param_names]:
             setattr(t, k, v)
 
         return t
@@ -104,9 +99,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # note base class __init__ methods sets all arguments as attributes
 
         if not isinstance(id_columns, list):
-            raise ValueError(
-                f"Invalid argument provided for `id_columns`: {id_columns}"
-            )
+            raise ValueError(f"Invalid argument provided for `id_columns`: {id_columns}")
 
         self.timestamp_column = timestamp_column
         self.input_columns = input_columns
@@ -117,7 +110,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.scaling = scaling
         self.time_series_task = time_series_task
         self.scale_outputs = scale_outputs
-        self.scaler_dict = dict()
+        self.scaler_dict = {}
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -138,9 +131,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         return output
 
     @classmethod
-    def from_dict(
-        cls, feature_extractor_dict: Dict[str, Any], **kwargs
-    ) -> "PreTrainedFeatureExtractor":
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
         """
         Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
         parameters.
@@ -178,11 +169,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             seq_x = d[self.input_columns].iloc[s_begin:s_end].values
 
             if self.time_series_task == TimeSeriesTask.FORECASTING:
-                seq_y = (
-                    d[self.output_columns]
-                    .iloc[s_end : s_end + self.prediction_length]
-                    .values
-                )
+                seq_y = d[self.output_columns].iloc[s_end : s_end + self.prediction_length].values
             else:
                 seq_y = None
             # to do: add handling of other types
@@ -223,9 +210,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         dataset: pd.DataFrame,
     ):
         if self.id_columns:
-            group_by_columns = (
-                self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
-            )
+            group_by_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
         else:
             group_by_columns = INTERNAL_ID_COLUMN
 
@@ -245,9 +230,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
         cols_to_scale = copy.copy(self.input_columns)
         if self.scale_outputs:
-            cols_to_scale.extend(
-                [c for c in self.output_columns if c not in self.input_columns]
-            )
+            cols_to_scale.extend([c for c in self.output_columns if c not in self.input_columns])
         return cols_to_scale
 
     def train(
@@ -312,9 +295,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         df = self._standardize_dataframe(dataset)
         if self.id_columns:
-            id_columns = (
-                self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
-            )
+            id_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
         else:
             id_columns = INTERNAL_ID_COLUMN
 
