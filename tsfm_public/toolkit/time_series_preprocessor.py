@@ -22,7 +22,7 @@ from transformers.feature_extraction_utils import (
 )
 
 from .dataset import ForecastDFDataset
-from .util import join_list_without_repeat, select_by_index
+from .util import get_split_params, join_list_without_repeat
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -587,30 +587,49 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return df
 
-    def get_datasets(
-        self, dataset: Union[Dataset, pd.DataFrame], config: Dict[str, Any]
-    ):  # load data, assume data file is in csv format
+    def get_datasets(self, dataset: Union[Dataset, pd.DataFrame], split_config: Dict[str, Any]) -> Tuple[Any]:
+        """Creates the preprocessed pytorch datasets needed for training and evaluation
+        using the HuggingFace trainer
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
+            split_config (Dict[str, Any]): Dictionary of dictionaries containing
+            split parameters. For example:
+                {
+                    train: {start: 0, end: 50},
+                    valid: {start: 50, end: 70},
+                    test: {start: 70, end: 100}
+                }
+            end value is not inclusive
+
+        Returns:
+            Tuple of pytorch datasets, including: train, validation, test.
+
+
+        """
+
         data = self._standardize_dataframe(dataset)
 
-        # to do: get split_params
+        # get split_params
         # split_params = get_split_params(config, self.context_length, len(data))
-        split_params = {}
+
+        split_params, split_function = get_split_params(split_config)
 
         # specify columns
         column_specifiers = {
-            "id_columns": config["data"]["id_columns"],
-            "timestamp_column": config["data"]["timestamp_column"],
-            "target_columns": config["data"]["target_columns"],
-            "observable_columns": config["data"]["observable_columns"],
-            "control_columns": config["data"]["control_columns"],
-            "conditional_columns": config["data"]["conditional_columns"],
-            "static_categorical_columns": config["data"]["static_categorical_columns"],
+            "id_columns": self.id_columns,
+            "timestamp_column": self.timestamp_column,
+            "target_columns": self.target_columns,
+            "observable_columns": self.observable_columns,
+            "control_columns": self.control_columns,
+            "conditional_columns": self.conditional_columns,
+            "static_categorical_columns": self.static_categorical_columns,
         }
 
         # split data
-        train_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["train"])
-        valid_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["valid"])
-        test_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["test"])
+        train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
+        valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
+        test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
 
         # # data preprocessing
         # tsp = TimeSeriesPreprocessor(

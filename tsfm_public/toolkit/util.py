@@ -5,7 +5,7 @@
 import copy
 from datetime import datetime
 from distutils.util import strtobool
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -334,6 +334,42 @@ def convert_tsf_to_dataframe(
             contain_missing_values,
             contain_equal_length,
         )
+
+
+def get_split_params(
+    split_config: Dict[str, List[int]], context_length=None
+) -> Dict[str, Dict[str, Union[int, float]]]:
+    """_summary_
+
+    Args:
+        split_config (Dict[str, List[int]]): _description_
+        context_length (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        Dict[str, Dict[str, Union[int, float]]]: _description_
+    """
+
+    split_params = {}
+    split_function = {}
+
+    for group in ["train", "test", "valid"]:
+        if split_config[group][1] < 1:
+            split_params[group] = {
+                "start_fraction": split_config[group][0],
+                "end_fraction": split_config[group][1],
+                "start_offset": (context_length if (context_length and group != "train") else 0),
+            }
+            split_function[group] = select_by_relative_fraction
+        else:
+            split_params[group] = {
+                "start_index": (
+                    split_config[group][0] - (context_length if (context_length and group != "train") else 0)
+                ),
+                "end_index": split_config[group][1],
+            }
+            split_function[group] = select_by_index
+
+    return split_params, split_function
 
 
 def convert_tsf(filename: str) -> pd.DataFrame:
