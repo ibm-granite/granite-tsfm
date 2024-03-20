@@ -21,7 +21,8 @@ from transformers.feature_extraction_utils import (
     PreTrainedFeatureExtractor,
 )
 
-from .util import join_list_without_repeat
+from .dataset import ForecastDFDataset
+from .util import join_list_without_repeat, select_by_index
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -585,6 +586,57 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
+
+    def get_datasets(
+        self, dataset: Union[Dataset, pd.DataFrame], config: Dict[str, Any]
+    ):  # load data, assume data file is in csv format
+        data = self._standardize_dataframe(dataset)
+
+        # to do: get split_params
+        # split_params = get_split_params(config, self.context_length, len(data))
+        split_params = {}
+
+        # specify columns
+        column_specifiers = {
+            "id_columns": config["data"]["id_columns"],
+            "timestamp_column": config["data"]["timestamp_column"],
+            "target_columns": config["data"]["target_columns"],
+            "observable_columns": config["data"]["observable_columns"],
+            "control_columns": config["data"]["control_columns"],
+            "conditional_columns": config["data"]["conditional_columns"],
+            "static_categorical_columns": config["data"]["static_categorical_columns"],
+        }
+
+        # split data
+        train_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["train"])
+        valid_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["valid"])
+        test_data = select_by_index(data, id_columns=column_specifiers["id_columns"], **split_params["test"])
+
+        # # data preprocessing
+        # tsp = TimeSeriesPreprocessor(
+        #     **column_specifiers,
+        #     scaling=config["scale"]["scaling"],
+        #     encode_categorical=config["encode_categorical"],
+        #     scaler_type=config["scale"]["scaler_type"],
+        #     freq=config["data"]["freq"],
+        # )
+        self.train(train_data)
+
+        params = column_specifiers
+        params["context_length"] = self.context_length
+        params["prediction_length"] = self.prediction_length
+
+        # get torch datasets
+        test_dataset = ForecastDFDataset(
+            self.preprocess(test_data),
+            **params,
+        )
+        train_dataset = ForecastDFDataset(self.preprocess(train_data), **params)
+        valid_dataset = ForecastDFDataset(
+            self.preprocess(valid_data),
+            **params,
+        )
+        return train_dataset, valid_dataset, test_dataset
 
 
 def create_timestamps(
