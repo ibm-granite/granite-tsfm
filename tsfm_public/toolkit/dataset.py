@@ -346,7 +346,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         frequency_token: Optional[int] = None,
         autoregressive_modeling: bool = True,
-        training: bool = True,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
