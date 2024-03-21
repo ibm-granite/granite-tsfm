@@ -36,3 +36,8 @@ tsp = TimeSeriesPreprocessor(
 train, valid, test = tsp.get_datasets(df, split_config)
 
 # %%
+split_config = {"train": [0, 0.7], "valid": [0.7, 0.9], "test": [0.9, 1]}
+
+train, valid, test = tsp.get_datasets(df, split_config)
+
+# %%

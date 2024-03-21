@@ -35,7 +35,9 @@ def select_by_timestamp(
     """
 
     if not start_timestamp and not end_timestamp:
-        raise ValueError("At least one of start_timestamp or end_timestamp must be specified.")
+        raise ValueError(
+            "At least one of start_timestamp or end_timestamp must be specified."
+        )
 
     if not start_timestamp:
         return df[df[timestamp_column] < end_timestamp]
@@ -43,7 +45,10 @@ def select_by_timestamp(
     if not end_timestamp:
         return df[df[timestamp_column] >= start_timestamp]
 
-    return df[(df[timestamp_column] >= start_timestamp) & (df[timestamp_column] < end_timestamp)]
+    return df[
+        (df[timestamp_column] >= start_timestamp)
+        & (df[timestamp_column] < end_timestamp)
+    ]
 
 
 def select_by_index(
@@ -74,12 +79,18 @@ def select_by_index(
         raise ValueError("At least one of start_index or end_index must be specified.")
 
     if not id_columns:
-        return _split_group_by_index(df, start_index=start_index, end_index=end_index).copy()
+        return _split_group_by_index(
+            df, start_index=start_index, end_index=end_index
+        ).copy()
 
     groups = df.groupby(_get_groupby_columns(id_columns))
     result = []
     for name, group in groups:
-        result.append(_split_group_by_index(group, name=name, start_index=start_index, end_index=end_index))
+        result.append(
+            _split_group_by_index(
+                group, name=name, start_index=start_index, end_index=end_index
+            )
+        )
 
     return pd.concat(result)
 
@@ -116,7 +127,9 @@ def select_by_relative_fraction(
         pd.DataFrame: Subset of the dataframe.
     """
     if not start_fraction and not end_fraction:
-        raise ValueError("At least one of start_fraction or end_fraction must be specified.")
+        raise ValueError(
+            "At least one of start_fraction or end_fraction must be specified."
+        )
 
     if start_offset < 0:
         raise ValueError("The value of start_offset should ne non-negative.")
@@ -202,7 +215,9 @@ def _split_group_by_fraction(
     else:
         end_index = None
 
-    return _split_group_by_index(group_df=group_df, start_index=start_index, end_index=end_index)
+    return _split_group_by_index(
+        group_df=group_df, start_index=start_index, end_index=end_index
+    )
 
 
 def convert_tsf_to_dataframe(
@@ -232,13 +247,17 @@ def convert_tsf_to_dataframe(
                     if not line.startswith("@data"):
                         line_content = line.split(" ")
                         if line.startswith("@attribute"):
-                            if len(line_content) != 3:  # Attributes have both name and type
+                            if (
+                                len(line_content) != 3
+                            ):  # Attributes have both name and type
                                 raise Exception("Invalid meta-data specification.")
 
                             col_names.append(line_content[1])
                             col_types.append(line_content[2])
                         else:
-                            if len(line_content) != 2:  # Other meta-data have only values
+                            if (
+                                len(line_content) != 2
+                            ):  # Other meta-data have only values
                                 raise Exception("Invalid meta-data specification.")
 
                             if line.startswith("@frequency"):
@@ -246,18 +265,24 @@ def convert_tsf_to_dataframe(
                             elif line.startswith("@horizon"):
                                 forecast_horizon = int(line_content[1])
                             elif line.startswith("@missing"):
-                                contain_missing_values = bool(strtobool(line_content[1]))
+                                contain_missing_values = bool(
+                                    strtobool(line_content[1])
+                                )
                             elif line.startswith("@equallength"):
                                 contain_equal_length = bool(strtobool(line_content[1]))
 
                     else:
                         if len(col_names) == 0:
-                            raise Exception("Missing attribute section. Attribute section must come before data.")
+                            raise Exception(
+                                "Missing attribute section. Attribute section must come before data."
+                            )
 
                         found_data_tag = True
                 elif not line.startswith("#"):
                     if len(col_names) == 0:
-                        raise Exception("Missing attribute section. Attribute section must come before data.")
+                        raise Exception(
+                            "Missing attribute section. Attribute section must come before data."
+                        )
                     elif not found_data_tag:
                         raise Exception("Missing @data tag.")
                     else:
@@ -290,7 +315,9 @@ def convert_tsf_to_dataframe(
                             else:
                                 numeric_series.append(float(val))
 
-                        if numeric_series.count(replace_missing_vals_with) == len(numeric_series):
+                        if numeric_series.count(replace_missing_vals_with) == len(
+                            numeric_series
+                        ):
                             raise Exception(
                                 "All series values are missing. A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series."
                             )
@@ -304,7 +331,9 @@ def convert_tsf_to_dataframe(
                             elif col_types[i] == "string":
                                 att_val = str(full_info[i])
                             elif col_types[i] == "date":
-                                att_val = datetime.strptime(full_info[i], "%Y-%m-%d %H-%M-%S")
+                                att_val = datetime.strptime(
+                                    full_info[i], "%Y-%m-%d %H-%M-%S"
+                                )
                             else:
                                 raise Exception(
                                     "Invalid attribute type."
@@ -353,21 +382,26 @@ def get_split_params(
     split_function = {}
 
     for group in ["train", "test", "valid"]:
-        if split_config[group][1] < 1:
-            split_params[group] = {
-                "start_fraction": split_config[group][0],
-                "end_fraction": split_config[group][1],
-                "start_offset": (context_length if (context_length and group != "train") else 0),
-            }
-            split_function[group] = select_by_relative_fraction
-        else:
+        if isinstance(split_config[group][0], int) and isinstance(
+            split_config[group][1], int
+        ):
             split_params[group] = {
                 "start_index": (
-                    split_config[group][0] - (context_length if (context_length and group != "train") else 0)
+                    split_config[group][0]
+                    - (context_length if (context_length and group != "train") else 0)
                 ),
                 "end_index": split_config[group][1],
             }
             split_function[group] = select_by_index
+        else:
+            split_params[group] = {
+                "start_fraction": split_config[group][0],
+                "end_fraction": split_config[group][1],
+                "start_offset": (
+                    context_length if (context_length and group != "train") else 0
+                ),
+            }
+            split_function[group] = select_by_relative_fraction
 
     return split_params, split_function
 
