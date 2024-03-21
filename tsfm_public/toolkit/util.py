@@ -2,12 +2,11 @@
 #
 """Basic functions and utilities"""
 
-# Standard
+import copy
 from datetime import datetime
 from distutils.util import strtobool
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
-# Third Party
 import pandas as pd
 
 
@@ -16,20 +15,35 @@ def select_by_timestamp(
     timestamp_column: str = "timestamp",
     start_timestamp: Optional[Union[str, datetime]] = None,
     end_timestamp: Optional[Union[str, datetime]] = None,
-):
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on timestamps.
+    Note that the range selected is inclusive of the starting timestamp.
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        timestamp_column (str, optional): Timestamp column in the dataset. Defaults to "timestamp".
+        start_timestamp (Optional[Union[str, datetime]], optional): Timestamp of the starting point.
+            Defaults to None. Use None to specify the start of the data.
+        end_timestamp (Optional[Union[str, datetime]], optional): Timestamp of the ending point.
+            Use None to specify the end of the data. Defaults to None.
+
+    Raises:
+        ValueError: User must specify either start_timestamp or end_timestamp.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
+
     if not start_timestamp and not end_timestamp:
-        raise ValueError(
-            "At least one of start_timestamp or end_timestamp must be specified."
-        )
-    elif not start_timestamp:
+        raise ValueError("At least one of start_timestamp or end_timestamp must be specified.")
+
+    if not start_timestamp:
         return df[df[timestamp_column] < end_timestamp]
-    elif not end_timestamp:
+
+    if not end_timestamp:
         return df[df[timestamp_column] >= start_timestamp]
-    else:
-        return df[
-            (df[timestamp_column] >= start_timestamp)
-            & (df[timestamp_column] < end_timestamp)
-        ]
+
+    return df[(df[timestamp_column] >= start_timestamp) & (df[timestamp_column] < end_timestamp)]
 
 
 def select_by_index(
@@ -37,35 +51,158 @@ def select_by_index(
     id_columns: Optional[List[str]] = None,
     start_index: Optional[int] = None,
     end_index: Optional[int] = None,
-):
-    if not start_index and not end_index:
-        raise ValueError("At least one of start_index or stop_index must be specified.")
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on integer indices into the data.
+    Note that the range selected is inclusive of the starting index. When ID columns are specified
+    the selection is done per-time series (i.e., the indices are used relative to each time series).
 
-    def _split_group_by_index(
-        group_df: pd.DataFrame,
-        start_index: Optional[int] = None,
-        end_index: Optional[int] = None,
-    ):
-        if not start_index:
-            return group_df.iloc[:end_index,]
-        elif not end_index:
-            return group_df.iloc[start_index:,]
-        else:
-            return group_df.iloc[start_index:end_index, :]
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
+        start_index (Optional[int], optional): Index of the starting point.
+            Defaults to None. Use None to specify the start of the data.
+        end_index (Optional[Union[str, datetime]], optional): Index of the ending point.
+            Use None to specify the end of the data. Defaults to None.
+
+    Raises:
+        ValueError: User must specify either start_index or end_index.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
+    if not start_index and not end_index:
+        raise ValueError("At least one of start_index or end_index must be specified.")
 
     if not id_columns:
-        return _split_group_by_index(
-            df, start_index=start_index, end_index=end_index
+        return _split_group_by_index(df, start_index=start_index, end_index=end_index).copy()
+
+    groups = df.groupby(_get_groupby_columns(id_columns))
+    result = []
+    for name, group in groups:
+        result.append(_split_group_by_index(group, name=name, start_index=start_index, end_index=end_index))
+
+    return pd.concat(result)
+
+
+def select_by_relative_fraction(
+    df: pd.DataFrame,
+    id_columns: Optional[List[str]] = None,
+    start_fraction: Optional[float] = None,
+    start_offset: Optional[int] = 0,
+    end_fraction: Optional[float] = None,
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on relative fractions of the data.
+    Note that the range selected is inclusive of the starting index. When ID columns are specified
+    the selection is done per-time series (i.e., the fractions are used relative to each time series length).
+
+    The indices are computed as:
+    index_start_i = floor(length_i * start_fraction) - start_offset
+    index_end_i = floor(length_i * end_fraction)
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
+        start_fraction (Optional[float], optional): The fraction to specify the start of the selection. Use None to specify the start of the dataset. Defaults to None.
+        start_offset (Optional[int], optional): An optional offset to apply to the starting point of
+            each subseries. A non-negative value should be used. Defaults to 0.
+        end_fraction (Optional[float], optional): The fraction to specify the end of the selection.
+            Use None to specify the end of the dataset. Defaults to None.
+
+    Raises:
+        ValueError: Raised when the user does not specify either start_index or end_index. Also raised
+            when a negative value of start_offset is provided.
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
+    if not start_fraction and not end_fraction:
+        raise ValueError("At least one of start_fraction or end_fraction must be specified.")
+
+    if start_offset < 0:
+        raise ValueError("The value of start_offset should ne non-negative.")
+
+    if not id_columns:
+        return _split_group_by_fraction(
+            df,
+            start_fraction=start_fraction,
+            end_fraction=end_fraction,
+            start_offset=start_offset,
         ).copy()
 
-    groups = df.groupby(id_columns)
+    groups = df.groupby(_get_groupby_columns(id_columns))
     result = []
     for name, group in groups:
         result.append(
-            _split_group_by_index(group, start_index=start_index, end_index=end_index)
+            _split_group_by_fraction(
+                group,
+                name=name,
+                start_fraction=start_fraction,
+                end_fraction=end_fraction,
+                start_offset=start_offset,
+            )
         )
 
     return pd.concat(result)
+
+
+def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
+    if not isinstance(id_columns, (List)):
+        raise ValueError("id_columns must be a list")
+
+    if len(id_columns) == 1:
+        return id_columns[0]
+
+    return id_columns
+
+
+def _split_group_by_index(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    start_index: Optional[int] = None,
+    end_index: Optional[int] = None,
+) -> pd.DataFrame:
+    if start_index and (start_index >= len(group_df)):
+        msg = "Selection would result in an empty time series, please check start_index and time series length"
+        msg = msg + f" (id = {name})" if name else msg
+        raise ValueError(msg)
+
+    # Also check that end_index <= len(group_df)?
+
+    if not start_index:
+        return group_df.iloc[:end_index,]
+
+    if not end_index:
+        return group_df.iloc[start_index:,]
+
+    return group_df.iloc[start_index:end_index, :]
+
+
+def _split_group_by_fraction(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    start_fraction: Optional[float] = None,
+    start_offset: Optional[int] = 0,
+    end_fraction: Optional[float] = None,
+) -> pd.DataFrame:
+    length = len(group_df)
+
+    if start_fraction is not None:
+        start_index = int(length * start_fraction) - start_offset
+        if start_index < 0:
+            if name:
+                msg = f"Computed starting_index for id={name} is negative, please check individual time series lengths, start_fraction, and start_offset."
+            else:
+                msg = "Computed starting_index is negative, please check time series length, start_fraction, and start_offset."
+            raise ValueError(msg)
+    else:
+        start_index = None
+
+    if end_fraction is not None:
+        end_index = int(length * end_fraction)
+    else:
+        end_index = None
+
+    return _split_group_by_index(group_df=group_df, start_index=start_index, end_index=end_index)
 
 
 def convert_tsf_to_dataframe(
@@ -95,17 +232,13 @@ def convert_tsf_to_dataframe(
                     if not line.startswith("@data"):
                         line_content = line.split(" ")
                         if line.startswith("@attribute"):
-                            if (
-                                len(line_content) != 3
-                            ):  # Attributes have both name and type
+                            if len(line_content) != 3:  # Attributes have both name and type
                                 raise Exception("Invalid meta-data specification.")
 
                             col_names.append(line_content[1])
                             col_types.append(line_content[2])
                         else:
-                            if (
-                                len(line_content) != 2
-                            ):  # Other meta-data have only values
+                            if len(line_content) != 2:  # Other meta-data have only values
                                 raise Exception("Invalid meta-data specification.")
 
                             if line.startswith("@frequency"):
@@ -113,24 +246,18 @@ def convert_tsf_to_dataframe(
                             elif line.startswith("@horizon"):
                                 forecast_horizon = int(line_content[1])
                             elif line.startswith("@missing"):
-                                contain_missing_values = bool(
-                                    strtobool(line_content[1])
-                                )
+                                contain_missing_values = bool(strtobool(line_content[1]))
                             elif line.startswith("@equallength"):
                                 contain_equal_length = bool(strtobool(line_content[1]))
 
                     else:
                         if len(col_names) == 0:
-                            raise Exception(
-                                "Missing attribute section. Attribute section must come before data."
-                            )
+                            raise Exception("Missing attribute section. Attribute section must come before data.")
 
                         found_data_tag = True
                 elif not line.startswith("#"):
                     if len(col_names) == 0:
-                        raise Exception(
-                            "Missing attribute section. Attribute section must come before data."
-                        )
+                        raise Exception("Missing attribute section. Attribute section must come before data.")
                     elif not found_data_tag:
                         raise Exception("Missing @data tag.")
                     else:
@@ -163,9 +290,7 @@ def convert_tsf_to_dataframe(
                             else:
                                 numeric_series.append(float(val))
 
-                        if numeric_series.count(replace_missing_vals_with) == len(
-                            numeric_series
-                        ):
+                        if numeric_series.count(replace_missing_vals_with) == len(numeric_series):
                             raise Exception(
                                 "All series values are missing. A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series."
                             )
@@ -179,9 +304,7 @@ def convert_tsf_to_dataframe(
                             elif col_types[i] == "string":
                                 att_val = str(full_info[i])
                             elif col_types[i] == "date":
-                                att_val = datetime.strptime(
-                                    full_info[i], "%Y-%m-%d %H-%M-%S"
-                                )
+                                att_val = datetime.strptime(full_info[i], "%Y-%m-%d %H-%M-%S")
                             else:
                                 raise Exception(
                                     "Invalid attribute type."
@@ -211,3 +334,56 @@ def convert_tsf_to_dataframe(
             contain_missing_values,
             contain_equal_length,
         )
+
+
+def convert_tsf(filename: str) -> pd.DataFrame:
+    """Converts a tsf format file into a pandas dataframe.
+    Returns the result in canonical multi-time series format, with an ID column, and timestamp.
+
+    Args:
+        filename (str): Input file name.
+
+    Returns:
+        pd.DataFrame: Converted time series
+    """
+    (
+        loaded_data,
+        frequency,
+        forecast_horizon,
+        contain_missing_values,
+        contain_equal_length,
+    ) = convert_tsf_to_dataframe(filename)
+
+    dfs = []
+    for index, item in loaded_data.iterrows():
+        # todo: use actual dates for timestamp
+        dfs.append(
+            pd.DataFrame(
+                {
+                    "id": item.series_name,
+                    "timestamp": range(len(item.series_value)),
+                    "value": item.series_value,
+                }
+            )
+        )
+
+    df = pd.concat(dfs)
+    return df
+
+
+def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
+    """Join multiple lists in sequence without repeating
+
+    Returns:
+        List[Any]: Combined list.
+    """
+
+    final = None
+    final_set = set()
+    for alist in lists:
+        if final is None:
+            final = copy.copy(alist)
+        else:
+            final = final + [item for item in alist if item not in final_set]
+        final_set = set(final)
+    return final

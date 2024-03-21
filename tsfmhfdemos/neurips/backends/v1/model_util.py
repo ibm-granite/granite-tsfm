@@ -149,15 +149,13 @@ def forecast(**kwargs) -> pd.DataFrame:
     prep_path = get_preprocessor_path(**kwargs)
 
     model_class = get_model_class(model_path)
-    model = model_class.from_pretrained(
-        model_path, num_input_channels=len(forecast_columns)
-    )
+    model = model_class.from_pretrained(model_path, num_input_channels=len(forecast_columns))
 
     forecast_pipeline = TimeSeriesForecastingPipeline(
         model=model,
         timestamp_column=timestamp_column,
         id_columns=id_columns,
-        input_columns=forecast_columns,
+        target_columns=forecast_columns,
     )
 
     context_length = model.config.context_length
@@ -194,9 +192,7 @@ def create_figure(**kwargs) -> graph_objs.Figure:
 
     model_class = get_model_class(model_path)
 
-    model = model_class.from_pretrained(
-        model_path, num_input_channels=len(forecast_columns)
-    )
+    model = model_class.from_pretrained(model_path, num_input_channels=len(forecast_columns))
     context_length = model.config.context_length
     periodicity = kwargs["periodicity"]
     channel = kwargs["channel"]
