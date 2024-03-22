@@ -5,7 +5,7 @@
 import copy
 from datetime import datetime
 from distutils.util import strtobool
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -367,33 +367,28 @@ def convert_tsf_to_dataframe(
 
 def get_split_params(
     split_config: Dict[str, List[int]], context_length=None
-) -> Dict[str, Dict[str, Union[int, float]]]:
-    """_summary_
+) -> Tuple[Dict[str, Dict[str, Union[int, float]]], Dict[str, Callable]]:
+    """Get split parameters
 
     Args:
-        split_config (Dict[str, List[int]]): _description_
-        context_length (_type_, optional): _description_. Defaults to None.
+        split_config (Dict[str, List[int]]): Dictionary containing keys for
+            train, valid, test. Each value consists of a list of length two, indicating
+            the boundaries of a split.
+        context_length (_type_, optional): Context length, used only when offseting
+            the split so predictions can be made for all elements of split. Defaults to None.
 
     Returns:
-        Dict[str, Dict[str, Union[int, float]]]: _description_
+        Tuple[Dict[str, Dict[str, Union[int, float]]], Dict[str, Callable]]: Tuple of split parameters
+        and split functions to use to split the data.
     """
 
     split_params = {}
     split_function = {}
 
     for group in ["train", "test", "valid"]:
-        if isinstance(split_config[group][0], int) and isinstance(
-            split_config[group][1], int
+        if ((split_config[group][0] < 1) and (split_config[group][0] != 0)) or (
+            split_config[group][1] < 1
         ):
-            split_params[group] = {
-                "start_index": (
-                    split_config[group][0]
-                    - (context_length if (context_length and group != "train") else 0)
-                ),
-                "end_index": split_config[group][1],
-            }
-            split_function[group] = select_by_index
-        else:
             split_params[group] = {
                 "start_fraction": split_config[group][0],
                 "end_fraction": split_config[group][1],
@@ -402,6 +397,15 @@ def get_split_params(
                 ),
             }
             split_function[group] = select_by_relative_fraction
+        else:
+            split_params[group] = {
+                "start_index": (
+                    split_config[group][0]
+                    - (context_length if (context_length and group != "train") else 0)
+                ),
+                "end_index": split_config[group][1],
+            }
+            split_function[group] = select_by_index
 
     return split_params, split_function
 
