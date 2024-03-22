@@ -623,7 +623,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # get split_params
         # split_params = get_split_params(config, self.context_length, len(data))
 
-        split_params, split_function = get_split_params(split_config)
+        split_params, split_function = get_split_params(split_config, context_length=self.context_length)
 
         # specify columns
         column_specifiers = {
