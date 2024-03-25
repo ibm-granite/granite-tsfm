@@ -23,9 +23,10 @@ from transformers.feature_extraction_utils import (
 
 from .dataset import ForecastDFDataset
 from .util import (
+    FractionLocation,
     get_split_params,
     join_list_without_repeat,
-    select_by_relative_fraction,
+    select_by_fixed_fraction,
 )
 
 
@@ -596,6 +597,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         dataset: Union[Dataset, pd.DataFrame],
         split_config: Dict[str, Any],
         fewshot_fraction: Optional[float] = None,
+        fewshot_location: str = FractionLocation.LAST.value,
     ) -> Tuple[Any]:
         """Creates the preprocessed pytorch datasets needed for training and evaluation
         using the HuggingFace trainer
@@ -613,6 +615,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             fewshot_fraction (float, optional): When non-null, return this percent of the original training
                 dataset. This is done to support fewshot fine-tuning. The fraction of data chosen is at the
                 end of the training dataset.
+            fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
+                as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
+                of the training dataset (i.e., "last").
 
         Returns:
             Tuple of pytorch datasets, including: train, validation, test.
@@ -646,9 +651,15 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         # handle fewshot operation
         if fewshot_fraction is not None:
-            if not ((fewshot_fraction <= 1) and (fewshot_fraction > 0)):
+            if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
                 raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
-            train_data = select_by_relative_fraction(train_data, start_fraction=1 - fewshot_fraction, end_fraction=1)
+
+            train_data = select_by_fixed_fraction(
+                train_data,
+                id_columns=self.id_columns,
+                fraction=fewshot_fraction,
+                location=fewshot_location,
+            )
 
         params = column_specifiers
         params["context_length"] = self.context_length
