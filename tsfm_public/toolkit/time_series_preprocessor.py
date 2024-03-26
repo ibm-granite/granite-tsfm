@@ -21,7 +21,13 @@ from transformers.feature_extraction_utils import (
     PreTrainedFeatureExtractor,
 )
 
-from .util import join_list_without_repeat
+from .dataset import ForecastDFDataset
+from .util import (
+    FractionLocation,
+    get_split_params,
+    join_list_without_repeat,
+    select_by_fixed_fraction,
+)
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -585,6 +591,91 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
+
+    def get_datasets(
+        self,
+        dataset: Union[Dataset, pd.DataFrame],
+        split_config: Dict[str, Any],
+        fewshot_fraction: Optional[float] = None,
+        fewshot_location: str = FractionLocation.LAST.value,
+    ) -> Tuple[Any]:
+        """Creates the preprocessed pytorch datasets needed for training and evaluation
+        using the HuggingFace trainer
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
+                split_config (Dict[str, Any]): Dictionary of dictionaries containing
+                split parameters. For example:
+                    {
+                        train: [0, 50],
+                        valid: [50, 70],
+                        test:  [70, 100]
+                    }
+                end value is not inclusive
+            fewshot_fraction (float, optional): When non-null, return this percent of the original training
+                dataset. This is done to support fewshot fine-tuning. The fraction of data chosen is at the
+                end of the training dataset.
+            fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
+                as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
+                of the training dataset (i.e., "last").
+
+        Returns:
+            Tuple of pytorch datasets, including: train, validation, test.
+        """
+
+        data = self._standardize_dataframe(dataset)
+
+        # get split_params
+        # split_params = get_split_params(config, self.context_length, len(data))
+
+        split_params, split_function = get_split_params(split_config, context_length=self.context_length)
+
+        # specify columns
+        column_specifiers = {
+            "id_columns": self.id_columns,
+            "timestamp_column": self.timestamp_column,
+            "target_columns": self.target_columns,
+            "observable_columns": self.observable_columns,
+            "control_columns": self.control_columns,
+            "conditional_columns": self.conditional_columns,
+            "static_categorical_columns": self.static_categorical_columns,
+        }
+
+        # split data
+        train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
+        valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
+        test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
+
+        # data preprocessing
+        self.train(train_data)
+
+        # handle fewshot operation
+        if fewshot_fraction is not None:
+            if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
+                raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
+
+            train_data = select_by_fixed_fraction(
+                train_data,
+                id_columns=self.id_columns,
+                fraction=fewshot_fraction,
+                location=fewshot_location,
+            )
+
+        params = column_specifiers
+        params["context_length"] = self.context_length
+        params["prediction_length"] = self.prediction_length
+
+        # get torch datasets
+        test_dataset = ForecastDFDataset(
+            self.preprocess(test_data),
+            **params,
+        )
+        train_dataset = ForecastDFDataset(self.preprocess(train_data), **params)
+        valid_dataset = ForecastDFDataset(
+            self.preprocess(valid_data),
+            **params,
+        )
+        return train_dataset, valid_dataset, test_dataset
 
 
 def create_timestamps(

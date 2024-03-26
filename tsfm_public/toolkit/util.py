@@ -3,11 +3,19 @@
 """Basic functions and utilities"""
 
 import copy
+import enum
 from datetime import datetime
 from distutils.util import strtobool
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+
+
+class FractionLocation(enum.Enum):
+    """`Enum` for the different locations where a fraction of data can be chosen."""
+
+    FIRST = "first"
+    LAST = "last"
 
 
 def select_by_timestamp(
@@ -145,6 +153,53 @@ def select_by_relative_fraction(
     return pd.concat(result)
 
 
+def select_by_fixed_fraction(
+    df: pd.DataFrame,
+    id_columns: Optional[List[str]] = None,
+    fraction: float = 1.0,
+    location: str = FractionLocation.FIRST.value,
+) -> pd.DataFrame:
+    """Select a portion of a dataset based on a fraction of the data.
+    Fraction can either be located at the start (location = FractionLocation.FIRST) or at the end (location = FractionLocation.LAST)
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
+        fraction (float): The fraction to select.
+        location (str): Location of where to select the fraction Defaults to FractionLocation.FIRST.value.
+
+    Raises:
+        ValueError: Raised when the
+
+    Returns:
+        pd.DataFrame: Subset of the dataframe.
+    """
+
+    if fraction < 0 or fraction > 1:
+        raise ValueError("The value of fraction should be between 0 and 1.")
+
+    if not id_columns:
+        return _split_group_by_fixed_fraction(
+            df,
+            fraction=fraction,
+            location=location,
+        ).copy()
+
+    groups = df.groupby(_get_groupby_columns(id_columns))
+    result = []
+    for name, group in groups:
+        result.append(
+            _split_group_by_fixed_fraction(
+                group,
+                name=name,
+                fraction=fraction,
+                location=location,
+            )
+        )
+
+    return pd.concat(result)
+
+
 def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
     if not isinstance(id_columns, (List)):
         raise ValueError("id_columns must be a list")
@@ -202,7 +257,30 @@ def _split_group_by_fraction(
     else:
         end_index = None
 
-    return _split_group_by_index(group_df=group_df, start_index=start_index, end_index=end_index)
+    return _split_group_by_index(group_df=group_df, name=name, start_index=start_index, end_index=end_index)
+
+
+def _split_group_by_fixed_fraction(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    fraction: float = 1.0,
+    location: Optional[str] = None,
+):
+    l = len(group_df)
+    fraction_size = int(fraction * l)
+
+    if location == FractionLocation.FIRST.value:
+        start_index = 0
+        end_index = fraction_size
+    elif location == FractionLocation.LAST.value:
+        start_index = l - fraction_size
+        end_index = l
+    else:
+        raise ValueError(
+            f"`location` should be either `{FractionLocation.FIRST.value}` or `{FractionLocation.LAST.value}`"
+        )
+
+    return _split_group_by_index(group_df=group_df, name=name, start_index=start_index, end_index=end_index)
 
 
 def convert_tsf_to_dataframe(
@@ -334,6 +412,47 @@ def convert_tsf_to_dataframe(
             contain_missing_values,
             contain_equal_length,
         )
+
+
+def get_split_params(
+    split_config: Dict[str, List[Union[int, float]]],
+    context_length: Optional[int] = None,
+) -> Tuple[Dict[str, Dict[str, Union[int, float]]], Dict[str, Callable]]:
+    """Get split parameters
+
+    Args:
+        split_config (Dict[str, List[int, float]]): Dictionary containing keys for
+            train, valid, test. Each value consists of a list of length two, indicating
+            the boundaries of a split.
+        context_length (int, optional): Context length, used only when offseting
+            the split so predictions can be made for all elements of split. Defaults to None.
+
+    Returns:
+        Tuple[Dict[str, Dict[str, Union[int, float]]], Dict[str, Callable]]: Tuple of split parameters
+        and split functions to use to split the data.
+    """
+
+    split_params = {}
+    split_function = {}
+
+    for group in ["train", "test", "valid"]:
+        if ((split_config[group][0] < 1) and (split_config[group][0] != 0)) or (split_config[group][1] < 1):
+            split_params[group] = {
+                "start_fraction": split_config[group][0],
+                "end_fraction": split_config[group][1],
+                "start_offset": (context_length if (context_length and group != "train") else 0),
+            }
+            split_function[group] = select_by_relative_fraction
+        else:
+            split_params[group] = {
+                "start_index": (
+                    split_config[group][0] - (context_length if (context_length and group != "train") else 0)
+                ),
+                "end_index": split_config[group][1],
+            }
+            split_function[group] = select_by_index
+
+    return split_params, split_function
 
 
 def convert_tsf(filename: str) -> pd.DataFrame:

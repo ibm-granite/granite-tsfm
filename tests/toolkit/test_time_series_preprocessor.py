@@ -16,6 +16,7 @@ from tsfm_public.toolkit.time_series_preprocessor import (
     create_timestamps,
     extend_time_series,
 )
+from tsfm_public.toolkit.util import FractionLocation
 
 
 def test_standard_scaler(sample_data):
@@ -72,7 +73,7 @@ def test_time_series_preprocessor_encodes(sample_data):
     static_categorical_columns = ["cat", "cat2"]
 
     tsp = TimeSeriesPreprocessor(
-        input_columns=["val", "val2"],
+        target_columns=["val", "val2"],
         static_categorical_columns=static_categorical_columns,
     )
     tsp.train(sample_data)
@@ -156,3 +157,71 @@ def test_create_timestamps():
     # it is an error to provide neither freq or sequence
     with pytest.raises(ValueError):
         ts = create_timestamps(start, periods=periods)
+
+
+def test_get_datasets(ts_data):
+    tsp = TimeSeriesPreprocessor(
+        id_columns=["id"],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=10,
+    )
+
+    train, valid, test = tsp.get_datasets(
+        ts_data,
+        split_config={"train": [0, 1 / 3], "valid": [1 / 3, 2 / 3], "test": [2 / 3, 1]},
+    )
+
+    # 3 time series of length 50
+    assert len(train) == 3 * (int((1 / 3) * 50) - (tsp.context_length + tsp.prediction_length) + 1)
+
+    assert len(valid) == len(test)
+
+    # no id columns, so treat as one big time series
+    tsp = TimeSeriesPreprocessor(
+        id_columns=[],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=10,
+    )
+
+    train, valid, test = tsp.get_datasets(
+        ts_data,
+        split_config={
+            "train": [0, 100],
+            "valid": [100, 125],
+            "test": [125, 150],
+        },
+        fewshot_fraction=0.2,
+        fewshot_location=FractionLocation.LAST.value,
+    )
+
+    # new train length should be 20% of 100, minus the usual for context length and prediction length
+    fewshot_train_size = int(100 * 0.2) - (tsp.context_length + tsp.prediction_length) + 1
+    assert len(train) == fewshot_train_size
+
+    assert len(valid) == len(test)
+
+    # no id columns, so treat as one big time series
+    tsp = TimeSeriesPreprocessor(
+        id_columns=[],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=10,
+    )
+
+    train, valid, test = tsp.get_datasets(
+        ts_data,
+        split_config={
+            "train": [0, 100],
+            "valid": [100, 125],
+            "test": [125, 150],
+        },
+        fewshot_fraction=0.2,
+        fewshot_location=FractionLocation.FIRST.value,
+    )
+
+    # new train length should be 20% of 100, minus the usual for context length and prediction length
+    assert len(train) == fewshot_train_size
+
+    assert len(valid) == len(test)
