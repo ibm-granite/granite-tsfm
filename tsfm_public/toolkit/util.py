@@ -168,9 +168,10 @@ def select_by_fixed_fraction(
         id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
         fraction (float): The fraction to select.
         location (str): Location of where to select the fraction Defaults to FractionLocation.FIRST.value.
+        minimum_size (int, optional): Minimum size of the split. Defaults to None.
 
     Raises:
-        ValueError: Raised when the
+        ValueError: Raised when the fraction is not within the range [0,1].
 
     Returns:
         pd.DataFrame: Subset of the dataframe.
@@ -216,6 +217,7 @@ def _split_group_by_index(
     start_index: Optional[int] = None,
     end_index: Optional[int] = None,
 ) -> pd.DataFrame:
+    """Helper function for splitting by index."""
     if start_index and (start_index >= len(group_df)):
         msg = "Selection would result in an empty time series, please check start_index and time series length"
         msg = msg + f" (id = {name})" if name else msg
@@ -239,6 +241,7 @@ def _split_group_by_fraction(
     start_offset: Optional[int] = 0,
     end_fraction: Optional[float] = None,
 ) -> pd.DataFrame:
+    """Helper function for splitting by relative fraction."""
     length = len(group_df)
 
     if start_fraction is not None:
@@ -267,24 +270,7 @@ def _split_group_by_fixed_fraction(
     location: Optional[str] = None,
     minimum_size: Optional[int] = 0,
 ):
-    """_summary_
-    Split by a fixed fraction, but ensure a minimum size. Size of the fraction is based on:
-
-        int(fraction * (l-minimum)) + minimum
-
-    Args:
-        group_df (pd.DataFrame): _description_
-        name (Optional[str], optional): _description_. Defaults to None.
-        fraction (float, optional): _description_. Defaults to 1.0.
-        location (Optional[str], optional): _description_. Defaults to None.
-        minimum_size (Optional[int], optional): _description_. Defaults to 0.
-
-    Raises:
-        ValueError: _description_
-
-    Returns:
-        _type_: _description_
-    """
+    """Helper function for splitting by fixed fraction."""
     l = len(group_df)
     fraction_size = int(fraction * (l - minimum_size)) + minimum_size
 
