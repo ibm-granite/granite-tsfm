@@ -197,7 +197,9 @@ def test_get_datasets(ts_data):
     )
 
     # new train length should be 20% of 100, minus the usual for context length and prediction length
-    fewshot_train_size = int(100 * 0.2) - (tsp.context_length + tsp.prediction_length) + 1
+    fewshot_train_size = (
+        int((100 - tsp.context_length) * 0.2) + tsp.context_length - (tsp.context_length + tsp.prediction_length) + 1
+    )
     assert len(train) == fewshot_train_size
 
     assert len(valid) == len(test)
