@@ -158,6 +158,7 @@ def select_by_fixed_fraction(
     id_columns: Optional[List[str]] = None,
     fraction: float = 1.0,
     location: str = FractionLocation.FIRST.value,
+    minimum_size: Optional[int] = 0,
 ) -> pd.DataFrame:
     """Select a portion of a dataset based on a fraction of the data.
     Fraction can either be located at the start (location = FractionLocation.FIRST) or at the end (location = FractionLocation.LAST)
@@ -180,9 +181,7 @@ def select_by_fixed_fraction(
 
     if not id_columns:
         return _split_group_by_fixed_fraction(
-            df,
-            fraction=fraction,
-            location=location,
+            df, fraction=fraction, location=location, minimum_size=minimum_size
         ).copy()
 
     groups = df.groupby(_get_groupby_columns(id_columns))
@@ -194,6 +193,7 @@ def select_by_fixed_fraction(
                 name=name,
                 fraction=fraction,
                 location=location,
+                minimum_size=minimum_size,
             )
         )
 
@@ -265,9 +265,28 @@ def _split_group_by_fixed_fraction(
     name: Optional[str] = None,
     fraction: float = 1.0,
     location: Optional[str] = None,
+    minimum_size: Optional[int] = 0,
 ):
+    """_summary_
+    Split by a fixed fraction, but ensure a minimum size. Size of the fraction is based on:
+
+        int(fraction * (l-minimum)) + minimum
+
+    Args:
+        group_df (pd.DataFrame): _description_
+        name (Optional[str], optional): _description_. Defaults to None.
+        fraction (float, optional): _description_. Defaults to 1.0.
+        location (Optional[str], optional): _description_. Defaults to None.
+        minimum_size (Optional[int], optional): _description_. Defaults to 0.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     l = len(group_df)
-    fraction_size = int(fraction * l)
+    fraction_size = int(fraction * (l - minimum_size)) + minimum_size
 
     if location == FractionLocation.FIRST.value:
         start_index = 0
