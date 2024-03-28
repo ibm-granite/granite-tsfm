@@ -659,6 +659,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 id_columns=self.id_columns,
                 fraction=fewshot_fraction,
                 location=fewshot_location,
+                minimum_size=self.context_length,
             )
 
         params = column_specifiers
