@@ -529,14 +529,17 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return self
 
-    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Dataset:
+    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Union[Dataset, pd.DataFrame]:
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
 
-        if not self.scaling or len(self.target_scaler_dict) == 0:
+        if not self.scaling:
+            return df
+
+        if len(self.target_scaler_dict) == 0:
             # trying to inverse scale but this preprocessor is not set up for scaling
             raise RuntimeError(
-                "Attempt to perform inverse scaling, but time series preprocess is not configured for scaling or scaler has not yet been trained. Please run the `train` method first."
+                "Attempt to perform inverse scaling, but time series preprocessor has not yet been trained. Please run the `train` method first."
             )
 
         cols_to_scale = self.target_columns
