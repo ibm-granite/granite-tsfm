@@ -127,6 +127,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if not isinstance(id_columns, list):
             raise ValueError(f"Invalid argument provided for `id_columns`: {id_columns}")
 
+        if isinstance(timestamp_column, list):
+            raise ValueError(f"`timestamp_column` should not be a list, received: {timestamp_column}")
+
         self.id_columns = id_columns
         self.timestamp_column = timestamp_column
         self.target_columns = list(target_columns)
