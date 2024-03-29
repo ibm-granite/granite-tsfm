@@ -39,3 +39,24 @@ train, valid, test = tsp.get_datasets(df, split_config)
 split_config = {"train": [0, 0.7], "valid": [0.7, 0.9], "test": [0.9, 1]}
 
 train, valid, test = tsp.get_datasets(df, split_config)
+
+
+# %%
+
+df = pd.read_csv("/Users/wmgifford/Downloads/weather.csv", parse_dates=["date"])
+
+tsp = TimeSeriesPreprocessor(
+    timestamp_column="date",
+    id_columns=[],
+    target_columns=[],
+    prediction_length=96,
+    context_length=512,
+)
+
+a, b, c = tsp.get_datasets(
+    df,
+    split_config={
+        "train": 0.7,
+        "test": 0.2,
+    },
+)

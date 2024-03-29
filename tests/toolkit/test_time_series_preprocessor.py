@@ -247,9 +247,9 @@ def test_get_datasets(ts_data):
 
     assert len(train) == int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
 
-    assert len(test) == int(150 * 0.2) - (tsp.context_length + tsp.prediction_length) + 1
+    assert len(test) == int(150 * 0.2) - tsp.prediction_length + 1
 
-    assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
+    assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
 
 
 def test_train_without_targets(ts_data):
