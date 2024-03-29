@@ -211,7 +211,12 @@ def train_test_split(
     # to do: add validation
 
     if not id_columns:
-        return tuple([tmp.copy() for tmp in _split_group_train_test(df, train=train, test=test)])
+        return tuple(
+            [
+                tmp.copy()
+                for tmp in _split_group_train_test(df, train=train, test=test, valid_test_offset=valid_test_offset)
+            ]
+        )
 
     groups = df.groupby(_get_groupby_columns(id_columns))
     result = []
