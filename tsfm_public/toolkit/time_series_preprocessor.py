@@ -595,7 +595,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def get_datasets(
         self,
         dataset: Union[Dataset, pd.DataFrame],
-        split_config: Dict[str, Any],
+        split_config: Dict[str, Union[List[Union[int, float]], float]],
         fewshot_fraction: Optional[float] = None,
         fewshot_location: str = FractionLocation.LAST.value,
     ) -> Tuple[Any]:
@@ -604,17 +604,24 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         Args:
             dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
-                split_config (Dict[str, Any]): Dictionary of dictionaries containing
-                split parameters. For example:
+                split_config (Dict[str, Union[List[Union[int, float]], float]]): Dictionary of dictionaries containing
+                split parameters. Two configurations are possible:
+                1. Specify train/valid/test indices or relative fractions
                     {
                         train: [0, 50],
                         valid: [50, 70],
                         test:  [70, 100]
                     }
                 end value is not inclusive
+                2. Specify train/test fractions:
+                    {
+                        train: 0.7
+                        test: 0.2
+                    }
+                    A valid split should not be specified directly; the above implies valid = 0.1
+
             fewshot_fraction (float, optional): When non-null, return this percent of the original training
-                dataset. This is done to support fewshot fine-tuning. The fraction of data chosen is at the
-                end of the training dataset.
+                dataset. This is done to support fewshot fine-tuning.
             fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
                 as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
                 of the training dataset (i.e., "last").

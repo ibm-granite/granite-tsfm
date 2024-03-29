@@ -477,15 +477,19 @@ def convert_tsf_to_dataframe(
 
 
 def get_split_params(
-    split_config: Dict[str, List[Union[int, float]]],
+    split_config: Dict[str, Union[float, List[Union[int, float]]]],
     context_length: Optional[int] = None,
 ) -> Tuple[Dict[str, Dict[str, Union[int, float]]], Dict[str, Callable]]:
     """Get split parameters
 
     Args:
-        split_config (Dict[str, List[int, float]]): Dictionary containing keys for
-            train, valid, test. Each value consists of a list of length two, indicating
+        split_config ( Dict[str, Union[float, List[Union[int, float]]]]): Dictionary containing keys which
+            define the splits. Two options are possible:
+            1. Specifiy train, valid, test. Each value consists of a list of length two, indicating
             the boundaries of a split.
+            2. Specify train, test. Each value consists of a single floating point number specifying the
+            fraction of data to use. Valid is populated using the remaining data.
+
         context_length (int, optional): Context length, used only when offseting
             the split so predictions can be made for all elements of split. Defaults to None.
 
