@@ -7,7 +7,6 @@ import datetime
 import enum
 import json
 from collections import defaultdict
-from datetime import timedelta
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -120,7 +119,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
-        freq: Optional[Union[int, float, timedelta, pd.Timedelta, str]] = None,
+        freq: Optional[Union[int, str]] = None,
         **kwargs,
     ):
         # note base class __init__ methods sets all arguments as attributes
@@ -488,6 +487,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
             # to do: make more robust
             self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
+
+            if not isinstance(self.freq, (str, int)):
+                self.freq = str(self.freq)
+
         else:
             # no timestamp, assume sequential count?
             self.freq = 1
@@ -724,6 +727,9 @@ def create_timestamps(
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+        if isinstance(freq, str):
+            freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+
         return pd.date_range(
             last_timestamp,
             freq=freq,
