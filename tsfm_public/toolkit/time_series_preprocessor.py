@@ -510,6 +510,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
         self._set_targets(df)
+        self._validate_columns()
 
         if self.freq is None:
             self._estimate_frequency(df)
@@ -563,7 +564,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # 2) incremental / batch based processing of datasets to minimize memory impact
 
         self._check_dataset(dataset)
-
         df = self._standardize_dataframe(dataset)
 
         if self.scaling:
@@ -647,21 +647,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         data = self._standardize_dataframe(dataset)
 
+        if not self.context_length:
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
+        if not self.prediction_length:
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null prediction_length")
+
         # get split_params
-        # split_params = get_split_params(config, self.context_length, len(data))
-
         split_params, split_function = get_split_params(split_config, context_length=self.context_length)
-
-        # specify columns
-        column_specifiers = {
-            "id_columns": self.id_columns,
-            "timestamp_column": self.timestamp_column,
-            "target_columns": self.target_columns,
-            "observable_columns": self.observable_columns,
-            "control_columns": self.control_columns,
-            "conditional_columns": self.conditional_columns,
-            "static_categorical_columns": self.static_categorical_columns,
-        }
 
         # split data
         if isinstance(split_function, dict):
@@ -673,6 +665,17 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         # data preprocessing
         self.train(train_data)
+
+        # specify columns
+        column_specifiers = {
+            "id_columns": self.id_columns,
+            "timestamp_column": self.timestamp_column,
+            "target_columns": self.target_columns,
+            "observable_columns": self.observable_columns,
+            "control_columns": self.control_columns,
+            "conditional_columns": self.conditional_columns,
+            "static_categorical_columns": self.static_categorical_columns,
+        }
 
         # handle fewshot operation
         if fewshot_fraction is not None:

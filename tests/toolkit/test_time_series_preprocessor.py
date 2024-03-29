@@ -284,3 +284,16 @@ def test_train_without_targets(ts_data):
     tsp.train(ts_data)
 
     assert tsp.target_columns == ["value2"]
+
+
+def test_get_datasets_without_targets(ts_data):
+    ts_data = ts_data.drop(columns=["id", "id2"])
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+    )
+
+    train, _, _ = tsp.get_datasets(ts_data, split_config={"train": 0.7, "test": 0.2})
+
+    train.datasets[0].target_columns == ["value1", "value2"]
