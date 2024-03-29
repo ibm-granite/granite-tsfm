@@ -201,6 +201,63 @@ def select_by_fixed_fraction(
     return pd.concat(result)
 
 
+def train_test_split(
+    df: pd.DataFrame,
+    id_columns: Optional[List[str]] = None,
+    train: Union[int, float] = 0.7,
+    test: Union[int, float] = 0.2,
+    valid_test_offset: int = 0,
+):
+    # to do: add validation
+
+    if not id_columns:
+        return tuple([tmp.copy() for tmp in _split_group_train_test(df, train=train, test=test)])
+
+    groups = df.groupby(_get_groupby_columns(id_columns))
+    result = []
+    for name, group in groups:
+        result.append(
+            _split_group_train_test(
+                group,
+                name=name,
+                train=train,
+                test=test,
+                valid_test_offset=valid_test_offset,
+            )
+        )
+
+    result_train, result_valid, result_test = zip(**result)
+    return pd.concat(result_train), pd.concat(result_valid), pd.concat(result_test)
+
+
+def _split_group_train_test(
+    group_df: pd.DataFrame,
+    name: Optional[str] = None,
+    train: Union[int, float] = 0.7,
+    test: Union[int, float] = 0.2,
+    valid_test_offset: int = 0,
+):
+    l = len(group_df)
+
+    train_size = int(l * train)
+    test_size = int(l * test)
+
+    valid_size = l - train_size - test_size
+
+    train_df = _split_group_by_index(group_df, name, start_index=0, end_index=train_size)
+
+    valid_df = _split_group_by_index(
+        group_df,
+        name,
+        start_index=train_size - valid_test_offset,
+        end_index=train_size + valid_size,
+    )
+
+    test_df = _split_group_by_index(group_df, name, start_index=train_size + valid_size - valid_test_offset)
+
+    return train_df, valid_df, test_df
+
+
 def _get_groupby_columns(id_columns: List[str]) -> Union[List[str], str]:
     if not isinstance(id_columns, (List)):
         raise ValueError("id_columns must be a list")
@@ -440,23 +497,32 @@ def get_split_params(
     split_params = {}
     split_function = {}
 
-    for group in ["train", "test", "valid"]:
-        if ((split_config[group][0] < 1) and (split_config[group][0] != 0)) or (split_config[group][1] < 1):
-            split_params[group] = {
-                "start_fraction": split_config[group][0],
-                "end_fraction": split_config[group][1],
-                "start_offset": (context_length if (context_length and group != "train") else 0),
-            }
-            split_function[group] = select_by_relative_fraction
-        else:
-            split_params[group] = {
-                "start_index": (
-                    split_config[group][0] - (context_length if (context_length and group != "train") else 0)
-                ),
-                "end_index": split_config[group][1],
-            }
-            split_function[group] = select_by_index
+    if "valid" in split_config:
+        for group in ["train", "test", "valid"]:
+            if ((split_config[group][0] < 1) and (split_config[group][0] != 0)) or (split_config[group][1] < 1):
+                split_params[group] = {
+                    "start_fraction": split_config[group][0],
+                    "end_fraction": split_config[group][1],
+                    "start_offset": (context_length if (context_length and group != "train") else 0),
+                }
+                split_function[group] = select_by_relative_fraction
+            else:
+                split_params[group] = {
+                    "start_index": (
+                        split_config[group][0] - (context_length if (context_length and group != "train") else 0)
+                    ),
+                    "end_index": split_config[group][1],
+                }
+                split_function[group] = select_by_index
+        return split_params, split_function
 
+    # no valid, assume train/test split
+    split_function = train_test_split
+    split_params = {
+        "train": split_config["train"],
+        "test": split_config["test"],
+        "valid_test_offset": context_length if context_length else 0,
+    }
     return split_params, split_function
 
 

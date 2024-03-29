@@ -227,3 +227,26 @@ def test_get_datasets(ts_data):
     assert len(train) == fewshot_train_size
 
     assert len(valid) == len(test)
+
+    # fraction splits
+    # no id columns, so treat as one big time series
+    tsp = TimeSeriesPreprocessor(
+        id_columns=[],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=10,
+    )
+
+    train, valid, test = tsp.get_datasets(
+        ts_data,
+        split_config={
+            "train": 0.7,
+            "test": 0.2,
+        },
+    )
+
+    assert len(train) == int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
+
+    assert len(test) == int(150 * 0.2) - (tsp.context_length + tsp.prediction_length) + 1
+
+    assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1

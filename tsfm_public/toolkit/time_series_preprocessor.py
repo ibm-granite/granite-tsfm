@@ -642,9 +642,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         }
 
         # split data
-        train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
-        valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
-        test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
+        if isinstance(split_function, dict):
+            train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
+            valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
+            test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
+        else:
+            train_data, valid_data, test_data = split_function(data, id_columns=self.id_columns, **split_params)
 
         # data preprocessing
         self.train(train_data)
