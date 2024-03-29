@@ -250,3 +250,37 @@ def test_get_datasets(ts_data):
     assert len(test) == int(150 * 0.2) - (tsp.context_length + tsp.prediction_length) + 1
 
     assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
+
+
+def test_train_without_targets(ts_data):
+    # no targets or other columns specified
+    tsp = TimeSeriesPreprocessor(id_columns=["id", "id2"], timestamp_column="timestamp")
+    tsp.train(ts_data)
+
+    assert tsp.target_columns == ["value1", "value2"]
+
+    # some other args specified
+    for arg in [
+        "control_columns",
+        "conditional_columns",
+        "observable_columns",
+        "static_categorical_columns",
+    ]:
+        tsp = TimeSeriesPreprocessor(
+            id_columns=["id", "id2"],
+            timestamp_column="timestamp",
+            **{arg: ["value2"]},
+        )
+        tsp.train(ts_data)
+
+        assert tsp.target_columns == ["value1"]
+
+    # test targets honored
+    tsp = TimeSeriesPreprocessor(
+        id_columns=["id", "id2"],
+        timestamp_column="timestamp",
+        target_columns=["value2"],
+    )
+    tsp.train(ts_data)
+
+    assert tsp.target_columns == ["value2"]

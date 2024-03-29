@@ -2,6 +2,7 @@
 #
 """Preprocessor for time series data preparation"""
 
+import copy
 import datetime
 import enum
 import json
@@ -152,7 +153,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         kwargs["processor_class"] = self.__class__.__name__
 
-        self._validate_columns()
+        # self._validate_columns()
 
         super().__init__(**kwargs)
 
@@ -463,6 +464,19 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if dataset is None or len(dataset) == 0:
             raise ValueError("Input dataset must not be null or zero length.")
 
+    def _set_targets(self, dataset: pd.DataFrame) -> None:
+        if self.target_columns == []:
+            skip_columns = copy.copy(self.id_columns)
+            if self.timestamp_column:
+                skip_columns.append(self.timestamp_column)
+
+            skip_columns.extend(self.observable_columns)
+            skip_columns.extend(self.control_columns)
+            skip_columns.extend(self.conditional_columns)
+            skip_columns.extend(self.static_categorical_columns)
+
+            self.target_columns = [c for c in dataset.columns.to_list() if c not in skip_columns]
+
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
             if self.id_columns:
@@ -494,8 +508,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
 
         self._check_dataset(dataset)
-
         df = self._standardize_dataframe(dataset)
+        self._set_targets(df)
 
         if self.freq is None:
             self._estimate_frequency(df)
@@ -509,6 +523,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         return self
 
     def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Dataset:
+        self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
 
         if not self.scaling or len(self.target_scaler_dict) == 0:
