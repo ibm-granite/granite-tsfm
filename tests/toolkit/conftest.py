@@ -35,3 +35,16 @@ def sample_data():
         }
     )
     return df
+
+
+@pytest.fixture(scope="module")
+def ts_data_runs():
+    df = pd.DataFrame(
+        {
+            "run_id": nreps(["1", "2", "3", "4"], 50),
+            "asset_id": nreps(["foo", "bar", "foo", "bar"], 50),
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 4,
+            "value1": range(200),
+        }
+    )
+    return df
