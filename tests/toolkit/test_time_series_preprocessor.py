@@ -27,9 +27,9 @@ def test_standard_scaler(sample_data):
     # check shape preserved
     result = scaler.fit_transform(sample_data[columns])
     assert result.shape == sample_data[columns].shape
-    expected = (sample_data[columns].values - np.mean(sample_data[columns].values, axis=0)) / np.std(
-        sample_data[columns].values, axis=0
-    )
+    expected = (
+        sample_data[columns].values - np.mean(sample_data[columns].values, axis=0)
+    ) / np.std(sample_data[columns].values, axis=0)
     np.testing.assert_allclose(result, expected)
 
     # check serialization
@@ -100,8 +100,12 @@ def test_time_series_preprocessor_scales(ts_data):
 
     # check scaled result
     out = tsp.preprocess(df)
-    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x)), 0.0)
-    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x)), 1.0)
+    assert np.allclose(
+        out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x)), 0.0
+    )
+    assert np.allclose(
+        out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x)), 1.0
+    )
 
     # check inverse scale result
     out_inv = tsp.inverse_scale_targets(out)
@@ -118,7 +122,9 @@ def test_time_series_preprocessor_scales(ts_data):
 
     suffix = "_foo"
     targets_suffix = [f"{c}{suffix}" for c in tsp.target_columns]
-    out.columns = [f"{c}{suffix}" if c in tsp.target_columns else c for c in out.columns]
+    out.columns = [
+        f"{c}{suffix}" if c in tsp.target_columns else c for c in out.columns
+    ]
     out_inv = tsp.inverse_scale_targets(out, suffix=suffix)
     assert np.all(
         out_inv.groupby(tsp.id_columns)[targets_suffix].apply(lambda x: np.mean(x))
@@ -126,9 +132,37 @@ def test_time_series_preprocessor_scales(ts_data):
     )
 
 
+def test_time_series_preprocessor_inv_scales_lists(ts_data):
+    df = ts_data
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        scaling=True,
+    )
+
+    tsp.train(df)
+
+    # check scaled result
+    out = tsp.preprocess(df)
+
+    # construct artificial result
+    out["value1"] = out["value1"].apply(lambda x: np.array([x, x]))
+    out["value2"] = out["value2"].apply(lambda x: np.array([x, x]))
+
+    out_inv = tsp.inverse_scale_targets(out)
+
+    1
+
+
 def test_augment_time_series(ts_data):
     periods = 5
-    a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)
+    a = extend_time_series(
+        ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods
+    )
 
     # check that length increases by periods for each id
     assert a.shape[0] == ts_data.shape[0] + 3 * periods
@@ -215,7 +249,9 @@ def test_get_datasets(ts_data):
     )
 
     # 3 time series of length 50
-    assert len(train) == 3 * (int((1 / 3) * 50) - (tsp.context_length + tsp.prediction_length) + 1)
+    assert len(train) == 3 * (
+        int((1 / 3) * 50) - (tsp.context_length + tsp.prediction_length) + 1
+    )
 
     assert len(valid) == len(test)
 
@@ -240,7 +276,10 @@ def test_get_datasets(ts_data):
 
     # new train length should be 20% of 100, minus the usual for context length and prediction length
     fewshot_train_size = (
-        int((100 - tsp.context_length) * 0.2) + tsp.context_length - (tsp.context_length + tsp.prediction_length) + 1
+        int((100 - tsp.context_length) * 0.2)
+        + tsp.context_length
+        - (tsp.context_length + tsp.prediction_length)
+        + 1
     )
     assert len(train) == fewshot_train_size
 
@@ -287,11 +326,15 @@ def test_get_datasets(ts_data):
         },
     )
 
-    assert len(train) == int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
+    assert (
+        len(train) == int(150 * 0.7) - (tsp.context_length + tsp.prediction_length) + 1
+    )
 
     assert len(test) == int(150 * 0.2) - tsp.prediction_length + 1
 
-    assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
+    assert (
+        len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
+    )
 
 
 def test_train_without_targets(ts_data):
@@ -354,7 +397,9 @@ def test_id_columns_and_scaling_id_columns(ts_data_runs):
         scaling=True,
     )
 
-    ds_train, ds_valid, ds_test = tsp.get_datasets(df, split_config={"train": 0.7, "test": 0.2})
+    ds_train, ds_valid, ds_test = tsp.get_datasets(
+        df, split_config={"train": 0.7, "test": 0.2}
+    )
 
     assert len(tsp.target_scaler_dict) == 2
     assert len(ds_train.datasets) == 4

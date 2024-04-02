@@ -326,4 +326,9 @@ class TimeSeriesForecastingPipeline(Pipeline):
         cols_ordered.extend([c for c in cols if c not in cols_ordered])
 
         out = out[cols_ordered]
+
+        # inverse scale if we have a feature extractor
+        if self.feature_extractor is not None:
+            out = self.feature_extractor.inverse_scale_targets(out, column_suffix="_prediction")
+
         return out

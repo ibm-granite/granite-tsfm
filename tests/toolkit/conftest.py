@@ -16,9 +16,10 @@ def ts_data():
         {
             "id": nreps(["A", "B", "C"], 50),
             "id2": nreps(["XX", "YY", "ZZ"], 50),
-            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 3,
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)]
+            * 3,
             "value1": range(150),
-            "value2": np.arange(150) / 3 + 10,
+            "value2": np.arange(150) ** 2 / 3 + 10,
         }
     )
     return df
@@ -43,7 +44,8 @@ def ts_data_runs():
         {
             "run_id": nreps(["1", "2", "3", "4"], 50),
             "asset_id": nreps(["foo", "bar", "foo", "bar"], 50),
-            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 4,
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)]
+            * 4,
             "value1": range(200),
         }
     )
