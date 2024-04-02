@@ -533,12 +533,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return self
 
-    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Union[Dataset, pd.DataFrame]:
+    def inverse_scale_targets(
+        self, dataset: Union[Dataset, pd.DataFrame], suffix: Optional[str] = None
+    ) -> Union[Dataset, pd.DataFrame]:
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
 
         if not self.scaling:
-            return df
+            return dataset
 
         if len(self.target_scaler_dict) == 0:
             # trying to inverse scale but this preprocessor is not set up for scaling
@@ -547,6 +549,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             )
 
         cols_to_scale = self.target_columns
+        if suffix is not None:
+            cols_to_scale = [f"{c}{suffix}" for c in cols_to_scale]
 
         def inverse_scale_func(grp, id_columns):
             if isinstance(id_columns, list):
