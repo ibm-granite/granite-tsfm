@@ -56,9 +56,7 @@ class SKLearnFeatureExtractionBase:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(
-        cls, feature_extractor_dict: Dict[str, Any], **kwargs
-    ) -> "SKLearnFeatureExtractionBase":
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "SKLearnFeatureExtractionBase":
         """ """
 
         t = cls()
@@ -128,14 +126,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # note base class __init__ methods sets all arguments as attributes
 
         if not isinstance(id_columns, list):
-            raise ValueError(
-                f"Invalid argument provided for `id_columns`: {id_columns}"
-            )
+            raise ValueError(f"Invalid argument provided for `id_columns`: {id_columns}")
 
         if isinstance(timestamp_column, list):
-            raise ValueError(
-                f"`timestamp_column` should not be a list, received: {timestamp_column}"
-            )
+            raise ValueError(f"`timestamp_column` should not be a list, received: {timestamp_column}")
 
         self.id_columns = id_columns
         self.timestamp_column = timestamp_column
@@ -152,11 +146,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
-        self.scaling_id_columns = (
-            scaling_id_columns
-            if scaling_id_columns is not None
-            else copy.copy(id_columns)
-        )
+        self.scaling_id_columns = scaling_id_columns if scaling_id_columns is not None else copy.copy(id_columns)
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = {}
@@ -233,10 +223,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 elif isinstance(value, np.int64):
                     dictionary[key] = int(value)
                 elif isinstance(value, list):
-                    dictionary[key] = [
-                        vv.tolist() if isinstance(vv, np.ndarray) else vv
-                        for vv in value
-                    ]
+                    dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
             return dictionary
@@ -252,9 +239,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
     @classmethod
-    def from_dict(
-        cls, feature_extractor_dict: Dict[str, Any], **kwargs
-    ) -> "PreTrainedFeatureExtractor":
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "PreTrainedFeatureExtractor":
         """
         Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
         parameters.
@@ -373,9 +358,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
         if self.scaling_id_columns:
             group_by_columns = (
-                self.scaling_id_columns
-                if len(self.scaling_id_columns) > 1
-                else self.scaling_id_columns[0]
+                self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
             )
         else:
             group_by_columns = INTERNAL_ID_COLUMN
@@ -440,9 +423,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         token = self.frequency_mapping.get(token_name, None)
 
         if token is None:
-            warn(
-                f"Frequency token {token_name} was not found in the frequncy token mapping."
-            )
+            warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
             token = self.frequency_mapping["oov"]
 
         return token
@@ -475,11 +456,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     @property
     def prediction_channel_indices(self) -> List[int]:
-        return [
-            i
-            for i, c in enumerate(self._get_real_valued_dynamic_channels())
-            if c in self.target_columns
-        ]
+        return [i for i, c in enumerate(self._get_real_valued_dynamic_channels()) if c in self.target_columns]
 
     def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
         """Basic checks for input dataset.
@@ -504,9 +481,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             skip_columns.extend(self.conditional_columns)
             skip_columns.extend(self.static_categorical_columns)
 
-            self.target_columns = [
-                c for c in dataset.columns.to_list() if c not in skip_columns
-            ]
+            self.target_columns = [c for c in dataset.columns.to_list() if c not in skip_columns]
 
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
@@ -518,10 +493,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 df_subset = df
 
             # to do: make more robust
-            self.freq = (
-                df_subset[self.timestamp_column].iloc[-1]
-                - df_subset[self.timestamp_column].iloc[-2]
-            )
+            self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
 
             if not isinstance(self.freq, (str, int)):
                 self.freq = str(self.freq)
@@ -582,6 +554,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         col_has_list = [df[c].dtype == np.dtype("O") for c in cols_to_scale]
 
+        def explode_row(df_row, name, columns):
+            df = pd.DataFrame(df_row[columns].to_dict())
+            inv_scale = self.target_scaler_dict[name].inverse_transform(df)
+            df_out = df_row.copy()
+            for idx, c in enumerate(columns):
+                df_out[c] = inv_scale[:, idx]
+            return df_out
+
         def inverse_scale_func(grp, id_columns):
             if isinstance(id_columns, list):
                 name = tuple(grp.iloc[0][id_columns].tolist())
@@ -589,24 +569,15 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 name = grp.iloc[0][id_columns]
 
             if not np.any(col_has_list):
-                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(
-                    grp[cols_to_scale]
-                )
+                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
             else:
-                # resort to rowwise transformation
-                # need converstion to array of list to single 2D array, then back to array of list
-                # at this point, all column elements should have same length
                 grp[cols_to_scale] = grp[cols_to_scale].apply(
-                    lambda x: self.target_scaler_dict[name].inverse_transform(x)
+                    lambda x: explode_row(x, name, cols_to_scale), axis="columns"
                 )
             return grp
 
         if self.scaling_id_columns:
-            id_columns = (
-                self.scaling_id_columns
-                if len(self.scaling_id_columns) > 1
-                else self.scaling_id_columns[0]
-            )
+            id_columns = self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
         else:
             id_columns = INTERNAL_ID_COLUMN
 
@@ -644,21 +615,15 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                     name = tuple(grp.iloc[0][id_columns].tolist())
                 else:
                     name = grp.iloc[0][id_columns]
-                grp[self.target_columns] = self.target_scaler_dict[name].transform(
-                    grp[self.target_columns]
-                )
+                grp[self.target_columns] = self.target_scaler_dict[name].transform(grp[self.target_columns])
                 if other_cols_to_scale:
-                    grp[other_cols_to_scale] = self.scaler_dict[name].transform(
-                        grp[other_cols_to_scale]
-                    )
+                    grp[other_cols_to_scale] = self.scaler_dict[name].transform(grp[other_cols_to_scale])
 
                 return grp
 
             if self.scaling_id_columns:
                 id_columns = (
-                    self.scaling_id_columns
-                    if len(self.scaling_id_columns) > 1
-                    else self.scaling_id_columns[0]
+                    self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
                 )
             else:
                 id_columns = INTERNAL_ID_COLUMN
@@ -672,9 +637,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         cols_to_encode = self._get_columns_to_encode()
         if self.encode_categorical and cols_to_encode:
             if not self.categorical_encoder:
-                raise RuntimeError(
-                    "Attempt to encode categorical columns, but the encoder has not been trained yet."
-                )
+                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         return df
@@ -720,34 +683,20 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         data = self._standardize_dataframe(dataset)
 
         if not self.context_length:
-            raise ValueError(
-                "TimeSeriesPreprocessor must be instantiated with non-null context_length"
-            )
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
         if not self.prediction_length:
-            raise ValueError(
-                "TimeSeriesPreprocessor must be instantiated with non-null prediction_length"
-            )
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null prediction_length")
 
         # get split_params
-        split_params, split_function = get_split_params(
-            split_config, context_length=self.context_length
-        )
+        split_params, split_function = get_split_params(split_config, context_length=self.context_length)
 
         # split data
         if isinstance(split_function, dict):
-            train_data = split_function["train"](
-                data, id_columns=self.id_columns, **split_params["train"]
-            )
-            valid_data = split_function["valid"](
-                data, id_columns=self.id_columns, **split_params["valid"]
-            )
-            test_data = split_function["test"](
-                data, id_columns=self.id_columns, **split_params["test"]
-            )
+            train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
+            valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
+            test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
         else:
-            train_data, valid_data, test_data = split_function(
-                data, id_columns=self.id_columns, **split_params
-            )
+            train_data, valid_data, test_data = split_function(data, id_columns=self.id_columns, **split_params)
 
         # data preprocessing
         self.train(train_data)
@@ -766,9 +715,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # handle fewshot operation
         if fewshot_fraction is not None:
             if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
-                raise ValueError(
-                    f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}"
-                )
+                raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
 
             train_data = select_by_fixed_fraction(
                 train_data,
@@ -798,17 +745,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 def create_timestamps(
     last_timestamp: Union[datetime.datetime, pd.Timestamp],
     freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]] = None,
-    time_sequence: Optional[
-        Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]
-    ] = None,
+    time_sequence: Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]] = None,
     periods: int = 1,
 ):
     """Simple utility to create a list of timestamps based on start, delta and number of periods"""
 
     if freq is None and time_sequence is None:
-        raise ValueError(
-            "Neither `freq` nor `time_sequence` provided, cannot determine frequency."
-        )
+        raise ValueError("Neither `freq` nor `time_sequence` provided, cannot determine frequency.")
 
     if freq is None:
         # to do: make more robust
@@ -874,9 +817,7 @@ def extend_time_series(
     if grouping_columns == []:
         new_time_series = augment_one_series(time_series)
     else:
-        new_time_series = time_series.groupby(grouping_columns).apply(
-            augment_one_series, include_groups=False
-        )
+        new_time_series = time_series.groupby(grouping_columns).apply(augment_one_series, include_groups=False)
         idx_names = list(new_time_series.index.names)
         idx_names[-1] = "__delete"
         new_time_series = new_time_series.reset_index(names=idx_names)
