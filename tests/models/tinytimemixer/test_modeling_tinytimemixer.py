@@ -81,8 +81,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         )
 
         cls.num_patches = (
-            max(cls.params["context_length"], cls.params["patch_length"])
-            - cls.params["patch_length"]
+            max(cls.params["context_length"], cls.params["patch_length"]) - cls.params["patch_length"]
         ) // cls.params["patch_stride"] + 1
 
         # batch_size = 32
@@ -147,17 +146,13 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             cls.params["num_input_channels"],
         )
 
-        cls.correct_sel_forecast_output = torch.rand(
-            batch_size, cls.params["prediction_length"], 2
-        )
+        cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["prediction_length"], 2)
 
     def test_patchmodel(self):
         config = TinyTimeMixerConfig(**self.__class__.params)
         mdl = TinyTimeMixerModel(config)
         output = mdl(self.__class__.data)
-        self.assertEqual(
-            output.last_hidden_state.shape, self.__class__.enc_output.shape
-        )
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
         self.assertEqual(output.patch_input.shape, self.__class__.enc_data.shape)
 
     # def test_forecast_head(self):
@@ -196,15 +191,10 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             if config.prediction_filter_length is not None:
                 target_output = target_output[:, : config.prediction_filter_length, :]
 
-            if (
-                "target_pred_length_filtered" in params
-                and params["target_pred_length_filtered"]
-            ):
+            if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
                 target_input = target_input[:, : config.prediction_filter_length, :]
 
-            ref_samples = target_output.unsqueeze(1).expand(
-                -1, config.num_parallel_samples, -1, -1
-            )
+            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
 
         else:
             print("invalid task")
@@ -341,9 +331,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         self.check_module(task="forecast", params=params)
 
-    def forecast_full_module(
-        self, params=None, output_hidden_states=False, return_dict=None
-    ):
+    def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = TinyTimeMixerConfig(**params)
         mdl = TinyTimeMixerForPrediction(config)
         target_val = self.__class__.correct_forecast_output
@@ -363,10 +351,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         if config.prediction_filter_length is not None:
             target_val = target_val[:, : config.prediction_filter_length, :]
 
-        if (
-            "target_pred_length_filtered" in params
-            and params["target_pred_length_filtered"]
-        ):
+        if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
             target_input = target_input[:, : config.prediction_filter_length, :]
 
         output = mdl(
@@ -407,15 +392,11 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         if config.loss == "nll":
             samples = mdl.generate(self.__class__.data)
-            ref_samples = target_val.unsqueeze(1).expand(
-                -1, params["num_parallel_samples"], -1, -1
-            )
+            ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast_full(self):
-        self.check_module(
-            task="forecast", params=self.__class__.params, output_hidden_states=True
-        )
+        self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)
         # self.forecast_full_module(self.__class__.params, output_hidden_states = True)
 
     def test_forecast_full_2(self):
