@@ -1,3 +1,6 @@
+# Copyright contributors to the TSFM project
+#
+
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports

@@ -1,4 +1,7 @@
+# Copyright contributors to the TSFM project
+#
 """ TinyTimeMixer model configuration"""
+
 from typing import Optional, Union
 
 from transformers.configuration_utils import PretrainedConfig
@@ -239,7 +242,5 @@ class TinyTimeMixerConfig(PretrainedConfig):
             if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
                 raise ValueError("prediction_filter_length should be positive and less than prediction_length")
 
-
         if self.prediction_channel_indices is not None:
             self.prediction_channel_indices.sort()
-

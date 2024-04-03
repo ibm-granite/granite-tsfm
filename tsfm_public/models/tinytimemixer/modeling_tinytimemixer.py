@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 """ PyTorch TinyTimeMixer model."""
 
 import copy
@@ -82,7 +84,6 @@ class TinyTimeMixerGatedAttention(nn.Module):
         attn_weight = self.attn_softmax(self.attn_layer(inputs))
         inputs = inputs * attn_weight
         return inputs
-
 
 
 class TinyTimeMixerBatchNorm(nn.Module):
@@ -752,7 +753,7 @@ class TinyTimeMixerDecoder(nn.Module):
             output_hidden_states (`bool`, *optional*, defaults to False.):
                 Whether to output the hidden states as well.
 
-    
+
         Returns:
             `torch.Tensor`: The embedding. `list`: List of all hidden states if `output_hidden_states` is set to
             `True`.
@@ -785,14 +786,12 @@ class TinyTimeMixerDecoder(nn.Module):
             if output_hidden_states:
                 decoder_hidden_states.append(decoder_input)
 
-
         decoder_output, hidden_states = self.decoder_block(
             hidden_state=decoder_input, output_hidden_states=output_hidden_states
         )  # bs x nvars x n_patches x d_model
 
         if output_hidden_states:
             decoder_hidden_states.extend(hidden_states)
-
 
         return decoder_output, decoder_hidden_states
 
@@ -826,7 +825,6 @@ class TinyTimeMixerForPredictionHead(nn.Module):
             self.base_forecast_block = distribution_output.get_parameter_projection(config.num_patches * head_d_model)
 
         self.flatten = nn.Flatten(start_dim=-2)
-
 
     def forward(self, hidden_features, past_values, future_values=None):
         """
@@ -882,7 +880,6 @@ class TinyTimeMixerForPredictionHead(nn.Module):
             future_values = future_values[
                 :, : self.prediction_filter_length, :
             ]  # [batch_size x prediction_filter_length x n_vars]
-
 
         return forecast
 

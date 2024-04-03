@@ -182,11 +182,15 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         config = TinyTimeMixerConfig(**params)
         if task == "forecast":
             mdl = TinyTimeMixerForPrediction(config)
-            if "target_channel_filtered" in params and params["target_channel_filtered"] and params["prediction_channel_indices"] is not None:
+            if (
+                "target_channel_filtered" in params
+                and params["target_channel_filtered"]
+                and params["prediction_channel_indices"] is not None
+            ):
                 target_input = self.__class__.correct_sel_forecast_output
             else:
                 target_input = self.__class__.correct_forecast_output
-            
+
             if config.prediction_channel_indices is not None:
                 target_output = self.__class__.correct_sel_forecast_output
             else:
@@ -209,7 +213,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             dec_output = self.__class__.dec_output
         else:
             dec_output = enc_output
-
 
         if target_input is None:
             output = mdl(
@@ -290,7 +293,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             loss=loss,
             prediction_filter_length=prediction_filter_length,
             target_pred_length_filtered=target_pred_length_filtered,
-            target_channel_filtered = False,
+            target_channel_filtered=False,
         )
 
         self.check_module(task="forecast", params=params)
@@ -331,12 +334,10 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             adaptive_patching_levels=adaptive_patching_levels,
             decoder_adaptive_patching_levels=decoder_adaptive_patching_levels,
             resolution_prefix_tuning=resolution_prefix_tuning,
-            target_channel_filtered = False,
+            target_channel_filtered=False,
         )
 
         self.check_module(task="forecast", params=params)
-
-
 
     def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = TinyTimeMixerConfig(**params)
@@ -360,7 +361,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
             target_input = target_input[:, : config.prediction_filter_length, :]
-
 
         output = mdl(
             self.__class__.data,
