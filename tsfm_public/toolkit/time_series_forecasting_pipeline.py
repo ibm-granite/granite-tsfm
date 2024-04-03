@@ -329,6 +329,6 @@ class TimeSeriesForecastingPipeline(Pipeline):
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None:
-            out = self.feature_extractor.inverse_scale_targets(out, column_suffix="_prediction")
+            out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out

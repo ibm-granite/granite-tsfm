@@ -8,6 +8,7 @@ from transformers import PatchTSTForPrediction
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
+from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 from tsfm_public.toolkit.util import select_by_index
 
 
@@ -79,3 +80,62 @@ def test_forecasting_pipeline_forecasts():
 
     forecasts_exploded = forecast_pipeline(test_data)
     assert forecasts_exploded.shape == (prediction_length, len(target_columns) + 1)
+
+
+def test_forecasting_pipeline_forecasts_with_preprocessor():
+    timestamp_column = "date"
+    id_columns = []
+    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+    prediction_length = 96
+
+    model_path = "ibm/patchtst-etth1-forecasting"
+    model = PatchTSTForPrediction.from_pretrained(model_path)
+    context_length = model.config.context_length
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        freq="1h",
+    )
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        feature_extractor=tsp,
+        explode_forecasts=False,
+    )
+
+    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
+    data = pd.read_csv(
+        dataset_path,
+        parse_dates=[timestamp_column],
+    )
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length - 4
+
+    data = pd.read_csv(
+        dataset_path,
+        parse_dates=[timestamp_column],
+    )
+
+    test_data = select_by_index(
+        data,
+        id_columns=id_columns,
+        start_index=test_start_index,
+        end_index=test_end_index,
+    )
+
+    forecasts = forecast_pipeline(test_data)
+
+    assert forecasts.shape == (
+        test_end_index - test_start_index - context_length + 1,
+        2 * len(target_columns) + 1,
+    )
+
+    # to do: add check on the scaling
