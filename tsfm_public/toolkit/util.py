@@ -231,7 +231,7 @@ def train_test_split(
             )
         )
 
-    result_train, result_valid, result_test = zip(**result)
+    result_train, result_valid, result_test = zip(*result)
     return pd.concat(result_train), pd.concat(result_valid), pd.concat(result_test)
 
 

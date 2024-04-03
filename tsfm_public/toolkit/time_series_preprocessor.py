@@ -116,6 +116,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         scaling: bool = False,
         # scale_outputs: bool = False,
         scaler_type: ScalerType = ScalerType.STANDARD.value,
+        scaling_id_columns: Optional[List[str]] = None,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
@@ -145,6 +146,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
+        self.scaling_id_columns = scaling_id_columns if scaling_id_columns is not None else copy.copy(id_columns)
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = {}
@@ -354,8 +356,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Yields:
             Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
         """
-        if self.id_columns:
-            group_by_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+        if self.scaling_id_columns:
+            group_by_columns = (
+                self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
+            )
         else:
             group_by_columns = INTERNAL_ID_COLUMN
 
@@ -529,12 +533,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return self
 
-    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Union[Dataset, pd.DataFrame]:
+    def inverse_scale_targets(
+        self, dataset: Union[Dataset, pd.DataFrame], suffix: Optional[str] = None
+    ) -> Union[Dataset, pd.DataFrame]:
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
 
         if not self.scaling:
-            return df
+            return dataset
 
         if len(self.target_scaler_dict) == 0:
             # trying to inverse scale but this preprocessor is not set up for scaling
@@ -543,17 +549,35 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             )
 
         cols_to_scale = self.target_columns
+        if suffix is not None:
+            cols_to_scale = [f"{c}{suffix}" for c in cols_to_scale]
+
+        col_has_list = [df[c].dtype == np.dtype("O") for c in cols_to_scale]
+
+        def explode_row(df_row, name, columns):
+            df = pd.DataFrame(df_row[columns].to_dict())
+            inv_scale = self.target_scaler_dict[name].inverse_transform(df)
+            df_out = df_row.copy()
+            for idx, c in enumerate(columns):
+                df_out[c] = inv_scale[:, idx]
+            return df_out
 
         def inverse_scale_func(grp, id_columns):
             if isinstance(id_columns, list):
                 name = tuple(grp.iloc[0][id_columns].tolist())
             else:
                 name = grp.iloc[0][id_columns]
-            grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+
+            if not np.any(col_has_list):
+                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+            else:
+                grp[cols_to_scale] = grp[cols_to_scale].apply(
+                    lambda x: explode_row(x, name, cols_to_scale), axis="columns"
+                )
             return grp
 
-        if self.id_columns:
-            id_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+        if self.scaling_id_columns:
+            id_columns = self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
         else:
             id_columns = INTERNAL_ID_COLUMN
 
@@ -597,8 +621,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
                 return grp
 
-            if self.id_columns:
-                id_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+            if self.scaling_id_columns:
+                id_columns = (
+                    self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
+                )
             else:
                 id_columns = INTERNAL_ID_COLUMN
 

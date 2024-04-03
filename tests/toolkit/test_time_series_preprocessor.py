@@ -84,6 +84,75 @@ def test_time_series_preprocessor_encodes(sample_data):
         assert sample_prep[c].dtype == float
 
 
+def test_time_series_preprocessor_scales(ts_data):
+    df = ts_data
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        scaling=True,
+    )
+
+    tsp.train(df)
+
+    # check scaled result
+    out = tsp.preprocess(df)
+    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x)), 0.0)
+    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x)), 1.0)
+
+    # check inverse scale result
+    out_inv = tsp.inverse_scale_targets(out)
+    assert np.all(
+        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x))
+        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x))
+    )
+    assert np.all(
+        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
+        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
+    )
+
+    # check inverse scale result, with suffix
+
+    suffix = "_foo"
+    targets_suffix = [f"{c}{suffix}" for c in tsp.target_columns]
+    out.columns = [f"{c}{suffix}" if c in tsp.target_columns else c for c in out.columns]
+    out_inv = tsp.inverse_scale_targets(out, suffix=suffix)
+    assert np.all(
+        out_inv.groupby(tsp.id_columns)[targets_suffix].apply(lambda x: np.mean(x))
+        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x))
+    )
+
+
+def test_time_series_preprocessor_inv_scales_lists(ts_data):
+    df = ts_data
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        scaling=True,
+    )
+
+    tsp.train(df)
+
+    # check scaled result
+    out = tsp.preprocess(df)
+
+    # construct artificial result
+    out["value1"] = out["value1"].apply(lambda x: np.array([x] * 3))
+    out["value2"] = out["value2"].apply(lambda x: np.array([x] * 3))
+
+    out_inv = tsp.inverse_scale_targets(out)
+
+    assert out_inv["value1"].mean()[0] == df["value1"].mean()
+    assert out_inv["value2"].mean()[0] == df["value2"].mean()
+
+
 def test_augment_time_series(ts_data):
     periods = 5
     a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)
@@ -297,3 +366,22 @@ def test_get_datasets_without_targets(ts_data):
     train, _, _ = tsp.get_datasets(ts_data, split_config={"train": 0.7, "test": 0.2})
 
     train.datasets[0].target_columns == ["value1", "value2"]
+
+
+def test_id_columns_and_scaling_id_columns(ts_data_runs):
+    df = ts_data_runs
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        scaling_id_columns=["asset_id"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    ds_train, ds_valid, ds_test = tsp.get_datasets(df, split_config={"train": 0.7, "test": 0.2})
+
+    assert len(tsp.target_scaler_dict) == 2
+    assert len(ds_train.datasets) == 4
