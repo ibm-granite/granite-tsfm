@@ -35,9 +35,12 @@ logger = logging.get_logger(__name__)
     build_pipeline_init_args(has_tokenizer=False, has_feature_extractor=True, has_image_processor=False)
 )
 class TimeSeriesForecastingPipeline(Pipeline):
-    """Hugging Face Pipeline for Time Series Forecasting"""
+    """Hugging Face Pipeline for Time Series Forecasting
 
-    # has_feature_extractor means we can pass feature_extractor=TimeSeriesPreprocessor
+    feature_extractor (TimeSeriesPreprocessor): A time series preprpocessor object that specifies how the time
+            series should be prepared. If this is provided, and of the other options below will be automatically
+            populated from this instance.
+    """
 
     def __init__(
         self,
@@ -128,40 +131,54 @@ class TimeSeriesForecastingPipeline(Pipeline):
         produces predictions.
 
         Args:
-            time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe or a referce to a location
-            from where a pandas datarame can be loaded containing the time series on which to perform inference.
+            time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe containing the time series on
+                which to perform inference.
 
-            future_time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe or a referce to a location
-            from where a pandas datarame can be loaded containing future values, i.e., exogenous or supporting features
-            which are known in advance.
+        Keyword arguments:
+            future_time_series (Union[&quot;pandas.DataFrame&quot;, str]): A pandas dataframe containing future values,
+                i.e., exogenous or supporting features which are known in advance.
 
-            To do: describe batch vs. single and the need for future_time_series
+            feature_extractor (TimeSeriesPreprocessor): A time series preprpocessor object that specifies how the time
+                series should be prepared. If this is provided, and of the other options below will be automatically
+                populated from this instance.
 
+            timestamp_column (str): The name of the column containing the timestamp of the time series.
 
-            kwargs
+            id_columns (List[str]): List of column names which identify different time series in a multi-time series input.
 
-            future_time_series: Optional[Union["pandas.DataFrame", str]] = None,
-            prediction_length
-            context_length
+            target_columns (List[str]): List of column names which identify the target channels in the input, these are the
+                columns that will be forecasted.
 
-            timestamp_column (str): the column containing the date / timestamp
-            id_columns (List[str]): the list of columns containing ID information. If no ids are present, pass [].
+            observable_columns (List[str]): List of column names which identify the observable channels in the input.
+                Observable channels are channels which we have knowledge about in the past and future. For example, weather
+                conditions such as temperature or precipitation may be known or estimated in the future, but cannot be
+                changed.
 
-            "target_columns",
-            "observable_columns",
-            "control_columns",
-            "conditional_columns",
-            "static_categorical_columns",
+            control_columns (List[str]): List of column names which identify the control channels in the input. Control
+                channels are similar to observable channels, except that future values may be controlled. For example, discount
+                percentage of a particular product is known and controllable in the future.
 
+            conditional_columns (List[str]): List of column names which identify the conditional channels in the input.
+                Conditional channels are channels which we know in the past, but do not know in the future.
 
-            # OLD
-            input_columns (List[str]): the columns that are used as to create the inputs to the forecasting model.
-            These values are used to select data in the input dataframe.
-            output_columns (List[str]): the column names that are used to label the outputs of the forecasting model.
-            If omitted, it is assumed that the model will forecast values for all the input columns.
+            static_categorical_columns (List[str]): List of column names which identify categorical-valued channels in the input
+                which are fixed over time.
 
+            freq (str): A freqency indicator for the given `timestamp_column`. See
+                https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
+                allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
+                inferred from `timestamp_column`.
 
-            Return:
+            prediction_length (int): The length of the desired forecast. Currently, this value must not exceed the maximum value
+                suported by the model. If not specified, the maximum value supported by the model is used.
+
+            context_length (int): Specifies the length of the context windows extracted from the historical data for feeding into
+                the model.
+
+            explode_forecasts (bool): If true, forecasts are returned one value per row of the pandas dataframe. If false, the
+                forecast over the prediction length will be contained as a list in a single row of the pandas dataframe.
+
+        Return (pandas dataframe):
             A new pandas dataframe containing the forecasts. Each row will contain the id, timestamp, the original
             input feature values and the output forecast for each input column. The output forecast is a list containing
             all the values over the prediction horizon.
@@ -326,4 +343,9 @@ class TimeSeriesForecastingPipeline(Pipeline):
         cols_ordered.extend([c for c in cols if c not in cols_ordered])
 
         out = out[cols_ordered]
+
+        # inverse scale if we have a feature extractor
+        if self.feature_extractor is not None:
+            out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+
         return out

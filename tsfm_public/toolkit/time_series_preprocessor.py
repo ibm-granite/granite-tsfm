@@ -2,11 +2,11 @@
 #
 """Preprocessor for time series data preparation"""
 
+import copy
 import datetime
 import enum
 import json
 from collections import defaultdict
-from datetime import timedelta
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -116,16 +116,20 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         scaling: bool = False,
         # scale_outputs: bool = False,
         scaler_type: ScalerType = ScalerType.STANDARD.value,
+        scaling_id_columns: Optional[List[str]] = None,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
-        freq: Optional[Union[int, float, timedelta, pd.Timedelta, str]] = None,
+        freq: Optional[Union[int, str]] = None,
         **kwargs,
     ):
         # note base class __init__ methods sets all arguments as attributes
 
         if not isinstance(id_columns, list):
             raise ValueError(f"Invalid argument provided for `id_columns`: {id_columns}")
+
+        if isinstance(timestamp_column, list):
+            raise ValueError(f"`timestamp_column` should not be a list, received: {timestamp_column}")
 
         self.id_columns = id_columns
         self.timestamp_column = timestamp_column
@@ -142,6 +146,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
+        self.scaling_id_columns = scaling_id_columns if scaling_id_columns is not None else copy.copy(id_columns)
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = {}
@@ -152,7 +157,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         kwargs["processor_class"] = self.__class__.__name__
 
-        self._validate_columns()
+        # self._validate_columns()
 
         super().__init__(**kwargs)
 
@@ -351,8 +356,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Yields:
             Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
         """
-        if self.id_columns:
-            group_by_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+        if self.scaling_id_columns:
+            group_by_columns = (
+                self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
+            )
         else:
             group_by_columns = INTERNAL_ID_COLUMN
 
@@ -463,6 +470,19 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if dataset is None or len(dataset) == 0:
             raise ValueError("Input dataset must not be null or zero length.")
 
+    def _set_targets(self, dataset: pd.DataFrame) -> None:
+        if self.target_columns == []:
+            skip_columns = copy.copy(self.id_columns)
+            if self.timestamp_column:
+                skip_columns.append(self.timestamp_column)
+
+            skip_columns.extend(self.observable_columns)
+            skip_columns.extend(self.control_columns)
+            skip_columns.extend(self.conditional_columns)
+            skip_columns.extend(self.static_categorical_columns)
+
+            self.target_columns = [c for c in dataset.columns.to_list() if c not in skip_columns]
+
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
             if self.id_columns:
@@ -474,6 +494,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
             # to do: make more robust
             self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
+
+            if not isinstance(self.freq, (str, int)):
+                self.freq = str(self.freq)
+
         else:
             # no timestamp, assume sequential count?
             self.freq = 1
@@ -494,8 +518,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
 
         self._check_dataset(dataset)
-
         df = self._standardize_dataframe(dataset)
+        self._set_targets(df)
+        self._validate_columns()
 
         if self.freq is None:
             self._estimate_frequency(df)
@@ -508,27 +533,51 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return self
 
-    def inverse_scale_targets(self, dataset: Union[Dataset, pd.DataFrame]) -> Dataset:
+    def inverse_scale_targets(
+        self, dataset: Union[Dataset, pd.DataFrame], suffix: Optional[str] = None
+    ) -> Union[Dataset, pd.DataFrame]:
+        self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
 
-        if not self.scaling or len(self.target_scaler_dict) == 0:
+        if not self.scaling:
+            return dataset
+
+        if len(self.target_scaler_dict) == 0:
             # trying to inverse scale but this preprocessor is not set up for scaling
             raise RuntimeError(
-                "Attempt to perform inverse scaling, but time series preprocess is not configured for scaling or scaler has not yet been trained. Please run the `train` method first."
+                "Attempt to perform inverse scaling, but time series preprocessor has not yet been trained. Please run the `train` method first."
             )
 
         cols_to_scale = self.target_columns
+        if suffix is not None:
+            cols_to_scale = [f"{c}{suffix}" for c in cols_to_scale]
+
+        col_has_list = [df[c].dtype == np.dtype("O") for c in cols_to_scale]
+
+        def explode_row(df_row, name, columns):
+            df = pd.DataFrame(df_row[columns].to_dict())
+            inv_scale = self.target_scaler_dict[name].inverse_transform(df)
+            df_out = df_row.copy()
+            for idx, c in enumerate(columns):
+                df_out[c] = inv_scale[:, idx]
+            return df_out
 
         def inverse_scale_func(grp, id_columns):
             if isinstance(id_columns, list):
                 name = tuple(grp.iloc[0][id_columns].tolist())
             else:
                 name = grp.iloc[0][id_columns]
-            grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+
+            if not np.any(col_has_list):
+                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+            else:
+                grp[cols_to_scale] = grp[cols_to_scale].apply(
+                    lambda x: explode_row(x, name, cols_to_scale), axis="columns"
+                )
             return grp
 
-        if self.id_columns:
-            id_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+        if self.scaling_id_columns:
+            id_columns = self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
         else:
             id_columns = INTERNAL_ID_COLUMN
 
@@ -548,7 +597,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         # 2) incremental / batch based processing of datasets to minimize memory impact
 
         self._check_dataset(dataset)
-
         df = self._standardize_dataframe(dataset)
 
         if self.scaling:
@@ -573,8 +621,10 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
                 return grp
 
-            if self.id_columns:
-                id_columns = self.id_columns if len(self.id_columns) > 1 else self.id_columns[0]
+            if self.scaling_id_columns:
+                id_columns = (
+                    self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
+                )
             else:
                 id_columns = INTERNAL_ID_COLUMN
 
@@ -595,7 +645,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def get_datasets(
         self,
         dataset: Union[Dataset, pd.DataFrame],
-        split_config: Dict[str, Any],
+        split_config: Dict[str, Union[List[Union[int, float]], float]],
         fewshot_fraction: Optional[float] = None,
         fewshot_location: str = FractionLocation.LAST.value,
     ) -> Tuple[Any]:
@@ -604,17 +654,24 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         Args:
             dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
-                split_config (Dict[str, Any]): Dictionary of dictionaries containing
-                split parameters. For example:
+                split_config (Dict[str, Union[List[Union[int, float]], float]]): Dictionary of dictionaries containing
+                split parameters. Two configurations are possible:
+                1. Specify train/valid/test indices or relative fractions
                     {
                         train: [0, 50],
                         valid: [50, 70],
                         test:  [70, 100]
                     }
                 end value is not inclusive
+                2. Specify train/test fractions:
+                    {
+                        train: 0.7
+                        test: 0.2
+                    }
+                    A valid split should not be specified directly; the above implies valid = 0.1
+
             fewshot_fraction (float, optional): When non-null, return this percent of the original training
-                dataset. This is done to support fewshot fine-tuning. The fraction of data chosen is at the
-                end of the training dataset.
+                dataset. This is done to support fewshot fine-tuning.
             fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
                 as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
                 of the training dataset (i.e., "last").
@@ -625,10 +682,24 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         data = self._standardize_dataframe(dataset)
 
-        # get split_params
-        # split_params = get_split_params(config, self.context_length, len(data))
+        if not self.context_length:
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
+        if not self.prediction_length:
+            raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null prediction_length")
 
+        # get split_params
         split_params, split_function = get_split_params(split_config, context_length=self.context_length)
+
+        # split data
+        if isinstance(split_function, dict):
+            train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
+            valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
+            test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
+        else:
+            train_data, valid_data, test_data = split_function(data, id_columns=self.id_columns, **split_params)
+
+        # data preprocessing
+        self.train(train_data)
 
         # specify columns
         column_specifiers = {
@@ -641,14 +712,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             "static_categorical_columns": self.static_categorical_columns,
         }
 
-        # split data
-        train_data = split_function["train"](data, id_columns=self.id_columns, **split_params["train"])
-        valid_data = split_function["valid"](data, id_columns=self.id_columns, **split_params["valid"])
-        test_data = split_function["test"](data, id_columns=self.id_columns, **split_params["test"])
-
-        # data preprocessing
-        self.train(train_data)
-
         # handle fewshot operation
         if fewshot_fraction is not None:
             if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
@@ -659,6 +722,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 id_columns=self.id_columns,
                 fraction=fewshot_fraction,
                 location=fewshot_location,
+                minimum_size=self.context_length,
             )
 
         params = column_specifiers
@@ -695,6 +759,9 @@ def create_timestamps(
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+        if isinstance(freq, str):
+            freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+
         return pd.date_range(
             last_timestamp,
             freq=freq,
