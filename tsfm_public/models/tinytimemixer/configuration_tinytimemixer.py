@@ -35,8 +35,6 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Hidden feature size of the model.
         prediction_length (`int`, *optional*, defaults to 16)
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
-        num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for probabilistic forecast.
         expansion_factor (`int`, *optional*, defaults to 2):
             Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
         num_layers (`int`, *optional*, defaults to 3):
@@ -69,9 +67,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         loss (`string`, *optional*, defaults to `"mse"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
-            error "mse".
+            The loss function for the model. Defaults to mean squared error "mse". Allowed values: ["mse", "mae"]
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         post_init (`bool`, *optional*, defaults to `False`):
@@ -93,15 +89,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Vocab size to use when resolution_prefix_tuning is enabled.
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `TinyTimeMixer` head.
-        distribution_output (`string`, *optional*, defaults to `"student_t"`):
-            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
-            "negative_binomial".
         prediction_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
             channels and we explicitly filter the channels in prediction and target before loss computation. Please provide the indices
-            in sorted ascending order.
-        exogenous_channel_indices (`list`, *optional*):
-            List of channel indices whose values are known in the forecast period. Please provide the indices
             in sorted ascending order.
         decoder_num_layers (`int`, *optional*, defaults to 8):
             Number of layers to use in decoder
@@ -171,8 +161,6 @@ class TinyTimeMixerConfig(PretrainedConfig):
         frequency_token_vocab_size: int = 5,
         # General head configuration
         head_dropout: float = 0.2,
-        distribution_output: str = "student_t",
-        num_parallel_samples: int = 100,
         # decoder parameters
         decoder_num_layers: int = 8,
         decoder_d_model: int = 8,
@@ -205,9 +193,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.self_attn_heads = self_attn_heads
         self.init_std = init_std
         self.post_init = post_init
-        self.distribution_output = distribution_output
         self.loss = loss
-        self.num_parallel_samples = num_parallel_samples
         self.norm_eps = norm_eps
 
         self.use_decoder = use_decoder

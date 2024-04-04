@@ -805,7 +805,7 @@ class TinyTimeMixerForPredictionHead(nn.Module):
         config (`TinyTimeMixerConfig`, *required*): Configuration.
     """
 
-    def __init__(self, config: TinyTimeMixerConfig, distribution_output=None):
+    def __init__(self, config: TinyTimeMixerConfig):
         super().__init__()
 
         self.prediction_channel_indices = config.prediction_channel_indices
@@ -821,11 +821,9 @@ class TinyTimeMixerForPredictionHead(nn.Module):
         else:
             head_d_model = config.d_model
 
-        if distribution_output is None:
-            self.base_forecast_block = nn.Linear((config.num_patches * head_d_model), config.prediction_length)
-        else:
-            self.base_forecast_block = distribution_output.get_parameter_projection(config.num_patches * head_d_model)
+        self.base_forecast_block = nn.Linear((config.num_patches * head_d_model), config.prediction_length)
 
+        
         self.flatten = nn.Flatten(start_dim=-2)
 
     def forward(self, hidden_features, past_values, future_values=None):
@@ -1416,24 +1414,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.prediction_filter_length = config.prediction_filter_length
 
-        if config.loss == "mse":
-            self.distribution_output = None
-        else:
-            if self.prediction_filter_length is None:
-                dim = config.prediction_length
-            else:
-                dim = config.prediction_filter_length
-
-            distribution_output_map = {
-                "student_t": StudentTOutput,
-                "normal": NormalOutput,
-                "negative_binomial": NegativeBinomialOutput,
-            }
-            output_class = distribution_output_map.get(config.distribution_output, None)
-            if output_class is not None:
-                self.distribution_output = output_class(dim=dim)
-            else:
-                raise ValueError(f"Unknown distribution output {config.distribution_output}")
+    
 
         self.backbone = TinyTimeMixerModel(config)
 
@@ -1444,7 +1425,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.head = TinyTimeMixerForPredictionHead(
             config=config,
-            distribution_output=self.distribution_output,
         )
 
         # Initialize weights and apply final processing
@@ -1487,10 +1467,10 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         """
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
-        elif self.loss == "nll":
-            loss = nll
+        elif self.loss == "mae":
+            loss = nn.L1Loss(reduction="mean")
         else:
-            raise ValueError("Invalid loss function: Allowed values: mse and nll")
+            loss = None
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
@@ -1550,15 +1530,10 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         loss_val = None
 
-        if self.distribution_output:
-            distribution = self.distribution_output.distribution(y_hat, loc=loc, scale=scale)
-            if future_values is not None and return_loss is True:
-                loss_val = loss(distribution, future_values)
-                loss_val = weighted_average(loss_val)
-        else:
-            y_hat = y_hat * scale + loc
-            if future_values is not None and return_loss is True:
-                loss_val = loss(y_hat, future_values)
+        y_hat = y_hat * scale + loc
+        
+        if future_values is not None and return_loss is True and loss is not None:
+            loss_val = loss(y_hat, future_values)
 
         if not return_dict:
             return tuple(
@@ -1584,49 +1559,4 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             scale=scale,
         )
 
-    def generate(
-        self,
-        past_values: torch.Tensor,
-        observed_mask: Optional[torch.Tensor] = None,
-    ) -> SampleTinyTimeMixerPredictionOutput:
-        """
-        Generate sequences of sample predictions from a model with a probability distribution head.
-
-        Args:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Past values of the time series that serves as context in order to predict the future.
-
-            observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
-
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
-        Return:
-            [`SampleTinyTimeMixerPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, prediction_length, num_input_channels)`.
-        """
-        # get number of samples
-        num_parallel_samples = self.num_parallel_samples
-
-        # get model output
-        outputs = self(
-            past_values=past_values,
-            future_values=None,
-            observed_mask=observed_mask,
-            output_hidden_states=False,
-        )
-
-        # get distribution
-
-        distribution = self.distribution_output.distribution(
-            outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
-        )
-
-        # get samples: list of [batch_size x prediction_length x num_channels]
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]
-
-        # stack tensors
-        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x prediction_length x num_channels]
-        return SampleTinyTimeMixerPredictionOutput(sequences=samples)
+    

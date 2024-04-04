@@ -246,9 +246,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         # self.assertEqual(output.backbone_hidden_state.shape, enc_output.shape)
         # self.assertEqual(output.decoder_hidden_state.shape, dec_output.shape)
 
-        if config.loss == "nll" and task in ["forecast", "regression"]:
-            samples = mdl.generate(self.__class__.data)
-            self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     @parameterized.expand(
         list(
@@ -258,7 +255,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 [True, False, "mean", "std"],
                 [True, False],
                 [None, [0, 2]],
-                ["mse", "nll"],
+                ["mse", "mae"],
                 [3, 4],
                 [True, False],
             )
@@ -390,10 +387,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         self.assertEqual(output.loss.item() < np.inf, True)
 
-        if config.loss == "nll":
-            samples = mdl.generate(self.__class__.data)
-            ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
-            self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast_full(self):
         self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)
@@ -448,8 +441,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         params.update(
             mode="mix_channel",
             prediction_channel_indices=[0, 2],
-            loss="nll",
-            distribution_output="normal",
+            loss="mae",
         )
 
         self.forecast_full_module(params)
@@ -459,8 +451,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         params.update(
             mode="mix_channel",
             prediction_channel_indices=[0, 2],
-            loss="nll",
-            # distribution_output = "normal",
+            loss="mae",
         )
         self.forecast_full_module(params)
 
@@ -469,8 +460,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         params.update(
             mode="mix_channel",
             # prediction_channel_indices=[0, 2],
-            loss="nll",
-            distribution_output="normal",
+            loss="mae",
         )
         self.forecast_full_module(params)
 
@@ -479,7 +469,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         params.update(
             mode="mix_channel",
             # prediction_channel_indices=[0, 2],
-            loss="nll",
-            distribution_output="normal",
+            loss="mae",
         )
         self.forecast_full_module(params)
