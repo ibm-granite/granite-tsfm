@@ -303,7 +303,6 @@ class TimeSeriesForecastingPipeline(Pipeline):
         """
         out = {}
 
-        print(kwargs)
         model_output_key = "prediction_outputs" if "prediction_outputs" in input.keys() else "prediction_logits"
 
         # name the predictions of target columns
