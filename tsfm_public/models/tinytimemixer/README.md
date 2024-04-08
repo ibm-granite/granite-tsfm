@@ -56,8 +56,10 @@ For Installation steps, refer [here](https://github.com/IBM/tsfm/tree/ttm)
 ## Sample Datasets required for the above notebooks
 
 The multivariate evaluation datasets utilized in these scripts are `etth1, etth2, ettm1, ettm2, weather, electricity, traffic`.
-The datasets should be stored in a directory `datasets/` in the follwing structure for the function `get_data` to work.  
+The datasets should be stored in a directory (e.g., `datasets/`) in the follwing structure for the function `get_data` to work. See the the implementation of `get_data()` [here](notebooks/hfdemo/tinytimemixer/utils/ttm_utils.py).
+Specify this path (e.g., `datasets/`) in the example notebooks.
 
+**Structure of the `datasets/` folder**
 - ETT datasets: "datasets/ETT-small/ETT*.csv"
 - Weather dataset: "datasets/weather/weather.csv"
 - Electricity dataset: "datasets/electricity/electricity.csv"
