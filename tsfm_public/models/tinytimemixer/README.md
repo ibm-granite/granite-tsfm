@@ -41,8 +41,10 @@ In addition, TTM also supports exogenous infusion and categorical data which is 
 - Enabling any upsampling or prepending zeros to virtually increase the context length is not recommended and will impact the model performance.
 
 
-# Getting started with TinyTimeMixer (TTM)
+# Installation:
+For Installation steps, refer [here](https://github.com/IBM/tsfm/tree/ttm)
 
+# Getting started with TinyTimeMixer (TTM)
 - Getting started notebook: [here](../../../notebooks/hfdemo/ttm_getting_started.ipynb)
 - Illustration notebook for 512-96 model on the considered target datasets: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_benchmarking_512_96.ipynb)
 - Illustration notebook for 1024-96 model on the considered target datasets: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_benchmarking_1024_96.ipynb)
