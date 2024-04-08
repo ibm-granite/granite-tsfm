@@ -4,12 +4,15 @@
 # https://github.com/huggingface/transformers/blob/main/tests/models/patchtsmixer/test_modeling_patchtsmixer.py
 """ Testing suite for the PyTorch TinyTimeMixer model. """
 
+# Standard
 import itertools
 
 # import torchinfo
 import unittest
 
 import numpy as np
+
+# Third Party
 from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch
@@ -33,8 +36,10 @@ from transformers.testing_utils import require_torch
 TOLERANCE = 1e-4
 
 if is_torch_available():
+    # Third Party
     import torch
 
+    # Local
     from tsfm_public.models.tinytimemixer import (
         TinyTimeMixerConfig,
         TinyTimeMixerForPrediction,
@@ -194,7 +199,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
                 target_input = target_input[:, : config.prediction_filter_length, :]
 
-            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
+            # ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
 
         else:
             print("invalid task")
@@ -245,7 +250,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         # self.assertEqual(output.backbone_hidden_state.shape, enc_output.shape)
         # self.assertEqual(output.decoder_hidden_state.shape, dec_output.shape)
-
 
     @parameterized.expand(
         list(
@@ -386,7 +390,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         #     self.assertEqual(output.hidden_states, None)
 
         self.assertEqual(output.loss.item() < np.inf, True)
-
 
     def test_forecast_full(self):
         self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)

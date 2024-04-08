@@ -1,29 +1,26 @@
 # Standard
-from datetime import timedelta
 import argparse
 import os
 import time
 
-# Third Party
-from transformers import TrainerCallback
-from transformers.trainer_callback import TrainerControl, TrainerState
-from transformers.training_args import TrainingArguments
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 
+# Third Party
+from transformers import TrainerCallback
+from transformers.trainer_callback import TrainerControl, TrainerState
+from transformers.training_args import TrainingArguments
+
 # Local
-from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 
 
 def get_ttm_args():
     parser = argparse.ArgumentParser(description="TTM pretrain arguments.")
     # Adding a positional argument
-    parser.add_argument(
-        "--forecast_length", "-fl", type=int, required=False, default=96, help="Forecast length"
-    )
+    parser.add_argument("--forecast_length", "-fl", type=int, required=False, default=96, help="Forecast length")
     parser.add_argument(
         "--context_length",
         "-cl",
@@ -72,12 +69,8 @@ def get_ttm_args():
         default=None,
         help="Number of GPUs",
     )
-    parser.add_argument(
-        "--random_seed", "-rs", type=int, required=False, default=42, help="Random seed"
-    )
-    parser.add_argument(
-        "--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size"
-    )
+    parser.add_argument("--random_seed", "-rs", type=int, required=False, default=42, help="Random seed")
+    parser.add_argument("--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size")
     parser.add_argument(
         "--num_epochs",
         "-ne",
@@ -173,11 +166,7 @@ def int_to_bool(value):
 
 # Utitlity: plot
 def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1):
-    device = (
-        torch.cuda.current_device()
-        if torch.cuda.is_available()
-        else torch.device("cpu")
-    )
+    device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
     random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
     output = trainer.model(random_samples.to(device=device))
@@ -198,9 +187,7 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
 
         # Plot predicted values with a dashed line
         y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
-        axs[i].plot(
-            y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2
-        )
+        axs[i].plot(y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2)
 
         # Plot true values with a solid line
         axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
@@ -354,9 +341,7 @@ def get_data(
     train_dataset, valid_dataset, test_dataset = tsp.get_datasets(
         data, split_config, fewshot_fraction=fewshot_fraction, fewshot_location="first"
     )
-    print(
-        f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}"
-    )
+    print(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 
     return train_dataset, valid_dataset, test_dataset
 
@@ -411,9 +396,7 @@ class TrackingCallback(TrainerCallback):
         self.epoch_end_time = time.time()
         self.last_epoch_time = self.epoch_end_time - self.epoch_start_time
         if self.verbose:
-            print(
-                f"[{self.__class__.__name__}] Epoch Time = {self.last_epoch_time} seconds"
-            )
+            print(f"[{self.__class__.__name__}] Epoch Time = {self.last_epoch_time} seconds")
         self.all_epoch_times.append(self.last_epoch_time)
         return super().on_epoch_end(args, state, control, **kwargs)
         return super().on_epoch_end(args, state, control, **kwargs)

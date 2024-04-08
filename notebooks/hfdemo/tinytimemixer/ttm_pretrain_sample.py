@@ -28,6 +28,7 @@ from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerForPrediction,
 )
 
+
 # Arguments
 args = get_ttm_args()
 
@@ -77,9 +78,7 @@ def pretrain(args, model, dset_train, dset_val):
         save_strategy="epoch",
         logging_strategy="epoch",
         save_total_limit=1,
-        logging_dir=os.path.join(
-            args.save_dir, "logs"
-        ),  # Make sure to specify a logging directory
+        logging_dir=os.path.join(args.save_dir, "logs"),  # Make sure to specify a logging directory
         load_best_model_at_end=True,  # Load the best model when training ends
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
@@ -138,9 +137,7 @@ if __name__ == "__main__":
     )
 
     # Data prep
-    dset_train, dset_val, dset_test = get_data(
-        args.dataset, args.context_length, args.forecast_length
-    )
+    dset_train, dset_val, dset_test = get_data(args.dataset, args.context_length, args.forecast_length)
     print("Length of the train dataset =", len(dset_train))
 
     # Get model
