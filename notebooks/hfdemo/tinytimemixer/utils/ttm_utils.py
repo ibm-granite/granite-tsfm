@@ -22,13 +22,14 @@ def get_ttm_args():
     parser = argparse.ArgumentParser(description="TTM pretrain arguments.")
     # Adding a positional argument
     parser.add_argument(
-        "--forecast_length", "-fl", type=int, required=True, help="Forecast length"
+        "--forecast_length", "-fl", type=int, required=False, default=96, help="Forecast length"
     )
     parser.add_argument(
         "--context_length",
         "-cl",
         type=int,
-        required=True,
+        required=False,
+        default=512,
         help="History context length",
     )
     parser.add_argument(
@@ -195,14 +196,17 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
         x = batch["past_values"][: 2 * pred_len, channel].squeeze().cpu().numpy()
         y = np.concatenate((x, y), axis=0)
 
-        # Plot true values with a solid line
-        axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
-
         # Plot predicted values with a dashed line
         y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
         axs[i].plot(
             y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2
         )
+
+        # Plot true values with a solid line
+        axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
+
+        # Plot horizon border
+        axs[i].axvline(x=2 * pred_len, color="r", linestyle="-")
 
         axs[i].set_title(f"Example {random_indices[i]}")
         axs[i].legend()
@@ -217,12 +221,18 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
 
 
 # Get data loaders using TSP
-def get_data(dataset_name: str, context_length, forecast_length, fewshot_fraction=1.0):
+def get_data(
+    dataset_name: str,
+    context_length,
+    forecast_length,
+    fewshot_fraction=1.0,
+    data_root_path: str = "datasets/",
+):
     print(dataset_name, context_length, forecast_length)
 
     config_map = {
         "etth1": {
-            "dataset_path": "datasets/ETT-small/ETTh1.csv",
+            "dataset_path": os.path.join(data_root_path, "ETT-small/ETTh1.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -233,7 +243,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "etth2": {
-            "dataset_path": "datasets/ETT-small/ETTh2.csv",
+            "dataset_path": os.path.join(data_root_path, "ETT-small/ETTh2.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -244,7 +254,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "ettm1": {
-            "dataset_path": "datasets/ETT-small/ETTm1.csv",
+            "dataset_path": os.path.join(data_root_path, "ETT-small/ETTm1.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -258,7 +268,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "ettm2": {
-            "dataset_path": "datasets/ETT-small/ETTm2.csv",
+            "dataset_path": os.path.join(data_root_path, "ETT-small/ETTm2.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -272,7 +282,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "weather": {
-            "dataset_path": "datasets/weather/weather.csv",
+            "dataset_path": os.path.join(data_root_path, "weather/weather.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": [],
@@ -282,7 +292,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "electricity": {
-            "dataset_path": "datasets/electricity/electricity.csv",
+            "dataset_path": os.path.join(data_root_path, "electricity/electricity.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": [],
@@ -292,7 +302,7 @@ def get_data(dataset_name: str, context_length, forecast_length, fewshot_fractio
             },
         },
         "traffic": {
-            "dataset_path": "datasets/traffic/traffic.csv",
+            "dataset_path": os.path.join(data_root_path, "traffic/traffic.csv"),
             "timestamp_column": "date",
             "id_columns": [],
             "target_columns": [],
@@ -407,5 +417,3 @@ class TrackingCallback(TrainerCallback):
         self.all_epoch_times.append(self.last_epoch_time)
         return super().on_epoch_end(args, state, control, **kwargs)
         return super().on_epoch_end(args, state, control, **kwargs)
-
-
