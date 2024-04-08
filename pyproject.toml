@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["tsfm_public", "tsfm_public.toolkit", "tsfm_public.models", "tsfmhfdemos"]
+packages = ["tsfm_public", "tsfm_public.toolkit", "tsfm_public.models", "tsfm_public.models.tinytimemixer", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
