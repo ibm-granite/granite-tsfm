@@ -19,12 +19,12 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
+packages = ["tsfm_public", "tsfm_public.toolkit", "tsfm_public.models", "tsfm_public.models.tinytimemixer", "tsfmhfdemos", "tsfmhfdemos.neurips", "tsfmhfdemos.neurips.backends", "tsfmhfdemos.neurips.backends.v1", "tsfmhfdemos.neurips.backends.v1.figures"]
 
 [project.optional-dependencies]
 
 notebooks = ["jupyter", "matplotlib", "datasets", "ipywidgets", "plotly", "kaleido", "tensorboard"]
-testing = ["pytest", "tsfm_public[notebooks]"]
+testing = ["pytest", "tsfm_public[notebooks]", "parameterized"]
 dev = ["pre-commit", "tsfm_public[testing]", "ruff==0.1.5"]
 evaluation = [
     "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
