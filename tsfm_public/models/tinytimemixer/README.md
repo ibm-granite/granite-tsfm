@@ -55,8 +55,8 @@ For Installation steps, refer [here](https://github.com/IBM/tsfm/tree/ttm)
 
 ## Sample Datasets required for the above notebooks
 
-The multivariate evaluation datasets utilized in these scripts are `etth1, etth2, ettm1, ettm2, weather, electricity, traffic`.
-The datasets should be stored in a directory (e.g., `datasets/`) in the follwing structure for the function `get_data` to work. See the the implementation of `get_data()` [here](notebooks/hfdemo/tinytimemixer/utils/ttm_utils.py).
+The evaluation datasets utilized in these scripts are `etth1, etth2, ettm1, ettm2, weather, electricity, traffic, m4-hourly`.
+The datasets should be stored in a directory (e.g., `datasets/`) in the follwing structure for the function `get_data` to work. See the the implementation of `get_data()` [here](../../../notebooks/hfdemo/tinytimemixer/utils/ttm_utils.py).
 Specify this path (e.g., `datasets/`) in the example notebooks.
 
 **Structure of the `datasets/` folder**
@@ -64,5 +64,6 @@ Specify this path (e.g., `datasets/`) in the example notebooks.
 - Weather dataset: "datasets/weather/weather.csv"
 - Electricity dataset: "datasets/electricity/electricity.csv"
 - Traffic dataset: "datasets/traffic/traffic.csv"
+- M4-hourly dataset: "datasets/m4/*.csv"
 
 The datasets can be downloaded from the Informer model's repository https://github.com/zhouhaoyi/Informer2020.
