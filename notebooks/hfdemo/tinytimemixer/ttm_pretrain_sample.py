@@ -10,6 +10,10 @@
 # Have a look at the fine-tune scripts for example usecases of the pre-trained
 # TTM models.
 
+# Basic usage:
+# python ttm_pretrain_sample.py --data_root_path datasets/
+# See the get_ttm_args() function to know more about other TTM arguments
+
 # Standard
 import math
 import os
@@ -24,10 +28,7 @@ from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
     TinyTimeMixerForPrediction,
 )
-
-# First Party
 from tsfm_public.models.tinytimemixer.utils import get_data, get_ttm_args
-
 
 # Arguments
 args = get_ttm_args()
@@ -78,7 +79,9 @@ def pretrain(args, model, dset_train, dset_val):
         save_strategy="epoch",
         logging_strategy="epoch",
         save_total_limit=1,
-        logging_dir=os.path.join(args.save_dir, "logs"),  # Make sure to specify a logging directory
+        logging_dir=os.path.join(
+            args.save_dir, "logs"
+        ),  # Make sure to specify a logging directory
         load_best_model_at_end=True,  # Load the best model when training ends
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
@@ -138,7 +141,10 @@ if __name__ == "__main__":
 
     # Data prep
     dset_train, dset_val, dset_test = get_data(
-        args.dataset, args.context_length, args.forecast_length, data_root_path=args.data_root_path
+        args.dataset,
+        args.context_length,
+        args.forecast_length,
+        data_root_path=args.data_root_path,
     )
     print("Length of the train dataset =", len(dset_train))
 
