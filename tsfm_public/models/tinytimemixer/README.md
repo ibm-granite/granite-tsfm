@@ -1,6 +1,11 @@
 
 # TinyTimeMixer (TTM)
-TTM, also known as TinyTimeMixer, are compact pre-trained models for Time-Series Forecasting, open-sourced by IBM Research. **With less than 1 Million parameters, TTM introduces the notion of the first-ever “tiny” pre-trained models for Time-Series Forecasting.**
+
+<p align="center" width="100%">
+<img src="utils/ttm_image.webp" width="600">
+</p>
+
+TinyTimeMixer (TTM) are compact pre-trained models for Time-Series Forecasting, open-sourced by IBM Research. **With less than 1 Million parameters, TTM introduces the notion of the first-ever “tiny” pre-trained models for Time-Series Forecasting.**
 
 TTM outperforms several popular benchmarks demanding billions of parameters in zero-shot and few-shot forecasting. TTM is pre-trained on diverse public time-series datasets which can be easily fine-tuned for your target data. Refer to our [paper](https://arxiv.org/pdf/2401.03955.pdf) for more details. The current open-source version supports forecasting use-cases ranging from minutely to hourly resolutions (Ex. 10 min, 15 min, 1 hour, etc.)
 

@@ -19,14 +19,14 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
-# First Party
-from notebooks.hfdemo.tinytimemixer.utils import get_data, get_ttm_args
-
 # Local
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
     TinyTimeMixerForPrediction,
 )
+
+# First Party
+from tsfm_public.models.tinytimemixer.utils import get_data, get_ttm_args
 
 
 # Arguments
@@ -137,7 +137,9 @@ if __name__ == "__main__":
     )
 
     # Data prep
-    dset_train, dset_val, dset_test = get_data(args.dataset, args.context_length, args.forecast_length)
+    dset_train, dset_val, dset_test = get_data(
+        args.dataset, args.context_length, args.forecast_length, data_root_path=args.data_root_path
+    )
     print("Length of the train dataset =", len(dset_train))
 
     # Get model
