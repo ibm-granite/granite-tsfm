@@ -54,7 +54,7 @@ For Installation steps, refer [here](https://github.com/IBM/tsfm/tree/ttm)
 - Illustration notebook for 512-96 model on the considered target datasets: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_benchmarking_512_96.ipynb)
 - Illustration notebook for 1024-96 model on the considered target datasets: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_benchmarking_1024_96.ipynb)
 - M4-hourly transfer learning example: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_m4_hourly.ipynb)
-- Sample pretraining script: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_pretrain_sample.py.ipynb) 
+- Sample pretraining script: [here](../../../notebooks/hfdemo/tinytimemixer/ttm_pretrain_sample.py) 
 
 
 
