@@ -98,11 +98,19 @@ def get_ttm_args():
         help="Dataset",
     )
     parser.add_argument(
+        "--data_root_path",
+        "-drp",
+        type=str,
+        required=False,
+        default="datasets/",
+        help="Dataset",
+    )
+    parser.add_argument(
         "--save_dir",
         "-sd",
         type=str,
         required=False,
-        default="/tmp",
+        default="tmp/",
         help="Data path",
     )
     parser.add_argument(
