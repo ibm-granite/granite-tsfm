@@ -1,18 +1,17 @@
 {
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
-    }
   },
-  "isort.args": [
-    "--profile",
-    "black"
-  ],
   "python.testing.pytestArgs": [
     "tests"
   ],
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestEnabled": true
+  "python.testing.pytestEnabled": true,
+  "ruff.format.args": [
+    "--config=./pyproject.toml"
+  ],
+  "ruff.lint.args": [
+    "--config=./pyproject.toml"
+  ]
 }
