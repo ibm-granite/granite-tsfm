@@ -232,7 +232,7 @@ def get_group_data(
 ):
     return cls(
         data_df=group,
-        group_id=group_id,
+        group_id=group_id if isinstance(group_id, tuple) else (group_id,),
         id_columns=id_columns,
         timestamp_column=timestamp_column,
         context_length=context_length,
