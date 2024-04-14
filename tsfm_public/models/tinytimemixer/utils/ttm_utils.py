@@ -1,19 +1,29 @@
 """Utilities for TTM notebooks"""
+# Standard
 import argparse
 import os
 
+# Third Party
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 
+# Local
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 
 
 def get_ttm_args():
     parser = argparse.ArgumentParser(description="TTM pretrain arguments.")
     # Adding a positional argument
-    parser.add_argument("--forecast_length", "-fl", type=int, required=False, default=96, help="Forecast length")
+    parser.add_argument(
+        "--forecast_length",
+        "-fl",
+        type=int,
+        required=False,
+        default=96,
+        help="Forecast length",
+    )
     parser.add_argument(
         "--context_length",
         "-cl",
@@ -170,6 +180,7 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
     random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
+    trainer.model = trainer.model.to(device)
     output = trainer.model(random_samples.to(device=device))
     y_hat = output.prediction_outputs[:, :, channel].detach().cpu().numpy()
     pred_len = y_hat.shape[1]
