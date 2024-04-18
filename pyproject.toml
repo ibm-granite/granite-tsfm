@@ -14,7 +14,7 @@ classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apa
 dependencies = [
     "pandas>=1.4",
     "scikit-learn",
-    "transformers[torch]>=4.39.3",
+    "transformers[torch]>=4.36.1",
     "datasets"
 ]
 
