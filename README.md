@@ -1,4 +1,4 @@
-# tsfm
+# TSFM: Time Series Foundation Models
 Public notebooks and utilities for working with Time Series Foundation Models (TSFM)
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
@@ -15,7 +15,7 @@ git clone git@github.com:IBM/tsfm.git
 cd tsfm
 ```
 
-## Notebooks Installation
+## 📕 Notebooks Installation
 Several notebooks are provided in the `notebooks` folder. They allow you to perform pre-training and finetuning on the models.
 To install use `pip`:
 
@@ -29,8 +29,11 @@ pip install ".[notebooks]"
 - Transfer learning with `PatchTST` [[Try it out]](https://github.com/IBM/tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
 - Getting started with `TinyTimeMixer (TTM)` [Try it out](notebooks/hfdemo/ttm_getting_started.ipynb)
 
+## 📗 Google Colab
+Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
+- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/tutorial/notebooks/tutorial/ttm_tutorial.ipynb) 
 
-## Demos Installation
+## 💻 Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at later date). To install the requirements use `pip`:
 
 ```bash
