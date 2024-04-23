@@ -759,14 +759,24 @@ def create_timestamps(
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
-        # if isinstance(freq, str):
-        #     freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
-
-        return pd.date_range(
-            last_timestamp,
-            freq=freq,
-            periods=periods + 1,
-        ).tolist()[1:]
+        try:
+            # try date range directly
+            return pd.date_range(
+                last_timestamp,
+                freq=freq,
+                periods=periods + 1,
+            ).tolist()[1:]
+        except ValueError as e:
+            # if it fails, we can try to compute a timedelta from the provided string
+            if isinstance(freq, str):
+                freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+                return pd.date_range(
+                    last_timestamp,
+                    freq=freq,
+                    periods=periods + 1,
+                ).tolist()[1:]
+            else:
+                raise e
     else:
         # numerical timestamp column
         return [last_timestamp + i * freq for i in range(1, periods + 1)]

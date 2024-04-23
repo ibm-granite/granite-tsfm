@@ -212,6 +212,18 @@ def test_create_timestamps():
             2,
             [103.5, 107.0],
         ),
+        (
+            pd.Timestamp(2021, 12, 31),
+            "QE",
+            None,
+            4,
+            [
+                pd.Timestamp(2022, 3, 31),
+                pd.Timestamp(2022, 6, 30),
+                pd.Timestamp(2022, 9, 30),
+                pd.Timestamp(2022, 12, 31),
+            ],
+        ),
     ]
 
     for start, freq, sequence, periods, expected in test_cases:
@@ -220,8 +232,9 @@ def test_create_timestamps():
         assert ts == expected
 
         # test based on provided sequence
-        ts = create_timestamps(start, time_sequence=sequence, periods=periods)
-        assert ts == expected
+        if sequence is not None:
+            ts = create_timestamps(start, time_sequence=sequence, periods=periods)
+            assert ts == expected
 
     # it is an error to provide neither freq or sequence
     with pytest.raises(ValueError):
