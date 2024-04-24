@@ -344,11 +344,29 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return df
 
+    def _clean_up_dataframe(self, df: pd.DataFrame) -> None:
+        """Removes columns added during internal processing of the provided dataframe.
+
+        Currently, the following checks are done:
+         - Remove INTERNAL_ID_COLUMN if present
+
+        Args:
+            df (pd.DataFrame): Input pandas dataframe
+
+        Returns:
+            pd.DataFrame: Cleaned up dataframe
+        """
+
+        if not self.id_columns:
+            if INTERNAL_ID_COLUMN in df.columns:
+                df.drop(columns=INTERNAL_ID_COLUMN, inplace=True)
+
     def _get_groups(
         self,
         dataset: pd.DataFrame,
     ) -> Generator[Tuple[Any, pd.DataFrame], None, None]:
-        """Get groups of the time series dataset (multi-time series) based on the ID columns.
+        """Get groups of the time series dataset (multi-time series) based on the ID columns for scaling.
+        Note that this is used for scaling purposes only.
 
         Args:
             dataset (pd.DataFrame): Input dataset
@@ -472,7 +490,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def _set_targets(self, dataset: pd.DataFrame) -> None:
         if self.target_columns == []:
-            skip_columns = copy.copy(self.id_columns)
+            skip_columns = copy.copy(self.id_columns) + [INTERNAL_ID_COLUMN]
             if self.timestamp_column:
                 skip_columns.append(self.timestamp_column)
 
@@ -531,6 +549,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if self.encode_categorical:
             self._train_categorical_encoder(df)
 
+        self._clean_up_dataframe(df)
         return self
 
     def inverse_scale_targets(
@@ -581,10 +600,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         else:
             id_columns = INTERNAL_ID_COLUMN
 
-        return df.groupby(id_columns, group_keys=False).apply(
+        df_inv = df.groupby(id_columns, group_keys=False).apply(
             inverse_scale_func,
             id_columns=id_columns,
         )
+        self._clean_up_dataframe(df_inv)
+        return df_inv
 
     def preprocess(
         self,
@@ -640,6 +661,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
             df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
+        self._clean_up_dataframe(df)
         return df
 
     def get_datasets(
@@ -759,14 +781,24 @@ def create_timestamps(
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
-        if isinstance(freq, str):
-            freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
-
-        return pd.date_range(
-            last_timestamp,
-            freq=freq,
-            periods=periods + 1,
-        ).tolist()[1:]
+        try:
+            # try date range directly
+            return pd.date_range(
+                last_timestamp,
+                freq=freq,
+                periods=periods + 1,
+            ).tolist()[1:]
+        except ValueError as e:
+            # if it fails, we can try to compute a timedelta from the provided string
+            if isinstance(freq, str):
+                freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+                return pd.date_range(
+                    last_timestamp,
+                    freq=freq,
+                    periods=periods + 1,
+                ).tolist()[1:]
+            else:
+                raise e
     else:
         # numerical timestamp column
         return [last_timestamp + i * freq for i in range(1, periods + 1)]

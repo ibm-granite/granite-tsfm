@@ -300,6 +300,10 @@ class TimeSeriesForecastingPipeline(Pipeline):
         """Postprocess step
         Takes the dictionary of outputs from the previous step and converts to a more user
         readable pandas format.
+
+        If the explode forecasts option is True, then individual forecasts are expanded as multiple
+        rows in the dataframe. This should only be used when producing a single forecast (i.e., unexploded
+        result is one row per ID).
         """
         out = {}
 
