@@ -51,7 +51,7 @@ class TimeSeriesPipeline(Pipeline):
         # our preprocess returns a dataset
         dataset = self.preprocess(inputs, **preprocess_params)
 
-        batch_size = 100
+        batch_size = forward_params["batch_size"]
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
 
@@ -180,6 +180,16 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             if c in kwargs:
                 postprocess_kwargs[c] = kwargs[c]
 
+        # same logic as HF Pipeline
+        batch_size = kwargs.get("batch_size", self._batch_size)
+        if batch_size is None:
+            if self._batch_size is None:
+                batch_size = 1
+            else:
+                batch_size = self._batch_size
+
+        forward_kwargs = {"batch_size": batch_size}
+
         # if "id_columns" in kwargs:
         #     preprocess_kwargs["id_columns"] = kwargs["id_columns"]
         #     postprocess_kwargs["id_columns"] = kwargs["id_columns"]
@@ -196,7 +206,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         #     preprocess_kwargs["output_columns"] = kwargs["input_columns"]
         #     postprocess_kwargs["output_columns"] = kwargs["input_columns"]
 
-        return preprocess_kwargs, {}, postprocess_kwargs
+        return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
     def __call__(
         self,
