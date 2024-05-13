@@ -670,6 +670,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         split_config: Dict[str, Union[List[Union[int, float]], float]],
         fewshot_fraction: Optional[float] = None,
         fewshot_location: str = FractionLocation.LAST.value,
+        return_dataframe: bool = False,
     ) -> Tuple[Any]:
         """Creates the preprocessed pytorch datasets needed for training and evaluation
         using the HuggingFace trainer
@@ -697,6 +698,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
                 as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
                 of the training dataset (i.e., "last").
+            return_dataframe: Instead for returning a pytorch dataset, return tuples of pandas dataframes, after any
+                preprocessing.
 
         Returns:
             Tuple of pytorch datasets, including: train, validation, test.
@@ -752,16 +755,23 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         params["prediction_length"] = self.prediction_length
 
         # get torch datasets
-        test_dataset = ForecastDFDataset(
-            self.preprocess(test_data),
-            **params,
-        )
-        train_dataset = ForecastDFDataset(self.preprocess(train_data), **params)
-        valid_dataset = ForecastDFDataset(
-            self.preprocess(valid_data),
-            **params,
-        )
-        return train_dataset, valid_dataset, test_dataset
+        train_valid_test = [train_data, valid_data, test_data]
+
+        if return_dataframe:
+            return tuple(train_valid_test)
+
+        return tuple([ForecastDFDataset(self.preprocess(d), **params) for d in train_valid_test])
+
+        # test_dataset = ForecastDFDataset(
+        #     self.preprocess(test_data),
+        #     **params,
+        # )
+        # train_dataset = ForecastDFDataset(self.preprocess(train_data), **params)
+        # valid_dataset = ForecastDFDataset(
+        #     self.preprocess(valid_data),
+        #     **params,
+        # )
+        # return train_dataset, valid_dataset, test_dataset
 
 
 def create_timestamps(
