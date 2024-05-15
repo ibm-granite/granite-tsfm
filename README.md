@@ -48,7 +48,7 @@ Before opening a new issue, please search for similar issues. It's possible that
 
 # Notice
 
-The intention of this repository is to make it easier to use and demonstrate IBM Research TSFM components that have been made available in the [Hugging Face transformers library](https://huggingface.co/docs/transformers/main/en/index). As we continute to develop these capabilities we will update the code here.
+The intention of this repository is to make it easier to use and demonstrate IBM Research TSFM components that have been made available in the [Hugging Face transformers library](https://huggingface.co/docs/transformers/main/en/index). As we continue to develop these capabilities we will update the code here.
 
 
 IBM Public Repository Disclosure: All content in this repository including code has been provided by IBM under the associated open source software license and IBM is under no obligation to provide enhancements, updates, or support. IBM developers produced this code as an open source project (not as an IBM product), and IBM makes no assertions as to the level of quality nor security, and will not be maintaining this code going forward.
