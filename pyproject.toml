@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apache Software License"]
 
 dependencies = [
-    "pandas>=1.4",
+    "pandas>=2.2.0",
     "scikit-learn",
     "transformers[torch]>=4.36.1",
     "datasets"
