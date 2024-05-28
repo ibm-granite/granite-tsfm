@@ -137,3 +137,6 @@ notebooks/thinklab/checkpoint/**
 
 # Checkpoints
 *.checkpoint-*/
+
+# Version
+/tsfm_public/_version.py
