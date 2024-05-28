@@ -1,10 +1,11 @@
 [build-system]
-requires = ["setuptools>=66", "wheel", "Cython"]
+requires = ["setuptools>=66", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
 name = "tsfm_public"
 requires-python = ">=3.9,<3.12"
-version = "0.0.1"
+# version = "0.0.1"
+dynamic = ["version"]
 authors = [{ name = "IBM" }]
 description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
@@ -44,6 +45,9 @@ demos = [
 ]
 # ###################################################
 
+
+[tool.setuptools_scm]
+version_file = "tsfm_public/_version.py"
 
 [tool.ruff]
 # Never enforce `E501` (line length violations).
