@@ -124,29 +124,43 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         freq: Optional[Union[int, str]] = None,
         **kwargs,
     ):
-        """_summary_
+        """Multi-time series aware data preprocessor. Provides functions for scaling data and facitilitates downstream
+        operations on time series data, including model training and inference.
 
         Args:
             id_columns (List[str]): List of column names which identify different time series in a multi-time series input. Defaults to [].
-            timestamp_column (Optional[str], optional): _description_. Defaults to None.
-            target_columns (List[str], optional): _description_. Defaults to [].
-            observable_columns (List[str], optional): _description_. Defaults to [].
-            control_columns (List[str], optional): _description_. Defaults to [].
-            conditional_columns (List[str], optional): _description_. Defaults to [].
-            static_categorical_columns (List[str], optional): _description_. Defaults to [].
-            context_length (int, optional): _description_. Defaults to 64.
-            prediction_length (Optional[int], optional): _description_. Defaults to None.
-            scaling (bool, optional): _description_. Defaults to False.
-            scaler_type (ScalerType, optional): _description_. Defaults to ScalerType.STANDARD.value.
-            scaling_id_columns (Optional[List[str]], optional): _description_. Defaults to None.
-            encode_categorical (bool, optional): _description_. Defaults to True.
-            time_series_task (str, optional): _description_. Defaults to TimeSeriesTask.FORECASTING.value.
+            timestamp_column (Optional[str], optional): The name of the column containing the timestamp of the time series. Defaults to None.
+            target_columns (List[str], optional): List of column names which identify the target channels in the input, these are the
+                columns that will be forecasted. Defaults to [].
+            observable_columns (List[str], optional): List of column names which identify the observable channels in the input.
+                Observable channels are channels which we have knowledge about in the past and future. For example, weather
+                conditions such as temperature or precipitation may be known or estimated in the future, but cannot be
+                changed. Defaults to [].
+            control_columns (List[str], optional): List of column names which identify the control channels in the input. Control
+                channels are similar to observable channels, except that future values may be controlled. For example, discount
+                percentage of a particular product is known and controllable in the future. Defaults to [].
+            conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
+                Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+            static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the input
+                which are fixed over time. Defaults to [].
+            context_length (int, optional): The length of the input context window. Defaults to 64.
+            prediction_length (Optional[int], optional): The length of the prediction window. Defaults to None.
+            scaling (bool, optional): If True, data is scaled. Defaults to False.
+            scaler_type (ScalerType, optional): The type of scaling to perform. See ScalerType for available scalers. Defaults to ScalerType.STANDARD.value.
+            scaling_id_columns (Optional[List[str]], optional): In some cases we need to separate data by a different set of id_columns
+                when determining scaling factors. For the purposes of determining scaling, data will be grouped by the provided columns.
+                If None, the `id_columns` will be used. Defaults to None.
+            encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
+            time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
             frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
-            freq (Optional[Union[int, str]], optional): _description_. Defaults to None.
+            freq (Optional[Union[int, str]], optional): A freqency indicator for the given `timestamp_column`. See
+                https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
+                allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
+                inferred from `timestamp_column`. Defaults to None.
 
         Raises:
-            ValueError: _description_
-            ValueError: _description_
+            ValueError: Raised if `id_columns` is not a list.
+            ValueError: Raised if `timestamp_column` is not a scalar.
         """
         # note base class __init__ method sets all arguments as attributes
 
