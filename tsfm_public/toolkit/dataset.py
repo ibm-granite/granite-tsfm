@@ -42,6 +42,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         context_length: int = 1,
         prediction_length: int = 0,
         zero_padding: bool = True,
+        stride: int = 1,
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -72,6 +73,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         self.zero_padding = zero_padding
         self.timestamps = None
         self.group_id = group_id
+        self.stride = stride
 
         # sort the data by datetime
         if timestamp_column in list(data_df.columns):
@@ -116,7 +118,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         )
 
     def __len__(self):
-        return len(self.X) - self.context_length - self.prediction_length + 1
+        return (len(self.X) - self.context_length - self.prediction_length + 1) // self.stride
 
     def __getitem__(self, index: int):
         """
@@ -153,6 +155,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         prediction_length: int = 1,
         num_workers: int = 1,
         cls=BaseDFDataset,
+        stride: int = 1,
         **kwargs,
     ):
         if len(id_columns) > 0:
@@ -166,6 +169,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         self.num_workers = num_workers
         self.cls = cls
         self.prediction_length = prediction_length
+        self.stride = stride
         self.extra_kwargs = kwargs
 
         # create groupby object
@@ -208,6 +212,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     self.context_length,
                     self.prediction_length,
                     self.drop_cols,
+                    self.stride,
                     self.extra_kwargs,
                 )
                 for group_id, group in group_df
@@ -228,6 +233,7 @@ def get_group_data(
     context_length: int = 1,
     prediction_length: int = 1,
     drop_cols: Optional[List[str]] = None,
+    stride: int = 1,
     extra_kwargs: Dict[str, Any] = {},
 ):
     return cls(
@@ -238,6 +244,7 @@ def get_group_data(
         context_length=context_length,
         prediction_length=prediction_length,
         drop_cols=drop_cols,
+        stride=stride,
         **extra_kwargs,
     )
 
@@ -264,6 +271,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
         target_columns: List[str] = [],
         context_length: int = 1,
         num_workers: int = 1,
+        stride: int = 1,
     ):
         super().__init__(
             data_df=data,
@@ -274,6 +282,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             prediction_length=0,
             cls=self.BasePretrainDFDataset,
             target_columns=target_columns,
+            stride=stride,
         )
         self.n_inp = 1
 
@@ -288,6 +297,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             id_columns: List[str] = [],
             timestamp_column: Optional[str] = None,
             target_columns: List[str] = [],
+            stride: int = 1,
         ):
             self.target_columns = target_columns
 
@@ -304,9 +314,11 @@ class PretrainDFDataset(BaseConcatDFDataset):
                 prediction_length=prediction_length,
                 group_id=group_id,
                 drop_cols=drop_cols,
+                stride=stride,
             )
 
-        def __getitem__(self, time_id):
+        def __getitem__(self, index):
+            time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {"past_values": np_to_torch(seq_x)}
             if self.datetime_col:
@@ -346,6 +358,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         frequency_token: Optional[int] = None,
         autoregressive_modeling: bool = True,
+        stride: int = 1,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -357,6 +370,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             context_length=context_length,
             prediction_length=prediction_length,
             cls=self.BaseForecastDFDataset,
+            stride=stride,
             # extra_args
             target_columns=target_columns,
             observable_columns=observable_columns,
@@ -391,6 +405,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
+            stride: int = 1,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -430,10 +445,14 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 prediction_length=prediction_length,
                 group_id=group_id,
                 drop_cols=drop_cols,
+                stride=stride,
             )
 
-        def __getitem__(self, time_id):
+        def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+
+            time_id = index * self.stride
+
             seq_x = self.X[time_id : time_id + self.context_length].values
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
@@ -465,7 +484,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return ret
 
         def __len__(self):
-            return len(self.X) - self.context_length - self.prediction_length + 1
+            return (len(self.X) - self.context_length - self.prediction_length + 1) // self.stride
 
 
 class RegressionDFDataset(BaseConcatDFDataset):
@@ -492,6 +511,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         static_categorical_columns: List[str] = [],
         context_length: int = 1,
         num_workers: int = 1,
+        stride: int = 1,
     ):
         # self.y_cols = y_cols
 
@@ -505,6 +525,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             input_columns=input_columns,
             target_columns=target_columns,
             static_categorical_columns=static_categorical_columns,
+            stride=stride,
         )
 
         self.n_inp = 2
@@ -526,6 +547,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             target_columns: List[str] = [],
             input_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
+            stride: int = 1,
         ):
             self.target_columns = target_columns
             self.input_columns = input_columns
@@ -544,10 +566,13 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 prediction_length=prediction_length,
                 group_id=group_id,
                 drop_cols=drop_cols,
+                stride=stride,
             )
 
-        def __getitem__(self, time_id):
+        def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+
+            time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             # return _torch(seq_x, seq_y)
