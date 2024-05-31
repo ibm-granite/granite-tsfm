@@ -15,6 +15,7 @@ from tsfm_public.toolkit.time_series_preprocessor import (
     TimeSeriesPreprocessor,
     create_timestamps,
     extend_time_series,
+    get_datasets,
 )
 from tsfm_public.toolkit.util import FractionLocation
 
@@ -249,7 +250,8 @@ def test_get_datasets(ts_data):
         context_length=10,
     )
 
-    train, valid, test = tsp.get_datasets(
+    train, valid, test = get_datasets(
+        tsp,
         ts_data,
         split_config={"train": [0, 1 / 3], "valid": [1 / 3, 2 / 3], "test": [2 / 3, 1]},
     )
@@ -267,7 +269,8 @@ def test_get_datasets(ts_data):
         context_length=10,
     )
 
-    train, valid, test = tsp.get_datasets(
+    train, valid, test = get_datasets(
+        tsp,
         ts_data,
         split_config={
             "train": [0, 100],
@@ -294,7 +297,8 @@ def test_get_datasets(ts_data):
         context_length=10,
     )
 
-    train, valid, test = tsp.get_datasets(
+    train, valid, test = get_datasets(
+        tsp,
         ts_data,
         split_config={
             "train": [0, 100],
@@ -319,7 +323,8 @@ def test_get_datasets(ts_data):
         context_length=10,
     )
 
-    train, valid, test = tsp.get_datasets(
+    train, valid, test = get_datasets(
+        tsp,
         ts_data,
         split_config={
             "train": 0.7,
@@ -376,7 +381,7 @@ def test_get_datasets_without_targets(ts_data):
         context_length=5,
     )
 
-    train, _, _ = tsp.get_datasets(ts_data, split_config={"train": 0.7, "test": 0.2})
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
 
     train.datasets[0].target_columns == ["value1", "value2"]
 
@@ -394,7 +399,7 @@ def test_id_columns_and_scaling_id_columns(ts_data_runs):
         scaling=True,
     )
 
-    ds_train, ds_valid, ds_test = tsp.get_datasets(df, split_config={"train": 0.7, "test": 0.2})
+    ds_train, ds_valid, ds_test = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
 
     assert len(tsp.target_scaler_dict) == 2
     assert len(ds_train.datasets) == 4

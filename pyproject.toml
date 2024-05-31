@@ -16,7 +16,8 @@ dependencies = [
     "pandas>=2.2.0",
     "scikit-learn",
     "transformers[torch]>=4.36.1",
-    "datasets"
+    "datasets",
+    "deprecated"
 ]
 
 [tool.setuptools]
