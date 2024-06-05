@@ -805,6 +805,7 @@ def get_datasets(
     fewshot_fraction: Optional[float] = None,
     fewshot_location: str = FractionLocation.LAST.value,
     as_univariate: bool = False,
+    use_frequency_token: bool = False,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -836,6 +837,7 @@ def get_datasets(
         as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
+        use_frequency_token (bool): If True, datasets are created that include the frequency token. Defaults to False.
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
@@ -886,6 +888,8 @@ def get_datasets(
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
     params["stride"] = stride
+    if use_frequency_token:
+        params["frequency_token"] = ts_preprocessor.get_frequency_token()
 
     # get torch datasets
     train_valid_test = [train_data, valid_data, test_data]
