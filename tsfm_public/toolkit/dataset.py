@@ -681,7 +681,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
 
             ret = {
                 "past_values": np_to_torch(seq_x),
-                "target_values": torch.tensor(seq_y),
+                "target_values": torch.tensor(seq_y, dtype=torch.int64),
             }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
