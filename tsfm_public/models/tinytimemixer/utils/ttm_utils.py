@@ -178,7 +178,7 @@ def int_to_bool(value):
 # Utitlity: plot
 def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1):
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
-    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)  # dset: test data
+    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
     trainer.model = trainer.model.to(device)
     output = trainer.model(random_samples.to(device=device))
