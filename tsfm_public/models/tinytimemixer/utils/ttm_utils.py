@@ -178,7 +178,7 @@ def int_to_bool(value):
 # Utitlity: plot
 def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1):
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
-    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
+    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)  # dset: test data
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
     trainer.model = trainer.model.to(device)
     output = trainer.model(random_samples.to(device=device))
@@ -188,8 +188,35 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
     # Set a more beautiful style
     plt.style.use("seaborn-v0_8-whitegrid")
 
+    # Account for 1 num_plots
+    if num_plots == 1:
+        for i, ri in enumerate(random_indices):
+            batch = dset[ri]
+            y = batch["future_values"][:pred_len, channel].squeeze().cpu().numpy()
+            x = batch["past_values"][: 2 * pred_len, channel].squeeze().cpu().numpy()
+            y = np.concatenate((x, y), axis=0)
+
+            # Plot predicted values with a dashed line
+            y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
+            plt.figure(figsize=(10, 2))
+
+            plt.plot(y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2)
+
+            # Plot true values with a solid line
+            plt.plot(y, label="True", linestyle="-", color="blue", linewidth=2)
+
+            # Plot horizon border
+            plt.axvline(x=2 * pred_len, color="r", linestyle="-")
+
+            plt.title(f"Example {random_indices[i]}")
+            plt.legend()
+
+    # Adjust overall layout
+        plt.tight_layout()
+        return
+
     # Adjust figure size and subplot spacing
-    fig, axs = plt.subplots(num_plots, 1, figsize=(10, 20))
+    _, axs = plt.subplots(num_plots, 1, figsize=(10, 2 * num_plots))
     for i, ri in enumerate(random_indices):
         batch = dset[ri]
 
