@@ -176,7 +176,7 @@ def int_to_bool(value):
 
 
 # Utitlity: plot
-def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1):
+def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1, truncate_history=True):
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
     random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
@@ -194,7 +194,10 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
         batch = dset[ri]
 
         y = batch["future_values"][:pred_len, channel].squeeze().cpu().numpy()
-        x = batch["past_values"][: 2 * pred_len, channel].squeeze().cpu().numpy()
+        if truncate_history:
+            x = batch["past_values"][-2 * pred_len :, channel].squeeze().cpu().numpy()
+        else:
+            x = batch["past_values"][:, channel].squeeze().cpu().numpy()
         y = np.concatenate((x, y), axis=0)
 
         # Plot predicted values with a dashed line
