@@ -42,11 +42,8 @@ class BaseDFDataset(torch.utils.data.Dataset):
         context_length: int = 1,
         prediction_length: int = 0,
         zero_padding: bool = True,
-<<<<<<< HEAD
         stride: int = 1,
-=======
         fill_value: Union[float, int] = 0.0,
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -159,11 +156,7 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         context_length: int = 1,
         prediction_length: int = 1,
         num_workers: int = 1,
-<<<<<<< HEAD
-=======
-        pred_len: int = 0,
         fill_value: Union[float, int] = 0.0,
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
         cls=BaseDFDataset,
         stride: int = 1,
         **kwargs,
@@ -177,16 +170,12 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         # self.y_cols = y_cols
         self.context_length = context_length
         self.num_workers = num_workers
-<<<<<<< HEAD
         self.cls = cls
         self.prediction_length = prediction_length
         self.stride = stride
         self.extra_kwargs = kwargs
-=======
-        self.pred_len = pred_len
         self.fill_value = fill_value
         self.cls = cls
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
 
         # create groupby object
         if len(id_columns) == 1:
@@ -228,14 +217,9 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
                     self.context_length,
                     self.prediction_length,
                     self.drop_cols,
-<<<<<<< HEAD
                     self.stride,
-                    self.extra_kwargs,
-=======
-                    self.seq_len,
-                    self.pred_len,
                     self.fill_value,
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
+                    self.extra_kwargs,
                 )
                 for group_id, group in group_df
             ],
@@ -250,24 +234,14 @@ def get_group_data(
     cls,
     group,
     group_id,
-<<<<<<< HEAD
     id_columns: List[str] = [],
     timestamp_column: Optional[str] = None,
     context_length: int = 1,
     prediction_length: int = 1,
     drop_cols: Optional[List[str]] = None,
     stride: int = 1,
+    fill_value: Union[float, int] = 0.0,
     extra_kwargs: Dict[str, Any] = {},
-=======
-    datetime_col: str,
-    id_columns: List[str],
-    x_cols: list,
-    y_cols: list,
-    drop_cols: list,
-    seq_len: int,
-    pred_len: int,
-    fill_value: Union[float, int],
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
 ):
     return cls(
         data_df=group,
@@ -277,14 +251,9 @@ def get_group_data(
         context_length=context_length,
         prediction_length=prediction_length,
         drop_cols=drop_cols,
-<<<<<<< HEAD
         stride=stride,
-        **extra_kwargs,
-=======
-        seq_len=seq_len,
-        pred_len=pred_len,
         fill_value=fill_value,
->>>>>>> f75400d (add filling missing and observed mask for forecasting)
+        **extra_kwargs,
     )
 
 
