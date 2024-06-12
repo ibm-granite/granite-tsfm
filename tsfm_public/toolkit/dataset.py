@@ -280,6 +280,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
         context_length: int = 1,
         num_workers: int = 1,
         stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
     ):
         super().__init__(
             data_df=data,
@@ -291,6 +292,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             cls=self.BasePretrainDFDataset,
             target_columns=target_columns,
             stride=stride,
+            fill_value=fill_value,
         )
         self.n_inp = 1
 
@@ -306,6 +308,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             timestamp_column: Optional[str] = None,
             target_columns: List[str] = [],
             stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
         ):
             self.target_columns = target_columns
 
@@ -323,12 +326,16 @@ class PretrainDFDataset(BaseConcatDFDataset):
                 group_id=group_id,
                 drop_cols=drop_cols,
                 stride=stride,
+                fill_value=fill_value,
             )
 
         def __getitem__(self, index):
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
-            ret = {"past_values": np_to_torch(seq_x)}
+            ret = {
+                "past_values": np_to_torch(seq_x),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
+            }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
             if self.group_id:
