@@ -193,6 +193,32 @@ def test_forecasting_df_dataset_stride(ts_data_with_categorical):
     np.testing.assert_allclose(ds_past_np, ds_past_np_expected)
 
 
+def test_forecasting_observed_mask(ts_data_with_categorical):
+    prediction_length = 2
+    context_length = 5
+    target_columns = ["value2", "value3"]
+
+    df = ts_data_with_categorical.copy()
+    df.loc[10, "value3"] = np.nan
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+    )
+
+    # check matching size
+    assert ds[0]["past_observed_mask"].shape == ds[0]["past_values"].shape
+    assert ds[0]["future_observed_mask"].shape == ds[0]["future_values"].shape
+
+    # Check mask is correct
+    np.testing.assert_allclose(ds[4]["future_observed_mask"], np.array([[True, True], [True, False]]))
+    np.testing.assert_allclose(ds[6]["past_observed_mask"][-1, :], np.array([True, False]))
+
+
 def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
     prediction_length = 2
     target_columns = ["value1"]
