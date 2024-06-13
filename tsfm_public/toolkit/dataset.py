@@ -118,7 +118,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         )
 
     def __len__(self):
-        return (len(self.X) - self.context_length - self.prediction_length + 1) // self.stride
+        return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
 
     def __getitem__(self, index: int):
         """
@@ -484,7 +484,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return ret
 
         def __len__(self):
-            return (len(self.X) - self.context_length - self.prediction_length + 1) // self.stride
+            return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
 
 
 class RegressionDFDataset(BaseConcatDFDataset):
