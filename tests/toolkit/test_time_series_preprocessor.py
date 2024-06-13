@@ -261,6 +261,21 @@ def test_get_datasets(ts_data):
 
     assert len(valid) == len(test)
 
+    full_lengths = [len(train), len(valid), len(test)]
+
+    stride = 3
+    num_ids = len(ts_data["id"].unique())
+    # test stride
+    train, valid, test = get_datasets(
+        tsp, ts_data, split_config={"train": [0, 1 / 3], "valid": [1 / 3, 2 / 3], "test": [2 / 3, 1]}, stride=stride
+    )
+
+    strided_lengths = [len(train), len(valid), len(test)]
+
+    # x is full length under stride 1
+    # x // 3 is full length for each ID, need to subtract one and then compute strided length per ID
+    assert [(((x // num_ids) - 1) // stride + 1) * num_ids for x in full_lengths] == strided_lengths
+
     # no id columns, so treat as one big time series
     tsp = TimeSeriesPreprocessor(
         id_columns=[],
