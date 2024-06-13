@@ -174,7 +174,7 @@ def test_forecasting_df_dataset_stride(ts_data_with_categorical):
 
     # length check
     series_len = len(df) / len(df["id"].unique())
-    assert len(ds) == ((series_len - prediction_length - context_length + 1) // stride) * len(df["id"].unique())
+    assert len(ds) == (((series_len - prediction_length - context_length) // stride) + 1) * len(df["id"].unique())
 
     # check proper windows are selected based on chosen stride
     ds_past_np = np.array([v["past_values"].numpy() for v in ds])
@@ -183,12 +183,15 @@ def test_forecasting_df_dataset_stride(ts_data_with_categorical):
             [[0.0, 10.0], [1.0, 10.333333], [2.0, 10.666667]],
             [[13.0, 14.333333], [14.0, 14.666667], [15.0, 15.0]],
             [[26.0, 18.666666], [27.0, 19.0], [28.0, 19.333334]],
+            [[39.0, 23.0], [40.0, 23.333334], [41.0, 23.666666]],
             [[50.0, 26.666666], [51.0, 27.0], [52.0, 27.333334]],
             [[63.0, 31.0], [64.0, 31.333334], [65.0, 31.666666]],
             [[76.0, 35.333332], [77.0, 35.666668], [78.0, 36.0]],
+            [[89.0, 39.666668], [90.0, 40.0], [91.0, 40.333332]],
             [[100.0, 43.333332], [101.0, 43.666668], [102.0, 44.0]],
             [[113.0, 47.666668], [114.0, 48.0], [115.0, 48.333332]],
             [[126.0, 52.0], [127.0, 52.333332], [128.0, 52.666668]],
+            [[139.0, 56.333332], [140.0, 56.666668], [141.0, 57.0]],
         ]
     )
 
