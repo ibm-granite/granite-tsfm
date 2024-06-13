@@ -800,6 +800,7 @@ def get_datasets(
     ts_preprocessor: TimeSeriesPreprocessor,
     dataset: Union[Dataset, pd.DataFrame],
     split_config: Dict[str, Union[List[Union[int, float]], float]] = {"train": 0.7, "test": 0.2},
+    stride: int = 1,
     fewshot_fraction: Optional[float] = None,
     fewshot_location: str = FractionLocation.LAST.value,
 ) -> Tuple[Any]:
@@ -823,7 +824,8 @@ def get_datasets(
                     test: 0.2
                 }
                 A valid split should not be specified directly; the above implies valid = 0.1
-
+        stride (int): Stride used for creating the datasets. It is applied to all of train, validation, and test.
+            Defaults to 1.
         fewshot_fraction (float, optional): When non-null, return this percent of the original training
             dataset. This is done to support fewshot fine-tuning.
         fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
@@ -878,6 +880,7 @@ def get_datasets(
     params = column_specifiers
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
+    params["stride"] = stride
 
     # get torch datasets
     train_valid_test = [train_data, valid_data, test_data]
