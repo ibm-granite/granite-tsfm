@@ -553,15 +553,43 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         contain_equal_length,
     ) = convert_tsf_to_dataframe(filename)
 
+    id_column_name = "id"
+    timestamp_column_name = "timestamp"
+    value_column_name = "value"
+
+    tsf_to_pandas = {
+        "daily": "d",
+        "hourly": "h",
+        "seconds": "s",
+        "minutes": "min",
+        "minutely": "min",
+    }
+
+    print(f"frequency: {frequency}")
+    if frequency:
+        try:
+            freq_val, freq_unit = frequency.split("_")
+            freq = freq_val + tsf_to_pandas[freq_unit]
+        except ValueError:
+            freq = tsf_to_pandas(freq_val)
+        except KeyError:
+            raise ValueError(f"Input file contains an unknow frequency unit {freq_unit}")
+    else:
+        freq = None
+
     dfs = []
     for index, item in loaded_data.iterrows():
-        # todo: use actual dates for timestamp
+        if freq:
+            timestamps = pd.date_range(item.start_timestamp, periods=len(item.series_value), freq=freq)
+        else:
+            timestamps = range(len(item.series_value))
+
         dfs.append(
             pd.DataFrame(
                 {
-                    "id": item.series_name,
-                    "timestamp": range(len(item.series_value)),
-                    "value": item.series_value,
+                    id_column_name: item.series_name,
+                    timestamp_column_name: timestamps,
+                    value_column_name: item.series_value,
                 }
             )
         )

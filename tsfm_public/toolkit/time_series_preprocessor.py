@@ -803,6 +803,7 @@ def get_datasets(
     stride: int = 1,
     fewshot_fraction: Optional[float] = None,
     fewshot_location: str = FractionLocation.LAST.value,
+    as_univariate: bool = False,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -831,6 +832,9 @@ def get_datasets(
         fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
             as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
             of the training dataset (i.e., "last").
+        as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
+            additional ID is added to distinguish original column name. Only valid if there are no exogenous
+            specified. Defaults to False.
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
@@ -884,8 +888,31 @@ def get_datasets(
 
     # get torch datasets
     train_valid_test = [train_data, valid_data, test_data]
+    train_valid_test_prep = [ts_preprocessor.preprocess(d) for d in train_valid_test]
 
-    return tuple([ForecastDFDataset(ts_preprocessor.preprocess(d), **params) for d in train_valid_test])
+    if as_univariate:
+        if (
+            ts_preprocessor.observable_columns
+            or ts_preprocessor.control_columns
+            or ts_preprocessor.conditional_columns
+            or ts_preprocessor.static_categorical_columns
+        ):
+            raise ValueError("`as_univariate` option only allowed when there are no exogenous columns")
+
+        train_valid_test_prep = [
+            convert_to_univariate(
+                d,
+                timestamp_column=ts_preprocessor.timestamp_column,
+                id_columns=ts_preprocessor.id_columns,
+                target_columns=ts_preprocessor.target_columns,
+            )
+            for d in train_valid_test_prep
+        ]
+
+        params["target_columns"] = ["value"]
+        params["id_columns"] = params["id_columns"] + ["column_id"]
+
+    return tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
 
 
 def create_timestamps(
@@ -980,3 +1007,16 @@ def extend_time_series(
         new_time_series.drop(columns=["__delete"], inplace=True)
 
     return new_time_series
+
+
+def convert_to_univariate(data, timestamp_column: str, id_columns: List[str], target_columns: List[str]):
+    return pd.melt(
+        data,
+        id_vars=[
+            timestamp_column,
+        ]
+        + id_columns,
+        value_vars=target_columns,
+        var_name="column_id",
+        value_name="value",
+    )
