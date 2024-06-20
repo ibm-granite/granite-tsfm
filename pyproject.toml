@@ -17,7 +17,8 @@ dependencies = [
     "scikit-learn",
     "transformers[torch]>=4.36.1",
     "datasets",
-    "deprecated"
+    "deprecated",
+    "urllib3>=2.2.2"
 ]
 
 [tool.setuptools]
