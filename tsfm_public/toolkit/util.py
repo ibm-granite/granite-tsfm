@@ -598,6 +598,45 @@ def convert_tsf(filename: str) -> pd.DataFrame:
     return df
 
 
+def convert_to_univariate(
+    data: pd.DataFrame,
+    timestamp_column: str,
+    id_columns: List[str],
+    target_columns: List[str],
+    var_name: str = "column_id",
+    value_name: str = "value",
+) -> pd.DataFrame:
+    """Converts a dataframe in canonical format to a univariate dataset. Adds an additional id column to
+    indicate which of the original target columns to which the value corresponds.
+
+    Args:
+        data (pd.DataFrame): Input data frame containing multiple target columns.
+        timestamp_column (str): String representing the timestamp column.
+        id_columns (List[str]): List of columns representing the ids in the data. Use empty list (`[]`) if there
+            are no id columns.
+        target_columns (List[str]): The target columns in the data.
+        var_name (str): Name of new id column used to identify original column name. Defaults to "column_id".
+        value_name (str): Name of new value column in the resulting univariate datset. Defaults to "value".
+
+    Returns:
+        pd.DataFrame: Converted dataframe.
+    """
+
+    if len(target_columns) < 2:
+        raise ValueError("`target_columns` should be a non-empty list of two or more elements.")
+
+    return pd.melt(
+        data,
+        id_vars=[
+            timestamp_column,
+        ]
+        + id_columns,
+        value_vars=target_columns,
+        var_name=var_name,
+        value_name=value_name,
+    )
+
+
 def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
     """Join multiple lists in sequence without repeating
 
