@@ -25,6 +25,7 @@ from transformers.feature_extraction_utils import (
 from .dataset import ForecastDFDataset
 from .util import (
     FractionLocation,
+    convert_to_univariate,
     get_split_params,
     join_list_without_repeat,
     select_by_fixed_fraction,
@@ -890,14 +891,14 @@ def get_datasets(
     train_valid_test = [train_data, valid_data, test_data]
     train_valid_test_prep = [ts_preprocessor.preprocess(d) for d in train_valid_test]
 
-    if as_univariate:
+    if as_univariate and len(ts_preprocessor.target_columns) > 1:
         if (
             ts_preprocessor.observable_columns
             or ts_preprocessor.control_columns
             or ts_preprocessor.conditional_columns
             or ts_preprocessor.static_categorical_columns
         ):
-            raise ValueError("`as_univariate` option only allowed when there are no exogenous columns")
+            raise ValueError("`as_univariate` option only allowed when there are no exogenous columns.")
 
         train_valid_test_prep = [
             convert_to_univariate(
@@ -1007,16 +1008,3 @@ def extend_time_series(
         new_time_series.drop(columns=["__delete"], inplace=True)
 
     return new_time_series
-
-
-def convert_to_univariate(data, timestamp_column: str, id_columns: List[str], target_columns: List[str]):
-    return pd.melt(
-        data,
-        id_vars=[
-            timestamp_column,
-        ]
-        + id_columns,
-        value_vars=target_columns,
-        var_name="column_id",
-        value_name="value",
-    )
