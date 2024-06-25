@@ -208,7 +208,7 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
             # Plot horizon border
             plt.axvline(x=2 * pred_len, color="r", linestyle="-")
 
-            plt.title(f"Example {random_indices[i]}")
+            plt.title(f"Example {ri}")
             plt.legend()
 
     # Adjust overall layout
@@ -234,7 +234,7 @@ def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", chann
         # Plot horizon border
         axs[i].axvline(x=2 * pred_len, color="r", linestyle="-")
 
-        axs[i].set_title(f"Example {random_indices[i]}")
+        axs[i].set_title(f"Example {ri}")
         axs[i].legend()
 
     # Adjust overall layout
