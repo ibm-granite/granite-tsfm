@@ -35,13 +35,17 @@ from .util import (
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
 
-
 DEFAULT_FREQUENCY_MAPPING = {
     "oov": 0,
-    "half_hourly": 1,
-    "hourly": 2,
-    "10_minutes": 3,
-    "15_minutes": 4,
+    "min": 1,  # minutely
+    "2min": 2,
+    "5min": 3,
+    "10min": 4,
+    "15min": 5,
+    "30min": 6,
+    "h": 7,  # hourly
+    "d": 8,  # daily
+    "W": 9,  # weekly
 }
 
 
@@ -154,7 +158,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
             frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
-            freq (Optional[Union[int, str]], optional): A freqency indicator for the given `timestamp_column`. See
+            freq (Optional[Union[int, str]], optional): A frequency indicator for the given `timestamp_column`. See
                 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
                 allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
                 inferred from `timestamp_column`. Defaults to None.
@@ -711,6 +715,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         split_config: Dict[str, Union[List[Union[int, float]], float]],
         fewshot_fraction: Optional[float] = None,
         fewshot_location: str = FractionLocation.LAST.value,
+        use_frequency_token: bool = False,
     ) -> Tuple[Any]:
         """Creates the preprocessed pytorch datasets needed for training and evaluation
         using the HuggingFace trainer
@@ -749,6 +754,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             split_config=split_config,
             fewshot_fraction=fewshot_fraction,
             fewshot_location=fewshot_location,
+            use_frequency_token=use_frequency_token,
         )
 
 
@@ -805,6 +811,7 @@ def get_datasets(
     fewshot_fraction: Optional[float] = None,
     fewshot_location: str = FractionLocation.LAST.value,
     as_univariate: bool = False,
+    use_frequency_token: bool = False,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -836,6 +843,7 @@ def get_datasets(
         as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
+        use_frequency_token (bool): If True, datasets are created that include the frequency token. Defaults to False.
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
@@ -886,6 +894,8 @@ def get_datasets(
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
     params["stride"] = stride
+    if use_frequency_token:
+        params["frequency_token"] = ts_preprocessor.get_frequency_token(ts_preprocessor.freq)
 
     # get torch datasets
     train_valid_test = [train_data, valid_data, test_data]

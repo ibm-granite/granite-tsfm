@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from tsfm_public.toolkit.time_series_preprocessor import (
+    DEFAULT_FREQUENCY_MAPPING,
     OrdinalEncoder,
     StandardScaler,
     TimeSeriesPreprocessor,
@@ -417,6 +418,15 @@ def test_get_datasets_univariate(ts_data):
 
     assert train[0]["id"][-1] == "value1"
     assert len(train) == 2 * len(train_base)
+
+
+def test_get_datasets_with_frequency_token(ts_data):
+    ts_data = ts_data.drop(columns=["id", "id2"])
+    tsp = TimeSeriesPreprocessor(timestamp_column="timestamp", prediction_length=2, context_length=5, freq="d")
+
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2}, use_frequency_token=True)
+
+    assert train[0]["freq_token"] == DEFAULT_FREQUENCY_MAPPING["d"]
 
 
 def test_id_columns_and_scaling_id_columns(ts_data_runs):
