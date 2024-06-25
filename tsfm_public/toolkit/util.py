@@ -537,7 +537,9 @@ def get_split_params(
 
 def convert_tsf(filename: str) -> pd.DataFrame:
     """Converts a tsf format file into a pandas dataframe.
-    Returns the result in canonical multi-time series format, with an ID column, and timestamp.
+    Returns the result in canonical multi-time series format, with an ID column, timestamp, and one or more
+    value columns. Attemps to map frequency information given in the input file to pandas equivalents.
+
 
     Args:
         filename (str): Input file name.
@@ -557,7 +559,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
     timestamp_column_name = "timestamp"
     value_column_name = "value"
 
-    tsf_to_pandas = {
+    tsf_to_pandas_freq_map = {
         "daily": "d",
         "hourly": "h",
         "seconds": "s",
@@ -565,13 +567,12 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         "minutely": "min",
     }
 
-    print(f"frequency: {frequency}")
     if frequency:
         try:
             freq_val, freq_unit = frequency.split("_")
-            freq = freq_val + tsf_to_pandas[freq_unit]
+            freq = freq_val + tsf_to_pandas_freq_map[freq_unit]
         except ValueError:
-            freq = tsf_to_pandas(freq_val)
+            freq = tsf_to_pandas_freq_map(freq_val)
         except KeyError:
             raise ValueError(f"Input file contains an unknow frequency unit {freq_unit}")
     else:
@@ -607,7 +608,7 @@ def convert_to_univariate(
     value_name: str = "value",
 ) -> pd.DataFrame:
     """Converts a dataframe in canonical format to a univariate dataset. Adds an additional id column to
-    indicate which of the original target columns to which the value corresponds.
+    indicate the original target column to which a given value corresponds.
 
     Args:
         data (pd.DataFrame): Input data frame containing multiple target columns.
