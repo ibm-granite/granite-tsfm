@@ -537,7 +537,9 @@ def get_split_params(
 
 def convert_tsf(filename: str) -> pd.DataFrame:
     """Converts a tsf format file into a pandas dataframe.
-    Returns the result in canonical multi-time series format, with an ID column, and timestamp.
+    Returns the result in canonical multi-time series format, with an ID column, timestamp, and one or more
+    value columns. Attemps to map frequency information given in the input file to pandas equivalents.
+
 
     Args:
         filename (str): Input file name.
@@ -553,21 +555,87 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         contain_equal_length,
     ) = convert_tsf_to_dataframe(filename)
 
+    id_column_name = "id"
+    timestamp_column_name = "timestamp"
+    value_column_name = "value"
+
+    tsf_to_pandas_freq_map = {
+        "daily": "d",
+        "hourly": "h",
+        "seconds": "s",
+        "minutes": "min",
+        "minutely": "min",
+    }
+
+    if frequency:
+        try:
+            freq_val, freq_unit = frequency.split("_")
+            freq = freq_val + tsf_to_pandas_freq_map[freq_unit]
+        except ValueError:
+            freq = tsf_to_pandas_freq_map(freq_val)
+        except KeyError:
+            raise ValueError(f"Input file contains an unknow frequency unit {freq_unit}")
+    else:
+        freq = None
+
     dfs = []
     for index, item in loaded_data.iterrows():
-        # todo: use actual dates for timestamp
+        if freq:
+            timestamps = pd.date_range(item.start_timestamp, periods=len(item.series_value), freq=freq)
+        else:
+            timestamps = range(len(item.series_value))
+
         dfs.append(
             pd.DataFrame(
                 {
-                    "id": item.series_name,
-                    "timestamp": range(len(item.series_value)),
-                    "value": item.series_value,
+                    id_column_name: item.series_name,
+                    timestamp_column_name: timestamps,
+                    value_column_name: item.series_value,
                 }
             )
         )
 
     df = pd.concat(dfs)
     return df
+
+
+def convert_to_univariate(
+    data: pd.DataFrame,
+    timestamp_column: str,
+    id_columns: List[str],
+    target_columns: List[str],
+    var_name: str = "column_id",
+    value_name: str = "value",
+) -> pd.DataFrame:
+    """Converts a dataframe in canonical format to a univariate dataset. Adds an additional id column to
+    indicate the original target column to which a given value corresponds.
+
+    Args:
+        data (pd.DataFrame): Input data frame containing multiple target columns.
+        timestamp_column (str): String representing the timestamp column.
+        id_columns (List[str]): List of columns representing the ids in the data. Use empty list (`[]`) if there
+            are no id columns.
+        target_columns (List[str]): The target columns in the data.
+        var_name (str): Name of new id column used to identify original column name. Defaults to "column_id".
+        value_name (str): Name of new value column in the resulting univariate datset. Defaults to "value".
+
+    Returns:
+        pd.DataFrame: Converted dataframe.
+    """
+
+    if len(target_columns) < 2:
+        raise ValueError("`target_columns` should be a non-empty list of two or more elements.")
+
+    return pd.melt(
+        data,
+        id_vars=[
+            timestamp_column,
+        ]
+        + id_columns,
+        value_vars=target_columns,
+        var_name=var_name,
+        value_name=value_name,
+    )
 
 
 def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:

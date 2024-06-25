@@ -398,7 +398,25 @@ def test_get_datasets_without_targets(ts_data):
 
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
 
-    train.datasets[0].target_columns == ["value1", "value2"]
+    assert train.datasets[0].target_columns == ["value1", "value2"]
+
+
+def test_get_datasets_univariate(ts_data):
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        prediction_length=2,
+        context_length=5,
+    )
+
+    # for baseline
+    train_base, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
+
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2}, as_univariate=True)
+
+    assert train[0]["id"][-1] == "value1"
+    assert len(train) == 2 * len(train_base)
 
 
 def test_id_columns_and_scaling_id_columns(ts_data_runs):

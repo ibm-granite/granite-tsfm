@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from tsfm_public.toolkit.util import get_split_params, train_test_split
+from tsfm_public.toolkit.util import convert_to_univariate, get_split_params, train_test_split
 
 
 split_cases = [
@@ -49,3 +49,27 @@ def test_train_test_split():
     assert len(valid) == valid_len_101
 
     assert valid_len_100 + 1 == valid_len_101
+
+
+def test_convert_to_univariate(ts_data):
+    id_columns = ["id"]
+    timestamp_column = "timestamp"
+    target_columns = ["value1", "value2"]
+    df_uni = convert_to_univariate(
+        ts_data, timestamp_column=timestamp_column, id_columns=id_columns, target_columns=target_columns
+    )
+
+    assert df_uni.columns.to_list() == [
+        timestamp_column,
+    ] + id_columns + ["column_id", "value"]
+
+    assert len(df_uni) == len(target_columns) * len(ts_data)
+
+    # test single column
+
+    target_columns = ["value1"]
+
+    with pytest.raises(ValueError):
+        df_uni = convert_to_univariate(
+            ts_data, timestamp_column=timestamp_column, id_columns=id_columns, target_columns=target_columns
+        )
