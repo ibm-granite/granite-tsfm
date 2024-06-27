@@ -27,7 +27,7 @@ pip install ".[notebooks]"
 - Getting started with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_getting_started.ipynb)
 - Transfer learning with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_transfer.ipynb)
 - Transfer learning with `PatchTST` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
-- Getting started with `TinyTimeMixer (TTM)` [Try it out](notebooks/hfdemo/ttm_getting_started.ipynb)
+- Getting started with `TinyTimeMixer (TTM)` [[Try it out]](notebooks/hfdemo/ttm_getting_started.ipynb)
 
 ## 📗 Google Colab
 Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
