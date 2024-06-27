@@ -18,7 +18,8 @@ dependencies = [
     "transformers[torch]>=4.36.1",
     "datasets",
     "deprecated",
-    "urllib3>=2.2.2"
+    "urllib3>=2.2.2",
+    "numpy<2"
 ]
 
 [tool.setuptools]
