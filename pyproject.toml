@@ -18,7 +18,7 @@ dependencies = [
     "transformers[torch]>=4.36.1",
     "datasets",
     "deprecated",
-    "urllib3>=2.2.2",
+    "urllib3>=1.26.19,<2",
     "numpy<2"
 ]
 
