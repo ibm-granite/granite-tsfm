@@ -542,7 +542,7 @@ def convert_tsfile_to_dataframe(path):
                     sub_df['id'] = [id]*seriesLength
 
                     for i, column in enumerate(split_line[:-1]):
-                        timestamp_column = [value.split(",")[0].strip("()") for value in column]
+                        timestamp_column = [pd.to_datetime(value.split(",")[0].strip("()")) for value in column]
                         value_column = [value.split(",")[1] for value in column]
                         sub_df[f'value_{i}'] = value_column
 
