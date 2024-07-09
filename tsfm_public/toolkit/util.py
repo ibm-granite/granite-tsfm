@@ -1192,3 +1192,53 @@ def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
             final = final + [item for item in alist if item not in final_set]
         final_set = set(final)
     return final
+
+def convert_tsfile(filename: str, classification=False) -> pd.DataFrame:
+    """Converts a .ts file into a pandas dataframe.
+    Returns the result in canonical multi-time series format, with an ID column, and timestamp.
+
+    Args:
+        filename (str): Input file name.
+        classification (bool): classification dataset
+
+    Returns:
+        pd.DataFrame: Converted time series
+    """
+    
+    final_df = pd.DataFrame()
+
+    df = convert_tsfile_to_dataframe(filename, return_separate_X_and_y=False)
+
+    rows, columns = df.shape
+
+    for i in range(rows):
+        temp_df = pd.DataFrame()
+        for j in range(columns):
+            if j!=columns-1:
+                series_to_df = df.iloc[i].iloc[j].to_frame().reset_index()
+                if j==0:
+                    repeat = len(series_to_df)
+                    if type(series_to_df['index'][0])==pd.Timestamp: ## include timestamp columns if data includes timestamps
+                        temp_df['timestamp'] = series_to_df['index']
+                    temp_df['id'] = [i]*repeat
+                temp_df[f'value_{j}'] = series_to_df[0]
+            else:
+                target = df.iloc[i].iloc[j]
+                temp_df['target'] = [target]*repeat
+            
+        final_df = pd.concat([final_df, temp_df],ignore_index=True)
+
+    ## convert targets to floats or integers
+    ## non-numeric classification labels will be converted to integers as well
+    try:
+        final_df['target'] = pd.to_numeric(final_df['target'])
+    except:
+        string_labels = final_df['target'].unique()
+        label_to_int_map = {str_label: num for num, str_label in enumerate(string_labels)}
+        final_df['target'] = final_df['target'].map(label_to_int_map) 
+
+    ## make sure labels are 0 indexed if classification
+    if classification and final_df['target'].min() != 0:
+         final_df['target'] = final_df['target'] - 1 
+
+    return final_df
