@@ -624,6 +624,7 @@ def convert_tsfile_to_dataframe(
                     has_class_labels_tag = True
                     class_label_list = [token.strip() for token in tokens[2:]]
                     metadata_started = True
+                    classification_dataset = True
                 elif line.startswith("@targetlabel"):
                     if data_started:
                         raise IOError("metadata must come before data")
@@ -645,7 +646,6 @@ def convert_tsfile_to_dataframe(
                         )
                     has_class_labels_tag = True
                     metadata_started = True
-                    regression = True
                 # Check if this line contains the start of data
                 elif line.startswith("@data"):
                     if line != "@data":
@@ -703,7 +703,7 @@ def convert_tsfile_to_dataframe(
                                     # Check if we have reached a class label
                                     if line[char_num] != "(" and class_labels:
                                         class_val = line[char_num:].strip()
-                                        if not regression:
+                                        if classification_dataset:
                                             if class_val not in class_label_list:
                                                 raise IOError(
                                                     "the class value '"
