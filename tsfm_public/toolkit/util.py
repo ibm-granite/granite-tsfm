@@ -645,6 +645,7 @@ def convert_tsfile_to_dataframe(
                         )
                     has_class_labels_tag = True
                     metadata_started = True
+                    regression = True
                 # Check if this line contains the start of data
                 elif line.startswith("@data"):
                     if line != "@data":
@@ -702,6 +703,16 @@ def convert_tsfile_to_dataframe(
                                     # Check if we have reached a class label
                                     if line[char_num] != "(" and class_labels:
                                         class_val = line[char_num:].strip()
+                                        if not regression:
+                                            if class_val not in class_label_list:
+                                                raise IOError(
+                                                    "the class value '"
+                                                    + class_val
+                                                    + "' on line "
+                                                    + str(line_num + 1)
+                                                    + " is not "
+                                                    "valid"
+                                                )
                                         class_val_list.append(class_val)
                                         char_num = line_len
                                         has_another_value = False
