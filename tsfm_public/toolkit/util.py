@@ -648,6 +648,7 @@ def convert_tsfile_to_dataframe(
                         )
                     has_class_labels_tag = True
                     metadata_started = True
+                    classification_dataset = False
                 # Check if this line contains the start of data
                 elif line.startswith("@data"):
                     if line != "@data":
