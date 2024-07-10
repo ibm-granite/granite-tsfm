@@ -197,6 +197,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.target_scaler_dict = {}
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
+
+        self._timedelta_map = self._get_timedelta_map()
+
         self.freq = freq
 
         kwargs["processor_class"] = self.__class__.__name__
@@ -227,6 +230,17 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             raise ValueError(
                 "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
             )
+
+    def _get_timedelta_map(
+        self,
+    ):
+        td_map = {}
+        for k, v in self.frequency_mapping.items():
+            if k == "oov":
+                continue
+            td_str = str(pd._libs.tslibs.timedeltas.Timedelta(k if k[0].isdigit() else f"1{k}"))
+            td_map[td_str] = k
+        return td_map
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -316,44 +330,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 target_scaler_params[k] = scaler_class.from_dict(v)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
-
-    # def _prepare_single_time_series(self, name, d):
-    #     """
-    #     Segment and prepare the time series based on the configuration arguments.
-
-    #     name: name for the time series, for example as a result of a grouping operation
-    #     d: the data for a single time series
-    #     """
-    #     for s_begin in range(d.shape[0] - self.context_length + 1):
-    #         s_end = s_begin + self.context_length
-    #         seq_x = d[self.input_columns].iloc[s_begin:s_end].values
-
-    #         if self.time_series_task == TimeSeriesTask.FORECASTING:
-    #             seq_y = (
-    #                 d[self.output_columns]
-    #                 .iloc[s_end : s_end + self.prediction_length]
-    #                 .values
-    #             )
-    #         else:
-    #             seq_y = None
-    #         # to do: add handling of other types
-
-    #         if self.timestamp_column:
-    #             ts = d[self.timestamp_column].iloc[s_end - 1]
-    #         else:
-    #             ts = None
-
-    #         if self.id_columns:
-    #             ids = d[self.id_columns].iloc[s_end - 1].values
-    #         else:
-    #             ids = None
-
-    #         yield {
-    #             "timestamp_column": ts,
-    #             "id_columns": ids,
-    #             "past_values": seq_x,
-    #             "future_values": seq_y,
-    #         }
 
     @classmethod
     def _get_scaler_class(cls, scaler_type):
@@ -483,6 +459,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def get_frequency_token(self, token_name: str):
         token = self.frequency_mapping.get(token_name, None)
+
+        # try lookup using timedelta directly
+        if token is None:
+            token_name_mapped = self._timedelta_map.get(token_name, None)
+            if token_name_mapped is not None:
+                token = self.frequency_mapping.get(token_name_mapped, None)
 
         if token is None:
             warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
