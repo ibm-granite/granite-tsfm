@@ -233,7 +233,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def _get_timedelta_map(
         self,
-    ):
+    ) -> Dict[str, str]:
+        """Get a mapping that relates timedeltas to frequencies in the frequency map.
+
+        Returns:
+            Dict[str, str]: Dictionary of mappings from timedelta strings to frequency token names.
+        """
         td_map = {}
         for k, v in self.frequency_mapping.items():
             if k == "oov":
