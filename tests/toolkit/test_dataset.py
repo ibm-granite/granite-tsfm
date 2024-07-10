@@ -3,7 +3,6 @@
 
 """Tests basic dataset functions"""
 
-
 from datetime import datetime, timedelta
 
 import numpy as np
