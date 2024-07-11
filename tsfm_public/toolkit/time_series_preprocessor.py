@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset
 from deprecated import deprecated
+from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
@@ -197,9 +198,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.target_scaler_dict = {}
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
-
-        self._timedelta_map = self._get_timedelta_map()
-
         self.freq = freq
 
         kwargs["processor_class"] = self.__class__.__name__
@@ -230,22 +228,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             raise ValueError(
                 "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
             )
-
-    def _get_timedelta_map(
-        self,
-    ) -> Dict[str, str]:
-        """Get a mapping that relates timedeltas to frequencies in the frequency map.
-
-        Returns:
-            Dict[str, str]: Dictionary of mappings from timedelta strings to frequency token names.
-        """
-        td_map = {}
-        for k, v in self.frequency_mapping.items():
-            if k == "oov":
-                continue
-            td_str = str(pd._libs.tslibs.timedeltas.Timedelta(k if k[0].isdigit() else f"1{k}"))
-            td_map[td_str] = k
-        return td_map
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -464,16 +446,23 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def get_frequency_token(self, token_name: str):
         token = self.frequency_mapping.get(token_name, None)
+        if token is not None:
+            return token
 
-        # try lookup using timedelta directly
-        if token is None:
-            token_name_mapped = self._timedelta_map.get(token_name, None)
-            if token_name_mapped is not None:
-                token = self.frequency_mapping.get(token_name_mapped, None)
+        # try to map as a frequency string
+        try:
+            token_name_offs = to_offset(token_name).freqstr
+            token = self.frequency_mapping.get(token_name_offs, None)
+            return token
+        except ValueError:
+            # lastly try to map the timedelta to a frequency string
+            token_name_td = pd._libs.tslibs.timedeltas.Timedelta(token_name)
+            token_name_offs = to_offset(token_name_td).freqstr
+            token = self.frequency_mapping.get(token_name_offs, None)
+            return token
 
-        if token is None:
-            warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
-            token = self.frequency_mapping["oov"]
+        warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        token = self.frequency_mapping["oov"]
 
         return token
 
