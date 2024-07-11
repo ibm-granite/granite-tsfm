@@ -453,13 +453,15 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         try:
             token_name_offs = to_offset(token_name).freqstr
             token = self.frequency_mapping.get(token_name_offs, None)
-            return token
+            if token is not None:
+                return token
         except ValueError:
             # lastly try to map the timedelta to a frequency string
             token_name_td = pd._libs.tslibs.timedeltas.Timedelta(token_name)
             token_name_offs = to_offset(token_name_td).freqstr
             token = self.frequency_mapping.get(token_name_offs, None)
-            return token
+            if token is not None:
+                return token
 
         warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
         token = self.frequency_mapping["oov"]
