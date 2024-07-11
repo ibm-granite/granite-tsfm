@@ -2,7 +2,7 @@
 #
 # This code is based on layers and components from the PatchTSMixer model in the HuggingFace Transformers
 # Library: https://github.com/huggingface/transformers/blob/main/src/transformers/models/patchtsmixer/modeling_patchtsmixer.py
-""" PyTorch TinyTimeMixer model."""
+"""PyTorch TinyTimeMixer model."""
 
 # Standard
 import copy

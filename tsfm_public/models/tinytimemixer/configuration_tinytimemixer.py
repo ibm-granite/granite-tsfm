@@ -1,6 +1,6 @@
 # Copyright contributors to the TSFM project
 #
-""" TinyTimeMixer model configuration"""
+"""TinyTimeMixer model configuration"""
 
 from typing import Optional, Union
 

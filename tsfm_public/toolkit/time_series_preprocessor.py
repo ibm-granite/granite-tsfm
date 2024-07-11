@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from datasets import Dataset
 from deprecated import deprecated
+from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
@@ -317,44 +318,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    # def _prepare_single_time_series(self, name, d):
-    #     """
-    #     Segment and prepare the time series based on the configuration arguments.
-
-    #     name: name for the time series, for example as a result of a grouping operation
-    #     d: the data for a single time series
-    #     """
-    #     for s_begin in range(d.shape[0] - self.context_length + 1):
-    #         s_end = s_begin + self.context_length
-    #         seq_x = d[self.input_columns].iloc[s_begin:s_end].values
-
-    #         if self.time_series_task == TimeSeriesTask.FORECASTING:
-    #             seq_y = (
-    #                 d[self.output_columns]
-    #                 .iloc[s_end : s_end + self.prediction_length]
-    #                 .values
-    #             )
-    #         else:
-    #             seq_y = None
-    #         # to do: add handling of other types
-
-    #         if self.timestamp_column:
-    #             ts = d[self.timestamp_column].iloc[s_end - 1]
-    #         else:
-    #             ts = None
-
-    #         if self.id_columns:
-    #             ids = d[self.id_columns].iloc[s_end - 1].values
-    #         else:
-    #             ids = None
-
-    #         yield {
-    #             "timestamp_column": ts,
-    #             "id_columns": ids,
-    #             "past_values": seq_x,
-    #             "future_values": seq_y,
-    #         }
-
     @classmethod
     def _get_scaler_class(cls, scaler_type):
         if scaler_type == ScalerType.MINMAX.value:
@@ -483,10 +446,25 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     def get_frequency_token(self, token_name: str):
         token = self.frequency_mapping.get(token_name, None)
+        if token is not None:
+            return token
 
-        if token is None:
-            warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
-            token = self.frequency_mapping["oov"]
+        # try to map as a frequency string
+        try:
+            token_name_offs = to_offset(token_name).freqstr
+            token = self.frequency_mapping.get(token_name_offs, None)
+            if token is not None:
+                return token
+        except ValueError:
+            # lastly try to map the timedelta to a frequency string
+            token_name_td = pd._libs.tslibs.timedeltas.Timedelta(token_name)
+            token_name_offs = to_offset(token_name_td).freqstr
+            token = self.frequency_mapping.get(token_name_offs, None)
+            if token is not None:
+                return token
+
+        warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        token = self.frequency_mapping["oov"]
 
         return token
 

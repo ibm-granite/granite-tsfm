@@ -2,7 +2,7 @@
 #
 # This code is based on the test code for PatchTSMixer in the HuggingFace Transformers Library:
 # https://github.com/huggingface/transformers/blob/main/tests/models/patchtsmixer/test_modeling_patchtsmixer.py
-""" Testing suite for the PyTorch TinyTimeMixer model. """
+"""Testing suite for the PyTorch TinyTimeMixer model."""
 
 # Standard
 import itertools
