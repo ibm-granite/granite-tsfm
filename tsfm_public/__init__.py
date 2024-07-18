@@ -1,14 +1,13 @@
 # Copyright contributors to the TSFM project
 #
 
-from .version import __version__, __version_tuple__
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
 # Check the dependencies satisfy the minimal versions required.
 from transformers.utils import _LazyModule, logging
+
+from .version import __version__, __version_tuple__
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
