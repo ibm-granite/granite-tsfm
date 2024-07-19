@@ -16,7 +16,13 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "models": [],
     "models.tinytimemixer": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyTimeMixerConfig"],
-    "toolkit": [],
+    "toolkit": [
+        "TimeSeriesPreprocessor",
+        "TimeSeriesForecastingPipeline",
+        "ForecastDFDataset",
+        "PretrainDFDataset",
+        "RegressionDFDataset",
+    ],
 }
 
 
@@ -39,6 +45,13 @@ if TYPE_CHECKING:
         TinyTimeMixerForPrediction,
         TinyTimeMixerModel,
         TinyTimeMixerPreTrainedModel,
+    )
+    from .toolkit import (
+        ForecastDFDataset,
+        PretrainDFDataset,
+        RegressionDFDataset,
+        TimeSeriesForecastingPipeline,
+        TimeSeriesPreprocessor,
     )
 else:
     # Standard
