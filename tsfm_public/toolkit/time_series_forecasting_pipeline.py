@@ -64,11 +64,9 @@ class TimeSeriesPipeline(Pipeline):
             signature_columns=signature_columns,
             logger=None,
             description=None,
-            model_name=self.model.__class__.__name__,
+            model_name=None,
         )
-        dataloader = DataLoader(
-            dataset, num_workers=1, batch_size=batch_size, collate_fn=remove_columns_collator, shuffle=False
-        )
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=remove_columns_collator, shuffle=False)
 
         # iterate over dataloader
         it = iter(dataloader)
@@ -349,29 +347,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-
-        # Eventually we should use inspection somehow
-        # inspect.signature(model_forward).parameters.keys()
-        # model_input_keys = {
-        #     "past_values",
-        #     "static_categorical_values",
-        #     "freq_token",
-        # }  # todo: this should not be hardcoded
-
-        # signature = inspect.signature(self.model.forward)
-        # model_input_keys = list(signature.parameters.keys())
-
-        # model_inputs_only = {}
-        # for k in model_input_keys:
-        #     if k in model_inputs:
-        #         model_inputs_only[k] = model_inputs[k]
-
-        # model_outputs = self.model(**model_inputs_only)
-
-        # # copy the other inputs
-        # copy_inputs = True
-        # for k in [akey for akey in model_inputs.keys() if (akey not in model_input_keys) or copy_inputs]:
-        #     model_outputs[k] = model_inputs[k]
 
         model_outputs = self.model(**model_inputs)
 
