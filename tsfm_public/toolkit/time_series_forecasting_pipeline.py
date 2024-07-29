@@ -149,7 +149,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             freq = self.feature_extractor.freq
 
         # check if we need to use the frequency token, get token in needed
-        use_frequency_token = getattr(self.model.config, "use_frequency_token", False)
+        use_frequency_token = getattr(self.model.config, "resolution_prefix_tuning", False)
 
         if use_frequency_token and self.feature_extractor:
             frequency_token = self.feature_extractor.get_frequency_token(freq)
