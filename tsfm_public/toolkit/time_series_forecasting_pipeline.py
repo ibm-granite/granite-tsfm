@@ -174,6 +174,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         preprocess_kwargs = {
             "prediction_length": prediction_length,
             "context_length": context_length,
+            "frequency_token": frequency_token,
         }
         postprocess_kwargs = {
             "prediction_length": prediction_length,
@@ -189,7 +190,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "conditional_columns",
             "static_categorical_columns",
             "future_time_series",
-            "frequency_token",
         ]
         postprocess_params = [
             "id_columns",
