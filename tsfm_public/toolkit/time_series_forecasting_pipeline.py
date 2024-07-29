@@ -143,6 +143,19 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         context_length = kwargs.get("context_length", self.model.config.context_length)
         prediction_length = kwargs.get("prediction_length", self.model.config.prediction_length)
 
+        # get freq from kwargs or the preprocessor
+        freq = kwargs.get("freq", None)
+        if self.feature_extractor and not freq:
+            freq = self.feature_extractor.freq
+
+        # check if we need to use the frequency token, get token in needed
+        use_frequency_token = getattr(self.model.config, "use_frequency_token", False)
+
+        if use_frequency_token and self.feature_extractor:
+            frequency_token = self.feature_extractor.get_frequency_token(freq)
+        else:
+            frequency_token = None
+
         # autopopulate from feature extractor
         if self.feature_extractor:
             for p in [
@@ -176,6 +189,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "conditional_columns",
             "static_categorical_columns",
             "future_time_series",
+            "frequency_token",
         ]
         postprocess_params = [
             "id_columns",
