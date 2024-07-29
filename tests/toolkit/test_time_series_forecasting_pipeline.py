@@ -2,6 +2,7 @@
 #
 
 """Tests the time series preprocessor and functions"""
+
 import pandas as pd
 import pytest
 from transformers import PatchTSTForPrediction
