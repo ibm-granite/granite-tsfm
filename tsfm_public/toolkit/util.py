@@ -565,6 +565,9 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         "seconds": "s",
         "minutes": "min",
         "minutely": "min",
+        "monthly": "MS",
+        "yearly": "YS",
+        "quarterly": "QS",
     }
 
     if frequency:
@@ -572,9 +575,9 @@ def convert_tsf(filename: str) -> pd.DataFrame:
             freq_val, freq_unit = frequency.split("_")
             freq = freq_val + tsf_to_pandas_freq_map[freq_unit]
         except ValueError:
-            freq = tsf_to_pandas_freq_map(freq_val)
+            freq = tsf_to_pandas_freq_map[frequency]
         except KeyError:
-            raise ValueError(f"Input file contains an unknow frequency unit {freq_unit}")
+            raise ValueError(f"Input file contains an unknown frequency unit {freq_unit}")
     else:
         freq = None
 
@@ -596,6 +599,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         )
 
     df = pd.concat(dfs)
+    df.reset_index(inplace=True, drop=True)
     return df
 
 
