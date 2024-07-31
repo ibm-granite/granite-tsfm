@@ -10,7 +10,10 @@ authors = [{ name = "IBM" }]
 description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
 license = { file = "LICENSE" }
-classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apache Software License"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+]
 
 dependencies = [
     "pandas>=2.2.0",
@@ -18,22 +21,41 @@ dependencies = [
     "transformers[torch]>=4.38.0",
     "datasets",
     "deprecated",
-    "urllib3>=1.26.19,<2",
-    "numpy<2"
+    "urllib3>=1.26.19,<2",         # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+    "numpy<2",
 ]
 
 [tool.setuptools]
-packages = ["tsfm_public", "tsfm_public.toolkit", "tsfm_public.models", "tsfm_public.models.tinytimemixer", "tsfm_public.models.tinytimemixer.utils", "tsfmhfdemos", "tsfmhfdemos.neurips", "tsfmhfdemos.neurips.backends", "tsfmhfdemos.neurips.backends.v1", "tsfmhfdemos.neurips.backends.v1.figures"]
+packages = [
+    "tsfm_public",
+    "tsfm_public.toolkit",
+    "tsfm_public.models",
+    "tsfm_public.models.tinytimemixer",
+    "tsfm_public.models.tinytimemixer.utils",
+    "tsfmhfdemos",
+    "tsfmhfdemos.neurips",
+    "tsfmhfdemos.neurips.backends",
+    "tsfmhfdemos.neurips.backends.v1",
+    "tsfmhfdemos.neurips.backends.v1.figures",
+]
 
 [project.optional-dependencies]
 
-notebooks = ["jupyter", "matplotlib", "datasets", "ipywidgets", "plotly", "kaleido", "tensorboard"]
+
+all = ["tsfm_public[notebooks,testing,dev]"]
+
+notebooks = [
+    "jupyter",
+    "matplotlib",
+    "datasets",
+    "ipywidgets",
+    "plotly",
+    "kaleido",
+    "tensorboard",
+]
 testing = ["pytest", "tsfm_public[notebooks]", "parameterized"]
 dev = ["pre-commit", "tsfm_public[testing]", "ruff==0.4.4"]
-evaluation = [
-    "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
-]
-all = ["tsfm_public[notebooks,testing,dev]"]
+
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
 ogv = ["datasets", "plotly", "kaleido"]
@@ -44,7 +66,7 @@ demos = [
     "plotly",
     "streamlit-aggrid",
     "kaleido",
-    "toml"
+    "toml",
 ]
 # ###################################################
 
@@ -53,10 +75,10 @@ demos = [
 version_file = "tsfm_public/_version.py"
 
 [tool.ruff]
-# Never enforce `E501` (line length violations).
-lint.ignore = ["C901", "E501", "E741", "F402", "F823" ]
-lint.select = ["C", "E", "F", "I", "W"]
+
 line-length = 119
+lint.ignore = ["C901", "E501", "E741", "F402", "F823"]
+lint.select = ["C", "E", "F", "I", "W"]
 extend-exclude = ["tsfm_public/_version.py"]
 
 # Ignore import violations in all `__init__.py` files.
