@@ -22,6 +22,7 @@ _import_structure = {
         "ForecastDFDataset",
         "PretrainDFDataset",
         "RegressionDFDataset",
+        "get_datasets",
     ],
 }
 
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         RegressionDFDataset,
         TimeSeriesForecastingPipeline,
         TimeSeriesPreprocessor,
+        get_datasets,
     )
 else:
     # Standard

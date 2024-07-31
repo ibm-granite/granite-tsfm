@@ -61,15 +61,17 @@ def select_by_index(
     end_index: Optional[int] = None,
 ) -> pd.DataFrame:
     """Select a portion of a dataset based on integer indices into the data.
-    Note that the range selected is inclusive of the starting index. When ID columns are specified
-    the selection is done per-time series (i.e., the indices are used relative to each time series).
+    Note that the range selected is inclusive of the starting index, but exclusive of the end index. When ID
+    columns are specified the selection is done per-time series (i.e., the indices are used relative to each
+    time series). The indexing is intended to be similar to python-style indexing into arrays, where the end
+    of the specified range is not included.
 
     Args:
         df (pd.DataFrame): Input dataframe.
         id_columns (List[str], optional): Columns which specify the IDs in the dataset. Defaults to None.
         start_index (Optional[int], optional): Index of the starting point.
             Defaults to None. Use None to specify the start of the data.
-        end_index (Optional[Union[str, datetime]], optional): Index of the ending point.
+        end_index (Optional[Union[str, datetime]], optional): Index for the end of the selection (not inclusive).
             Use None to specify the end of the data. Defaults to None.
 
     Raises:
