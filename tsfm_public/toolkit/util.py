@@ -63,7 +63,7 @@ def select_by_index(
     """Select a portion of a dataset based on integer indices into the data.
     Note that the range selected is inclusive of the starting index, but exclusive of the end index. When ID
     columns are specified the selection is done per-time series (i.e., the indices are used relative to each
-    time series). The indexing is intended to be similar to python-style indexing into arrays, where the end
+    time series). The indexing is intended to be similar to python-style indexing into lists, where the end
     of the specified range is not included.
 
     Args:
