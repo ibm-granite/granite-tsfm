@@ -32,6 +32,7 @@ jobs:
         cd services/inference && poetry install -n --with dev
     - name: Test with pytest
       run: |
+        cd services/inference
         make start_service_local
         sleep 20
         pytest tests
