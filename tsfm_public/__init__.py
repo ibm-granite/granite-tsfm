@@ -23,6 +23,8 @@ _import_structure = {
         "PretrainDFDataset",
         "RegressionDFDataset",
         "get_datasets",
+        "TrackingCallback",
+        "count_parameters",
     ],
 }
 
@@ -53,6 +55,8 @@ if TYPE_CHECKING:
         RegressionDFDataset,
         TimeSeriesForecastingPipeline,
         TimeSeriesPreprocessor,
+        TrackingCallback,
+        count_parameters,
         get_datasets,
     )
 else:
