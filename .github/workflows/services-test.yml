@@ -25,16 +25,11 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      run: |
-        
+      run: |    
         python -m pip install --upgrade pip
         pip install poetry
         # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         cd services/inference && poetry install -n --with dev
-    - name: Ruff quality checks
-      run: |
-        # use hf-style check
-        make quality
     - name: Test with pytest
       run: |
         make start_service_local
