@@ -9,6 +9,7 @@ from distutils.util import strtobool
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+import torch
 
 
 class FractionLocation(enum.Enum):
@@ -660,3 +661,15 @@ def join_list_without_repeat(*lists: List[List[Any]]) -> List[Any]:
             final = final + [item for item in alist if item not in final_set]
         final_set = set(final)
     return final
+
+
+def count_parameters(model: torch.nn.Module) -> int:
+    """Count trainable parameters in a model
+
+    Args:
+        model (torch.nn.Module): The model.
+
+    Returns:
+        int: Number of parameters requiring gradients.
+    """
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

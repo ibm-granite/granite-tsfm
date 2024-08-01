@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 """Some basic callbacks for training with HF Trainer"""
 
 import time
@@ -9,6 +11,8 @@ from transformers.training_args import TrainingArguments
 
 
 class TrackingCallback(TrainerCallback):
+    """Simple tracking callback that tracks per epoch run times and calculates some statistics after training completes."""
+
     def on_train_begin(
         self,
         args: TrainingArguments,

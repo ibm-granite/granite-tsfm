@@ -5,8 +5,6 @@ import argparse
 import os
 
 # Third Party
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import torch
 
@@ -163,10 +161,6 @@ def get_ttm_args():
     return args
 
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
 def int_to_bool(value):
     if value == 0:
         return False
@@ -176,54 +170,6 @@ def int_to_bool(value):
         raise argparse.ArgumentTypeError("Boolean value expected (0 or 1)")
 
 
-# Utitlity: plot
-def plot_preds(trainer, dset, plot_dir, num_plots=10, plot_prefix="valid", channel=-1, truncate_history=True):
-    device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
-    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
-    random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
-    trainer.model = trainer.model.to(device)
-    output = trainer.model(random_samples.to(device=device))
-    y_hat = output.prediction_outputs[:, :, channel].detach().cpu().numpy()
-    pred_len = y_hat.shape[1]
-
-    # Set a more beautiful style
-    plt.style.use("seaborn-v0_8-whitegrid")
-
-    # Adjust figure size and subplot spacing
-    fig, axs = plt.subplots(num_plots, 1, figsize=(10, 20))
-    for i, ri in enumerate(random_indices):
-        batch = dset[ri]
-
-        y = batch["future_values"][:pred_len, channel].squeeze().cpu().numpy()
-        if truncate_history:
-            x = batch["past_values"][-2 * pred_len :, channel].squeeze().cpu().numpy()
-        else:
-            x = batch["past_values"][:, channel].squeeze().cpu().numpy()
-        y = np.concatenate((x, y), axis=0)
-
-        # Plot predicted values with a dashed line
-        y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
-        axs[i].plot(y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2)
-
-        # Plot true values with a solid line
-        axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
-
-        # Plot horizon border
-        axs[i].axvline(x=2 * pred_len, color="r", linestyle="-")
-
-        axs[i].set_title(f"Example {random_indices[i]}")
-        axs[i].legend()
-
-    # Adjust overall layout
-    plt.tight_layout()
-
-    # Save the plot
-    plot_filename = f"synthetic_{plot_prefix}_ch_{str(channel)}.pdf"
-    os.makedirs(plot_dir, exist_ok=True)
-    plt.savefig(os.path.join(plot_dir, plot_filename))
-
-
-# Get data loaders using TSP
 def get_data(
     dataset_name: str,
     context_length,
