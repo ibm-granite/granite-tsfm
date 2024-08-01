@@ -36,4 +36,4 @@ jobs:
         make quality
     - name: Test with pytest
       run: |
-        pytest
+        pytest tests
