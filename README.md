@@ -1,8 +1,8 @@
 # TSFM: Time Series Foundation Models
-Public notebooks and utilities for working with Time Series Foundation Models (TSFM)
+Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
-[here](wiki.md).
+[here](wiki.md). Information on the services component can be found [here](services/inference/README.md).
 
 
 # Python Version
@@ -31,7 +31,7 @@ pip install ".[notebooks]"
 
 ## 📗 Google Colab
 Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
-- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/tutorial/notebooks/tutorial/ttm_tutorial.ipynb) 
+- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
 
 ## 💻 Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at later date). To install the requirements use `pip`:
