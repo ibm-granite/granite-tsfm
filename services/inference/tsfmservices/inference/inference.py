@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 """Inference Runtime"""
 
 import datetime

@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 """Primary entry point for inference services"""
 
 import logging

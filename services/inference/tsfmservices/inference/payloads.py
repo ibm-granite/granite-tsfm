@@ -1,9 +1,9 @@
+# Copyright contributors to the TSFM project
+#
 """Payload definitions for inference"""
 
-# Standard
 from typing import Annotated, Any, Dict, List, Optional
 
-# Third Party
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 

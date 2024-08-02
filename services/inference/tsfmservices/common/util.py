@@ -1,14 +1,13 @@
+# Copyright contributors to the TSFM project
+#
 """Utilities to support custom time series models"""
 
-# Standard
 import importlib
 import logging
 import pathlib
 from typing import Optional, Union
 
 import transformers
-
-# Third Party
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
 
