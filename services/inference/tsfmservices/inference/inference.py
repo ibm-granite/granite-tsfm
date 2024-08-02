@@ -135,12 +135,6 @@ class InferenceRuntime:
             add_known_ground_truth=False,
         )
 
-        # warn if future data is not provided, but is needed by the model
-        if preprocessor.exogenous_channel_indices and future_data is None:
-            raise ValueError(
-                "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
-            )
-
         # truncate data length when exploding
         # context_length = model.config.context_length
         # if explode_forecasts and len(data) > context_length:
