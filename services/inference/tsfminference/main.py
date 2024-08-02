@@ -7,13 +7,13 @@ import logging
 import yaml
 from fastapi import FastAPI
 
-from tsfmservices import (
+from . import (
     TSFM_CONFIG_FILE,
     TSFM_PYTHON_LOGGING_FORMAT,
     TSFM_PYTHON_LOGGING_LEVEL,
 )
-from tsfmservices.common.constants import API_VERSION
-from tsfmservices.inference import InferenceRuntime
+from .constants import API_VERSION
+from .inference import InferenceRuntime
 
 
 logging.basicConfig(
