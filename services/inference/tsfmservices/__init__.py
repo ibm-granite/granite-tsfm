@@ -1,17 +1,18 @@
 import logging
 import os
 
+
 TSFM_PYTHON_LOGGING_LEVEL = os.getenv("TSFM_PYTHON_LOGGING_LEVEL", "INFO")
 
-LevelNamesMapping = dict(
-    INFO=logging.INFO,
-    WARN=logging.WARN,
-    WARNING=logging.WARNING,
-    ERROR=logging.ERROR,
-    CRITICAL=logging.CRITICAL,
-    DEBUG=logging.DEBUG,
-    FATAL=logging.FATAL,
-)
+LevelNamesMapping = {
+    "INFO": logging.INFO,
+    "WARN": logging.WARN,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+    "DEBUG": logging.DEBUG,
+    "FATAL": logging.FATAL,
+}
 
 TSFM_PYTHON_LOGGING_LEVEL = (
     logging.getLevelNamesMapping()[TSFM_PYTHON_LOGGING_LEVEL]
@@ -41,7 +42,5 @@ TSFM_ALLOW_LOAD_FROM_HF_HUB = int(os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB", "1"))
 
 TSFM_CONFIG_FILE = os.getenv(
     "TSFM_CONFIG_FILE",
-    os.path.realpath(
-        os.path.join(os.path.dirname(__file__), "config", "default_config.yml")
-    ),
+    os.path.realpath(os.path.join(os.path.dirname(__file__), "config", "default_config.yml")),
 )

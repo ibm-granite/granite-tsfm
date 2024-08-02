@@ -11,6 +11,7 @@ import transformers
 # Third Party
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
+
 LOGGER = logging.getLogger(__file__)
 
 
@@ -36,9 +37,7 @@ def register_config(model_type: str, model_config_name: str, module_path: str) -
         mod = importlib.import_module(module_path)
         conf_class = getattr(mod, model_config_name, None)
     except ModuleNotFoundError as exc:  # modulenot found, key error ?
-        raise RuntimeError(
-            f"Could not load {model_config_name} from {module_path}"
-        ) from exc
+        raise RuntimeError(f"Could not load {model_config_name} from {module_path}") from exc
 
     if conf_class is not None:
         AutoConfig.register(model_type, conf_class)
@@ -73,9 +72,7 @@ def load_config(
         conf = AutoConfig.from_pretrained(model_path)
     except (KeyError, ValueError) as exc:  # determine error raised by autoconfig
         if model_type is None or model_config_name is None or module_path is None:
-            raise ValueError(
-                "model_type, model_config_name, and module_path should be specified."
-            ) from exc
+            raise ValueError("model_type, model_config_name, and module_path should be specified.") from exc
 
         register_config(model_type, model_config_name, module_path)
         conf = AutoConfig.from_pretrained(model_path)
@@ -83,9 +80,7 @@ def load_config(
     return conf
 
 
-def _get_model_class(
-    config: PretrainedConfig, module_path: Optional[str] = None
-) -> type:
+def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None) -> type:
     """Helper to find model class based on config object
 
     First the module_path will be checked if it can be loaded in the current environment. If not
@@ -120,9 +115,7 @@ def _get_model_class(
             return model_class
         except AttributeError as exc:
             # catch specific error import error or attribute error
-            raise AttributeError(
-                "Could not load model class for architecture '{arch}'."
-            ) from exc
+            raise AttributeError("Could not load model class for architecture '{arch}'.") from exc
 
 
 def load_model(
@@ -147,9 +140,7 @@ def load_model(
     """
 
     if module_path is not None and config is None:
-        raise ValueError(
-            "Config must be provided when loading from a custom module_path"
-        )
+        raise ValueError("Config must be provided when loading from a custom module_path")
 
     if config is not None:
         model_class = _get_model_class(config, module_path=module_path)

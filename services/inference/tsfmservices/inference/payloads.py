@@ -6,11 +6,10 @@ from typing import Annotated, Any, Dict, List, Optional
 # Third Party
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
-EverythingPatternedString = Annotated[
-    str, Field(min_length=0, max_length=100, pattern=".*")
-]
+EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=".*")]
 
 
 class BaseMetadataInput(BaseModel):
@@ -31,11 +30,9 @@ class BaseMetadataInput(BaseModel):
         min_length=0,
     )
     freq: Optional[str] = Field(
-        description="""A freqency indicator for the given timestamp_column. 
-        See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the allowed values. 
-        If not provided, we will attempt to infer it from the data.""",
+        description="""A freqency indicator for the given timestamp_column. See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the allowed values. If not provided, we will attempt to infer it from the data.""",
         default=None,
-        pattern="\d+[B|D|W|M|Q|Y|h|min|s|ms|us|ns]|^\s*$",
+        pattern=r"\d+[B|D|W|M|Q|Y|h|min|s|ms|us|ns]|^\s*$",
         min_length=0,
         max_length=100,
         example="1h",
@@ -94,7 +91,7 @@ class BaseInferenceInput(BaseModel):
 
     model_id: str = Field(
         description="A model identifier.",
-        pattern="^\S+$",
+        pattern=r"^\S+$",
         min_length=1,
         max_length=100,
         example="ibm/tinytimemixer-monash-fl_96",
@@ -110,9 +107,7 @@ class ForecastingInferenceInput(BaseInferenceInput):
         description="Data",
     )
 
-    future_data: Optional[Dict[str, List[Any]]] = Field(
-        description="Future data", default=None
-    )
+    future_data: Optional[Dict[str, List[Any]]] = Field(description="Future data", default=None)
 
     @model_validator(mode="before")
     @classmethod

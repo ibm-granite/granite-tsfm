@@ -1,16 +1,18 @@
 """Primary entry point for inference services"""
 
 import logging
-from fastapi import FastAPI
+
 import yaml
+from fastapi import FastAPI
 
 from tsfmservices import (
+    TSFM_CONFIG_FILE,
     TSFM_PYTHON_LOGGING_FORMAT,
     TSFM_PYTHON_LOGGING_LEVEL,
-    TSFM_CONFIG_FILE,
 )
 from tsfmservices.common.constants import API_VERSION
 from tsfmservices.inference import InferenceRuntime
+
 
 logging.basicConfig(
     format=TSFM_PYTHON_LOGGING_FORMAT,
@@ -42,7 +44,6 @@ def root():
 
 
 if __name__ == "__main__":
-
     # Third Party
     import uvicorn
 

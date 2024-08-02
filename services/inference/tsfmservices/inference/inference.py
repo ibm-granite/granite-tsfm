@@ -2,27 +2,25 @@
 
 import datetime
 import logging
-from typing import Any, Dict, List
 from pathlib import Path
+from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfmservices import TSFM_ALLOW_LOAD_FROM_HF_HUB
 
 from ..common.constants import API_VERSION
 from ..common.util import load_config, load_model, register_config
 from .payloads import ForecastingInferenceInput, PredictOutput
-
-from tsfmservices import TSFM_ALLOW_LOAD_FROM_HF_HUB
 
 
 LOGGER = logging.getLogger(__file__)
 
 
 class InferenceRuntime:
-
     def __init__(self, config: Dict[str, Any] = {}):
-
         self.config = config
         model_map = {}
 
@@ -35,14 +33,11 @@ class InferenceRuntime:
                 )
                 LOGGER.info(f"registered {custom_module['model_type']}")
 
-                model_map[custom_module["model_config_name"]] = custom_module[
-                    "module_path"
-                ]
+                model_map[custom_module["model_config_name"]] = custom_module["module_path"]
 
         self.model_to_module_map = model_map
 
     def add_routes(self, app):
-
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
         self.router.add_api_route(
             "/forecasting",
@@ -53,7 +48,6 @@ class InferenceRuntime:
         app.include_router(self.router)
 
     def load(self, model_path: str):
-
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
@@ -84,10 +78,7 @@ class InferenceRuntime:
             LOGGER.exception(e)
             raise HTTPException(status_code=500, detail=repr(e))
 
-    def _forecast_common(
-        self, input_payload: ForecastingInferenceInput
-    ) -> PredictOutput:
-
+    def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
         # we need some sort of model registry
         # payload = input_payload.model_dump()  # do we need?
 
@@ -151,9 +142,7 @@ class InferenceRuntime:
             future_data = preprocessor.preprocess(future_data)
             future_data.drop(columns=input_payload.target_columns)
 
-        forecasts = forecast_pipeline(
-            test_data, future_time_series=future_data, inverse_scale_outputs=True
-        )
+        forecasts = forecast_pipeline(test_data, future_time_series=future_data, inverse_scale_outputs=True)
 
         return PredictOutput(
             model_id=input_payload.model_id,

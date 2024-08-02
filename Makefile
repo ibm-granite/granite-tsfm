@@ -1,7 +1,7 @@
 # Adapted from HF Transformers: https://github.com/huggingface/transformers/tree/main
 .PHONY: quality style
 
-check_dirs := tests tsfm_public tsfmhfdemos notebooks
+check_dirs := tests tsfm_public tsfmhfdemos notebooks services
 
 
 # this target runs checks on all files

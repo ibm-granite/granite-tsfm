@@ -1,8 +1,5 @@
 # Standard
-from datetime import datetime
-from io import BytesIO
 from typing import Any, Dict
-import json
 
 # Third Party
 import numpy as np
@@ -12,16 +9,11 @@ import requests
 
 # First Party
 from tsfm_public.toolkit.util import select_by_index
-from tsfm_public import TinyTimeMixerForPrediction
-
-from transformers import PatchTSTForPrediction, PatchTSMixerForPrediction
 
 
 @pytest.fixture(scope="module")
 def ts_data():
-    dataset_path = (
-        "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
-    )
+    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
 
     forecast_length = 96
     context_length = 512
