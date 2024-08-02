@@ -35,6 +35,7 @@ jobs:
     - name: Test local server inference service with pytest
       run: |
         source .venv/bin/activate
+        cd services/inference
         make start_service_local
         sleep 20
         pytest tests
