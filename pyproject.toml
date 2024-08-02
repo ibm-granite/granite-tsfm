@@ -26,18 +26,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = [
-    "tsfm_public",
-    "tsfm_public.toolkit",
-    "tsfm_public.models",
-    "tsfm_public.models.tinytimemixer",
-    "tsfm_public.models.tinytimemixer.utils",
-    "tsfmhfdemos",
-    "tsfmhfdemos.neurips",
-    "tsfmhfdemos.neurips.backends",
-    "tsfmhfdemos.neurips.backends.v1",
-    "tsfmhfdemos.neurips.backends.v1.figures",
-]
+packages = ["tsfm_public", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
