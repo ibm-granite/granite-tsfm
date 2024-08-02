@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "tsfmservices"
+name = "tsfminference"
 version = "0.0.1"
 description = "Service layer for TSFM granite models."
 authors = ["IBM"]
@@ -12,7 +12,7 @@ python = ">=3.10,<3.12"
 numpy = { version = "<2" }
 tsfm_public = { git = "https://github.com/IBM/tsfm.git", tag = "v0.2.5" }
 
-# trying to pick up cpu version for inference
+# trying to pick up cpu version for tsfminference
 # to make image smaller
 torch = { version = ">2,<3", source = "pytorch" }
 

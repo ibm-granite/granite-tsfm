@@ -1,6 +1,6 @@
 # Copyright contributors to the TSFM project
 #
-"""Payload definitions for inference"""
+"""Payload definitions for tsfminference"""
 
 from typing import Annotated, Any, Dict, List, Optional
 

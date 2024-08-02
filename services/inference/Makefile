@@ -1,18 +1,18 @@
 CONTAINER_BUILDER ?= docker
 
-# starts the inference service (used mainly for test cases)
+# starts the tsfminference service (used mainly for test cases)
 start_service_local:
-	python -m tsfmservices.inference.main &
+	python -m tsfminference.main &
 	sleep 10
 stop_service_local:
-	pkill  -f 'python.*tsfmservices.*'
+	pkill  -f 'python.*tsfminference.*'
 	sleep 10
 
 image:
-	$(CONTAINER_BUILDER) build -t tsfmservices -f Dockerfile .
+	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
 
 start_service_image: image
-	$(CONTAINER_BUILDER) run -p 8000:8000 -d --rm --name tsfmserver tsfmservices
+	$(CONTAINER_BUILDER) run -p 8000:8000 -d --rm --name tsfmserver tsfminference
 	sleep 10
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver

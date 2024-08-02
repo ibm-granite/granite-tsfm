@@ -45,11 +45,11 @@ CONTAINER_BUILDER=<docker|podmain> make image
 # e.g, CONTAINER_BUILDER=docker make image
 ```
 
-After a successful build you should have a local image named `tsfmservices:latest`
+After a successful build you should have a local image named `tsfminference:latest`
 
 ```sh
-(py311) ➜  tsfm-services git:(revised-build-system) ✗ docker images | grep tsfmservices | head -n 1
-tsfmservices                                             latest               df592dcb0533   46 seconds ago      1.49GB
+(py311) ➜  tsfm-services git:(revised-build-system) ✗ docker images | grep tsfminference | head -n 1
+tsfminference                                             latest               df592dcb0533   46 seconds ago      1.49GB
 # some of the numeric and hash values on your machine could be different
 ```
 

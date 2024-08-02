@@ -1,6 +1,8 @@
 # Copyright contributors to the TSFM project
 #
-"""Inference Runtime"""
+"""Tsfminference Runtime"""
+
+print("In module __package__, __name__ ==", __package__, __name__)
 
 import datetime
 import logging
@@ -11,11 +13,11 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
-from tsfmservices import TSFM_ALLOW_LOAD_FROM_HF_HUB
 
-from ..common.constants import API_VERSION
-from ..common.util import load_config, load_model, register_config
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
+from .constants import API_VERSION
 from .payloads import ForecastingInferenceInput, PredictOutput
+from .util import load_config, load_model, register_config
 
 
 LOGGER = logging.getLogger(__file__)
