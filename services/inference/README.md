@@ -1,7 +1,8 @@
 # TSFM Services
 
-This component provides basic RESTful services for the IBM tsfm-granite
-class of timeseries foundation models. At present it can serve the following models:
+
+
+This component provides RESTful services for the  tsfm-granite class of timeseries foundation models. At present it can serve the following models:
 
 * https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1
 * https://huggingface.co/ibm-granite/granite-timeseries-patchtst
