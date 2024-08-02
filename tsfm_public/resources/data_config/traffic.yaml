@@ -9,8 +9,6 @@ conditional_columns: []
 static_categorical_columns: []
 freq: 1h
 
-batch_size: 4
-
 scale: 
     scaling: True
     scaler_type: standard

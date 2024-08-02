@@ -9,8 +9,6 @@ conditional_columns: []
 static_categorical_columns: []
 freq: 1h
 
-batch_size: 256
-
 scale: 
     scaling: True
     scaler_type: standard
@@ -28,5 +26,4 @@ split:
         - 11520 # = 12 * 30 * 24 + 4 * 30 * 24
         - 14400 # = 12 * 30 * 24 + 8 * 30 * 24
 
-fewshot_fraction: 
 
