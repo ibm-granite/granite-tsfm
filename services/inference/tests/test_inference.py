@@ -1,13 +1,12 @@
-# Standard
+# Copyright contributors to the TSFM project
+#
 from typing import Any, Dict
 
-# Third Party
 import numpy as np
 import pandas as pd
 import pytest
 import requests
 
-# First Party
 from tsfm_public.toolkit.util import select_by_index
 
 
