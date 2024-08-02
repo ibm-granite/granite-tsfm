@@ -9,9 +9,7 @@ from typing import Optional
 import pandas as pd
 import yaml
 
-from tsfm_public import get_datasets
-
-from .time_series_preprocessor import TimeSeriesPreprocessor
+from .time_series_preprocessor import TimeSeriesPreprocessor, get_datasets
 
 
 def load_dataset(
