@@ -2,8 +2,6 @@
 #
 """Tsfminference Runtime"""
 
-print("In module __package__, __name__ ==", __package__, __name__)
-
 import datetime
 import logging
 from pathlib import Path
