@@ -24,14 +24,17 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Test with pytest
+    - name: Install deps into a virtual enviroment
       run: |
-        python -m pip install --upgrade pip
         python -m venv .venv
         source .venv/bin/activate
+        python -m pip install --upgrade pip
         pip install poetry
         cd services/inference
         poetry install -n --with dev
+    - name: Test local server inference service with pytest
+      run: |
+        source .venv/bin/activate
         make start_service_local
         sleep 20
         pytest tests
