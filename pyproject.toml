@@ -69,6 +69,7 @@ line-length = 119
 lint.ignore = ["C901", "E501", "E741", "F402", "F823"]
 lint.select = ["C", "E", "F", "I", "W"]
 extend-exclude = ["tsfm_public/_version.py"]
+extend-include = ["*.ipynb"]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
