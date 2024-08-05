@@ -4,8 +4,10 @@
 
 import logging
 
+import starlette.status as status
 import yaml
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from . import (
     TSFM_CONFIG_FILE,
@@ -40,9 +42,7 @@ ir.add_routes(app)
 
 @app.get("/")
 def root():
-    # Endpoint at the root URL ("/") returns a welcome message with a clickable link
-    message = "Welcome. Go to /docs to access the API documentation."
-    return {"message": message}
+    return RedirectResponse(url="/docs", status_code=status.HTTP_302_FOUND)
 
 
 if __name__ == "__main__":

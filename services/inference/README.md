@@ -66,7 +66,7 @@ make test_image
 make start_local_server
 ```
 
-Then open your browser to http://127.0.0.1:8000/docs, click on the `/openapi.json` link at the top of this page.
+Then open your browser to http://127.0.0.1:8000
 
 To stop the server run:
 
