@@ -1,16 +1,45 @@
 # Copyright contributors to the TSFM project
 #
 
+import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
-from transformers.utils import _LazyModule, logging
+from transformers.utils import _LazyModule
 
 from .version import __version__, __version_tuple__
 
 
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+TSFM_PYTHON_LOGGING_LEVEL = os.getenv("TSFM_PYTHON_LOGGING_LEVEL", "INFO")
+
+LevelNamesMapping = {
+    "INFO": logging.INFO,
+    "WARN": logging.WARN,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+    "DEBUG": logging.DEBUG,
+    "FATAL": logging.FATAL,
+}
+
+TSFM_PYTHON_LOGGING_LEVEL = (
+    logging.getLevelNamesMapping()[TSFM_PYTHON_LOGGING_LEVEL]
+    if hasattr(logging, "getLevelNamesMapping")
+    else LevelNamesMapping[TSFM_PYTHON_LOGGING_LEVEL]
+)
+TSFM_PYTHON_LOGGING_FORMAT = os.getenv(
+    "TSFM_PYTHON_LOGGING_FORMAT",
+    "%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s",
+)
+
+logging.basicConfig(
+    format=TSFM_PYTHON_LOGGING_FORMAT,
+    level=TSFM_PYTHON_LOGGING_LEVEL,
+)
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {

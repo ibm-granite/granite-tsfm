@@ -3,9 +3,13 @@
 """Utilities for TTM notebooks"""
 
 import argparse
+import logging
 import os
 
 import torch
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_ttm_args():
@@ -145,7 +149,7 @@ def get_ttm_args():
     # Calculate number of gpus
     if args.num_gpus is None:
         args.num_gpus = torch.cuda.device_count()
-        print("Automatically calculated number of GPUs =", args.num_gpus)
+        logger.info(f"Automatically calculated number of GPUs ={args.num_gpus}")
 
     # Create save directory
     args.save_dir = os.path.join(

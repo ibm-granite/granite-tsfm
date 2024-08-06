@@ -1,6 +1,7 @@
 """Utilities for handling datasets"""
 
 import glob
+import logging
 import os
 from importlib import resources
 from pathlib import Path
@@ -12,6 +13,9 @@ import yaml
 from .time_series_preprocessor import TimeSeriesPreprocessor, get_datasets
 
 
+LOGGER = logging.getLogger(__file__)
+
+
 def load_dataset(
     dataset_name: str,
     context_length,
@@ -21,7 +25,7 @@ def load_dataset(
     dataset_root_path: str = "datasets/",
     dataset_path: Optional[str] = None,
 ):
-    print(dataset_name, context_length, forecast_length)
+    LOGGER.info(f"Dataset name: {dataset_name}, context length: {context_length}, prediction length {forecast_length}")
 
     config_path = resources.files("tsfm_public.resources.data_config")
     configs = glob.glob(os.path.join(config_path, "*.yaml"))
@@ -31,7 +35,7 @@ def load_dataset(
 
     if config_path is None:
         raise ValueError(
-            f"Currently `get_data()` function supports the following datasets: {names_to_config.keys()}\n \
+            f"Currently the `load_dataset()` function supports the following datasets: {names_to_config.keys()}\n \
                          For other datasets, please provide the proper configs to the TimeSeriesPreprocessor (TSP) module."
         )
 
@@ -71,6 +75,6 @@ def load_dataset(
         fewshot_fraction=fewshot_fraction,
         fewshot_location=fewshot_location,
     )
-    print(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
+    LOGGER.info(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 
     return train_dataset, valid_dataset, test_dataset
