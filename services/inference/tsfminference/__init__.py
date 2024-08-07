@@ -3,6 +3,8 @@
 import logging
 import os
 
+from .version import __version__, __version_tuple__
+
 
 TSFM_PYTHON_LOGGING_LEVEL = os.getenv("TSFM_PYTHON_LOGGING_LEVEL", "INFO")
 

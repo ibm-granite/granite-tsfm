@@ -2074,12 +2074,12 @@ transformers = {version = ">=4.38.0", extras = ["torch"]}
 urllib3 = ">=1.26.19,<2"
 
 [package.extras]
-all = ["tsfm-public[dev,notebooks,testing]"]
-demos = ["altair (<5)", "kaleido", "plotly", "streamlit", "streamlit-aggrid", "toml", "tsfm-public[notebooks]"]
-dev = ["pre-commit", "ruff (==0.4.4)", "tsfm-public[testing]"]
+all = ["tsfm_public[dev,notebooks,testing]"]
+demos = ["altair (<5)", "kaleido", "plotly", "streamlit", "streamlit-aggrid", "toml", "tsfm_public[notebooks]"]
+dev = ["pre-commit", "ruff (==0.4.4)", "tsfm_public[testing]"]
 notebooks = ["datasets", "ipywidgets", "jupyter", "kaleido", "matplotlib", "plotly", "tensorboard"]
 ogv = ["datasets", "kaleido", "plotly"]
-testing = ["parameterized", "pytest", "tsfm-public[notebooks]"]
+testing = ["parameterized", "pytest", "tsfm_public[notebooks]"]
 
 [package.source]
 type = "git"
@@ -2446,4 +2446,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "f5f4baacceda4c844f29ce34a290c6bf8cd665404b58aade86d7cf0aff8644b2"
+content-hash = "9a972dbf15d1dc22316af3c52c342d72c4d1db9d19812b2c28fb3aa0daa4089c"
