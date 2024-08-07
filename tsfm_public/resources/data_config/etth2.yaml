@@ -1,0 +1,29 @@
+data_file: ETTh2.csv    
+data_path: ETT-small/
+id_columns: []
+timestamp_column: date    
+target_columns: []
+observable_columns: []
+control_columns: []
+conditional_columns: []
+static_categorical_columns: []
+freq: 1h
+
+scale: 
+    scaling: True
+    scaler_type: standard
+
+encode_categorical: False
+
+split:
+    train:
+        - 0
+        - 8640 # = 12 * 30 * 24 
+    valid:
+        - 8640 # = 12 * 30 * 24
+        - 11520 # = 12 * 30 * 24 + 4 * 30 * 24
+    test: 
+        - 11520 # = 12 * 30 * 24 + 4 * 30 * 24
+        - 14400 # = 12 * 30 * 24 + 8 * 30 * 24
+
+

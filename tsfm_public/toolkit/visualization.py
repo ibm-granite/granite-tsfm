@@ -3,9 +3,12 @@
 """Utilities for plotting time series data"""
 
 import logging
+import os
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
+import torch
 from IPython.display import Image
 from plotly.subplots import make_subplots
 
@@ -194,3 +197,70 @@ def plot_ts_forecasting(
         plt.xticks(rotation=45)
         plt.close()
         return fig
+
+
+def plot_predictions(
+    model: torch.nn.Module,
+    dset: torch.utils.data.Dataset,
+    plot_dir: str = None,
+    num_plots: int = 10,
+    plot_prefix: str = "valid",
+    channel: int = -1,
+    truncate_history: bool = True,
+):
+    """Utility for plotting forecasts along with history.
+
+    Args:
+        model (torch.nn.Module): A trained model.
+        dset (torch.utils.data.Dataset): Dataset that was fed into Trainer for predicting
+        plot_dir (str, optional): A location to save the plot. If None, no plot is saved. Defaults to None.
+        num_plots (int, optional): Number of sub-plots (context windows) to include. Defaults to 10.
+        plot_prefix (str, optional): A prefix for the saved filename. Defaults to "valid".
+        channel (int, optional): Which channels to plot for a multivariate dataset. Defaults to -1.
+        truncate_history (bool, optional): If True only some hisotry (2 * pred_len samples) will be included in the plot. Defaults to True.
+    """
+    # device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
+    device = model.device
+    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
+    random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+
+    output = model(random_samples)
+    y_hat = output.prediction_outputs[:, :, channel].detach().cpu().numpy()
+    pred_len = y_hat.shape[1]
+
+    # Set a more beautiful style
+    plt.style.use("seaborn-v0_8-whitegrid")
+
+    # Adjust figure size and subplot spacing
+    fig, axs = plt.subplots(num_plots, 1, figsize=(10, 20))
+    for i, ri in enumerate(random_indices):
+        batch = dset[ri]
+
+        y = batch["future_values"][:pred_len, channel].squeeze().cpu().numpy()
+        if truncate_history:
+            x = batch["past_values"][-2 * pred_len :, channel].squeeze().cpu().numpy()
+        else:
+            x = batch["past_values"][:, channel].squeeze().cpu().numpy()
+        y = np.concatenate((x, y), axis=0)
+
+        # Plot predicted values with a dashed line
+        y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
+        axs[i].plot(y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2)
+
+        # Plot true values with a solid line
+        axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
+
+        # Plot horizon border
+        axs[i].axvline(x=2 * pred_len, color="r", linestyle="-")
+
+        axs[i].set_title(f"Example {random_indices[i]}")
+        axs[i].legend()
+
+    # Adjust overall layout
+    plt.tight_layout()
+
+    # Save the plot
+    if plot_dir is not None:
+        plot_filename = f"{plot_prefix}_ch_{str(channel)}.pdf"
+        os.makedirs(plot_dir, exist_ok=True)
+        plt.savefig(os.path.join(plot_dir, plot_filename))

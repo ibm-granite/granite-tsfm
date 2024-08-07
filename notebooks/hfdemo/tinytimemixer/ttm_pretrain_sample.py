@@ -1,6 +1,24 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import logging
+import math
+import os
+
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import OneCycleLR
+from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
+
+from tsfm_public.models.tinytimemixer import (
+    TinyTimeMixerConfig,
+    TinyTimeMixerForPrediction,
+)
+from tsfm_public.models.tinytimemixer.utils import get_ttm_args
+from tsfm_public.toolkit.data_handling import load_dataset
+
+
+logger = logging.getLogger(__file__)
+
 # TTM pre-training example.
 # This scrips provides a toy example to pretrain a Tiny Time Mixer (TTM) model on
 # the `etth1` dataset. For pre-training TTM on a much large set of datasets, please
@@ -13,26 +31,6 @@
 # Basic usage:
 # python ttm_pretrain_sample.py --data_root_path datasets/
 # See the get_ttm_args() function to know more about other TTM arguments
-
-# Standard
-import math
-import os
-
-# Third Party
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import OneCycleLR
-from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
-
-# Local
-from tsfm_public.models.tinytimemixer import (
-    TinyTimeMixerConfig,
-    TinyTimeMixerForPrediction,
-)
-from tsfm_public.models.tinytimemixer.utils import get_data, get_ttm_args
-
-
-# Arguments
-args = get_ttm_args()
 
 
 def get_model(args):
@@ -71,7 +69,7 @@ def pretrain(args, model, dset_train, dset_val):
         overwrite_output_dir=True,
         learning_rate=args.learning_rate,
         num_train_epochs=args.num_epochs,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         dataloader_num_workers=args.num_workers,
@@ -129,21 +127,22 @@ def pretrain(args, model, dset_train, dset_val):
 
 
 if __name__ == "__main__":
+    # Arguments
+    args = get_ttm_args()
+
     # Set seed
     set_seed(args.random_seed)
 
-    print(
-        "*" * 20,
-        f"Pre-training a TTM for context len = {args.context_length}, forecast len = {args.forecast_length}",
-        "*" * 20,
+    logger.info(
+        f"{'*' * 20} Pre-training a TTM for context len = {args.context_length}, forecast len = {args.forecast_length} {'*' * 20}"
     )
 
     # Data prep
-    dset_train, dset_val, dset_test = get_data(
+    dset_train, dset_val, dset_test = load_dataset(
         args.dataset,
         args.context_length,
         args.forecast_length,
-        data_root_path=args.data_root_path,
+        dataset_root_path=args.data_root_path,
     )
     print("Length of the train dataset =", len(dset_train))
 
