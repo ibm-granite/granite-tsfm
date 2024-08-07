@@ -543,6 +543,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             timestamp_column=timestamp_column,
             num_workers=num_workers,
             context_length=context_length,
+            prediction_length=0,
             cls=self.BaseRegressionDFDataset,
             input_columns=input_columns,
             target_columns=target_columns,
@@ -602,6 +603,107 @@ class RegressionDFDataset(BaseConcatDFDataset):
             ret = {
                 "past_values": np_to_torch(seq_x),
                 "target_values": np_to_torch(seq_y),
+            }
+            if self.datetime_col:
+                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
+
+            if self.group_id:
+                ret["id"] = self.group_id
+
+            if self.static_categorical_columns:
+                categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
+                ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+            return ret
+
+
+class ClassificationDFDataset(BaseConcatDFDataset):
+    """
+    A dataset for use with time series classification.
+    Args:
+        data_df (DataFrame, required): input data
+        datetime_col (str, optional): datetime column in the data_df. Defaults to None
+        x_cols (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
+        y_cols (list, required): list of columns of y. Defaults to an empty list.
+        group_ids (list, optional): list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
+        seq_len (int, required): the sequence length. Defaults to 1
+        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        input_columns: List[str] = [],
+        label_column: str = "label",
+        static_categorical_columns: List[str] = [],
+        context_length: int = 1,
+        num_workers: int = 1,
+        stride: int = 1,
+    ):
+        super().__init__(
+            data_df=data,
+            id_columns=id_columns,
+            timestamp_column=timestamp_column,
+            num_workers=num_workers,
+            context_length=context_length,
+            prediction_length=0,
+            cls=self.BaseClassificationDFDataset,
+            input_columns=input_columns,
+            label_column=label_column,
+            static_categorical_columns=static_categorical_columns,
+            stride=stride,
+        )
+
+        self.n_inp = 2
+
+    class BaseClassificationDFDataset(BaseDFDataset):
+        def __init__(
+            self,
+            data_df: pd.DataFrame,
+            group_id: Optional[Union[List[int], List[str]]] = None,
+            context_length: int = 1,
+            prediction_length: int = 0,
+            drop_cols: list = [],
+            id_columns: List[str] = [],
+            timestamp_column: Optional[str] = None,
+            label_column: str = "label",
+            input_columns: List[str] = [],
+            static_categorical_columns: List[str] = [],
+            stride: int = 1,
+        ):
+            self.label_column = label_column
+            self.input_columns = input_columns
+            self.static_categorical_columns = static_categorical_columns
+
+            x_cols = input_columns
+            y_cols = label_column
+
+            super().__init__(
+                data_df=data_df,
+                id_columns=id_columns,
+                timestamp_column=timestamp_column,
+                x_cols=x_cols,
+                y_cols=y_cols,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                group_id=group_id,
+                drop_cols=drop_cols,
+                stride=stride,
+            )
+
+        def __getitem__(self, index):
+            # seq_x: batch_size x seq_len x num_x_cols
+
+            time_id = index * self.stride
+            seq_x = self.X[time_id : time_id + self.context_length].values
+            # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+            seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
+
+            ret = {
+                "past_values": np_to_torch(seq_x),
+                "target_values": torch.tensor(seq_y),
             }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
