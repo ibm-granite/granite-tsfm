@@ -358,6 +358,18 @@ def convert_tsf_to_dataframe(
     replace_missing_vals_with="NaN",
     value_column_name="series_value",
 ):
+    """Read a .tsf file into a pandas dataframe.
+
+    Args:
+        full_file_path_and_name (_type_): _description_
+        replace_missing_vals_with (str, optional): _description_. Defaults to "NaN".
+        value_column_name (str, optional): _description_. Defaults to "series_value".
+
+    This code adopted from the Monash forecasting repository github:
+    https://github.com/rakshitha123/TSForecasting/blob/master/utils/data_loader.py
+
+    """
+
     col_names = []
     col_types = []
     all_data = {}
@@ -511,6 +523,11 @@ def convert_tsfile_to_dataframe(
         If not return_separate_X_and_y then a single DataFrame containing
         all time-series and (if relevant) a column "class_vals" the
         associated class values.
+
+
+    This code adopted from sktime:
+    https://github.com/sktime/sktime/blob/v0.30.0/sktime/datasets/_readers_writers/ts.py#L32-L615
+
     """
     # Initialize flags and variables used when parsing the file
     metadata_started = False
