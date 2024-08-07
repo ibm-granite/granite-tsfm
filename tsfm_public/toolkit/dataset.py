@@ -333,7 +333,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {
-                "past_values": np_to_torch(seq_x),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
             }
             if self.datetime_col:
@@ -534,6 +534,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         context_length: int = 1,
         num_workers: int = 1,
         stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
     ):
         # self.y_cols = y_cols
 
@@ -549,6 +550,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             target_columns=target_columns,
             static_categorical_columns=static_categorical_columns,
             stride=stride,
+            fill_value=fill_value,
         )
 
         self.n_inp = 2
@@ -571,6 +573,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             input_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
         ):
             self.target_columns = target_columns
             self.input_columns = input_columns
@@ -590,6 +593,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 group_id=group_id,
                 drop_cols=drop_cols,
                 stride=stride,
+                fill_value=fill_value,
             )
 
         def __getitem__(self, index):
@@ -601,8 +605,9 @@ class RegressionDFDataset(BaseConcatDFDataset):
             # return _torch(seq_x, seq_y)
 
             ret = {
-                "past_values": np_to_torch(seq_x),
-                "target_values": np_to_torch(seq_y),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "target_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
             }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
@@ -641,6 +646,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         context_length: int = 1,
         num_workers: int = 1,
         stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
     ):
         super().__init__(
             data_df=data,
@@ -654,6 +660,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             label_column=label_column,
             static_categorical_columns=static_categorical_columns,
             stride=stride,
+            fill_value=fill_value,
         )
 
         self.n_inp = 2
@@ -672,6 +679,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             input_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
         ):
             self.label_column = label_column
             self.input_columns = input_columns
@@ -691,6 +699,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                 group_id=group_id,
                 drop_cols=drop_cols,
                 stride=stride,
+                fill_value=fill_value,
             )
 
         def __getitem__(self, index):
@@ -702,8 +711,9 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
 
             ret = {
-                "past_values": np_to_torch(seq_x),
-                "target_values": torch.tensor(seq_y, dtype=torch.int64),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "target_values": torch.tensor(np.nan_to_num(seq_y, nan=self.fill_value), dtype=torch.int64),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
             }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
