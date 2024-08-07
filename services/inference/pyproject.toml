@@ -18,7 +18,7 @@ format = "{base}"
 #persistent-substitution = true
 
 [tool.poetry-dynamic-versioning.files."tsfminference/_version.py"]
-persistent-substitution = true # useful for editable installs
+# persistent-substitution = true # useful for editable installs
 initial-content = """
 # These version placeholders will be replaced later during substitution.
 __version__ = "0.0.0"
