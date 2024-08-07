@@ -19,6 +19,7 @@ torch = { version = ">2,<3", source = "pytorch" }
 fastapi = { version = "*" }
 pydantic = { version = "*" }
 uvicorn = { version = "*" }
+setuptools = { version = "*" }
 
 [[tool.poetry.source]]
 name = "pytorch"
