@@ -1215,29 +1215,32 @@ def convert_tsfile(filename: str) -> pd.DataFrame:
 
     Returns:
         pd.DataFrame: Converted time series
+
+
+    To do:
+    - address renaming of columns
+    - check that we catch all timestamp column types
+
     """
 
     dfs = []
     df = convert_tsfile_to_dataframe(filename, return_separate_X_and_y=False)
 
-    rows, columns = df.shape
+    # rows, columns = df.shape
+    value_columns = [c for c in df.columns if c != "class_vals"]
 
-    for i in range(rows):
-        temp_df = pd.DataFrame()
-        for j in range(columns):
-            if j != columns - 1:
-                series_to_df = df.iloc[i].iloc[j].to_frame().reset_index()
-                if j == 0:
-                    repeat = len(series_to_df)
-                    if (
-                        type(series_to_df["index"][0]) == pd.Timestamp
-                    ):  ## include timestamp columns if data includes timestamps
-                        temp_df["timestamp"] = series_to_df["index"]
-                    temp_df["id"] = [i] * repeat
-                temp_df[f"value_{j}"] = series_to_df[0]
-            else:
-                target = df.iloc[i].iloc[j]
-                temp_df["target"] = [target] * repeat
+    for row in df.itertuples():
+        l = len(row.dim_0)
+        temp_df = pd.DataFrame({"id": [row.Index] * l})
+
+        for j, c in enumerate(value_columns):
+            c_data = getattr(row, c)
+            if isinstance(c_data.index, pd.Timestamp) and "timestamp" not in temp_df.columns:
+                ## include timestamp columns if data includes timestamps
+                temp_df["timestamp"] = c_data.index
+            temp_df[f"value_{j}"] = c_data.values
+
+        temp_df["target"] = row.class_vals
 
         dfs.append(temp_df)
 
