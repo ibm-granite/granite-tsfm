@@ -232,7 +232,7 @@ def plot_predictions(
     plt.style.use("seaborn-v0_8-whitegrid")
 
     # Adjust figure size and subplot spacing
-    fig, axs = plt.subplots(num_plots, 1, figsize=(10, 20))
+    fig, axs = plt.subplots(num_plots, 1, figsize=(10, 2*num_plots))
     for i, ri in enumerate(random_indices):
         batch = dset[ri]
 
