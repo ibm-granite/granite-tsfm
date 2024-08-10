@@ -242,9 +242,10 @@ def plot_predictions(
         with torch.no_grad():
             if random_indices is None:
                 random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
-            random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+            random_x_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+            random_y_samples = torch.stack([dset[i]["future_values"] for i in random_indices]).to(device=device)
 
-            output = model(random_samples)
+            output = model(random_x_samples, future_values=random_y_samples)
             predictions_subset = output.prediction_outputs[:, :, channel].squeeze().cpu().numpy()
             prediction_length = predictions_subset.shape[1]
         using_pipeline = False
