@@ -35,6 +35,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Hidden feature size of the model.
         prediction_length (`int`, *optional*, defaults to 16)
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for probabilistic forecast.
         expansion_factor (`int`, *optional*, defaults to 2):
             Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
         num_layers (`int`, *optional*, defaults to 3):
@@ -67,7 +69,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         loss (`string`, *optional*, defaults to `"mse"`):
-            The loss function for the model. Defaults to mean squared error "mse". Allowed values: ["mse", "mae"]
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
+            error "mse" or "mae". Distribution head (nll) is currently disabled and not allowed.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         post_init (`bool`, *optional*, defaults to `False`):
@@ -89,9 +93,15 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Vocab size to use when resolution_prefix_tuning is enabled.
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `TinyTimeMixer` head.
+        distribution_output (`string`, *optional*, defaults to `"student_t"`):
+            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
+            "negative_binomial".
         prediction_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
             channels and we explicitly filter the channels in prediction and target before loss computation. Please provide the indices
+            in sorted ascending order.
+        exogenous_channel_indices (`list`, *optional*):
+            List of channel indices whose values are known in the forecast period. Please provide the indices
             in sorted ascending order.
         decoder_num_layers (`int`, *optional*, defaults to 8):
             Number of layers to use in decoder
@@ -105,6 +115,22 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Decoder channel mode. Use `"common_channel" for channel-independent modelling and `"mix_channel"` for channel-mixing modelling
         use_decoder (`bool`, *optional*, defaults to `True`):
             Enable to use decoder.
+        enable_forecast_channel_mixing (`bool`, *optional*, defaults to `False`):
+            Enable if we want to reconcile forecasts across all channels and also to enable exogenous infusion, if you have them.
+        fcm_gated_attn (`bool`, *optional*, defaults to `True`):
+            Enable gated attention in forecast channel mixing block.
+        fcm_context_length (`int`, *optional*, defaults to `1):
+            Surrounding context length to use. For Ex. If we want to consider 2 lag point before and after a data point, provide value 2 for `fcm_context_length`
+        fcm_use_mixer (`bool`, *optional*, defaults to `True`):
+            Enable Mixing in forecast channel mixing block.
+        fcm_mix_layers (`int`, *optional*, defaults to 2):
+            Number of mixer layers to use if fcm_use_mixer is enabled
+        fcm_prepend_past (`bool`, *optional*, defaults to `True`):
+            Prepend last context for forecast reconciliation
+        fcm_prepend_past_offset  (`int`, *optional*, defaults to None):
+
+        categorical_vocab_size_list (`list`, *optional*):
+            List of vocab size for all the tokenized categorical variables to use. Pass it in the same order as used in the foreward call param `static_categorical_values`.
         prediction_filter_length (`int`,*optional*, defaults to None):
             Actual length in the prediction output to use for loss calculations.
 
@@ -139,6 +165,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         prediction_length: int = 16,
         patch_stride: int = 8,
         prediction_channel_indices: Optional[list] = None,
+        exogenous_channel_indices: Optional[list] = None,
         # General model configuration
         d_model: int = 16,
         expansion_factor: int = 2,
@@ -152,7 +179,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         use_positional_encoding: bool = False,
         positional_encoding_type: str = "sincos",
         scaling: Optional[Union[str, bool]] = "std",
-        loss: str = "mse",
+        loss: Optional[str] = "mse",
         init_std: float = 0.02,
         post_init: bool = False,
         norm_eps: float = 1e-5,
@@ -161,6 +188,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         frequency_token_vocab_size: int = 5,
         # General head configuration
         head_dropout: float = 0.2,
+        distribution_output: str = "student_t",
+        num_parallel_samples: int = 100,
         # decoder parameters
         decoder_num_layers: int = 8,
         decoder_d_model: int = 8,
@@ -168,8 +197,21 @@ class TinyTimeMixerConfig(PretrainedConfig):
         decoder_raw_residual: bool = False,
         decoder_mode: str = "common_channel",
         use_decoder: bool = True,
+        # forecast channel mixing wit exog support
+        enable_forecast_channel_mixing: bool = False,
+        fcm_gated_attn: bool = True,
+        fcm_context_length: int = 1,
+        fcm_use_mixer: bool = False,
+        fcm_mix_layers: int = 2,
+        fcm_prepend_past: bool = True,
+        fcm_prepend_past_offset: Optional[int] = None,
+        # static categorical
+        categorical_vocab_size_list: Optional[list] = None,
         # prediction length filtering
         prediction_filter_length: Optional[int] = None,
+        # initialization parameters
+        init_linear: str = "pytorch",
+        init_embed: str = "pytorch",
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -193,23 +235,37 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.self_attn_heads = self_attn_heads
         self.init_std = init_std
         self.post_init = post_init
+        self.distribution_output = distribution_output
         self.loss = loss
+        self.num_parallel_samples = num_parallel_samples
         self.norm_eps = norm_eps
 
         self.use_decoder = use_decoder
 
         self.adaptive_patching_levels = adaptive_patching_levels
         self.resolution_prefix_tuning = resolution_prefix_tuning
+        self.exogenous_channel_indices = exogenous_channel_indices
         self.decoder_num_layers = decoder_num_layers
         self.decoder_adaptive_patching_levels = decoder_adaptive_patching_levels
         self.decoder_raw_residual = decoder_raw_residual
         self.decoder_mode = decoder_mode
+        self.fcm_gated_attn = fcm_gated_attn
+        self.fcm_context_length = fcm_context_length
+        self.fcm_use_mixer = fcm_use_mixer
+        self.fcm_mix_layers = fcm_mix_layers
+        self.fcm_prepend_past = fcm_prepend_past
+        self.fcm_prepend_past_offset = fcm_prepend_past_offset
+        self.enable_forecast_channel_mixing = enable_forecast_channel_mixing
         self.frequency_token_vocab_size = frequency_token_vocab_size
+
         self.d_model = d_model
         self.patch_stride = patch_stride
         self.decoder_d_model = decoder_d_model
+        self.categorical_vocab_size_list = categorical_vocab_size_list
         self.init_processing = False
         self.prediction_filter_length = prediction_filter_length
+        self.init_linear = init_linear
+        self.init_embed = init_embed
 
         super().__init__(**kwargs)
 
@@ -217,9 +273,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.init_processing = True
 
         if not hasattr(self, "num_patches"):
-            self.num_patches = (
-                max(self.context_length, self.patch_length) - self.patch_length
-            ) // self.patch_stride + 1
+            context_length = self.context_length
+            self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
@@ -228,5 +283,17 @@ class TinyTimeMixerConfig(PretrainedConfig):
             if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
                 raise ValueError("prediction_filter_length should be positive and less than prediction_length")
 
+        if self.loss == "nll" and self.enable_forecast_channel_mixing:
+            raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
+
         if self.prediction_channel_indices is not None:
+            self.prediction_channel_indices.sort()
+
+        if self.exogenous_channel_indices is not None:
+            self.exogenous_channel_indices.sort()
+
+        if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
+            self.prediction_channel_indices = list(
+                set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
+            )
             self.prediction_channel_indices.sort()

@@ -222,9 +222,10 @@ def plot_predictions(
     # device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
     device = model.device
     random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
-    random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+    random_x_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+    random_y_samples = torch.stack([dset[i]["future_values"] for i in random_indices]).to(device=device)
 
-    output = model(random_samples)
+    output = model(random_x_samples,future_values = random_y_samples)
     y_hat = output.prediction_outputs[:, :, channel].detach().cpu().numpy()
     pred_len = y_hat.shape[1]
 
