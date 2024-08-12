@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import pytest
+from torch.utils.data import DataLoader, default_collate
 
 from tsfm_public.toolkit.dataset import (
+    ClassificationDFDataset,
     ForecastDFDataset,
     PretrainDFDataset,
     ts_padding,
@@ -261,3 +263,34 @@ def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
 
     # check that past values of targets are zeroed out
     assert np.all(ds[0]["past_values"][:, 0].numpy() == 0)
+
+
+def test_clasification_df_dataset(ts_data):
+    data = ts_data.copy()
+    data["label"] = (data["val"] > 4).astype(int)
+
+    ds = ClassificationDFDataset(
+        data,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column=["label"],
+        id_columns=["id", "id2"],
+        context_length=4,
+    )
+
+    # check length
+    assert len(ds) == len(data) - ds.context_length + 1
+
+    # check alignment
+    assert ds[-1]["timestamp"] == ts_data.iloc[-1]["time_date"]
+
+    # check shape under dataloader
+    def my_collate(batch):
+        valid_keys = ["past_values", "target_values"]
+        batch_ = [{k: item[k] for k in valid_keys} for item in batch]
+        return default_collate(batch_)
+
+    dl = DataLoader(ds, batch_size=2, collate_fn=my_collate)
+    b = next(iter(dl))
+
+    assert len(b["target_values"].shape) == 1

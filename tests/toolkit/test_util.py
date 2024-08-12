@@ -1,9 +1,11 @@
 """Tests for util functions"""
 
+import tempfile
+
 import pandas as pd
 import pytest
 
-from tsfm_public.toolkit.util import convert_to_univariate, get_split_params, train_test_split
+from tsfm_public.toolkit.util import convert_to_univariate, convert_tsfile, get_split_params, train_test_split
 
 
 split_cases = [
@@ -73,3 +75,30 @@ def test_convert_to_univariate(ts_data):
         df_uni = convert_to_univariate(
             ts_data, timestamp_column=timestamp_column, id_columns=id_columns, target_columns=target_columns
         )
+
+
+def test_convert_tsfile():
+    data = """#Test
+#
+#The classes are
+#1. one
+#2. two
+#3. three
+@problemName test
+@timeStamps false
+@missing false
+@univariate true
+@equalLength true
+@seriesLength 5
+@classLabel true 1 2 3
+@data
+1,2,3,4,5:1
+10,20,30,40,50:2
+11,12,13,14,15:3
+"""
+    with tempfile.NamedTemporaryFile() as t:
+        t.write(data.encode("utf-8"))
+        t.flush()
+        df = convert_tsfile(t.name)
+
+    assert df.shape == (15, 3)
