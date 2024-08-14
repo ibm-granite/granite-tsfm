@@ -88,15 +88,16 @@ tests/test_inference.py ...                                                     
 ### Testing on a local RedHat Openshift instance using CodeReady Containers (CRC)
 
 1. install CRC by following the instructions [here](https://www.redhat.com/sysadmin/codeready-containers)
-1. start a crc instance with `crc start  -m 16000 -d 128 -c 6`. Note that crc uses a lot of resources. Give the VM as many resources as you comfortably can. The command shown here is on a machine with 32 cores and 32GB of RAM and allocates about 16GB of RAM and 128GB of storage space plus six CPU cores.
+1. start a crc instance with `crc start -m 16000 -d 64`. Note that crc uses a lot of resources. Give the VM as many resources as you comfortably can. The command shown here is on a machine with 32 cores and 32GB of RAM and allocates about 16GB of RAM and 128GB of storage space plus six CPU cores.
 1. install kserve with service mesh on your crc instance:
    * make sure you are using the correct `oc` context (e.g., `oc config use-context crc-admin`)
    * clone the kserve repository (`git clone --depth=1 -b v0.13.1  https://github.com/kserve/kserve.git`).
    * `cd kserve/docs`
-   * Copy this [code block](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md#installation-with-service-mesh) to a file named `kserve_install`
-   * **edit [this](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md?plain=1#L41) line to read `export KSERVE_VERSION=v0.13.1`
+   * Copy [this code block](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md#installation-with-service-mesh) to a file named `kserve_install`
+   * **edit** [this](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md?plain=1#L41) line to read `export KSERVE_VERSION=v0.13.1`
    * `sh ./kserve_install`
-   * The install can take a while to complete. You may have to run it more than once. You can confirm the installation by doing:
+   * The install can take a while to complete. You may have to run it more than once (hitting ctrl-c between runs if it seems to hang). With enough attempts, it should evenually complete with out any warning or error messages. This writer typically has to run the install script two or three times. Running it multiple times after issuing a `ctrl-c` doesn't seem to harm anything (in fact, it seems necessary).
+   * Confirm the installation by doing:
    ```bash
     (py311) ➜  docs git:(v0.13.1) oc -n kserve get pods          
     NAME                                         READY   STATUS    RESTARTS   AGE
