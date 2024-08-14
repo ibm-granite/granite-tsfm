@@ -85,25 +85,75 @@ tests/test_inference.py ...                                                     
 ====================================== 3 passed in 3.69s =======================
 ```
 
-### Testing on a local RedHat Openshift instance using CodeReady Containers (CRC)
+### Testing on a local kubernetes cluster using kind
 
-1. install CRC by following the instructions [here](https://www.redhat.com/sysadmin/codeready-containers)
-1. start a crc instance with `crc start -m 16000 -d 64`. Note that crc uses a lot of resources. Give the VM as many resources as you comfortably can. The command shown here is on a machine with 32 cores and 32GB of RAM and allocates about 16GB of RAM and 128GB of storage space plus six CPU cores.
-1. install kserve with service mesh on your crc instance:
-   * make sure you are using the correct `oc` context (e.g., `oc config use-context crc-admin`)
-   * clone the kserve repository (`git clone --depth=1 -b v0.13.1  https://github.com/kserve/kserve.git`).
-   * `cd kserve/docs`
-   * Copy [this code block](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md#installation-with-service-mesh) to a file named `kserve_install`
-   * **edit** [this](https://github.com/kserve/kserve/blob/v0.13.1/docs/OPENSHIFT_GUIDE.md?plain=1#L41) line to read `export KSERVE_VERSION=v0.13.1`
-   * `sh ./kserve_install`
-   * The install can take a while to complete. You may have to run it more than once (hitting ctrl-c between runs if it seems to hang). With enough attempts, it should evenually complete with out any warning or error messages. This writer typically has to run the install script two or three times. Running it multiple times after issuing a `ctrl-c` doesn't seem to harm anything (in fact, it seems necessary).
-   * Confirm the installation by doing:
-   ```bash
-    (py311) ➜  docs git:(v0.13.1) oc -n kserve get pods          
-    NAME                                         READY   STATUS    RESTARTS   AGE
-    kserve-controller-manager-589c77df99-49cwj   2/2     Running   0          17m
-     ```
-  
+For this example we'll use [kind](https://kind.sigs.k8s.io/docs/user/quick-start/),
+a lightweight way of running a local kubernetes cluster using docker. Before 
+proceding, please follow the kind 
+[installation guide](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
+* Create a local cluster
+
+```bash
+kind create cluster
+Creating cluster "kind" ...
+ ✓ Ensuring node image (kindest/node:v1.29.2) 🖼
+ ✓ Preparing nodes 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+Set kubectl context to "kind-kind"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+```
+
+* Confirm that `kubectl` is using the local cluster as its context
+
+```bash
+kubectl config current-context 
+kind-kind
+```
+
+* Install kserve inside your local cluster:
+
+```bash
+curl -s https://raw.githubusercontent.com/kserve/kserve/release-0.13/hack/quick_install.sh | bash
+```
+
+This might take a little while to complete because a number of kserve-related containers 
+need to be pulled and started. The script may fail the first time around (
+   you can run it multiple times without harm.
+) because some containers might still be in the pull or starting state. 
+You can confirm that all of kserve's containers have started properly by doing:
+
+```bash
+ kubectl get pods --all-namespaces
+
+NAMESPACE            NAME                                         READY   STATUS    RESTARTS   AGE
+cert-manager         cert-manager-b748b77ff-q88k5                 1/1     Running   0          3m45s
+cert-manager         cert-manager-cainjector-7ccb6546c6-f4bgf     1/1     Running   0          3m45s
+cert-manager         cert-manager-webhook-7f669bd79f-p76rv        1/1     Running   0          3m45s
+istio-system         istio-ingressgateway-76c99fc86c-t5fnr        1/1     Running   0          7m12s
+istio-system         istiod-7f7457d5fc-gzlxb                      1/1     Running   0          7m54s
+knative-serving      activator-58db57894b-6dznh                   1/1     Running   0          6m46s
+knative-serving      autoscaler-76f95fff78-h62tw                  1/1     Running   0          6m45s
+knative-serving      controller-7dd875844b-bcf5r                  1/1     Running   0          6m45s
+knative-serving      net-istio-controller-57486f879-6lx8w         1/1     Running   0          6m44s
+knative-serving      net-istio-webhook-7ccdbcb557-vfwbp           1/1     Running   0          6m44s
+knative-serving      webhook-d8674645d-qrb4j                      1/1     Running   0          6m45s
+kserve               kserve-controller-manager-589c77df99-p9tw2   1/2     Running   0          2m
+kube-system          coredns-76f75df574-257xj                     1/1     Running   0          15m
+kube-system          coredns-76f75df574-szdnf                     1/1     Running   0          15m
+kube-system          etcd-kind-control-plane                      1/1     Running   0          16m
+kube-system          kindnet-qvmc5                                1/1     Running   0          15m
+kube-system          kube-apiserver-kind-control-plane            1/1     Running   0          16m
+kube-system          kube-controller-manager-kind-control-plane   1/1     Running   0          16m
+kube-system          kube-proxy-8vl2j                             1/1     Running   0          15m
+kube-system          kube-scheduler-kind-control-plane            1/1     Running   0          16m
+```
+
 
 ## Viewing the OpenAPI 3.x specification and swagger page
 
