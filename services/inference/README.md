@@ -1,7 +1,5 @@
 # TSFM Services
 
-
-
 This component provides RESTful services for the  tsfm-granite class of 
 timeseries foundation models. At present it can serve the following models:
 
@@ -9,7 +7,6 @@ timeseries foundation models. At present it can serve the following models:
 * https://huggingface.co/ibm-granite/granite-timeseries-patchtst
 * https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
   
-
 
 ## Prerequisites:
 
@@ -46,11 +43,13 @@ make test_local
 ### Creating an image
 
 _You must have either docker or podman installed on your system for this to
-work. You must also have proper permissions on your system to build images._
+work. You must also have proper permissions on your system to build images. If you are using podman, please also alias the `podman` command to `docker` so that the code snippets that reference `docker` below will work._
 
 ```sh
-CONTAINER_BUILDER=<docker|podmain> make image
-# e.g, CONTAINER_BUILDER=docker make image
+# this defaults to using the docker command
+# if you're using podman, don't forget to
+# alias docker=podman first
+make image
 ```
 
 After a successful build you should have a local image named 
@@ -62,12 +61,12 @@ tsfminference                                             latest               d
 # some of the numeric and hash values on your machine could be different
 ```
 
-## Runing the service unit tests
+## Running the service unit tests
 
-### Using docker or podman
+### Using the built image
 
 ```sh
-CONTAINER_BUILDER=<docker|podman> make test_image
+make test_image
 
 docker run -p 8000:8000 -d --rm --name tsfmserver tsfminference
 1f88368b7c133ce4a236f5dbe3be18a23e98f65871e822ad808cf4646106fc9e
@@ -78,24 +77,30 @@ platform linux -- Python 3.11.9, pytest-8.3.2, pluggy-1.5.0
 rootdir: /home/stus/git/github.com/tsfm_public/services/inference
 configfile: pyproject.toml
 plugins: anyio-4.4.0
-collected 3 items                                                                                                                                                                           
-# this list of tests is illustrative only
+collected 3 items                                                                                                         # this list of tests is illustrative only
 tests/test_inference.py ...                                                                                                                                                           [100%]
 
 ====================================== 3 passed in 3.69s =======================
 ```
 
-### Testing on a local kubernetes cluster using kind
+## Testing on a local kubernetes cluster using kind
 
 For this example we'll use [kind](https://kind.sigs.k8s.io/docs/user/quick-start/),
 a lightweight way of running a local kubernetes cluster using docker. Before 
 proceding, please follow the kind 
-[installation guide](https://kind.sigs.k8s.io/docs/user/quick-start/).
+[installation guide](https://kind.sigs.k8s.io/docs/user/quick-start/) but do not create a local cluster.
 
-* Create a local cluster
+### Create a local cluster
+
+For this example, we need to install kind with a
+local image registry. Download the [installer script](https://kind.sigs.k8s.io/examples/kind-with-registry.sh):
 
 ```bash
-kind create cluster
+curl -L https://kind.sigs.k8s.io/examples/kind-with-registry.sh > /tmp/kind-with-registry.sh
+```
+
+```bash
+sh /tmp/kind-with-registry.sh
 Creating cluster "kind" ...
  ✓ Ensuring node image (kindest/node:v1.29.2) 🖼
  ✓ Preparing nodes 📦  
@@ -107,26 +112,35 @@ Set kubectl context to "kind-kind"
 You can now use your cluster with:
 
 kubectl cluster-info --context kind-kind
+
+Have a nice day! 👋
+configmap/local-registry-hosting created
 ```
 
-* Confirm that `kubectl` is using the local cluster as its context
+### Upload our tsfm service image to the kind local registry:
+
+```bash
+# don't forget to run "make image" first
+docker tag tsfminference:latest localhost:5001/tsfminference:latest
+docker push localhost:5001/tsfminference:latest
+```
+
+Confirm that `kubectl` is using the local cluster as its context
 
 ```bash
 kubectl config current-context 
 kind-kind
 ```
 
-* Install kserve inside your local cluster:
+### Install kserve inside your local cluster:
 
 ```bash
 curl -s https://raw.githubusercontent.com/kserve/kserve/release-0.13/hack/quick_install.sh | bash
 ```
 
 This might take a little while to complete because a number of kserve-related containers 
-need to be pulled and started. The script may fail the first time around (
-   you can run it multiple times without harm.
-) because some containers might still be in the pull or starting state. 
-You can confirm that all of kserve's containers have started properly by doing:
+need to be pulled and started. The script may fail the first time around (you can run it multiple times without harm) because some containers might still be in the pull or starting state. 
+You can confirm that all of kserve's containers have started properly by doing (you may see some additional cointainers listed that are part of kind's internal services):
 
 ```bash
  kubectl get pods --all-namespaces
@@ -154,6 +168,46 @@ kube-system          kube-proxy-8vl2j                             1/1     Runnin
 kube-system          kube-scheduler-kind-control-plane            1/1     Running   0          16m
 ```
 
+### Deploy the tsfm kserve service
+
+Save the folling yaml snippet to a file called tsfm.yaml:
+
+```yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+  name: tsfminferenceserver
+spec:
+  predictor:
+    containers:
+      - name: "tsfmgrpcserver"
+        image: "localhost:5001/tsfminference:latest"
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+```
+
+Create a namespace for the deployment
+
+```bash
+kubectl create namespace kserve-test
+```
+
+```bash
+kubectl -n kserve-test apply -f tsfm.yaml
+```
+
+Confirm that the service is running:
+
+```bash
+kubectl -n kserve-test get inferenceservices.serving.kserve.io tsfminferenceserver 
+NAME                  URL                                                  READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION   AGE
+tsfminferenceserver   http://tsfminferenceserver-kserve-test.example.com   True                                                                  25m
+
+```
 
 ## Viewing the OpenAPI 3.x specification and swagger page
 
