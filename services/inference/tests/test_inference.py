@@ -111,8 +111,8 @@ def test_zero_shot_forecast_inference(ts_data):
 @pytest.mark.parametrize(
     "model_path",
     [
-        "ibm-granite/granite-timeseries-patchtst",
-        "ibm-granite/granite-timeseries-patchtsmixer",
+        "ibm/test-patchtst",
+        "ibm/test-patchtsmixer",
     ],
 )
 def test_trained_model_inference(ts_data, model_path):
