@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from transformers import PatchTSTForPrediction
 
-from tsfm_public import TinyTimeMixerForPrediction
+from tsfm_public import TinyTimeMixerConfig, TinyTimeMixerForPrediction
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
@@ -25,8 +25,10 @@ def patchtst_model():
 
 @pytest.fixture(scope="module")
 def ttm_model():
-    model_path = "ibm-granite/granite-timeseries-ttm-v1"
-    model = TinyTimeMixerForPrediction.from_pretrained(model_path)
+    # model_path = "ibm-granite/granite-timeseries-ttm-v1"
+
+    conf = TinyTimeMixerConfig()
+    model = TinyTimeMixerForPrediction(conf)
 
     return model
 
