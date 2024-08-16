@@ -14,6 +14,7 @@ from tsfm_public.toolkit.dataset import (
     ClassificationDFDataset,
     ForecastDFDataset,
     PretrainDFDataset,
+    RegressionDFDataset,
     ts_padding,
 )
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
@@ -101,6 +102,28 @@ def test_pretrain_df_dataset(ts_data):
     assert len(ds) == 1
 
     assert ds[0]["timestamp"] == ts_data.iloc[-1]["time_date"]
+
+
+def test_regression_df_dataset(ts_data):
+    ts_data2 = ts_data.copy()
+    ts_data2["id"] = "B"
+    ts_data2["val2"] = ts_data2["val2"] + 100
+    ts_data2 = pd.concat([ts_data, ts_data2], axis=0)
+
+    ds = RegressionDFDataset(
+        ts_data2,
+        id_columns=["id"],
+        timestamp_column="time_date",
+        input_columns=["val"],
+        target_columns=["val2"],
+        context_length=5,
+    )
+
+    # Test proper target alignment
+    np.testing.assert_allclose(ds[0]["target_values"].numpy(), np.asarray([104]))
+    assert ds[0]["id"] == ("A",)
+    np.testing.assert_allclose(ds[6]["target_values"].numpy(), np.asarray([204]))
+    assert ds[6]["id"] == ("B",)
 
 
 def test_forecasting_df_dataset(ts_data_with_categorical):
