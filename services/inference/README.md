@@ -135,7 +135,7 @@ kind-kind
 ### Install kserve inside your local cluster:
 
 ```bash
-curl -s https://raw.githubusercontent.com/kserve/kserve/release-0.13/hack/quick_install.sh | bash
+curl -s https://raw.githubusercontent.com/kserve/kserve/v0.13.1/hack/quick_install.sh | bash
 ```
 
 This might take a little while to complete because a number of kserve-related containers 
@@ -168,6 +168,52 @@ kube-system          kube-proxy-8vl2j                             1/1     Runnin
 kube-system          kube-scheduler-kind-control-plane            1/1     Running   0          16m
 ```
 
+### Confirm that you can perform a sklearn inference run (optional)
+
+This optional section is to help you confirm that your kserve setup is correct
+to isolate any k8s issues from TSFM-specific ones. After following the steps up to
+[here](https://kserve.github.io/website/0.13/modelserving/v1beta1/sklearn/v2/#test-the-deployed-model), you should be able to run the following inference request 
+(note that we're going to use port-forwarding instead of an ingress port for simplicity)
+
+First check that the sklearn service is running (you have to apply the sklearn.yaml content given in [this section](https://kserve.github.io/website/0.13/modelserving/v1beta1/sklearn/v2/#deploy-the-model-with-rest-endpoint-through-inferenceservice).
+
+```bash
+kubectl get inferenceservices.serving.kserve.io sklearn-v2-iris 
+NAME              URL                                          READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION               AGE
+sklearn-v2-iris   http://sklearn-v2-iris.default.example.com   True           100                             sklearn-v2-iris-predictor-00001   48s
+```
+
+Start a k8s port forward
+
+```bash
+INGRESS_GATEWAY_SERVICE=$(kubectl get svc --namespace istio-system --selector="app=istio-ingressgateway" --output jsonpath='{.items[0].metadata.name}')
+kubectl port-forward --namespace istio-system svc/${INGRESS_GATEWAY_SERVICE} 8080:80
+```
+
+In a separate terminal, run an inference (don't forget to create the `iris-input-v2.json`
+file using the payload content shown [here](iris-input-v2.json) ):
+
+```bash
+curl  \
+  -H "Host: ${SERVICE_HOSTNAME}" \
+  -H "Content-Type: application/json" \
+  -d @./iris-input-v2.json \
+  http://localhost:8080/v2/models/sklearn-v2-iris/infer
+```
+
+You should get an output that resembles:
+
+```json
+{"model_name":"sklearn-v2-iris",
+"model_version":null,"id":"1b479ed4-14ca-4b71-8a33-47a7d5c40134",
+"parameters":null,
+"outputs":[{"name":"output-0",
+"shape":[2],
+"datatype":"INT32",
+"parameters":null,
+"data":[1,1]}]}
+```
+
 ### Deploy the tsfm kserve service
 
 Save the folling yaml snippet to a file called tsfm.yaml:
@@ -193,17 +239,16 @@ spec:
 Create a namespace for the deployment
 
 ```bash
-kubectl create namespace kserve-test
-```
-
-```bash
-kubectl -n kserve-test apply -f tsfm.yaml
+# note that we're using the defualt namespace
+# You may not have deploy rights in this namespace on your
+# k8s system (you should if you're using kind, though)
+kubectl apply -f tsfm.yaml
 ```
 
 Confirm that the service is running:
 
 ```bash
-kubectl -n kserve-test get inferenceservices.serving.kserve.io tsfminferenceserver 
+kubectl get inferenceservices.serving.kserve.io tsfminferenceserver 
 NAME                  URL                                                  READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION   AGE
 tsfminferenceserver   http://tsfminferenceserver-kserve-test.example.com   True                                                                  25m
 
