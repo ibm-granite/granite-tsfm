@@ -86,21 +86,16 @@ tests/test_inference.py ...                                                     
 ## Testing on a local kubernetes cluster using kind
 
 For this example we'll use [kind](https://kind.sigs.k8s.io/docs/user/quick-start/),
-a lightweight way of running a local kubernetes cluster using docker. Before 
-proceding, please follow the kind 
-[installation guide](https://kind.sigs.k8s.io/docs/user/quick-start/) but do not create a local cluster.
+a lightweight way of running a local kubernetes cluster using docker.
 
 ### Create a local cluster
 
 For this example, we need to install kind with a
-local image registry. Download the [installer script](https://kind.sigs.k8s.io/examples/kind-with-registry.sh):
+local image registry. 
 
 ```bash
-curl -L https://kind.sigs.k8s.io/examples/kind-with-registry.sh > /tmp/kind-with-registry.sh
-```
+curl -s https://kind.sigs.k8s.io/examples/kind-with-registry.sh | bash
 
-```bash
-sh /tmp/kind-with-registry.sh
 Creating cluster "kind" ...
  ✓ Ensuring node image (kindest/node:v1.29.2) 🖼
  ✓ Preparing nodes 📦  
@@ -138,34 +133,16 @@ kind-kind
 curl -s https://raw.githubusercontent.com/kserve/kserve/v0.13.1/hack/quick_install.sh | bash
 ```
 
-This might take a little while to complete because a number of kserve-related containers 
-need to be pulled and started. The script may fail the first time around (you can run it multiple times without harm) because some containers might still be in the pull or starting state. 
-You can confirm that all of kserve's containers have started properly by doing (you may see some additional cointainers listed that are part of kind's internal services):
+This will take a minute or so to complete because a number of kserve-related containers 
+need to be pulled and started. The script may fail the first time around (you can run it multiple times without harm) because some containers might still be in the pull or starting state. You can confirm that all of kserve's containers have started properly by doing (you may see some additional cointainers listed that are part of kind's internal services).
+
+You know you have a successful install when you finally see (it might take two 
+or more tries):
 
 ```bash
- kubectl get pods --all-namespaces
-
-NAMESPACE            NAME                                         READY   STATUS    RESTARTS   AGE
-cert-manager         cert-manager-b748b77ff-q88k5                 1/1     Running   0          3m45s
-cert-manager         cert-manager-cainjector-7ccb6546c6-f4bgf     1/1     Running   0          3m45s
-cert-manager         cert-manager-webhook-7f669bd79f-p76rv        1/1     Running   0          3m45s
-istio-system         istio-ingressgateway-76c99fc86c-t5fnr        1/1     Running   0          7m12s
-istio-system         istiod-7f7457d5fc-gzlxb                      1/1     Running   0          7m54s
-knative-serving      activator-58db57894b-6dznh                   1/1     Running   0          6m46s
-knative-serving      autoscaler-76f95fff78-h62tw                  1/1     Running   0          6m45s
-knative-serving      controller-7dd875844b-bcf5r                  1/1     Running   0          6m45s
-knative-serving      net-istio-controller-57486f879-6lx8w         1/1     Running   0          6m44s
-knative-serving      net-istio-webhook-7ccdbcb557-vfwbp           1/1     Running   0          6m44s
-knative-serving      webhook-d8674645d-qrb4j                      1/1     Running   0          6m45s
-kserve               kserve-controller-manager-589c77df99-p9tw2   1/2     Running   0          2m
-kube-system          coredns-76f75df574-257xj                     1/1     Running   0          15m
-kube-system          coredns-76f75df574-szdnf                     1/1     Running   0          15m
-kube-system          etcd-kind-control-plane                      1/1     Running   0          16m
-kube-system          kindnet-qvmc5                                1/1     Running   0          15m
-kube-system          kube-apiserver-kind-control-plane            1/1     Running   0          16m
-kube-system          kube-controller-manager-kind-control-plane   1/1     Running   0          16m
-kube-system          kube-proxy-8vl2j                             1/1     Running   0          15m
-kube-system          kube-scheduler-kind-control-plane            1/1     Running   0          16m
+# [snip]...
+clusterstoragecontainer.serving.kserve.io/default created
+😀 Successfully installed KServe
 ```
 
 ### Confirm that you can perform a sklearn inference run (optional)
@@ -216,7 +193,7 @@ You should get an output that resembles:
 
 ### Deploy the tsfm kserve service
 
-Save the folling yaml snippet to a file called tsfm.yaml:
+Save the folling yaml snippet to a file called tsfm.yaml.
 
 ```yaml
 apiVersion: serving.kserve.io/v1beta1
@@ -228,7 +205,7 @@ metadata:
 spec:
   predictor:
     containers:
-      - name: "tsfmgrpcserver"
+      - name: "tsfm-server"
         image: "localhost:5001/tsfminference:latest"
         imagePullPolicy: Always
         ports:
@@ -236,12 +213,7 @@ spec:
             protocol: TCP
 ```
 
-Create a namespace for the deployment
-
 ```bash
-# note that we're using the defualt namespace
-# You may not have deploy rights in this namespace on your
-# k8s system (you should if you're using kind, though)
 kubectl apply -f tsfm.yaml
 ```
 
