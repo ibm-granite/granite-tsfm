@@ -234,7 +234,7 @@ def plot_predictions(
     # Adjust figure size and subplot spacing
     assert num_plots >= 1
     fig, axs = plt.subplots(num_plots, 1, figsize=(10, 2 * num_plots))
-    if num_plots==1:
+    if num_plots == 1:
         axs = [axs]
 
     for i, ri in enumerate(random_indices):
