@@ -236,7 +236,7 @@ def plot_predictions(
     fig, axs = plt.subplots(num_plots, 1, figsize=(10, 2 * num_plots))
     if num_plots==1:
         axs = [axs]
-        
+
     for i, ri in enumerate(random_indices):
         batch = dset[ri]
 
