@@ -123,6 +123,44 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         kwargs["explode_forecasts"] = explode_forecasts
         kwargs["inverse_scale_outputs"] = inverse_scale_outputs
         kwargs["add_known_ground_truth"] = add_known_ground_truth
+
+        # autopopulate from feature extractor and model
+        if "feature_extractor" in kwargs:
+            for p in [
+                "id_columns",
+                "timestamp_column",
+                "target_columns",
+                "observable_columns",
+                "control_columns",
+                "conditional_columns",
+                "static_categorical_columns",
+                "freq",
+            ]:
+                if p not in kwargs:
+                    kwargs[p] = getattr(kwargs["feature_extractor"], p)
+
+            # get freq from kwargs or the preprocessor
+            if "freq" not in kwargs:
+                kwargs["freq"] = kwargs["feature_extractor"].freq
+
+        model = kwargs.get("model", None)
+        if not model:
+            raise ValueError("A model must be supplied during instantiation of a TimeSeriesForecastingPipeline")
+
+        if "context_length" not in kwargs:
+            kwargs["context_length"] = model.config.context_length
+
+        if "prediction_length" not in kwargs:
+            kwargs["prediction_length"] = model.config.prediction_length
+
+        # check if we need to use the frequency token, get token if needed
+        use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
+
+        if use_frequency_token and "feature_extractor" in kwargs:
+            kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
+        else:
+            kwargs["frequency_token"] = None
+
         super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
@@ -140,48 +178,13 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         For expected parameters see the call method below.
         """
 
-        context_length = kwargs.get("context_length", self.model.config.context_length)
-        prediction_length = kwargs.get("prediction_length", self.model.config.prediction_length)
-
-        # get freq from kwargs or the preprocessor
-        freq = kwargs.get("freq", None)
-        if self.feature_extractor and not freq:
-            freq = self.feature_extractor.freq
-
-        # check if we need to use the frequency token, get token in needed
-        use_frequency_token = getattr(self.model.config, "resolution_prefix_tuning", False)
-
-        if use_frequency_token and self.feature_extractor:
-            frequency_token = self.feature_extractor.get_frequency_token(freq)
-        else:
-            frequency_token = None
-
-        # autopopulate from feature extractor
-        if self.feature_extractor:
-            for p in [
-                "id_columns",
-                "timestamp_column",
-                "target_columns",
-                "observable_columns",
-                "control_columns",
-                "conditional_columns",
-                "static_categorical_columns",
-                "freq",
-            ]:
-                if p not in kwargs:
-                    kwargs[p] = getattr(self.feature_extractor, p)
-
-        preprocess_kwargs = {
-            "prediction_length": prediction_length,
-            "context_length": context_length,
-            "frequency_token": frequency_token,
-        }
-        postprocess_kwargs = {
-            "prediction_length": prediction_length,
-            "context_length": context_length,
-        }
+        preprocess_kwargs = {}
+        postprocess_kwargs = {}
 
         preprocess_params = [
+            "prediction_length",
+            "context_length",
+            "frequency_token",
             "id_columns",
             "timestamp_column",
             "target_columns",
@@ -192,6 +195,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "future_time_series",
         ]
         postprocess_params = [
+            "prediction_length",
+            "context_length",
             "id_columns",
             "timestamp_column",
             "target_columns",
@@ -355,6 +360,16 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             for c in future_time_series.columns:
                 if c not in time_series.columns:
                     raise ValueError(f"Future time series input contains an unknown column {c}.")
+
+            if id_columns:
+                id_count = time_series[id_columns].unique().shape[0]
+            else:
+                id_count = 1
+
+            if future_time_series.shape[0] != prediction_length * id_count:
+                raise ValueError(
+                    f"If provided, `future_time_series` data should cover the prediction length for each of the time series in the test dataset. Received data of length {future_time_series.shape[0]} but expected {prediction_length * id_count}"
+                )
 
             time_series = pd.concat((time_series, future_time_series), axis=0)
         else:
