@@ -5,7 +5,7 @@
 
 import pandas as pd
 import pytest
-from transformers import PatchTSTForPrediction
+from transformers import PatchTSTConfig, PatchTSTForPrediction
 
 from tsfm_public import TinyTimeMixerConfig, TinyTimeMixerForPrediction
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
@@ -17,7 +17,7 @@ from tsfm_public.toolkit.util import select_by_index
 
 @pytest.fixture(scope="module")
 def patchtst_model():
-    model_path = "ibm-granite/granite-timeseries-patchtst"
+    model_path = "ibm/test-patchtst"
     model = PatchTSTForPrediction.from_pretrained(model_path)
 
     return model
@@ -79,6 +79,20 @@ def etth_data():
     }
 
     return train_data, test_data, params
+
+
+def test_forecasting_pipeline_defaults():
+    model = PatchTSTForPrediction(PatchTSTConfig(prediction_length=3, context_length=33))
+
+    tspipe = TimeSeriesForecastingPipeline(model=model)
+
+    assert tspipe._preprocess_params["prediction_length"] == 3
+    assert tspipe._preprocess_params["context_length"] == 33
+
+    tspipe = TimeSeriesForecastingPipeline(model=model, prediction_length=6, context_length=66)
+
+    assert tspipe._preprocess_params["prediction_length"] == 6
+    assert tspipe._preprocess_params["context_length"] == 66
 
 
 def test_forecasting_pipeline_forecasts(patchtst_model):
