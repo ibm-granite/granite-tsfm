@@ -42,16 +42,10 @@ make test_local
 
 ### Creating an image
 
-_You must have either docker or podman installed on your system for this to
-work. You must also have proper permissions on your system to build images. If you are using podman, please also alias the `podman` command to `docker` so that the code snippets that reference `docker` below will work._
-
-```sh
-# this defaults to using the docker command
-# if you're using podman, don't forget to
-# alias docker=podman first
-make image
-```
-
+You must have either docker or podman installed on your system for this to
+work. You must also have proper permissions on your system to build images. In this 
+README we assume you have a working docker command which can be docker itself 
+or `podman` that has been aliased twith dev
 After a successful build you should have a local image named 
 `tsfminference:latest`
 
@@ -90,8 +84,26 @@ a lightweight way of running a local kubernetes cluster using docker.
 
 ### Create a local cluster
 
-For this example, we need to install kind with a
-local image registry. 
+First:
+
+* [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
+* [Install kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
+* [Install helm](https://helm.sh/docs/intro/install/)
+* If you are using podman, you will need to enable the use of an insecure (using http instead of https)
+local container registry by creating a file called `/etc/containers/registries.conf.d/localhost.conf` 
+with the following content:
+
+  ```
+  [[registry]]
+  location = "localhost:5001"
+  insecure = true
+  ```
+* If you're using podman, you may run into issues running the kserve container due to 
+open file (nofile) limits. If so, 
+see https://github.com/containers/common/blob/main/docs/containers.conf.5.md
+for instructions on how to increase the default limits.
+
+Now install a kind control plane with a local docker registry:
 
 ```bash
 curl -s https://kind.sigs.k8s.io/examples/kind-with-registry.sh | bash
@@ -117,7 +129,7 @@ configmap/local-registry-hosting created
 ```bash
 # don't forget to run "make image" first
 docker tag tsfminference:latest localhost:5001/tsfminference:latest
-docker push localhost:5001/tsfminference:latest
+  docker push localhost:5001/tsfminference:latest
 ```
 
 Confirm that `kubectl` is using the local cluster as its context
@@ -130,7 +142,8 @@ kind-kind
 ### Install kserve inside your local cluster:
 
 ```bash
-curl -s https://raw.githubusercontent.com/kserve/kserve/v0.13.1/hack/quick_install.sh | bash
+curl -s https://raw.githubusercontent.com/kserve/kserve/master/hack/quick_install.sh > quick_install.sh
+bash ./quick_install.sh -r
 ```
 
 This will take a minute or so to complete because a number of kserve-related containers 
@@ -199,6 +212,9 @@ Save the folling yaml snippet to a file called tsfm.yaml.
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
+  # We're using a RawDeployment for testing purposes
+  # as well as to get around an issue with the knative
+  # operator reading from a local container registry
   annotations:
     serving.kserve.io/deploymentMode: RawDeployment
   name: tsfminferenceserver
@@ -224,6 +240,19 @@ kubectl get inferenceservices.serving.kserve.io tsfminferenceserver
 NAME                  URL                                                  READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION   AGE
 tsfminferenceserver   http://tsfminferenceserver-kserve-test.example.com   True                                                                  25m
 
+```
+
+Create a port forward for the predictor pod:
+
+```bash
+# your pod identifier suffix will be different
+kubectl port-forward pods/tsfminferenceserver-predictor-7dcd6ff5d5-8f726 8000:8000   
+```
+
+Run the unit tests:
+
+```bash
+pytest tests
 ```
 
 ## Viewing the OpenAPI 3.x specification and swagger page
