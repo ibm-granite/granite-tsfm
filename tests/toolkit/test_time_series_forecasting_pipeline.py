@@ -84,7 +84,7 @@ def etth_data():
 def test_forecasting_pipeline_defaults():
     model = PatchTSTForPrediction(PatchTSTConfig(prediction_length=3, context_length=33))
 
-    tspipe = TimeSeriesForecastingPipeline(model=model)
+    tspipe = TimeSeriesForecastingPipeline(model)
 
     assert tspipe._preprocess_params["prediction_length"] == 3
     assert tspipe._preprocess_params["context_length"] == 33

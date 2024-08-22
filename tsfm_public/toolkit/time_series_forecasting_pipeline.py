@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
+from transformers import PreTrainedModel
 from transformers.data.data_collator import default_data_collator
 from transformers.pipelines.base import (
     GenericTensor,
@@ -112,6 +113,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
     def __init__(
         self,
+        model: Union["PreTrainedModel"],
         *args,
         freq: Optional[str] = None,
         explode_forecasts: bool = False,
@@ -143,9 +145,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             if "freq" not in kwargs:
                 kwargs["freq"] = kwargs["feature_extractor"].freq
 
-        model = kwargs.get("model", None)
-        if not model:
-            raise ValueError("A model must be supplied during instantiation of a TimeSeriesForecastingPipeline")
+        # model = kwargs.get("model", None)
+        # if not model:
+        #     raise ValueError("A model must be supplied during instantiation of a TimeSeriesForecastingPipeline")
 
         if "context_length" not in kwargs:
             kwargs["context_length"] = model.config.context_length
@@ -161,7 +163,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         else:
             kwargs["frequency_token"] = None
 
-        super().__init__(*args, **kwargs)
+        super().__init__(model, *args, **kwargs)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
