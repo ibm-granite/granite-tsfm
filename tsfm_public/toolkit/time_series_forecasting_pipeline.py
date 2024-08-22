@@ -145,7 +145,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         model = kwargs.get("model", None)
         if not model:
-            raise ValueError("A model must be supplied")
+            raise ValueError("A model must be supplied during instantiation of a TimeSeriesForecastingPipeline")
 
         if "context_length" not in kwargs:
             kwargs["context_length"] = model.config.context_length
