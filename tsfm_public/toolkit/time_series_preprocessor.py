@@ -909,8 +909,24 @@ def create_timestamps(
     freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]] = None,
     time_sequence: Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]] = None,
     periods: int = 1,
-):
-    """Simple utility to create a list of timestamps based on start, delta and number of periods"""
+) -> List[pd.Timestamp]:
+    """Simple utility to create a list of timestamps based on start, delta and number of periods
+
+    Args:
+        last_timestamp (Union[datetime.datetime, pd.Timestamp]): The last observed timestamp, new timestamps will be created
+            after this timestamp.
+        freq (Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]], optional): The frequency at which timestamps
+            should be generated. Defaults to None.
+        time_sequence (Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]], optional): A time sequence
+            from which the frequency can be inferred. Defaults to None.
+        periods (int, optional): The number of timestamps to generate. Defaults to 1.
+
+    Raises:
+        ValueError: If the frequency cannot be parsed from freq or inferred from time_sequence
+
+    Returns:
+        List[pd.Timestamp]: List of timestamps
+    """
 
     if freq is None and time_sequence is None:
         raise ValueError("Neither `freq` nor `time_sequence` provided, cannot determine frequency.")
