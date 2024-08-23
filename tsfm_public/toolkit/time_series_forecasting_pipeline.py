@@ -468,6 +468,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+            out = self.feature_extractor.inverse_scale_targets(out)
+            if kwargs["add_known_ground_truth"]:
+                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out
