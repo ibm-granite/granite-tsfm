@@ -31,6 +31,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install poetry
         cd services/inference
+        poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev
     - name: Test local server tsfminference service with pytest
       run: |
