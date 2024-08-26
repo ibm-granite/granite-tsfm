@@ -245,7 +245,7 @@ def plot_predictions(
             random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
 
             output = model(random_samples)
-            predictions_subset = output.prediction_outputs[:, :, channel].squeeze().numpy()
+            predictions_subset = output.prediction_outputs[:, :, channel].squeeze().cpu().numpy()
             prediction_length = predictions_subset.shape[1]
         using_pipeline = False
     else:
