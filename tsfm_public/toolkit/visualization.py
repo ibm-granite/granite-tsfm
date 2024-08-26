@@ -221,6 +221,9 @@ def plot_predictions(
 ):
     random_indices = indices
 
+    if random_indices is not None:
+        num_plots = len(random_indices)
+
     # possible operations:
     if test_df is not None and predictions_df is not None:
         # 1) test_df and predictions plus column information is provided
