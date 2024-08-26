@@ -237,8 +237,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         enc_output = self.__class__.enc_output
 
-
-
         if config.use_decoder:
             dec_output = self.__class__.dec_output
         else:
@@ -294,7 +292,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         if config.resolution_prefix_tuning:
             enc_output_shape[-2] += 1
             dec_output_shape[-2] += 1
-
 
         self.assertEqual(list(output.backbone_hidden_state.shape), enc_output_shape)
         self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
@@ -505,8 +502,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         enc_output = self.__class__.enc_output
 
-
-
         if config.use_decoder:
             dec_output = self.__class__.dec_output
 
@@ -551,7 +546,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         if config.resolution_prefix_tuning:
             enc_output_shape[-2] += 1
             dec_output_shape[-2] += 1
-
 
         self.assertEqual(list(output.backbone_hidden_state.shape), enc_output_shape)
         self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
