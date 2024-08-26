@@ -5,6 +5,7 @@
 import inspect
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
@@ -426,7 +427,10 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if kwargs["add_known_ground_truth"]:
             for i, c in enumerate(kwargs["target_columns"]):
-                out[c] = input["future_values"][:, :, i].numpy().tolist()
+                ground_truth = input["future_values"][:, :, i].numpy()
+                missing = ~input["future_observed_mask"][:, :, i].numpy()
+                ground_truth[missing] = np.NaN
+                out[c] = ground_truth.tolist()
 
         if "timestamp_column" in kwargs:
             out[kwargs["timestamp_column"]] = input["timestamp"]
@@ -468,6 +472,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+            out = self.feature_extractor.inverse_scale_targets(out)
+            if kwargs["add_known_ground_truth"]:
+                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out

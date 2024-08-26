@@ -4,6 +4,7 @@
 
 import logging
 import os
+from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,10 @@ import plotly.graph_objs as go
 import torch
 from IPython.display import Image
 from plotly.subplots import make_subplots
+from torch.utils.data.dataset import Dataset
+from transformers import PreTrainedModel
+
+from .time_series_preprocessor import create_timestamps
 
 
 try:
@@ -200,33 +205,54 @@ def plot_ts_forecasting(
 
 
 def plot_predictions(
-    model: torch.nn.Module,
-    dset: torch.utils.data.Dataset,
+    test_df: Optional[pd.DataFrame] = None,
+    predictions_df: Optional[pd.DataFrame] = None,
+    dset: Optional[Dataset] = None,
+    model: Optional[PreTrainedModel] = None,
+    freq: Optional[str] = None,
+    timestamp_column: Optional[str] = None,
+    id_columns: Optional[List[str]] = None,
+    plot_context: Optional[None] = None,
     plot_dir: str = None,
     num_plots: int = 10,
     plot_prefix: str = "valid",
-    channel: int = -1,
-    truncate_history: bool = True,
+    channel: Union[int, str] = None,
+    indices: List[int] = None,
 ):
-    """Utility for plotting forecasts along with history.
+    random_indices = indices
 
-    Args:
-        model (torch.nn.Module): A trained model.
-        dset (torch.utils.data.Dataset): Dataset that was fed into Trainer for predicting
-        plot_dir (str, optional): A location to save the plot. If None, no plot is saved. Defaults to None.
-        num_plots (int, optional): Number of sub-plots (context windows) to include. Defaults to 10.
-        plot_prefix (str, optional): A prefix for the saved filename. Defaults to "valid".
-        channel (int, optional): Which channels to plot for a multivariate dataset. Defaults to -1.
-        truncate_history (bool, optional): If True only some hisotry (2 * pred_len samples) will be included in the plot. Defaults to True.
-    """
-    # device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
-    device = model.device
-    random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
-    random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+    # possible operations:
+    if test_df is not None and predictions_df is not None:
+        # 1) test_df and predictions plus column information is provided
 
-    output = model(random_samples)
-    y_hat = output.prediction_outputs[:, :, channel].detach().cpu().numpy()
-    pred_len = y_hat.shape[1]
+        l = len(predictions_df)
+        if random_indices is None:
+            random_indices = np.random.choice(l, size=num_plots, replace=False)
+        predictions_subset = [predictions_df.iloc[i] for i in random_indices]
+
+        gt_df = test_df.copy()
+        gt_df = gt_df.set_index(timestamp_column)  # add id column logic here
+
+        prediction_length = len(predictions_subset[0][channel])
+        using_pipeline = True
+    elif model is not None and dset is not None:
+        # 2) model and dataset are provided
+        device = model.device
+
+        with torch.no_grad():
+            if random_indices is None:
+                random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
+            random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+
+            output = model(random_samples)
+            predictions_subset = output.prediction_outputs[:, :, channel].squeeze().cpu().numpy()
+            prediction_length = predictions_subset.shape[1]
+        using_pipeline = False
+    else:
+        raise RuntimeError("You must provide either test_df and predictions_df or dset and model.")
+
+    if plot_context is None:
+        plot_context = 2 * prediction_length
 
     # Set a more beautiful style
     plt.style.use("seaborn-v0_8-whitegrid")
@@ -238,24 +264,41 @@ def plot_predictions(
         axs = [axs]
 
     for i, ri in enumerate(random_indices):
-        batch = dset[ri]
+        if using_pipeline:
+            ts_y_hat = create_timestamps(predictions_subset[i][timestamp_column], freq=freq, periods=prediction_length)
+            y_hat = (
+                predictions_subset[i][f"{channel}_prediction"]
+                if f"{channel}_prediction" in predictions_subset[i]
+                else predictions_subset[i][channel]
+            )
 
-        y = batch["future_values"][:pred_len, channel].squeeze().cpu().numpy()
-        if truncate_history:
-            x = batch["past_values"][-2 * pred_len :, channel].squeeze().cpu().numpy()
+            # get ground truth
+            loc = gt_df.index.get_loc(predictions_subset[i][timestamp_column])
+            ts_index = gt_df.index[loc - plot_context + 1 : loc + 1 + prediction_length]
+            y = gt_df.loc[ts_index][channel]
+            ts_y = y.index
+            y = y.values
+            border = ts_y[-prediction_length]
+
         else:
-            x = batch["past_values"][:, channel].squeeze().cpu().numpy()
-        y = np.concatenate((x, y), axis=0)
+            batch = dset[ri]
+            ts_y_hat = np.arange(plot_context, plot_context + prediction_length)
+            y_hat = predictions_subset[i]
+
+            ts_y = np.arange(plot_context + prediction_length)
+            y = batch["future_values"][:, channel].squeeze().numpy()
+            x = batch["past_values"][-plot_context:, channel].squeeze().numpy()
+            y = np.concatenate((x, y), axis=0)
+            border = plot_context
 
         # Plot predicted values with a dashed line
-        y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
-        axs[i].plot(y_hat_plot, label="Predicted", linestyle="--", color="orange", linewidth=2)
+        axs[i].plot(ts_y_hat, y_hat, label="Predicted", linestyle="--", color="orange", linewidth=2)
 
         # Plot true values with a solid line
-        axs[i].plot(y, label="True", linestyle="-", color="blue", linewidth=2)
+        axs[i].plot(ts_y, y, label="True", linestyle="-", color="blue", linewidth=2)
 
         # Plot horizon border
-        axs[i].axvline(x=2 * pred_len, color="r", linestyle="-")
+        axs[i].axvline(x=border, color="r", linestyle="-")
 
         axs[i].set_title(f"Example {random_indices[i]}")
         axs[i].legend()
