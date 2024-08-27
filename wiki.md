@@ -63,9 +63,9 @@ We sincerely thank all the blog authors for dedicating their valuable time to an
 
 - **February 1, 2024**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
 
-- **February 1, 2024**: [Patch Time Series Transformer in Hugging Face - Getting Started](https://huggingface.co/blog/patchtst)
+- **February 1, 2024**: [Patch Time Series Transformer in Hugging Face - Getting Started](https://huggingface.co/blog/patchtst) (joint blog post with Hugging Face)
 
-- **January 19, 2024**: [PatchTSMixer in HuggingFace - Getting Started](https://huggingface.co/blog/patchtsmixer)
+- **January 19, 2024**: [PatchTSMixer in HuggingFace - Getting Started](https://huggingface.co/blog/patchtsmixer) (joint blog post with Hugging Face)
 
 - **June 26, 2023**: [TS Foundation Models - The Battle of Time-series Transformers](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
 
