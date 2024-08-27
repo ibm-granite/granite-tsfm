@@ -52,27 +52,38 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 
 1. Lam M. Nguyen, Trang H. Tran, Wang Zhang, Subhro Das, Tsui-Wei Weng. _When Machine Learning meets Dynamical Systems: Theory and Applications_. Workshop at The 37th Conference on Artificial Intelligence (AAAI 2023).
 
-## Blogs
+## Blogs and News Articles
 
 We sincerely thank all the blog authors for dedicating their valuable time to analyzing and exploring our TSFM models. The analysis and conclusions presented are entirely the work of the respective authors.
 
-1. [Tiny Time Mixers (TTMs) for Next-Level Time Series Forecasting (July 31, 2024)](https://medium.com/@yi.angela/tiny-time-mixers-ttms-for-next-level-time-series-forecasting-5aa07365d963)
+- **August 23, 2024**: [IBM reveals why its "tiny" AI models punch well above their weight](https://www.thestack.technology/ibm-tiny-time-mixer-ai/)
+  
+- **August 19, 2024**: [‘Tiny’ AI, big world: New models show smaller can be smarter](https://www.fierce-network.com/cloud/tiny-ai-big-world-ibms-new-model-shows-smaller-can-be-smarter)
 
-1. [Exploring the Latest Advances in Foundation Time-Series Models (July 17, 2024)](https://towardsdatascience.com/exploring-the-latest-advances-in-foundation-time-series-models-3fc8431ab7bd)
+- **July 31, 2024**: [Tiny Time Mixers (TTMs) for Next-Level Time Series Forecasting](https://medium.com/@yi.angela/tiny-time-mixers-ttms-for-next-level-time-series-forecasting-5aa07365d963)
 
-1. [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM (June 04, 2024)](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
+- **July 17, 2024**: [Exploring the Latest Advances in Foundation Time-Series Models](https://towardsdatascience.com/exploring-the-latest-advances-in-foundation-time-series-models-3fc8431ab7bd)
 
-1. [Predicting Venetian Lagoon Tide Levels with Multivariate Time Series Modeling (May 14, 2024)](https://medium.com/@david.proietti_17/predicting-venetian-lagoon-tide-levels-with-multivariate-time-series-modeling-8bafdf229588)
+- **June 11, 2024**: [IBM showcased GenAI’s potential to reshape business automation at Think 2024](https://indiaai.gov.in/article/ibm-showcased-genai-s-potential-to-reshape-business-automation-at-think-2024)
 
-1. [Top AI/ML Papers of the Week [12/06 - 18/06] highlighting TSMixer](https://www.linkedin.com/pulse/top-aiml-papers-week-1206-1806-bruno-miguel-l-silva/)
+- **June 04, 2024 _(IBM Research Blog)_**: [At Think, IBM showed how generative AI is set to take automation to another level](https://research.ibm.com/blog/automation-think-generative-ai)
 
-1. [TS Foundation Models - The Battle of Time-series Transformers (June 26, 2023)](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
+- **June 04, 2024**: [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
 
-1. [PatchTST: A Breakthrough in Time Series Forecasting (June 20, 2023)](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
+- **May 14, 2024**: [Predicting Venetian Lagoon Tide Levels with Multivariate Time Series Modeling](https://medium.com/@david.proietti_17/predicting-venetian-lagoon-tide-levels-with-multivariate-time-series-modeling-8bafdf229588)
 
-1. [PatchTST for Time Series Forecasting: Original Results and My Single-Channel Experiments (May 17, 2023)](https://medium.com/@lalf_klein/patchtst-for-time-series-forecasting-original-results-and-new-single-channel-experiments-f375699f7b91)
+- **March 14, 2024 _(IBM Research Blog)_**: [Generative AI could offer a faster way to test theories of how the universe works](https://research.ibm.com/blog/time-series-AI-transformers)
 
-1. [The Return of the Fallen: Transformers for Forecasting (May 25, 2023)](https://towardsdatascience.com/the-return-of-the-fallen-transformers-for-forecasting-24f6fec5bc30)
+- **February 01, 2024 _(IBM Research Blog)_**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
+
+- **June 26, 2023 _(From the Authors)_**: [TS Foundation Models - The Battle of Time-series Transformers](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
+
+- **June 20, 2023**: [PatchTST: A Breakthrough in Time Series Forecasting](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
+
+- **May 25, 2023**: [The Return of the Fallen: Transformers for Forecasting](https://towardsdatascience.com/the-return-of-the-fallen-transformers-for-forecasting-24f6fec5bc30)
+
+- **May 17, 2023**: [PatchTST for Time Series Forecasting: Original Results and My Single-Channel Experiments](https://medium.com/@lalf_klein/patchtst-for-time-series-forecasting-original-results-and-new-single-channel-experiments-f375699f7b91)
+
 
 
 ## Tutorial videos
@@ -85,18 +96,16 @@ We sincerely thank all the tutors for dedicating their valuable time to analyzin
 
 <!-- 1. [PatchTST — A Step Forward in Time Series Forecasting (June 24, 2023)](https://pub.towardsai.net/patchtst-a-step-forward-in-time-series-forecasting-13a8e8f53feb) -->
 
-## Other Open-Source Implementations
+## Model-wise List of Opensource Implementations
 
-1. **PatchTSMixer _[HF Release]_:** https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer
-
-1. **PatchTST _[HF Release]_:** https://huggingface.co/docs/transformers/en/model_doc/patchtst
-
-1. **PatchTST:** https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html
-
-1. **PatchTST:** https://nixtla.github.io/neuralforecast/models.patchtst.html
-
-1. **PatchTST:** https://github.com/yuqinie98/PatchTST 
-
-1. **TST:** https://timeseriesai.github.io/tsai/models.tst.html
-
-1. **TST:** https://github.com/gzerveas/mvts_transformer 
+| Model   | Repository   | Stars | Forks | Comment |
+|------------|------------|------------|------------|------------|
+| TTM   | [granite-tsfm](https://github.com/ibm-granite/granite-tsfm)   | 319 | 160 | From the Authors   | 
+| TTM   | [sktime](https://www.sktime.net/en/latest/api_reference/auto_generated/sktime.forecasting.ttm.TinyTimeMixerForecaster.html) | -- | -- | -- |
+| PatchTSMixer | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer) | -- | -- | From the Authors |
+| PatchTST | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtst) | -- | -- | From the Authors |
+| PatchTST | [GluonTS](https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html) | -- | -- | -- |
+| PatchTST | [Nixtla](https://nixtla.github.io/neuralforecast/models.patchtst.html) | -- | -- | -- |
+| PatchTST | [yuqinie98/PatchTST](https://github.com/yuqinie98/PatchTST) | 1.5k | 256 | From the authors |
+| TST | [tsai](https://timeseriesai.github.io/tsai/models.tst.html) | -- | -- | -- |
+| TST | [mvts_transformer]() | 734 | 171 | From the authors |
