@@ -6,12 +6,12 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 
 ### Pre-trained models
 1. **TinyTimeMixer (TTM):** https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1  
-🚀 _**Total downloads: 1.1 Million +**_ (as of 26 Aug 2024) 🚀
+🚀 _**Downloads: 1.1 Million+, Likes: 148**_ (as of 26 Aug 2024) 🚀
 
-### Data-specific pre-trained models
-1. **PatchTSMixer:** https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
+### Architectures
+1. **PatchTSMixer:** https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer
 
-1. **PatchTST:** https://huggingface.co/ibm-granite/granite-timeseries-patchtst
+1. **PatchTST:** https://huggingface.co/docs/transformers/en/model_doc/patchtst
 
 
 ## Publications
@@ -56,6 +56,17 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 
 We sincerely thank all the blog authors for dedicating their valuable time to analyzing and exploring our TSFM models. The analysis and conclusions presented are entirely the work of the respective authors.
 
+### IBM Research blogs
+- **June 04, 2024**: [At Think, IBM showed how generative AI is set to take automation to another level](https://research.ibm.com/blog/automation-think-generative-ai)
+
+- **March 14, 2024**: [Generative AI could offer a faster way to test theories of how the universe works](https://research.ibm.com/blog/time-series-AI-transformers)
+
+- **February 01, 2024**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
+
+- **June 26, 2023**: [TS Foundation Models - The Battle of Time-series Transformers](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
+
+### From External Authors
+
 - **August 23, 2024**: [IBM reveals why its "tiny" AI models punch well above their weight](https://www.thestack.technology/ibm-tiny-time-mixer-ai/)
   
 - **August 19, 2024**: [‘Tiny’ AI, big world: New models show smaller can be smarter](https://www.fierce-network.com/cloud/tiny-ai-big-world-ibms-new-model-shows-smaller-can-be-smarter)
@@ -66,17 +77,9 @@ We sincerely thank all the blog authors for dedicating their valuable time to an
 
 - **June 11, 2024**: [IBM showcased GenAI’s potential to reshape business automation at Think 2024](https://indiaai.gov.in/article/ibm-showcased-genai-s-potential-to-reshape-business-automation-at-think-2024)
 
-- **June 04, 2024 _(IBM Research Blog)_**: [At Think, IBM showed how generative AI is set to take automation to another level](https://research.ibm.com/blog/automation-think-generative-ai)
-
 - **June 04, 2024**: [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
 
 - **May 14, 2024**: [Predicting Venetian Lagoon Tide Levels with Multivariate Time Series Modeling](https://medium.com/@david.proietti_17/predicting-venetian-lagoon-tide-levels-with-multivariate-time-series-modeling-8bafdf229588)
-
-- **March 14, 2024 _(IBM Research Blog)_**: [Generative AI could offer a faster way to test theories of how the universe works](https://research.ibm.com/blog/time-series-AI-transformers)
-
-- **February 01, 2024 _(IBM Research Blog)_**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
-
-- **June 26, 2023 _(From the Authors)_**: [TS Foundation Models - The Battle of Time-series Transformers](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
 
 - **June 20, 2023**: [PatchTST: A Breakthrough in Time Series Forecasting](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
 
