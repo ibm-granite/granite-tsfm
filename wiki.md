@@ -8,7 +8,7 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 1. **TinyTimeMixer (TTM):** https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1  
 🚀 _**Total downloads: 1.1 Million +**_ (as of 26 Aug 2024) 🚀
 
-### TSFM architectures
+### Data-specific pre-trained models
 1. **PatchTSMixer:** https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
 
 1. **PatchTST:** https://huggingface.co/ibm-granite/granite-timeseries-patchtst
@@ -86,6 +86,10 @@ We sincerely thank all the tutors for dedicating their valuable time to analyzin
 <!-- 1. [PatchTST — A Step Forward in Time Series Forecasting (June 24, 2023)](https://pub.towardsai.net/patchtst-a-step-forward-in-time-series-forecasting-13a8e8f53feb) -->
 
 ## Other Open-Source Implementations
+
+1. **PatchTSMixer _[HF Release]_:** https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer
+
+1. **PatchTST _[HF Release]_:** https://huggingface.co/docs/transformers/en/model_doc/patchtst
 
 1. **PatchTST:** https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html
 
