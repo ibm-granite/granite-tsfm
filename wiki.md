@@ -1,6 +1,6 @@
 # Time Series Foundation Models (TSFM)
 
-In this section, we highlight the papers, blogs, pre-trained models, and open-source codes from IBM's TSFM group.
+In this section, we highlight the papers, blogs, pre-trained models, and open-source codes from IBM Research's TSFM group.
 
 ## HuggingFace releases
 
@@ -31,7 +31,7 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 
 1. **HPRO:** Jati, A., Ekambaram, V., Pal, S., Quanz, B., Gifford, W.M., Harsha, P., Siegel, S., Mukherjee, S. and Narayanaswami, C. [_Hierarchical proxy modeling for improved HPO in time series forecasting._](https://dl.acm.org/doi/abs/10.1145/3580305.3599378) In KDD 2023. **(citations: 6)**
 
-1. **AutoMixer** Palaskar, S., Ekambaram, V., Jati, A., Gantayat, N., Saha, A., Nagar, S., Nguyen, N.H., Dayama, P., Sindhgatta, R., Mohapatra, P. and Kumar, H. [_Automixer for improved multivariate time-series forecasting on business and it observability data._](https://ojs.aaai.org/index.php/AAAI/article/view/30336) In AAAI 2024. **(citations: 3)**
+1. **AutoMixer:** Palaskar, S., Ekambaram, V., Jati, A., Gantayat, N., Saha, A., Nagar, S., Nguyen, N.H., Dayama, P., Sindhgatta, R., Mohapatra, P. and Kumar, H. [_Automixer for improved multivariate time-series forecasting on business and it observability data._](https://ojs.aaai.org/index.php/AAAI/article/view/30336) In AAAI 2024. **(citations: 3)**
 
 1. **ConCerNet:** Zhang, W., Weng, T.W., Das, S., Megretski, A., Daniel, L. and Nguyen, L.M. [_ConCerNet: A Contrastive Learning Based Framework for Automated Conservation Law Discovery and Trustworthy Dynamical System Prediction._](https://proceedings.mlr.press/v202/zhang23ao/zhang23ao.pdf) In ICML 2023. **(citations: 1)**
 
@@ -57,15 +57,21 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 We sincerely thank all the blog authors for dedicating their valuable time to analyzing and exploring our TSFM models. The analysis and conclusions presented are entirely the work of the respective authors.
 
 ### IBM Research blogs
-- **June 04, 2024**: [At Think, IBM showed how generative AI is set to take automation to another level](https://research.ibm.com/blog/automation-think-generative-ai)
+- **June 4, 2024**: [At Think, IBM showed how generative AI is set to take automation to another level](https://research.ibm.com/blog/automation-think-generative-ai)
 
 - **March 14, 2024**: [Generative AI could offer a faster way to test theories of how the universe works](https://research.ibm.com/blog/time-series-AI-transformers)
 
-- **February 01, 2024**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
+- **February 1, 2024**: [A crystal ball made of AI transformers](https://research.ibm.com/blog/AI-time-series-forecasting)
+
+- **February 1, 2024**: [Patch Time Series Transformer in Hugging Face - Getting Started](https://huggingface.co/blog/patchtst)
+
+- **January 19, 2024**: [PatchTSMixer in HuggingFace - Getting Started](https://huggingface.co/blog/patchtsmixer)
 
 - **June 26, 2023**: [TS Foundation Models - The Battle of Time-series Transformers](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
 
+
 ### From External Authors
+
 
 - **August 23, 2024**: [IBM reveals why its "tiny" AI models punch well above their weight](https://www.thestack.technology/ibm-tiny-time-mixer-ai/)
   
@@ -77,9 +83,12 @@ We sincerely thank all the blog authors for dedicating their valuable time to an
 
 - **June 11, 2024**: [IBM showcased GenAI’s potential to reshape business automation at Think 2024](https://indiaai.gov.in/article/ibm-showcased-genai-s-potential-to-reshape-business-automation-at-think-2024)
 
-- **June 04, 2024**: [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
+- **June 4, 2024**: [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
 
 - **May 14, 2024**: [Predicting Venetian Lagoon Tide Levels with Multivariate Time Series Modeling](https://medium.com/@david.proietti_17/predicting-venetian-lagoon-tide-levels-with-multivariate-time-series-modeling-8bafdf229588)
+
+
+
 
 - **June 20, 2023**: [PatchTST: A Breakthrough in Time Series Forecasting](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
 
@@ -95,7 +104,7 @@ We sincerely thank all the tutors for dedicating their valuable time to analyzin
 
 1. [TinyTimeMixer TTM Model by IBM - Run in Google Colab for Forecasting (July 5, 2024)](https://www.youtube.com/watch?v=83j5FddZBNs)
 
-1. [PALS INDUSTRY ASSISTED LECTURE SERIES ON AI FOR IOT: INTRODUCTION AND HANDS-ON AI FOR IOT DATA (Oct 12, 2023)](https://www.youtube.com/watch?v=B9IFffk1JMc&t=4906s)
+1. [PALS Industry Assisted Lecture Series on AI for IOT: Introduction and Hands-On AI for IOT Data (Oct 12, 2023)](https://www.youtube.com/watch?v=B9IFffk1JMc&t=4906s)
 
 <!-- 1. [PatchTST — A Step Forward in Time Series Forecasting (June 24, 2023)](https://pub.towardsai.net/patchtst-a-step-forward-in-time-series-forecasting-13a8e8f53feb) -->
 
