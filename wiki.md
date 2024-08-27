@@ -1,74 +1,98 @@
 # Time Series Foundation Models (TSFM)
 
-In this section, we highlight the papers, blogs, and open-source code from IBM's TSFM group.
+In this section, we highlight the papers, blogs, pre-trained models, and open-source codes from IBM's TSFM group.
 
 ## HuggingFace releases
 
 ### Pre-trained models
-**TinyTimeMixer (TTM):** https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1
+1. **TinyTimeMixer (TTM):** https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1  
+🚀 _**Total downloads: 1.1 Million +**_ (as of 26 Aug 2024) 🚀
 
 ### TSFM architectures
-**PatchTSMixer:** https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
+1. **PatchTSMixer:** https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
 
-**PatchTST:** https://huggingface.co/ibm-granite/granite-timeseries-patchtst
+1. **PatchTST:** https://huggingface.co/ibm-granite/granite-timeseries-patchtst
 
 
 ## Publications
 
-4 KDD, 1 ICLR, 1 AAAI, 1 ICML. **Total citations: 1700** (as of 26 Aug 2024).
+4 KDD, 1 ICLR, 2 AAAI, 1 ICML.  
+🚀 _**Total citations: 1700**_ (as of 26 Aug 2024). 🚀
 
-* **TST:** Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., & Eickhoff, C. [_A transformer-based framework for multivariate time series representation learning._](https://arxiv.org/abs/2010.02803) In KDD 2021. **(citations: 840)**
+1. **TST:** Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., & Eickhoff, C. [_A transformer-based framework for multivariate time series representation learning._](https://arxiv.org/abs/2010.02803) In KDD 2021. **(citations: 840)**
 
-* **PatchTST:** Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2022). [_A Time Series is Worth 64 Words: Long-term Forecasting with Transformers._](https://arxiv.org/abs/2211.14730) ICLR 2023. **(citations: 656)**
+1. **PatchTST:** Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2022). [_A Time Series is Worth 64 Words: Long-term Forecasting with Transformers._](https://arxiv.org/abs/2211.14730) ICLR 2023. **(citations: 656)**
 
-* **PatchTSMixer:** Ekambaram, V., Jati, A., Nguyen, N., Sinthong, P., & Kalagnanam, J. [_TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting._](https://arxiv.org/abs/2306.09364) In KDD 2023. **(citations: 59)**
+1. **PatchTSMixer:** Ekambaram, V., Jati, A., Nguyen, N., Sinthong, P., & Kalagnanam, J. [_TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting._](https://arxiv.org/abs/2306.09364) In KDD 2023. **(citations: 59)**
 
-* **NPF:** Ekambaram, V., Manglik, K., Mukherjee, S., Sajja, S. S. K., Dwivedi, S., & Raykar, V. [_Attention based multi-modal new product sales time-series forecasting._](https://dl.acm.org/doi/10.1145/3394486.3403362) In KDD 2020. **(citations: 68)**
+1. **NPF:** Ekambaram, V., Manglik, K., Mukherjee, S., Sajja, S. S. K., Dwivedi, S., & Raykar, V. [_Attention based multi-modal new product sales time-series forecasting._](https://dl.acm.org/doi/10.1145/3394486.3403362) In KDD 2020. **(citations: 68)**
 
-* **TLAE:** Nguyen, N., & Quanz, B. [_Temporal latent auto-encoder: A method for probabilistic multivariate time series forecasting._](https://arxiv.org/abs/2101.10460) AAAI 2021. **(citations: 67)**
+1. **TLAE:** Nguyen, N., & Quanz, B. [_Temporal latent auto-encoder: A method for probabilistic multivariate time series forecasting._](https://arxiv.org/abs/2101.10460) AAAI 2021. **(citations: 67)**
 
-* **HPRO:** Jati, A., Ekambaram, V., Pal, S., Quanz, B., Gifford, W.M., Harsha, P., Siegel, S., Mukherjee, S. and Narayanaswami, C. [_Hierarchical proxy modeling for improved hpo in time series forecasting._](https://dl.acm.org/doi/abs/10.1145/3580305.3599378) In KDD 2023. **(citations: 6)**
+1. **HPRO:** Jati, A., Ekambaram, V., Pal, S., Quanz, B., Gifford, W.M., Harsha, P., Siegel, S., Mukherjee, S. and Narayanaswami, C. [_Hierarchical proxy modeling for improved HPO in time series forecasting._](https://dl.acm.org/doi/abs/10.1145/3580305.3599378) In KDD 2023. **(citations: 6)**
 
-* **AutoMixer** Palaskar, S., Ekambaram, V., Jati, A., Gantayat, N., Saha, A., Nagar, S., Nguyen, N.H., Dayama, P., Sindhgatta, R., Mohapatra, P. and Kumar, H. [_Automixer for improved multivariate time-series forecasting on business and it observability data._](https://ojs.aaai.org/index.php/AAAI/article/view/30336) In AAAI 2024. **(citations: 3)**
+1. **AutoMixer** Palaskar, S., Ekambaram, V., Jati, A., Gantayat, N., Saha, A., Nagar, S., Nguyen, N.H., Dayama, P., Sindhgatta, R., Mohapatra, P. and Kumar, H. [_Automixer for improved multivariate time-series forecasting on business and it observability data._](https://ojs.aaai.org/index.php/AAAI/article/view/30336) In AAAI 2024. **(citations: 3)**
 
-* **ConCerNet:** Zhang, W., Weng, T.W., Das, S., Megretski, A., Daniel, L. and Nguyen, L.M. [_ConCerNet: A Contrastive Learning Based Framework for Automated Conservation Law Discovery and Trustworthy Dynamical System Prediction._](https://proceedings.mlr.press/v202/zhang23ao/zhang23ao.pdf) In ICML 2023. **(citations: 1)**
+1. **ConCerNet:** Zhang, W., Weng, T.W., Das, S., Megretski, A., Daniel, L. and Nguyen, L.M. [_ConCerNet: A Contrastive Learning Based Framework for Automated Conservation Law Discovery and Trustworthy Dynamical System Prediction._](https://proceedings.mlr.press/v202/zhang23ao/zhang23ao.pdf) In ICML 2023. **(citations: 1)**
 
-**Workshops/Invited Talks/Tutorials:**
+## Preprints
 
-* Lam M. Nguyen, Trang H. Tran, Wang Zhang, Subhro Das, Tsui-Wei Weng. _When Machine Learning meets Dynamical Systems: Theory and Applications_. Workshop at The 37th Conference on Artificial Intelligence (AAAI 2023).
+1. **TTM:** Ekambaram, V., Jati, A., Nguyen, N.H., Dayama, P., Reddy, C., Gifford, W.M. and Kalagnanam, J., [_Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series._](https://arxiv.org/abs/2401.03955), arXiv preprint 2024.
 
-* Arindam Jati, Vijay Ekambaram, Pankaj Dayama, Nam H. Nguyen,Jayant Kalagnanam. [_Light-Weight Pre-Trained Mixer Models For Effective Transfer Learning In Multivariate Time Series Forecasting_](https://whova.com/embedded/session/a1FSCBNUVSoDe3YGmt0K2B2OQAm5arkz%401l4TJaUYuc%3D/3894088/?widget=primary). Presented at the 44th International Symposium on Forecasting (ISF), 2024, held at Dijon, France.
+1. Trang H. Tran, Lam M. Nguyen, Kyongmin Yeo, Nam Nguyen, Dzung Phan, Roman Vaculin, Jayant Kalagnanam. [_An End-to-End Time Series Model for Simultaneous Imputation and Forecast._](https://arxiv.org/abs/2306.00778) arXiv preprint 2023.
 
-**Preprints:**
+1. Anh Duy Nguyen, Trang H. Tran, Hieu H. Pham, Phi Le Nguyen, Lam M. Nguyen. [_Learning Robust and Consistent Time Series Representations: A Dilated Inception-Based Approach._](https://arxiv.org/abs/2306.06579) arXiv preprint 2023.
 
-* Ekambaram, V., Jati, A., Nguyen, N.H., Dayama, P., Reddy, C., Gifford, W.M. and Kalagnanam, J., [_Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series._](https://arxiv.org/abs/2401.03955), arXiv preprint 2024.
 
-* Trang H. Tran, Lam M. Nguyen, Kyongmin Yeo, Nam Nguyen, Dzung Phan, Roman Vaculin, Jayant Kalagnanam. [_An End-to-End Time Series Model for Simultaneous Imputation and Forecast._](https://arxiv.org/abs/2306.00778) arXiv preprint 2023.
+## Workshops/Invited Talks/Tutorials
 
-* Anh Duy Nguyen, Trang H. Tran, Hieu H. Pham, Phi Le Nguyen, Lam M. Nguyen. [_Learning Robust and Consistent Time Series Representations: A Dilated Inception-Based Approach._](https://arxiv.org/abs/2306.06579) arXiv preprint 2023.
+1. Arindam Jati, Vijay Ekambaram, Pankaj Dayama, Nam H. Nguyen,Jayant Kalagnanam. [_Light-Weight Pre-Trained Mixer Models For Effective Transfer Learning In Multivariate Time Series Forecasting_](https://whova.com/embedded/session/a1FSCBNUVSoDe3YGmt0K2B2OQAm5arkz%401l4TJaUYuc%3D/3894088/?widget=primary). Presented at the 44th International Symposium on Forecasting (ISF), 2024, held at Dijon, France.
 
-**Blogs**
+1. Sumanta Mukherjee, Chandramouli Kamanchi, Pankaj Dayama, Vijay Ekambaram, Arindam Jati, Kameshwaran Sampath. [_Intervention Aware Forecasting For Process Control With Sparse Data_](https://whova.com/embedded/session/a1FSCBNUVSoDe3YGmt0K2B2OQAm5arkz%401l4TJaUYuc%3D/3894486/?widget=primary). Presented at the 44th International Symposium on Forecasting (ISF), 2024, held at Dijon, France.
 
-1. [PatchTST: A Breakthrough in Time Series Forecasting (June 20, 2023)](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
+1. Lam M. Nguyen, Trang H. Tran, Wang Zhang, Subhro Das, Tsui-Wei Weng. _When Machine Learning meets Dynamical Systems: Theory and Applications_. Workshop at The 37th Conference on Artificial Intelligence (AAAI 2023).
 
-1. [PatchTST — A Step Forward in Time Series Forecasting (June 24, 2023)](https://pub.towardsai.net/patchtst-a-step-forward-in-time-series-forecasting-13a8e8f53feb)
+## Blogs
 
-1. [PatchTST for Time Series Forecasting: Original Results and My Single-Channel Experiments (May 17, 2023)](https://medium.com/@lalf_klein/patchtst-for-time-series-forecasting-original-results-and-new-single-channel-experiments-f375699f7b91)
+We sincerely thank all the blog authors for dedicating their valuable time to analyzing and exploring our TSFM models. The analysis and conclusions presented are entirely the work of the respective authors.
+
+1. [Tiny Time Mixers (TTMs) for Next-Level Time Series Forecasting (July 31, 2024)](https://medium.com/@yi.angela/tiny-time-mixers-ttms-for-next-level-time-series-forecasting-5aa07365d963)
+
+1. [Exploring the Latest Advances in Foundation Time-Series Models (July 17, 2024)](https://towardsdatascience.com/exploring-the-latest-advances-in-foundation-time-series-models-3fc8431ab7bd)
+
+1. [Tiny Time Mixers(TTMs): Powerful Zero/Few-Shot Forecasting Models by IBM (June 04, 2024)](https://aihorizonforecast.substack.com/p/tiny-time-mixersttms-powerful-zerofew)
+
+1. [Predicting Venetian Lagoon Tide Levels with Multivariate Time Series Modeling (May 14, 2024)](https://medium.com/@david.proietti_17/predicting-venetian-lagoon-tide-levels-with-multivariate-time-series-modeling-8bafdf229588)
 
 1. [Top AI/ML Papers of the Week [12/06 - 18/06] highlighting TSMixer](https://www.linkedin.com/pulse/top-aiml-papers-week-1206-1806-bruno-miguel-l-silva/)
 
-1. [The Return of the Fallen: Transformers for Forecasting (May 25, 2023)](https://towardsdatascience.com/the-return-of-the-fallen-transformers-for-forecasting-24f6fec5bc30)
-
 1. [TS Foundation Models - The Battle of Time-series Transformers (June 26, 2023)](https://www.linkedin.com/pulse/ts-foundation-models-battle-time-series-vijay-ekambaram/)
 
-**Other OpenSource Models**
+1. [PatchTST: A Breakthrough in Time Series Forecasting (June 20, 2023)](https://towardsdatascience.com/patchtst-a-breakthrough-in-time-series-forecasting-e02d48869ccc)
 
-https://timeseriesai.github.io/tsai/models.tst.html
+1. [PatchTST for Time Series Forecasting: Original Results and My Single-Channel Experiments (May 17, 2023)](https://medium.com/@lalf_klein/patchtst-for-time-series-forecasting-original-results-and-new-single-channel-experiments-f375699f7b91)
 
-https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html
+1. [The Return of the Fallen: Transformers for Forecasting (May 25, 2023)](https://towardsdatascience.com/the-return-of-the-fallen-transformers-for-forecasting-24f6fec5bc30)
 
-https://nixtla.github.io/neuralforecast/models.patchtst.html
 
-https://github.com/yuqinie98/PatchTST
+## Tutorial videos
 
-https://github.com/gzerveas/mvts_transformer 
+We sincerely thank all the tutors for dedicating their valuable time to analyzing and exploring our TSFM models. The analysis and conclusions presented are entirely the work of the respective authors and tutors.
+
+1. [TinyTimeMixer TTM Model by IBM - Run in Google Colab for Forecasting (July 5, 2024)](https://www.youtube.com/watch?v=83j5FddZBNs)
+
+1. [PALS INDUSTRY ASSISTED LECTURE SERIES ON AI FOR IOT: INTRODUCTION AND HANDS-ON AI FOR IOT DATA (Oct 12, 2023)](https://www.youtube.com/watch?v=B9IFffk1JMc&t=4906s)
+
+<!-- 1. [PatchTST — A Step Forward in Time Series Forecasting (June 24, 2023)](https://pub.towardsai.net/patchtst-a-step-forward-in-time-series-forecasting-13a8e8f53feb) -->
+
+## Other Open-Source Implementations
+
+1. **PatchTST:** https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html
+
+1. **PatchTST:** https://nixtla.github.io/neuralforecast/models.patchtst.html
+
+1. **PatchTST:** https://github.com/yuqinie98/PatchTST 
+
+1. **TST:** https://timeseriesai.github.io/tsai/models.tst.html
+
+1. **TST:** https://github.com/gzerveas/mvts_transformer 
