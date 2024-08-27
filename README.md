@@ -2,7 +2,7 @@
 Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
-[here](wiki.md). Information on the services component can be found [here](services/inference/README.md).
+[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](services/inference/README.md).
 
 
 ## Python Version
@@ -45,7 +45,7 @@ If you encounter an issue with this project, you are welcome to submit a [bug re
 Before opening a new issue, please search for similar issues. It's possible that someone has already reported it.
 
 ## 🌏 Wiki 
-[Wiki Page](wiki.md)
+[Wiki Page](https://github.com/ibm-granite/granite-tsfm/wiki)
 
 # Notice
 The intention of this repository is to make it easier to use and demonstrate Granite TimeSeries components that have been made available in the [Hugging Face transformers library](https://huggingface.co/docs/transformers/main/en/index). As we continue to develop these capabilities we will update the code here.
