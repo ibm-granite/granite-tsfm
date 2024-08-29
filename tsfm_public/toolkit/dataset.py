@@ -89,8 +89,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
             data_df = self.pad_zero(data_df)
 
         if timestamp_column in list(data_df.columns):
-            self.timestamps = data_df[timestamp_column].values
-
+            self.timestamps = data_df[timestamp_column].to_list()  # .values coerces timestamps
         # get the input data
         if len(x_cols) > 0:
             self.X = data_df[x_cols]
