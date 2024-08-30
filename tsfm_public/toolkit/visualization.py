@@ -286,7 +286,9 @@ def plot_predictions(
         using_pipeline = False
         plot_test_data = True
     else:
-        raise RuntimeError("You must provide either input_df and predictions_df, or dset and model, or input_df and exploded_predictions_df.")
+        raise RuntimeError(
+            "You must provide either input_df and predictions_df, or dset and model, or input_df and exploded_predictions_df."
+        )
 
     if plot_context is None:
         plot_context = 2 * prediction_length
@@ -317,9 +319,11 @@ def plot_predictions(
             y = y.values
             border = ts_y[-prediction_length]
             plot_title = f"Example {indices[i]}"
-        
+
         elif using_pipeline:
-            ts_y_hat = create_timestamps(exploded_predictions_df[timestamp_column].iloc[0], freq=freq, periods=prediction_length)
+            ts_y_hat = create_timestamps(
+                exploded_predictions_df[timestamp_column].iloc[0], freq=freq, periods=prediction_length
+            )
             y_hat = exploded_predictions_df[f"{channel}_prediction"]
 
             # get context
