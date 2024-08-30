@@ -208,6 +208,7 @@ def plot_predictions(
     test_df: Optional[pd.DataFrame] = None,
     predictions_df: Optional[pd.DataFrame] = None,
     dset: Optional[Dataset] = None,
+    context_df: Optional[pd.DataFrame] = None,
     model: Optional[PreTrainedModel] = None,
     freq: Optional[str] = None,
     timestamp_column: Optional[str] = None,
@@ -219,40 +220,72 @@ def plot_predictions(
     channel: Union[int, str] = None,
     indices: List[int] = None,
 ):
-    random_indices = indices
+    """Utility for plotting forecasts along with context and test data.
 
-    if random_indices is not None:
-        num_plots = len(random_indices)
+    Args:
+        test_df: Test data.
+        predictions_df: The predictions dataframe, containing timestamp and prediction columns
+        dset: Dataset.
+        context_df: Context dataframe, containing timestamp and target columns.
+        model: The pre-trained TimeseriesModel.
+        freq: Frequency of the time series data
+        timestamp_column: Name of timestamp column in the dataframe.
+        id_columns: List of id columns in the dataframe.
+        plot_context: If True, plot context data along with forecasts.
+        plot_dir: Directory where plots are saved.
+        num_plots: Number of subplots to plot in the figure.
+        plot_prefix: Prefix to put on the plot file names.
+        channel: Channel (target column or its index) to plot.
+        indices: List of indices to plot.
+    """
+    if indices is not None:
+        num_plots = len(indices)
 
     # possible operations:
-    if test_df is not None and predictions_df is not None:
-        # 1) test_df and predictions plus column information is provided
+    if context_df is not None and predictions_df is not None:
+        # 1) This is a zero-shot prediction, so no test data. We have context data for the channel (target column).
+        # We expect the context and predictions to contain the channel
+        pchannel = f"{channel}_prediction"
+        if pchannel not in predictions_df.columns:
+            raise ValueError(f"Predictions dataframe does not contain target column '{pchannel}'.")
+        if channel not in context_df.columns:
+            raise ValueError(f"Context dataframe does not contain target column '{channel}'.")
 
-        l = len(predictions_df)
-        if random_indices is None:
-            random_indices = np.random.choice(l, size=num_plots, replace=False)
-        predictions_subset = [predictions_df.iloc[i] for i in random_indices]
+        num_plots = 1
+        prediction_length = len(predictions_df)
+        plot_context = len(context_df)
+        using_pipeline = True
+        plot_test_data = False
+    elif test_df is not None and predictions_df is not None:
+        # 2) test_df and predictions plus column information is provided
+
+        if indices is None:
+            l = len(predictions_df)
+            indices = np.random.choice(l, size=num_plots, replace=False)
+        predictions_subset = [predictions_df.iloc[i] for i in indices]
 
         gt_df = test_df.copy()
         gt_df = gt_df.set_index(timestamp_column)  # add id column logic here
 
         prediction_length = len(predictions_subset[0][channel])
         using_pipeline = True
+        plot_test_data = True
     elif model is not None and dset is not None:
-        # 2) model and dataset are provided
+        # 3) model and dataset are provided
         device = model.device
 
         with torch.no_grad():
-            if random_indices is None:
-                random_indices = np.random.choice(len(dset), size=num_plots, replace=False)
-            random_samples = torch.stack([dset[i]["past_values"] for i in random_indices]).to(device=device)
+            if indices is None:
+                indices = np.random.choice(len(dset), size=num_plots, replace=False)
+            random_samples = torch.stack([dset[i]["past_values"] for i in indices]).to(device=device)
 
             output = model(random_samples)
             predictions_subset = output.prediction_outputs[:, :, channel].squeeze().cpu().numpy()
             prediction_length = predictions_subset.shape[1]
         using_pipeline = False
+        plot_test_data = True
     else:
-        raise RuntimeError("You must provide either test_df and predictions_df or dset and model.")
+        raise RuntimeError("You must provide either test_df and predictions_df, or dset and model, or context_df, predictions_df and target_columns.")
 
     if plot_context is None:
         plot_context = 2 * prediction_length
@@ -266,8 +299,8 @@ def plot_predictions(
     if num_plots == 1:
         axs = [axs]
 
-    for i, ri in enumerate(random_indices):
-        if using_pipeline:
+    for i, index in enumerate(indices):
+        if using_pipeline and plot_test_data:
             ts_y_hat = create_timestamps(predictions_subset[i][timestamp_column], freq=freq, periods=prediction_length)
             y_hat = (
                 predictions_subset[i][f"{channel}_prediction"]
@@ -282,9 +315,21 @@ def plot_predictions(
             ts_y = y.index
             y = y.values
             border = ts_y[-prediction_length]
+            plot_title = f"Example {indices[i]}"
+        
+        elif using_pipeline:
+            ts_y_hat = create_timestamps(predictions_df[timestamp_column].iloc[0], freq=freq, periods=prediction_length)
+            y_hat = predictions_df[f"{channel}_prediction"]
+
+            # get context
+            # ts_y = create_timestamps(context_df[timestamp_column].iloc[0], freq=freq, periods=len(context_df))
+            ts_y = context_df[timestamp_column].values
+            y = context_df[channel].values
+            border = None
+            plot_title = f"Forecast for {channel}"
 
         else:
-            batch = dset[ri]
+            batch = dset[index]
             ts_y_hat = np.arange(plot_context, plot_context + prediction_length)
             y_hat = predictions_subset[i]
 
@@ -293,6 +338,7 @@ def plot_predictions(
             x = batch["past_values"][-plot_context:, channel].squeeze().numpy()
             y = np.concatenate((x, y), axis=0)
             border = plot_context
+            plot_title = f"Example {indices[i]}"
 
         # Plot predicted values with a dashed line
         axs[i].plot(ts_y_hat, y_hat, label="Predicted", linestyle="--", color="orange", linewidth=2)
@@ -301,9 +347,10 @@ def plot_predictions(
         axs[i].plot(ts_y, y, label="True", linestyle="-", color="blue", linewidth=2)
 
         # Plot horizon border
-        axs[i].axvline(x=border, color="r", linestyle="-")
+        if border is not None:
+            axs[i].axvline(x=border, color="r", linestyle="-")
 
-        axs[i].set_title(f"Example {random_indices[i]}")
+        axs[i].set_title(plot_title)
         axs[i].legend()
 
     # Adjust overall layout
