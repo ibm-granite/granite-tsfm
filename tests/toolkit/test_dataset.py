@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, default_collate
 from tsfm_public.toolkit.dataset import (
     ClassificationDFDataset,
     ForecastDFDataset,
+    ImputeForecastDFDataset,
     PretrainDFDataset,
     RegressionDFDataset,
     ts_padding,
@@ -480,3 +481,38 @@ def test_metadata(ts_data):
     assert ds[0]["metadata"][0][1] == "B"
 
     assert len(ds[0]["metadata"]) == ds.context_length + ds.prediction_length
+
+
+def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
+    prediction_length = 2
+    context_length = 5
+    fill_value = 0.0
+    target_columns = ["value2", "value3"]
+
+    df = ts_data_with_categorical.copy()
+    df.loc[10, "value3"] = np.nan
+
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+    )
+
+    assert np.all(ds[0]["artificial_past_observed_mask"])
+
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.9,
+    )
+
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.1)
