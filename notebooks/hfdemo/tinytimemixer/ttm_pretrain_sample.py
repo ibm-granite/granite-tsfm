@@ -24,7 +24,7 @@ logger = logging.getLogger(__file__)
 # the `etth1` dataset. For pre-training TTM on a much large set of datasets, please
 # have a look at our paper: https://arxiv.org/pdf/2401.03955.pdf
 # If you want to directly utilize the pre-trained models. Please use them from the
-# Hugging Face Hub: https://huggingface.co/ibm/TTM
+# Hugging Face Hub: https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1
 # Have a look at the fine-tune scripts for example usecases of the pre-trained
 # TTM models.
 

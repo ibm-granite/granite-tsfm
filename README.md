@@ -6,13 +6,13 @@ The core TSFM time series models have been made available on Hugging Face -- det
 
 
 ## Python Version
-The current Python versions supported are 3.9, 3.10, 3.11.
+The current Python versions supported are 3.9, 3.10, 3.11, 3.12.
 
 ## Initial Setup
 First clone the repository:
 ```bash
-git clone git@github.com:ibm-granite/granite-tsfm.git
-cd tsfm
+git clone "https://github.com/ibm-granite/granite-tsfm.git" 
+cd granite-tsfm
 ```
 
 ## 📕 Notebooks Installation
