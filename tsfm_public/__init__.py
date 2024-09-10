@@ -55,7 +55,6 @@ _import_structure = {
         "load_dataset",
         "TrackingCallback",
         "count_parameters",
-        "plot_predictions",
     ],
 }
 
@@ -90,7 +89,6 @@ if TYPE_CHECKING:
         count_parameters,
         get_datasets,
         load_dataset,
-        plot_predictions,
     )
 else:
     # Standard

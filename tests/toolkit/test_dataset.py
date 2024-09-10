@@ -3,15 +3,18 @@
 
 """Tests basic dataset functions"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 import pytest
+from torch.utils.data import DataLoader, default_collate
 
 from tsfm_public.toolkit.dataset import (
+    ClassificationDFDataset,
     ForecastDFDataset,
     PretrainDFDataset,
+    RegressionDFDataset,
     ts_padding,
 )
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
@@ -99,6 +102,28 @@ def test_pretrain_df_dataset(ts_data):
     assert len(ds) == 1
 
     assert ds[0]["timestamp"] == ts_data.iloc[-1]["time_date"]
+
+
+def test_regression_df_dataset(ts_data):
+    ts_data2 = ts_data.copy()
+    ts_data2["id"] = "B"
+    ts_data2["val2"] = ts_data2["val2"] + 100
+    ts_data2 = pd.concat([ts_data, ts_data2], axis=0)
+
+    ds = RegressionDFDataset(
+        ts_data2,
+        id_columns=["id"],
+        timestamp_column="time_date",
+        input_columns=["val"],
+        target_columns=["val2"],
+        context_length=5,
+    )
+
+    # Test proper target alignment
+    np.testing.assert_allclose(ds[0]["target_values"].numpy(), np.asarray([104]))
+    assert ds[0]["id"] == ("A",)
+    np.testing.assert_allclose(ds[6]["target_values"].numpy(), np.asarray([204]))
+    assert ds[6]["id"] == ("B",)
 
 
 def test_forecasting_df_dataset(ts_data_with_categorical):
@@ -261,3 +286,61 @@ def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
 
     # check that past values of targets are zeroed out
     assert np.all(ds[0]["past_values"][:, 0].numpy() == 0)
+
+
+def test_clasification_df_dataset(ts_data):
+    data = ts_data.copy()
+    data["label"] = (data["val"] > 4).astype(int)
+
+    ds = ClassificationDFDataset(
+        data,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column=["label"],
+        id_columns=["id", "id2"],
+        context_length=4,
+    )
+
+    # check length
+    assert len(ds) == len(data) - ds.context_length + 1
+
+    # check alignment
+    assert ds[-1]["timestamp"] == ts_data.iloc[-1]["time_date"]
+
+    # check shape under dataloader
+    def my_collate(batch):
+        valid_keys = ["past_values", "target_values"]
+        batch_ = [{k: item[k] for k in valid_keys} for item in batch]
+        return default_collate(batch_)
+
+    dl = DataLoader(ds, batch_size=2, collate_fn=my_collate)
+    b = next(iter(dl))
+
+    assert len(b["target_values"].shape) == 1
+
+
+def test_datetime_handling(ts_data):
+    df = ts_data.copy()
+    df["time_date_utc_offset"] = pd.date_range(start="2022-10-01 10:00:00 +01:00", periods=10, freq="h")
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="time_date_utc_offset",
+        id_columns=["id"],
+        target_columns=["val"],
+        context_length=3,
+        prediction_length=2,
+    )
+
+    assert ds[0]["timestamp"].tz == timezone(timedelta(hours=1))
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="time_date",
+        id_columns=["id"],
+        target_columns=["val"],
+        context_length=3,
+        prediction_length=2,
+    )
+
+    assert ds[0]["timestamp"].tz is None

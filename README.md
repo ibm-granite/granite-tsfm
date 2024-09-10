@@ -2,10 +2,10 @@
 Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
-[here](wiki.md). Information on the services component can be found [here](services/inference/README.md).
+[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](services/inference/README.md).
 
 
-# Python Version
+## Python Version
 The current Python versions supported are 3.9, 3.10, 3.11.
 
 ## Initial Setup
@@ -23,13 +23,13 @@ To install use `pip`:
 pip install ".[notebooks]"
 ```
 
-### Notebooks links
+### 🔗 Links to the notebooks
 - Getting started with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_getting_started.ipynb)
 - Transfer learning with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_transfer.ipynb)
 - Transfer learning with `PatchTST` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
 - Getting started with `TinyTimeMixer (TTM)` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb)
 
-## 📗 Google Colab
+## 📗 Google Colab Tutorials
 Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
 - [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
 
@@ -40,10 +40,12 @@ The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requ
 pip install ".[demos]"
 ```
 
-## Issues
+## 🪲 Issues
 If you encounter an issue with this project, you are welcome to submit a [bug report](https://github.com/ibm-granite/granite-tsfm/issues).
 Before opening a new issue, please search for similar issues. It's possible that someone has already reported it.
 
+## 🌏 Wiki 
+[Wiki Page](https://github.com/ibm-granite/granite-tsfm/wiki)
 
 # Notice
 The intention of this repository is to make it easier to use and demonstrate Granite TimeSeries components that have been made available in the [Hugging Face transformers library](https://huggingface.co/docs/transformers/main/en/index). As we continue to develop these capabilities we will update the code here.

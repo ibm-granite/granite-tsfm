@@ -68,7 +68,7 @@ def test_zero_shot_forecast_inference(ts_data):
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
 
     msg = {
-        "model_id": "ibm-granite/granite-timeseries-ttm-v1",
+        "model_id": "ibm/test-ttm-v1",
         "parameters": {
             # "prediction_length": params["prediction_length"],
         },
@@ -89,7 +89,7 @@ def test_zero_shot_forecast_inference(ts_data):
     test_data_ = test_data.copy()
 
     msg = {
-        "model_id": "ibm-granite/granite-timeseries-ttm-v1",
+        "model_id": "ibm/test-ttm-v1",
         "parameters": {
             # "prediction_length": params["prediction_length"],
         },
@@ -111,8 +111,8 @@ def test_zero_shot_forecast_inference(ts_data):
 @pytest.mark.parametrize(
     "model_path",
     [
-        "ibm-granite/granite-timeseries-patchtst",
-        "ibm-granite/granite-timeseries-patchtsmixer",
+        "ibm/test-patchtst",
+        "ibm/test-patchtsmixer",
     ],
 )
 def test_trained_model_inference(ts_data, model_path):

@@ -1292,7 +1292,7 @@ class TinyTimeMixerStdScaler(nn.Module):
         """
 
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
-        denominator = denominator.clamp_min(1.0)
+        denominator = denominator.clamp_min(torch.tensor(1, device=denominator.device))
         loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
 
         variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator

@@ -14,20 +14,21 @@ from .util import join_list_without_repeat
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
-    """
-    An abtract class representing a :class: `BaseDFDataset`.
-
-    All the datasets that represents data frames should subclass it.
-    All subclasses should overwrite :meth: `__get_item__`
+    """Base dataset for time series models built upon a pandas dataframe
 
     Args:
-        data_df (DataFrame, required): input data
-        datetime_col (str, optional): datetime column in the data_df. Defaults to None
-        x_cols (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
-        y_cols (list, required): list of columns of y. Defaults to an empty list.
-        seq_len (int, required): the sequence length. Defaults to 1
-        pred_len (int, required): forecasting horizon. Defaults to 0.
-        zero_padding (bool, optional): pad zero if the data_df is shorter than seq_len+pred_len
+        data_df (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        group_id (Optional[Union[List[int], List[str]]], optional): _description_. Defaults to None.
+        x_cols (list, optional): Columns to treat as inputs. If an empty list ([]) all the columns in the data_df are taken, except the timestamp column. Defaults to [].
+        y_cols (list, optional): Columns to treat as outputs. Defaults to [].
+        drop_cols (list, optional): List of columns that are dropped to form the X matrix (input). Defaults to [].
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset. Defaults to 1.
+        prediction_length (int, optional): Length of prediction (future values). Defaults to 0.
+        zero_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
     """
 
     def __init__(
@@ -79,7 +80,8 @@ class BaseDFDataset(torch.utils.data.Dataset):
 
         # sort the data by datetime
         if timestamp_column in list(data_df.columns):
-            data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
+            if not isinstance(data_df[timestamp_column].iloc[0], pd.Timestamp):
+                data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
             data_df = data_df.sort_values(timestamp_column, ignore_index=True)
 
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
@@ -87,8 +89,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
             data_df = self.pad_zero(data_df)
 
         if timestamp_column in list(data_df.columns):
-            self.timestamps = data_df[timestamp_column].values
-
+            self.timestamps = data_df[timestamp_column].to_list()  # .values coerces timestamps
         # get the input data
         if len(x_cols) > 0:
             self.X = data_df[x_cols]
@@ -133,19 +134,18 @@ class BaseDFDataset(torch.utils.data.Dataset):
 
 
 class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
-    """
-    An abtract class representing a :class: `BaseConcatDFDataset`.
+    """A dataset consisting of a concatenation of other datasets, based on torch ConcatDataset.
 
     Args:
-        data_df (DataFrame, required): input data
-        datetime_col (str, optional): datetime column in the data_df. Defaults to None
-        x_cols (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
-        y_cols (list, required): list of columns of y. Defaults to an empty list.
-        group_ids (list, optional): list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
-        seq_len (int, required): the sequence length. Defaults to 1
-        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
-        pred_len (int, required): forecasting horizon. Defaults to 0.
-        cls (class, required): dataset class
+        data_df (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset. Defaults to 1.
+        prediction_length (int, optional): Length of prediction (future values). Defaults to 0.
+        num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        cls (_type_, optional): The dataset class used to create the underlying datasets. Defaults to BaseDFDataset.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
     """
 
     def __init__(
@@ -258,17 +258,25 @@ def get_group_data(
 
 
 class PretrainDFDataset(BaseConcatDFDataset):
-    """
-    A :class: `PretrainDFDataset` is used for pretraining.
+    """A dataset used for masked pre-training.
 
-    To be updated
     Args:
-        data_df (DataFrame, required): input data
-        datetime_col (str, optional): datetime column in the data_df. Defaults to None
-        x_cols (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
-        group_ids (list, optional): list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
-        seq_len (int, required): the sequence length. Defaults to 1
-        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
+        data (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        target_columns (List[str], optional): List of column names which identify the target channels in the input, these are the
+            columns that will be predicted. Defaults to [].
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset. Defaults to 1.
+        num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+
+
+    The resulting dataset returns records (dictionaries) containing:
+        past_values: tensor of past values of the target columns of length equal to context length
+        past_observed_mask: tensor indicating which values are observed in the past values tensor
+        timestamp: the timestamp of the end of the context window
+        id: a tuple of id values (taken from the id columns) containing the id information of the time series segment
     """
 
     def __init__(
@@ -333,7 +341,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {
-                "past_values": np_to_torch(seq_x),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
             }
             if self.datetime_col:
@@ -345,17 +353,49 @@ class PretrainDFDataset(BaseConcatDFDataset):
 
 
 class ForecastDFDataset(BaseConcatDFDataset):
-    """
-    A :class: `ForecastDFDataset` used for forecasting.
+    """A dataset used for forecasting pretraing and inference
 
     Args:
-        data_df (DataFrame, required): input data
-        datetime_col (str, optional): datetime column in the data_df. Defaults to None
-        x_cols (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
-        group_ids (list, optional): list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
-        seq_len (int, required): the sequence length. Defaults to 1
-        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
-        pred_len (int, required): forecasting horizon. Defaults to 0.
+        data (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults
+            to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        target_columns (List[str], optional): List of column names which identify the target channels in the input, these are the
+            columns that will be predicted. Defaults to [].
+        observable_columns (List[str], optional): List of column names which identify the observable channels in the input.
+            Observable channels are channels which we have knowledge about in the past and future. For example, weather
+            conditions such as temperature or precipitation may be known or estimated in the future, but cannot be
+            changed. Defaults to [].
+        control_columns (List[str], optional): List of column names which identify the control channels in the input. Control
+            channels are similar to observable channels, except that future values may be controlled. For example, discount
+            percentage of a particular product is known and controllable in the future. Defaults to [].
+        conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
+            Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+        static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the
+            input which are fixed over time. Defaults to [].
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
+            Defaults to 1.
+        prediction_length (int, optional): Length of the future forecast. Defaults to 1.
+        num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
+        frequency_token (Optional[int], optional): An integer representing the frequency of the data. Please see for an example of
+            frequency token mappings. Defaults to None.
+        autoregressive_modeling (bool, optional): (Experimental) If False, any target values in the context window are masked and
+            replaced by 0. If True, the context window contains all the historical target information. Defaults to True.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+
+    The resulting dataset returns records (dictionaries) containing:
+        past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
+        past_observed_mask: tensor indicating which values are observed in the past values tensor (context_length x number of features)
+        future_values: tensor of future values of the target columns of length equal to prediction length (prediction_length x number of features)
+        future_observed_mask: tensor indicating which values are observed in the future values tensor (prediction_length x number of features)
+        freq_token: tensor containing the frequency token (scalar)
+        static_categorical_features: tensor of static categorical features (1 x len(static_categorical_columns))
+        timestamp: the timestamp of the end of the context window
+        id: a tuple of id values (taken from the id columns) containing the id information of the time series segment
+
+        where number of features is the total number of columns specified in target_columns, observable_columns, control_columns,
+            conditional_columns
     """
 
     def __init__(
@@ -510,17 +550,29 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
 
 class RegressionDFDataset(BaseConcatDFDataset):
-    """
-    A :class: `RegressionDFDataset` used for regression.
+    """A dataset used for forecasting pretraing and inference
 
     Args:
-        data_df (DataFrame, required): input data
-        datetime_col (str, optional): datetime column in the data_df. Defaults to None
-        input_columns (list, optional): list of columns of X. If x_cols is an empty list, all the columns in the data_df is taken, except the datatime_col. Defaults to an empty list.
-        output_columns (list, required): list of columns of y. Defaults to an empty list.
-        id_columns (list, optional): List of columns that specify ids in the dataset. list of group_ids to split the data_df to different groups. If group_ids is defined, it will triggle the groupby method in DataFrame. If empty, entire data frame is treated as one group.
-        context_length (int, required): the sequence length. Defaults to 1
-        num_workers (int, optional): the number if workers used for creating a list of dataset from group_ids. Defaults to 1.
+        data (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults
+            to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        input_columns (List[str], optional): List of columns to use as inputs to the regression
+        target_columns (List[str], optional): List of column names which identify the target channels in the input, these are the
+            columns that will be predicted. Defaults to [].
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
+            Defaults to 1.
+        num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+
+    The resulting dataset returns records (dictionaries) containing:
+        past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
+        past_observed_mask: tensor indicating which values are observed in the past values tensor (context_length x len(input_columns))
+        target_values: tensor of future values of the target columns of length equal to prediction length (prediction_length x len(target_columns))
+        static_categorical_features: tensor of static categorical features (1 x len(static_categorical_columns))
+        timestamp: the timestamp of the end of the context window
+        id: a tuple of id values (taken from the id columns) containing the id information of the time series segment
     """
 
     def __init__(
@@ -534,6 +586,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         context_length: int = 1,
         num_workers: int = 1,
         stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
     ):
         # self.y_cols = y_cols
 
@@ -543,11 +596,13 @@ class RegressionDFDataset(BaseConcatDFDataset):
             timestamp_column=timestamp_column,
             num_workers=num_workers,
             context_length=context_length,
+            prediction_length=0,
             cls=self.BaseRegressionDFDataset,
             input_columns=input_columns,
             target_columns=target_columns,
             static_categorical_columns=static_categorical_columns,
             stride=stride,
+            fill_value=fill_value,
         )
 
         self.n_inp = 2
@@ -570,6 +625,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             input_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
         ):
             self.target_columns = target_columns
             self.input_columns = input_columns
@@ -589,6 +645,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 group_id=group_id,
                 drop_cols=drop_cols,
                 stride=stride,
+                fill_value=fill_value,
             )
 
         def __getitem__(self, index):
@@ -600,8 +657,127 @@ class RegressionDFDataset(BaseConcatDFDataset):
             # return _torch(seq_x, seq_y)
 
             ret = {
-                "past_values": np_to_torch(seq_x),
-                "target_values": np_to_torch(seq_y),
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "target_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
+            }
+            if self.datetime_col:
+                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
+
+            if self.group_id:
+                ret["id"] = self.group_id
+
+            if self.static_categorical_columns:
+                categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
+                ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+            return ret
+
+
+class ClassificationDFDataset(BaseConcatDFDataset):
+    """A dataset used for forecasting pretraing and inference
+
+    Args:
+        data (pd.DataFrame): Underlying pandas dataframe.
+        id_columns (List[str], optional): List of columns which contain id information to separate distinct time series. Defaults
+            to [].
+        timestamp_column (Optional[str], optional): Name of the timestamp column. Defaults to None.
+        input_columns (List[str], optional): List of columns to use as inputs to the regression
+        label_column (str, optional): List of column names which identify the label of the time series. Defaults to "label".
+        context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
+            Defaults to 1.
+        num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
+        stride (int, optional): Stride at which windows are produced. Defaults to 1.
+        fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+
+    The resulting dataset returns records (dictionaries) containing:
+        past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
+        past_observed_mask: tensor indicating which values are observed in the past values tensor (context_length x len(input_columns))
+        target_values: tensor containing the label (scalar)
+        static_categorical_features: tensor of static categorical features (1 x len(static_categorical_columns))
+        timestamp: the timestamp of the end of the context window
+        id: a tuple of id values (taken from the id columns) containing the id information of the time series segment
+    """
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        input_columns: List[str] = [],
+        label_column: str = "label",
+        static_categorical_columns: List[str] = [],
+        context_length: int = 1,
+        num_workers: int = 1,
+        stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
+    ):
+        super().__init__(
+            data_df=data,
+            id_columns=id_columns,
+            timestamp_column=timestamp_column,
+            num_workers=num_workers,
+            context_length=context_length,
+            prediction_length=0,
+            cls=self.BaseClassificationDFDataset,
+            input_columns=input_columns,
+            label_column=label_column,
+            static_categorical_columns=static_categorical_columns,
+            stride=stride,
+            fill_value=fill_value,
+        )
+
+        self.n_inp = 2
+
+    class BaseClassificationDFDataset(BaseDFDataset):
+        def __init__(
+            self,
+            data_df: pd.DataFrame,
+            group_id: Optional[Union[List[int], List[str]]] = None,
+            context_length: int = 1,
+            prediction_length: int = 0,
+            drop_cols: list = [],
+            id_columns: List[str] = [],
+            timestamp_column: Optional[str] = None,
+            label_column: str = "label",
+            input_columns: List[str] = [],
+            static_categorical_columns: List[str] = [],
+            stride: int = 1,
+            fill_value: Union[float, int] = 0.0,
+        ):
+            self.label_column = label_column
+            self.input_columns = input_columns
+            self.static_categorical_columns = static_categorical_columns
+
+            x_cols = input_columns
+            y_cols = label_column
+
+            super().__init__(
+                data_df=data_df,
+                id_columns=id_columns,
+                timestamp_column=timestamp_column,
+                x_cols=x_cols,
+                y_cols=y_cols,
+                context_length=context_length,
+                prediction_length=prediction_length,
+                group_id=group_id,
+                drop_cols=drop_cols,
+                stride=stride,
+                fill_value=fill_value,
+            )
+
+        def __getitem__(self, index):
+            # seq_x: batch_size x seq_len x num_x_cols
+
+            time_id = index * self.stride
+            seq_x = self.X[time_id : time_id + self.context_length].values
+            # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+            seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
+
+            ret = {
+                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "target_values": torch.tensor(np.nan_to_num(seq_y, nan=self.fill_value), dtype=torch.int64),
+                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
             }
             if self.datetime_col:
                 ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
