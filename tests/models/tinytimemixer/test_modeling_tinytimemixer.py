@@ -13,12 +13,13 @@ import numpy as np
 import torch
 from parameterized import parameterized
 from transformers import set_seed
-from tsfm.models.tinytimemixer import (
+
+from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
     TinyTimeMixerForPrediction,
     TinyTimeMixerModel,
 )
-from tsfm.models.tinytimemixer.modeling_tinytimemixer import (
+from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import (
     TinyTimeMixerForPredictionOutput,
 )
 
