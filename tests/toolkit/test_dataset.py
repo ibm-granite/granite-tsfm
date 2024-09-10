@@ -492,6 +492,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
     df = ts_data_with_categorical.copy()
     df.loc[10, "value3"] = np.nan
 
+    # check no missing by default
     ds = ImputeForecastDFDataset(
         df,
         timestamp_column="timestamp",
@@ -504,6 +505,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
 
     assert np.all(ds[0]["artificial_past_observed_mask"])
 
+    # check that the missing rate is respected
     ds = ImputeForecastDFDataset(
         df,
         timestamp_column="timestamp",
@@ -516,3 +518,50 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
     )
 
     np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.1)
+
+    # check reproducibility
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=42,
+    )
+
+    apom_1 = ds[0]["artificial_past_observed_mask"]
+
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=42,
+    )
+
+    apom_2 = ds[0]["artificial_past_observed_mask"]
+
+    np.testing.assert_allclose(apom_1, apom_2)
+
+    # ensure seed is respected
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=41,
+    )
+
+    apom_3 = ds[0]["artificial_past_observed_mask"]
+    assert np.any(np.logical_xor(apom_2, apom_3))
