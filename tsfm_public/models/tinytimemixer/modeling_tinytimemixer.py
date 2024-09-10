@@ -4,7 +4,6 @@
 # Library: https://github.com/huggingface/transformers/blob/main/src/transformers/models/patchtsmixer/modeling_patchtsmixer.py
 """PyTorch TinyTimeMixer model."""
 
-
 import copy
 import math
 from dataclasses import dataclass
@@ -1808,7 +1807,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         elif self.loss == "mae":
             loss = nn.L1Loss(reduction="mean")
         elif self.loss == "nll":
-            raise Exception("NLL loss and Distribution heads are currently not allowed. Use mse or mae as loss functions.")
+            raise Exception(
+                "NLL loss and Distribution heads are currently not allowed. Use mse or mae as loss functions."
+            )
             loss = nll
         elif self.loss is None:
             loss = None
@@ -1977,4 +1978,3 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x prediction_length x num_channels]
         return SampleTinyTimeMixerPredictionOutput(sequences=samples)
-
