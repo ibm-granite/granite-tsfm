@@ -503,7 +503,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
         fill_value=fill_value,
     )
 
-    assert np.all(ds[0]["artificial_past_observed_mask"])
+    assert np.all(ds[0]["artificial_past_observed_mask"].numpy())
 
     # check that the missing rate is respected
     ds = ImputeForecastDFDataset(
@@ -532,7 +532,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
         random_seed=42,
     )
 
-    apom_1 = ds[0]["artificial_past_observed_mask"]
+    apom_1 = ds[0]["artificial_past_observed_mask"].numpy()
 
     ds = ImputeForecastDFDataset(
         df,
@@ -546,7 +546,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
         random_seed=42,
     )
 
-    apom_2 = ds[0]["artificial_past_observed_mask"]
+    apom_2 = ds[0]["artificial_past_observed_mask"].numpy()
 
     np.testing.assert_allclose(apom_1, apom_2)
 
@@ -563,5 +563,44 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
         random_seed=41,
     )
 
-    apom_3 = ds[0]["artificial_past_observed_mask"]
+    apom_3 = ds[0]["artificial_past_observed_mask"].numpy()
     assert np.any(np.logical_xor(apom_2, apom_3))
+
+    # check missing column argument
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        artificial_missing_columns=["value3"],
+        random_seed=41,
+    )
+
+    np.testing.assert_allclose(np.mean([dsi["artificial_past_observed_mask"].numpy()[:, 0].mean() for dsi in ds]), 1)
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.5)
+
+    # check time t is missing
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        artificial_missing_columns=["value3"],
+        artificial_missing_at_time_t=True,
+        random_seed=41,
+    )
+
+    assert np.all(
+        [
+            dsi["artificial_past_observed_mask"].numpy()[-1, 1] == ~dsi["past_observed_mask"].numpy()[-1, 1]
+            for dsi in ds
+        ]
+    )

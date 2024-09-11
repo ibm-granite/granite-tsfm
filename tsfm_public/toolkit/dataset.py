@@ -690,6 +690,8 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
         artificial_missing_rate: float = 0.0,
+        artificial_missing_columns: Optional[List[str]] = None,
+        artificial_missing_at_time_t: bool = False,
         random_seed: int = 0,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
@@ -712,6 +714,8 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             artificial_missing_rate=artificial_missing_rate,
+            artificial_missing_columns=artificial_missing_columns,
+            artificial_missing_at_time_t=artificial_missing_at_time_t,
             rng=np.random.default_rng(seed=random_seed),
         )
         self.n_inp = 2
@@ -741,6 +745,8 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
             artificial_missing_rate: float = 0.0,
+            artificial_missing_columns: Optional[List[str]] = None,
+            artificial_missing_at_time_t: bool = False,
             rng=np.random.default_rng(),
         ):
             self.frequency_token = frequency_token
@@ -750,7 +756,13 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
             self.artificial_missing_rate = artificial_missing_rate
+            self.artificial_missing_at_time_t = artificial_missing_at_time_t
             self.rng = rng
+
+            if artificial_missing_columns is None:
+                self.artificial_missing_columns = copy.copy(target_columns)
+            else:
+                self.artificial_missing_columns = artificial_missing_columns
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -783,19 +795,30 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             # target columns only
             # we don't mask what is already missing
 
-            self._target_mask = np.array([(c in target_columns) for c in x_cols])
+            self._artificial_missing_column_mask = np.array([(c in self.artificial_missing_columns) for c in x_cols])
+            artificial_observed_mask = np.ones_like(self.X.values[:, self._artificial_missing_column_mask], dtype=bool)
 
-            artificial_observed_mask = np.ones_like(self.X.values[:, self._target_mask], dtype=bool)
-            obs_x = np.where(~np.isnan(self.X.values[:, self._target_mask]))
-            artificial_missing_indices = self.rng.choice(
-                range(len(obs_x[0])),
-                int(np.prod(artificial_observed_mask.shape) * self.artificial_missing_rate),
-                replace=False,
-            )
+            if artificial_missing_rate > 0:
+                # obs_x = np.where(~np.isnan(self.X.values[:, self._artificial_missing_mask]))
+                obs_x = np.nonzero(~np.isnan(self.X.values[:, self._artificial_missing_column_mask]))
 
-            artificial_observed_mask[obs_x[0][artificial_missing_indices], obs_x[1][artificial_missing_indices]] = (
-                False
-            )
+                # process columnwise
+                for col_idx in range(artificial_observed_mask.shape[1]):
+                    # get a column
+                    obs_x_tmp = obs_x[0][obs_x[1] == col_idx]
+
+                    # select missing, and generate 2-tuple of indices
+                    k = int(artificial_observed_mask.shape[0] * self.artificial_missing_rate)
+                    artificial_missing_indices = (
+                        self.rng.choice(
+                            obs_x_tmp,
+                            k,
+                            replace=False,
+                        ),
+                        np.array([col_idx] * k, dtype=int),
+                    )
+                    artificial_observed_mask[artificial_missing_indices] = False
+
             self._artificial_past_observed_mask = artificial_observed_mask
 
         def __getitem__(self, index):
@@ -806,9 +829,15 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             seq_x = self.X[time_id : time_id + self.context_length].values
 
             artificial_past_observed_seq = np.ones_like(seq_x, dtype=bool)
-            artificial_past_observed_seq[:, self._target_mask] = self._artificial_past_observed_mask[
-                time_id : time_id + self.context_length
-            ]
+            artificial_past_observed_seq[:, self._artificial_missing_column_mask] = (
+                self._artificial_past_observed_mask[time_id : time_id + self.context_length]
+            )
+
+            # enforce missing at time t
+            if self.artificial_missing_at_time_t:
+                # get columns where time t value is observed
+                col_obs = ~np.isnan(seq_x[-1, self._artificial_missing_column_mask])
+                artificial_past_observed_seq[-1, self._artificial_missing_column_mask] = ~col_obs
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
@@ -822,7 +851,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                 "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
-                "artificial_past_observed_mask": artificial_past_observed_seq,
+                "artificial_past_observed_mask": np_to_torch(artificial_past_observed_seq),
             }
 
             if self.datetime_col:
