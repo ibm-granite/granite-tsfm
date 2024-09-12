@@ -517,7 +517,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
         artificial_missing_rate=0.9,
     )
 
-    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.1)
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.1, atol=0.01)
 
     # check reproducibility
     ds = ImputeForecastDFDataset(
@@ -581,7 +581,7 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
     )
 
     np.testing.assert_allclose(np.mean([dsi["artificial_past_observed_mask"].numpy()[:, 0].mean() for dsi in ds]), 1)
-    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.5)
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.5, atol=0.02)
 
     # check time t is missing
     ds = ImputeForecastDFDataset(

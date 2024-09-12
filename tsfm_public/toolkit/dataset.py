@@ -808,9 +808,9 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                     obs_x_tmp = obs_x[0][obs_x[1] == col_idx]
 
                     # select missing, and generate 2-tuple of indices
-                    k = int(artificial_observed_mask.shape[0] * self.artificial_missing_rate)
-                    if k >= len(obs_x_tmp):
-                        k = int(len(obs_x_tmp) * self.artificial_missing_rate)
+                    # k = int(artificial_observed_mask.shape[0] * self.artificial_missing_rate)
+                    # if k >= len(obs_x_tmp):
+                    k = int(len(obs_x_tmp) * self.artificial_missing_rate)
 
                     artificial_missing_indices = (
                         self.rng.choice(
