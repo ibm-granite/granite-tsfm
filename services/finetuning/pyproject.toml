@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "tsfmfinetuning"
+version = "0.0.0"
+description = "Service layer for TSFM granite models."
+authors = ["IBM"]
+license = "https://github.com/ibm-granite/granite-tsfm/blob/main/LICENSE"
+packages = [{ include = "tsfmfinetuning/**/*.py" }]
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+# latest-tag = true
+# style = "semver"
+format = "{base}"
+
+#[tool.poetry-dynamic-versioning.substitution]
+#files = ["tsfmfinetuning/_version.py"]
+#persistent-substitution = true
+
+[tool.poetry-dynamic-versioning.files."tsfmfinetuning/_version.py"]
+# persistent-substitution = true # useful for editable installs
+initial-content = """
+# These version placeholders will be replaced later during substitution.
+__version__ = "0.0.0"
+__version_tuple__ = (0, 0, 0)
+"""
+
+
+[tool.poetry.dependencies]
+# including 3.9 causes poetry lock to run forever
+python = ">=3.10,<3.13"
+numpy = { version = "<2" }
+tsfm_public = { git = "https://github.com/IBM/tsfm.git", tag = "v0.2.6" }
+
+# trying to pick up cpu version for tsfmfinetuning
+# to make image smaller
+torch = { version = ">2,<3", source = "pytorch" }
+
+fastapi = { version = "*" }
+pydantic = { version = "*" }
+uvicorn = { version = "*" }
+setuptools = { version = "*" }
+urllib3 = { version =  ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[tool.poetry.group.dev]
+optional = true
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
