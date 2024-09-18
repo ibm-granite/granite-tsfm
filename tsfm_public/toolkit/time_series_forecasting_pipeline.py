@@ -331,6 +331,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         prediction_length = kwargs.get("prediction_length")
         timestamp_column = kwargs.get("timestamp_column")
         id_columns = kwargs.get("id_columns")
+        target_columns = kwargs.get("target_columns")
         # context_length = kwargs.get("context_length")
 
         # use the feature extractor here
@@ -342,6 +343,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             )
 
         future_time_series = kwargs.pop("future_time_series", None)
+
+        if self.feature_extractor:
+            time_series = self.feature_extractor.preprocess(time_series)
 
         if future_time_series is not None:
             if isinstance(future_time_series, str):
@@ -369,6 +373,12 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 raise ValueError(
                     f"If provided, `future_time_series` data should cover the prediction length for each of the time series in the test dataset. Received data of length {future_time_series.shape[0]} but expected {prediction_length * id_count}"
                 )
+
+            if self.feature_extractor:
+                # future data needs some values for targets, but they are unused
+                future_time_series[target_columns] = 0
+                future_time_series = self.feature_extractor.preprocess(future_time_series)
+                future_time_series.drop(columns=target_columns)
 
             time_series = pd.concat((time_series, future_time_series), axis=0)
         else:
