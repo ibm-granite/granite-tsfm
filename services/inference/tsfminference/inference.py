@@ -126,7 +126,6 @@ class InferenceRuntime:
             explode_forecasts=True,
             feature_extractor=preprocessor,
             add_known_ground_truth=False,
-            feature_extractor=preprocessor
         )
 
         # truncate data length when exploding
@@ -145,7 +144,7 @@ class InferenceRuntime:
         #     future_data = preprocessor.preprocess(future_data)
         #     future_data.drop(columns=input_payload.target_columns)
 
-        forecasts = forecast_pipeline(test_data, future_time_series=future_data, inverse_scale_outputs=True)
+        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
         return PredictOutput(
             model_id=input_payload.model_id,
