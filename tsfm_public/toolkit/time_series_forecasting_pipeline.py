@@ -3,7 +3,7 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import inspect
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -116,13 +116,11 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         self,
         model: Union["PreTrainedModel"],
         *args,
-        freq: Optional[str] = None,
         explode_forecasts: bool = False,
         inverse_scale_outputs: bool = True,
         add_known_ground_truth: bool = True,
         **kwargs,
     ):
-        kwargs["freq"] = freq
         kwargs["explode_forecasts"] = explode_forecasts
         kwargs["inverse_scale_outputs"] = inverse_scale_outputs
         kwargs["add_known_ground_truth"] = add_known_ground_truth
@@ -141,10 +139,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             ]:
                 if p not in kwargs:
                     kwargs[p] = getattr(kwargs["feature_extractor"], p)
-
-            # get freq from kwargs or the preprocessor
-            if "freq" not in kwargs:
-                kwargs["freq"] = kwargs["feature_extractor"].freq
 
         if "context_length" not in kwargs:
             kwargs["context_length"] = model.config.context_length

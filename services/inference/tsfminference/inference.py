@@ -115,6 +115,8 @@ class InferenceRuntime:
             # train to estimate freq if not available
             preprocessor.train(data)
 
+        LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+
         # warn if future data is not provided, but is needed by the model
         if preprocessor.exogenous_channel_indices and future_data is None:
             raise ValueError(
