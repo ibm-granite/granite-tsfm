@@ -2,19 +2,17 @@
 #
 """Tsfmfinetuning Runtime"""
 
-import datetime
 import logging
-from pathlib import Path
+import uuid
 from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public import TimeSeriesPreprocessor
 
-from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
-from .payloads import ForecastingInferenceInput, PredictOutput
+from .payloads import AsyncCallReturn, TinyTimeMixerForecastingTuneInput
 from .util import load_config, load_model, register_config
 
 
@@ -42,10 +40,10 @@ class FinetuningRuntime:
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/finetuning", tags=["finetuning"])
         self.router.add_api_route(
-            "/forecasting",
-            self.forecast,
+            "/tinytimemixer/forecasting",
+            self.finetuning,
             methods=["POST"],
-            response_model=PredictOutput,
+            response_model=AsyncCallReturn,
         )
         app.include_router(self.router)
 
@@ -70,87 +68,20 @@ class FinetuningRuntime:
         LOGGER.info("Successfully loaded model")
         return model, preprocessor
 
-    def forecast(self, input: ForecastingInferenceInput):
+    def finetuning(self, input: TinyTimeMixerForecastingTuneInput):
         try:
             LOGGER.info("calling forecast_common")
-            answer = self._forecast_common(input)
+            answer = self._finetuning_common(input)
             LOGGER.info("done, returning.")
             return answer
         except Exception as e:
             LOGGER.exception(e)
             raise HTTPException(status_code=500, detail=repr(e))
 
-    def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
-        # we need some sort of model registry
-        # payload = input_payload.model_dump()  # do we need?
+    def _finetuning_common(self, input_payload: TinyTimeMixerForecastingTuneInput) -> AsyncCallReturn:
+        # a no-op for now
 
-        data = decode_data(input_payload.data, input_payload.metadata)
-        future_data = decode_data(input_payload.future_data, input_payload.metadata)
-
-        model_path = Path(self.config["model_dir"]) / input_payload.model_id
-
-        if not model_path.is_dir():
-            LOGGER.info(f"Could not find model at path: {model_path}")
-            if TSFM_ALLOW_LOAD_FROM_HF_HUB:
-                model_path = input_payload.model_id
-                LOGGER.info(f"Using HuggingFace Hub: {model_path}")
-            else:
-                raise RuntimeError(
-                    f"Could not load model {input_payload.model_id} from {self.config['model_dir']}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
-                )
-
-        model, preprocessor = self.load(model_path)
-
-        preprocessor_params = input_payload.metadata.model_dump()
-
-        # preprocess
-        if preprocessor is None:
-            preprocessor = TimeSeriesPreprocessor(
-                **preprocessor_params,
-                scaling=False,
-                encode_categorical=False,
-            )
-            # we don't set context length or prediction length above because it is not needed for finetuning
-
-            # train to estimate freq if not available
-            preprocessor.train(data)
-
-        # warn if future data is not provided, but is needed by the model
-        if preprocessor.exogenous_channel_indices and future_data is None:
-            raise ValueError(
-                "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
-            )
-
-        forecast_pipeline = TimeSeriesForecastingPipeline(
-            model=model,
-            explode_forecasts=True,
-            feature_extractor=preprocessor,
-            add_known_ground_truth=False,
-        )
-
-        # truncate data length when exploding
-        # context_length = model.config.context_length
-        # if explode_forecasts and len(data) > context_length:
-        #     data = select_by_index(
-        #         data, id_columns=input.id_columns, start_index=-context_length
-        #     )
-
-        test_data = preprocessor.preprocess(data)
-
-        if future_data is not None:
-            # future data needs some values for targets, but they are unused
-            # Eventually this will be part of the forecast pipeline.
-            future_data[input_payload.target_columns] = 0
-            future_data = preprocessor.preprocess(future_data)
-            future_data.drop(columns=input_payload.target_columns)
-
-        forecasts = forecast_pipeline(test_data, future_time_series=future_data, inverse_scale_outputs=True)
-
-        return PredictOutput(
-            model_id=input_payload.model_id,
-            created_at=datetime.datetime.now().isoformat(),
-            results=[forecasts.to_dict(orient="list")],
-        )
+        return AsyncCallReturn(job_id=uuid.uuid4().hex)
 
 
 def decode_data(data: Dict[str, List[Any]], metadata: Dict[str, Any]) -> pd.DataFrame:
