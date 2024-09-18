@@ -69,11 +69,11 @@ class BaseTuneInput(BaseModel):
 
 class BaseDataInput(BaseModel):
     data: str = Field(
-        description="A URI pointing to readable data or a base64 encoded string of data.",
+        description="A supported URI pointing to readable finetuning data.",
         min_length=1,
-        max_length=5_000_000,
+        max_length=5_00,
         pattern=".*",
-        example="CSV_DATA_OR_BASE64_ENCODED_PYARROW_TABLE",
+        example="file:///persistent_volume/claim/path/data.csv",
     )
     timestamp_column: str = Field(
         description="A valid column in the data that should be treated as the timestamp.",
