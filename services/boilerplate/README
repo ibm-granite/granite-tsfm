@@ -1,0 +1,6 @@
+This directory contains boilerplate code that is
+not intended to be a standalone module. Instead
+the code from this folder gets copied to the suitable
+locations during the execution of relevant make target
+involved in the packaging and building of the various
+service runtimes.
