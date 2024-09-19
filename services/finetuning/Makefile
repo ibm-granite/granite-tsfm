@@ -1,5 +1,10 @@
 CONTAINER_BUILDER ?= docker
 
+boilerplate:
+	cp ../boilerplate/warning.txt tsfmfinetuning/inference_payloads.py
+	cat ../boilerplate/inference_payloads.py >> tsfmfinetuning/inference_payloads.py
+	
+
 # starts the tsfmfinetuning service (used mainly for test cases)
 start_service_local:
 	python -m tsfmfinetuning.main &
