@@ -252,7 +252,7 @@ def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model):
         inverse_scale_outputs=True,
     )
 
-    forecasts = forecast_pipeline(tsp.preprocess(test_data))
+    forecasts = forecast_pipeline(test_data)
 
     assert forecasts.shape == (
         test_end_index - test_start_index - context_length + 1,

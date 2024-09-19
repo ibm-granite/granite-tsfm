@@ -115,6 +115,8 @@ class InferenceRuntime:
             # train to estimate freq if not available
             preprocessor.train(data)
 
+        LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+
         # warn if future data is not provided, but is needed by the model
         if preprocessor.exogenous_channel_indices and future_data is None:
             raise ValueError(
@@ -126,6 +128,7 @@ class InferenceRuntime:
             explode_forecasts=True,
             feature_extractor=preprocessor,
             add_known_ground_truth=False,
+            freq=preprocessor.freq,
         )
 
         # truncate data length when exploding
@@ -135,16 +138,16 @@ class InferenceRuntime:
         #         data, id_columns=input.id_columns, start_index=-context_length
         #     )
 
-        test_data = preprocessor.preprocess(data)
+        # test_data = preprocessor.preprocess(data)
 
-        if future_data is not None:
-            # future data needs some values for targets, but they are unused
-            # Eventually this will be part of the forecast pipeline.
-            future_data[input_payload.target_columns] = 0
-            future_data = preprocessor.preprocess(future_data)
-            future_data.drop(columns=input_payload.target_columns)
+        # if future_data is not None:
+        #     # future data needs some values for targets, but they are unused
+        #     # Eventually this will be part of the forecast pipeline.
+        #     future_data[input_payload.target_columns] = 0
+        #     future_data = preprocessor.preprocess(future_data)
+        #     future_data.drop(columns=input_payload.target_columns)
 
-        forecasts = forecast_pipeline(test_data, future_time_series=future_data, inverse_scale_outputs=True)
+        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
         return PredictOutput(
             model_id=input_payload.model_id,
