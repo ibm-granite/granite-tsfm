@@ -9,7 +9,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .inference_payloads import ForecastingMetadataInput
+from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .model_parameters import (
     TinyTimeMixerParameters,
 )
@@ -70,12 +70,13 @@ class BaseTuneInput(BaseModel):
 
 class ForecastingTuneInput(BaseTuneInput):
     schema: ForecastingMetadataInput
-    model_config = ConfigDict(extra="forbid")
-    validation_data: str = Field(
-        description="A URI pointing to readable data or a base64 encoded string of data for validation data.",
-        max_length=5_000_000,
+    parameters: ForecastingParameters
+    data: str = Field(
+        description="""A supported URI pointing to data convertible to a pandas dataframe such as
+        as csv file with column headings or a pyarrow feather table.""",
+        max_length=500,
         min_length=0,
-        pattern=".*",
+        pattern="file://.*",
         default="",
     )
 
