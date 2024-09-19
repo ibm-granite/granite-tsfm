@@ -69,7 +69,7 @@ class BaseTuneInput(BaseModel):
 
 
 class ForecastingTuneInput(BaseTuneInput):
-    metadata: ForecastingMetadataInput
+    schema: ForecastingMetadataInput
     model_config = ConfigDict(extra="forbid")
     validation_data: str = Field(
         description="A URI pointing to readable data or a base64 encoded string of data for validation data.",

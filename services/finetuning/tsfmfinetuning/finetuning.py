@@ -84,11 +84,11 @@ class FinetuningRuntime:
         return AsyncCallReturn(job_id=uuid.uuid4().hex)
 
 
-def decode_data(data: Dict[str, List[Any]], metadata: Dict[str, Any]) -> pd.DataFrame:
+def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFrame:
     if not data:
         return None
 
     df = pd.DataFrame.from_dict(data)
-    if ts_col := metadata.timestamp_column:
+    if ts_col := schema.timestamp_column:
         df[ts_col] = pd.to_datetime(df[ts_col])
     return df

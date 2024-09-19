@@ -99,7 +99,7 @@ class BaseInferenceInput(BaseModel):
 
 
 class ForecastingInferenceInput(BaseInferenceInput):
-    metadata: ForecastingMetadataInput
+    schema: ForecastingMetadataInput
 
     parameters: ForecastingParameters
 
