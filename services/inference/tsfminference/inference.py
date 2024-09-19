@@ -14,7 +14,7 @@ from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
-from .payloads import ForecastingInferenceInput, PredictOutput
+from .inference_payloads import ForecastingInferenceInput, PredictOutput
 from .util import load_config, load_model, register_config
 
 

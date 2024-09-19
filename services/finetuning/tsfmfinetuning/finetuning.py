@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from tsfm_public import TimeSeriesPreprocessor
 
 from .constants import API_VERSION
-from .payloads import AsyncCallReturn, TinyTimeMixerForecastingTuneInput
+from .finetuning_payloads import AsyncCallReturn, TinyTimeMixerForecastingTuneInput
 from .util import load_config, load_model, register_config
 
 
