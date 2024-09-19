@@ -128,6 +128,7 @@ class InferenceRuntime:
             explode_forecasts=True,
             feature_extractor=preprocessor,
             add_known_ground_truth=False,
+            freq=preprocessor.freq,
         )
 
         # truncate data length when exploding
