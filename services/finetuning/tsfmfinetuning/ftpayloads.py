@@ -5,7 +5,7 @@
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -13,6 +13,35 @@ from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .model_parameters import (
     TinyTimeMixerParameters,
 )
+
+
+class S3aCredentials(BaseModel):
+    access_key_id: str = Field(description="s3 acess key id.", pattern=".*", min_length=1, max_length=512)
+    secret_access_key: str = Field(description="s3 acess key.", pattern=".*", min_length=1, max_length=512)
+    endpoint: str = Field(
+        default="s3.us-east.cloud-object-storage.appdomain.cloud",
+        pattern=".*",
+        min_length=1,
+        max_length=128,
+    )
+    default_region: str = Field(
+        default="us-east",
+        pattern=".*",
+        min_length=1,
+        max_length=128,
+    )
+
+    @classmethod
+    def from_ibmcos_creds(
+        cls,
+        coscreds: Dict[str, str],
+        endpoint: str = "s3.us-east.cloud-object-storage.appdomain.cloud",
+    ):
+        return S3aCredentials(
+            access_key=coscreds["cos_hmac_keys"]["access_key_id"],
+            secret_key=coscreds["cos_hmac_keys"]["secret_access_key"],
+            endpoint=endpoint,
+        )
 
 
 class TuneTypeEnum(str, Enum):
