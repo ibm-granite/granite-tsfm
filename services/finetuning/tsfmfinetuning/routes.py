@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException
 from tsfm_public import TimeSeriesPreprocessor
 
 from .constants import API_VERSION
-from .finetuning_payloads import AsyncCallReturn, TinyTimeMixerForecastingTuneInput
-from .util import load_config, load_model, register_config
+from .ftpayloads import AsyncCallReturn, TinyTimeMixerForecastingTuneInput
+from .hfutil import load_config, load_model, register_config
 
 
 LOGGER = logging.getLogger(__file__)
