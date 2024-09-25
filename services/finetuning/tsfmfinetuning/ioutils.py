@@ -14,16 +14,22 @@ from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
-
-# Third Party
-from minio import Minio
-from minio.deleteobjects import DeleteObject
 from transformers import AutoConfig
 
+# Third Party
 # First Party
 from tsfm_public import TinyTimeMixerConfig
 
 from .ftpayloads import S3aCredentials
+
+
+try:
+    from minio import Minio
+    from minio.deleteobjects import DeleteObject
+
+    HAVE_MINIO = True
+except ImportError as _:
+    HAVE_MINIO = False
 
 
 AutoConfig.register("tinytimemixer", TinyTimeMixerConfig)
@@ -61,6 +67,10 @@ def getminio(s3creds: S3aCredentials) -> Minio:
     Returns:
         Minio: A Minio implementation.
     """
+
+    if not HAVE_MINIO:
+        raise RuntimeError("you must have minio installed to use this method.")
+
     # Create minio client
     return Minio(
         endpoint=s3creds.endpoint,
