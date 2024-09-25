@@ -30,13 +30,14 @@ __version_tuple__ = (0, 0, 0)
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-tsfm_public = { git = "https://github.com/IBM/tsfm.git", tag = "v0.2.6" }
+tsfm_public = { git = "https://github.com/IBM/tsfm.git", tag = "v0.2.10" }
 
 # trying to pick up cpu version for tsfmfinetuning
 # to make image smaller
 torch = { version = ">2,<3", source = "pytorch" }
 
 fastapi = { version = "*" }
+minio = { version = "*" }
 pydantic = { version = "*" }
 uvicorn = { version = "*" }
 setuptools = { version = "*" }
@@ -51,6 +52,12 @@ priority = "explicit"
 optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+redis = "*"
+
+[tool.poetry.group.redis]
+optional = true
+[tool.poetry.group.redis.dependencies]
+redis = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
