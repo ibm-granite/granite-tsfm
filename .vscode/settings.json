@@ -13,5 +13,8 @@
   ],
   "ruff.lint.args": [
     "--config=./pyproject.toml"
-  ]
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "always"
+  }
 }
