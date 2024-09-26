@@ -1117,7 +1117,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         forecast_horizon,
         contain_missing_values,
         contain_equal_length,
-    ) = convert_tsf_to_dataframe(filename)
+    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.NaN)
 
     id_column_name = "id"
     timestamp_column_name = "timestamp"
@@ -1126,6 +1126,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
     tsf_to_pandas_freq_map = {
         "daily": "d",
         "hourly": "h",
+        "half_hourly": "30min",
         "seconds": "s",
         "minutes": "min",
         "minutely": "min",
@@ -1136,12 +1137,15 @@ def convert_tsf(filename: str) -> pd.DataFrame:
 
     if frequency:
         try:
-            freq_val, freq_unit = frequency.split("_")
-            freq = freq_val + tsf_to_pandas_freq_map[freq_unit]
-        except ValueError:
             freq = tsf_to_pandas_freq_map[frequency]
         except KeyError:
-            raise ValueError(f"Input file contains an unknown frequency unit {freq_unit}")
+            try:
+                freq_val, freq_unit = frequency.split("_")
+                freq = freq_val + tsf_to_pandas_freq_map[freq_unit]
+            except ValueError:
+                freq = tsf_to_pandas_freq_map[frequency]
+            except KeyError:
+                raise ValueError(f"Input file contains an unknown frequency unit {freq_unit}")
     else:
         freq = None
 
