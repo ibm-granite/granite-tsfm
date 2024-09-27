@@ -113,3 +113,8 @@ class ForecastingTuneInput(BaseTuneInput):
 class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
     model_config = ConfigDict(protected_namespaces=())
     model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
+
+
+class TuneOutput(BaseModel):
+    # model_id: str
+    training_ref: str

@@ -208,16 +208,24 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     """
 
     received_bytes = not isinstance(uri, str)
-    #                               01234567
+    # some guardrails (dependeing on deployment we'll want to paramterize these)
+    # at present all we're allowing is a local (file://) refernece to csv or feather
+    #                               012345
+    if uri[0:6].upper().startswith("S3A://"):
+        raise NotImplementedError("reading s3 input is currently forbidden.")
+    if received_bytes:
+        raise NotImplementedError("reading byte input is currently forbidden.")
     if not received_bytes and uri[0:8].upper().startswith("HTTPS://"):
-        raise NotImplementedError("data not accepted")
+        raise NotImplementedError("reading from https sources is forbidden.")
+    if not received_bytes and uri[0:8].upper().startswith("HTTP://"):
+        raise NotImplementedError("reading from http sources is forbidden.")
 
     timestamp_column = kwargs.get("timestamp_column", None)
-    # we're reading from file       0123456
+    # we're reading from file                              0123456
     if not received_bytes and uri[0:7].upper().startswith("FILE://"):
-        return _to_pandas(_iscsv(uri), _isfeather(uri), buf=uri[7:], timestamp_column=timestamp_column)
+        return _to_pandas(iscsv=_iscsv(uri), isfeather=_isfeather(uri), buf=uri[7:], timestamp_column=timestamp_column)
 
-    # we're reading from s3         012345
+    # we're reading from s3                                012345
     if not received_bytes and uri[0:6].upper().startswith("S3A://"):
         if _iscsv(uri) or _isfeather(uri):
             bucket_name = get_bucket_name(uri)

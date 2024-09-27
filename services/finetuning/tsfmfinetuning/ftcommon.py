@@ -1,24 +1,18 @@
 """ "Common implementations for fine-tuning"""
 
-# Standard
 import logging
 import tempfile
 import uuid
 from pathlib import Path
 
 import pandas as pd
-
-# Third Party
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
-# Local
-from services.finetuning.tsfmfinetuning.ftpayloads import BaseTuneInput, TuneOutput, TuneTypeEnum
-
-# First Party
 from tsfm_public.toolkit.dataset import ForecastDFDataset
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 from tsfm_public.toolkit.util import select_by_fixed_fraction
 
+from .ftpayloads import BaseTuneInput, TuneOutput, TuneTypeEnum
 from .hfutil import load_model, load_model_config, load_preprocessor, prepare_model_and_preprocessor
 from .ioutils import copy_dir_to_s3, getminio, to_pandas
 
@@ -201,21 +195,28 @@ def _forecasting_tuning_workflow(
     return save_path
 
 
-def forecasting_tuning(
+def forecasting_tuning_to_local(
+    target_dir: Path,
+    model_name: str,
     input: BaseTuneInput,
-    servicing_grpc=False,
-    model_bucket="tsfm-services",
 ) -> TuneOutput:
+    """Run finetuning. TuneOutput will contain a reference to a model saved to the local file system."""
+    model_path: Path = _forecasting_tuning_workflow(input, tuned_model_name=model_name, tmp_dir=target_dir)
+    return TuneOutput(training_ref=model_path.as_posix())
+
+
+def forecasting_tuning_to_s3(
+    input: BaseTuneInput,
+) -> TuneOutput:
+    """Run finetuning. TuneOutput will contain a reference to a model saved to a s3-compatible object store."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         # make prefix and unique tuned model name
         model_prefix = input.tune_prefix if input.tune_prefix else ""
         uid = uuid.uuid4().hex
         model_name = f"{model_prefix}{input.model_id}-{uid}"
         bucket_name = input.results_bucket
-
         model_path: Path = _forecasting_tuning_workflow(input, tuned_model_name=model_name, tmp_dir=tmp_dir)
-
-        mc = getminio(s3creds=input.s3credentials)
+        s3creds = input.s3creds
+        mc = getminio(s3creds=s3creds)
         copy_dir_to_s3(mc, bucket_name, model_path, prefix=model_name)
-
-    return TuneOutput(training_ref=f"s3a://{bucket_name}/{model_name}")
+        return TuneOutput(training_ref=f"s3a://{bucket_name}/{model_name}")
