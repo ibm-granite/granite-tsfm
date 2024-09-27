@@ -73,28 +73,6 @@ class TrainerArguments(BaseModel):
 class BaseTuneInput(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     model_id: str
-    tune_type: TuneTypeEnum = TuneTypeEnum.linear_probe
-    trainer_args: TrainerArguments = Field(default=TrainerArguments())
-
-    tune_prefix: str = Field(
-        pattern=".*",
-        min_length=1,
-        max_length=100,
-        description="A prefix used when saving a tuned model.",
-        example="<a_prefix>",
-    )
-    fewshot_fraction: float = Field(
-        default=1.0,
-        description="Fraction of data to use for fine tuning.",
-    )
-    random_seed: Optional[int] = Field(default=None, description="Random seed set prior to fine tuning.")
-
-    @field_validator("fewshot_fraction")
-    @classmethod
-    def check_valid_fraction(cls, v: float) -> float:
-        if (v > 1) or (v <= 0):
-            raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
-        return v
 
 
 class ForecastingTuneInput(BaseTuneInput):
@@ -116,7 +94,28 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
     # inner class seems to hide "Parameters" from the json/yaml
     # schema which is what we want.
     class Parameters(ForecastingParameters):
+        tune_type: TuneTypeEnum = TuneTypeEnum.linear_probe
+        trainer_args: TrainerArguments = Field(default=TrainerArguments())
+        tune_prefix: str = Field(
+            pattern=".*",
+            min_length=1,
+            max_length=100,
+            description="A prefix used when saving a tuned model.",
+            example="<a_prefix>",
+        )
+        fewshot_fraction: float = Field(
+            default=1.0,
+            description="Fraction of data to use for fine tuning.",
+        )
+        random_seed: Optional[int] = Field(default=None, description="Random seed set prior to fine tuning.")
         model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
+
+        @field_validator("fewshot_fraction")
+        @classmethod
+        def check_valid_fraction(cls, v: float) -> float:
+            if (v > 1) or (v <= 0):
+                raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
+            return v
 
     parameters: Parameters
 
