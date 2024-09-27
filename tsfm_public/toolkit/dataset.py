@@ -4,7 +4,7 @@
 
 import copy
 from itertools import starmap
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -420,6 +420,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         autoregressive_modeling: bool = True,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        masking_specification: List[Tuple[str, Union[int, Tuple[int]]]] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -441,6 +442,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
+            masking_specification=masking_specification,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -469,6 +471,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             autoregressive_modeling: bool = True,
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            masking_specification: List[Tuple[str, Union[int, Tuple[int]]]] = None,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -477,6 +480,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
+            self.masking_specification = masking_specification
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -485,6 +489,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 conditional_columns,
             )
             y_cols = copy.copy(x_cols)
+
+            self.column_name_to_index_map = {k: v for v, k in enumerate(x_cols)}
 
             # check non-autoregressive case
             if len(target_columns) == len(x_cols) and not self.autoregressive_modeling:
@@ -512,20 +518,40 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 fill_value=fill_value,
             )
 
+        def apply_masking_specification(self, past_values_tensor: np.ndarray) -> np.ndarray:
+            """Apply the desired mask defined by masking_specification.
+
+            Args:
+                past_values_tensor (np.ndarray): Tensor of past values, should have shape (context_length, num_channels)
+
+            Returns:
+                np.ndarry: Tensor with values masked
+            """
+
+            for col_name, spec in self.masking_specification:
+                col_idx = self.column_name_to_index_map[col_name]
+                if isinstance(spec, (tuple, list)) and len(spec) == 2:
+                    past_values_tensor[spec[0] : spec[1], col_idx] = np.NaN
+                else:
+                    past_values_tensor[spec:, col_idx] = np.NaN
+            return past_values_tensor
+
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
 
             time_id = index * self.stride
 
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X[time_id : time_id + self.context_length].values.astype(np.float32)
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
+
+            if self.masking_specification is not None:
+                seq_x = self.apply_masking_specification(seq_x)
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
-
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
