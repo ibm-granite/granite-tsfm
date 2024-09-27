@@ -112,7 +112,13 @@ class ForecastingTuneInput(BaseTuneInput):
 
 class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
     model_config = ConfigDict(protected_namespaces=())
-    model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
+
+    # inner class seems to hide "Parameters" from the json/yaml
+    # schema which is what we want.
+    class Parameters(ForecastingParameters):
+        model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
+
+    parameters: Parameters
 
 
 class TuneOutput(BaseModel):
