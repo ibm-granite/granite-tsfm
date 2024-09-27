@@ -7,7 +7,7 @@ boilerplate:
 
 # starts the tsfmfinetuning service (used mainly for test cases)
 start_service_local:
-	python -m tsfmfinetuning.main &
+	python -m tsfmfinetuning.ftservice &
 	sleep 10
 stop_service_local:
 	pkill  -f 'python.*tsfmfinetuning.*'
