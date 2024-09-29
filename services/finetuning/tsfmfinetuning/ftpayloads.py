@@ -83,6 +83,7 @@ class ForecastingTuneInput(BaseTuneInput):
         min_length=0,
         pattern="file://.*",
         default="",
+        examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"]
     )
     schema: ForecastingMetadataInput
     parameters: ForecastingParameters
