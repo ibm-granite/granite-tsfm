@@ -76,8 +76,6 @@ class BaseTuneInput(BaseModel):
 
 
 class ForecastingTuneInput(BaseTuneInput):
-    schema: ForecastingMetadataInput
-    parameters: ForecastingParameters
     data: str = Field(
         description="""A supported URI pointing to data convertible to a pandas dataframe such as
         as csv file with column headings or a pyarrow feather table.""",
@@ -85,7 +83,10 @@ class ForecastingTuneInput(BaseTuneInput):
         min_length=0,
         pattern="file://.*",
         default="",
+        examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"]
     )
+    schema: ForecastingMetadataInput
+    parameters: ForecastingParameters
 
 
 class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
@@ -94,8 +95,8 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
     # inner class seems to hide "Parameters" from the json/yaml
     # schema which is what we want.
     class Parameters(ForecastingParameters):
+        random_seed: Optional[int] = Field(default=None, description="Random seed set prior to fine tuning.")
         tune_type: TuneTypeEnum = TuneTypeEnum.linear_probe
-        trainer_args: TrainerArguments = Field(default=TrainerArguments())
         tune_prefix: str = Field(
             pattern=".*",
             min_length=1,
@@ -107,7 +108,7 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
             default=1.0,
             description="Fraction of data to use for fine tuning.",
         )
-        random_seed: Optional[int] = Field(default=None, description="Random seed set prior to fine tuning.")
+        trainer_args: TrainerArguments = Field(default=TrainerArguments())
         model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
 
         @field_validator("fewshot_fraction")

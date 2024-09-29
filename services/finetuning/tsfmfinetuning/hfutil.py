@@ -1,23 +1,20 @@
+# THIS FILE IS COPIED FROM THE BOILERPLATE DIRECTORY,
+# DO NOT EDIT IT OR YOU WILL LOSE YOUR CHANGES.
+# MAKE CHANGES IN THE TOP LEVEL services/boilerplate DIRECTORY.
+#
+#
+#
 # Copyright contributors to the TSFM project
 #
 """Utilities to support custom time series models"""
 
 import importlib
 import logging
-import os
 import pathlib
-import tempfile
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import transformers
-from transformers import AutoConfig, PretrainedConfig
-
-import tsfm_public
-from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
-
-from .ftpayloads import S3aCredentials
-from .ioutils import BREADCRUMB_FILE, CHECK_FOR_BREADCRUMB, dump_model_from_s3
+from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
 
 LOGGER = logging.getLogger(__file__)
@@ -88,112 +85,6 @@ def load_config(
     return conf
 
 
-def _hf_model_load(load_path: Path, **config_kwargs: Dict[str, Any]):
-    """Load model from a given path. Currently determines model class by searchin private tsfm and huggingface.
-
-    Args:
-        load_path (Path): String representing path from which to load model.
-
-    Raises:
-        AttributeError: Raised when model class cannot be found for an architecture.
-        ValueError: When the architecture cannot be determined from the model config.
-
-    Returns:
-        _type_: _description_
-    """
-
-    model_class, conf = load_model_config(load_path, model_prefix=None, **config_kwargs)
-    return model_class.from_pretrained(load_path, local_files_only=True, config=conf)
-
-
-def prepare_model_and_preprocessor(
-    model_id: str,
-    model_prefix="model",
-    preprocessor_prefix: str = "preprocessor",
-    bucket_name: str = None,
-    s3creds: S3aCredentials = None,
-) -> Path:
-    LOGGER.info(f"in prepare_model_and_preprocessor with model_id {model_id}")
-
-    # we have to deal with wanting to dump a file
-    # and with one already existing in or out of our
-    # temporary location (this is due to both testing and kmodel
-    # requirements)
-    target_location = Path(os.environ.get("TSFM_MODEL_CACHE_ROOT", Path(tempfile.gettempdir()).as_posix()))
-
-    LOGGER.info(f"target_location {target_location}")
-    mp = Path(f"{model_id}/{model_prefix}")
-    LOGGER.info(f"mp: {mp}")
-    s3_load_path = Path(model_id)  # for s3
-    LOGGER.info(f"s3_load_path: {s3_load_path}")
-    # this next block was originally intended to service test cases
-    # with relative model directories but apparently
-    # is getting used for more that that
-    if mp.is_dir():
-        LOGGER.info(f"1:returning {mp.parent} from already existing model path")
-        return mp.parent
-    # mimics an s3 download
-    if (target_location / mp).is_dir() and (not CHECK_FOR_BREADCRUMB or (mp / BREADCRUMB_FILE).exists()):
-        LOGGER.info(f"2:returning {target_location / s3_load_path} from already existing model path")
-        return target_location / s3_load_path
-
-    # if we're here we have to get it from s3
-    LOGGER.info("calling dump_model_from_s3")
-    dump_model_from_s3(
-        s3creds=s3creds,
-        bucket_name=bucket_name,
-        model_id=model_id,
-        preprocessor_prefix=preprocessor_prefix,
-        model_prefix=model_prefix,
-        target_directory=target_location,
-    )
-
-    LOGGER.info(f"exiting prepare_model_and_preprocessor returning {target_location / s3_load_path}")
-    return target_location / s3_load_path
-
-
-def load_preprocessor(
-    model_id: str,
-    preprocessor_prefix: str = "preprocessor",
-    model_prefix="model",
-    bucket_name: str = None,
-    s3creds: S3aCredentials = None,
-    **config_kwargs: Dict[str, Any],
-):  # TODO minio hop needed
-    load_path = prepare_model_and_preprocessor(
-        model_id,
-        model_prefix=model_prefix,
-        preprocessor_prefix=preprocessor_prefix,
-        bucket_name=bucket_name,
-        s3creds=s3creds,
-    )
-    load_path_ = load_path / preprocessor_prefix
-
-    # check if the path is an empty directory
-    if load_path_.is_dir() and not os.listdir(load_path_):
-        return None
-    return TimeSeriesPreprocessor.from_pretrained(load_path_, local_files_only=True, **config_kwargs)
-
-
-def load_model(
-    model_id: str,
-    model_prefix="model",
-    preprocessor_prefix: str = "preprocessor",
-    bucket_name: str = None,
-    s3creds: S3aCredentials = None,
-    **config_kwargs: Dict[str, Any],
-):
-    load_path = prepare_model_and_preprocessor(
-        model_id,
-        model_prefix=model_prefix,
-        preprocessor_prefix=preprocessor_prefix,
-        bucket_name=bucket_name,
-        s3creds=s3creds,
-    )
-
-    return _hf_model_load(load_path / model_prefix, **config_kwargs)
-
-
 def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None) -> type:
     """Helper to find model class based on config object
 
@@ -232,40 +123,36 @@ def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None
             raise AttributeError("Could not load model class for architecture '{arch}'.") from exc
 
 
-def load_model_config(
-    load_path: Path, model_prefix="model", **config_kwargs: Dict[str, Any]
-) -> Tuple[type, transformers.PretrainedConfig]:
-    """Load model from a given path. Currently determines model class by searchin private tsfm and huggingface.
+def load_model(
+    model_path: Union[str, pathlib.Path],
+    config: Optional[PretrainedConfig] = None,
+    module_path: Optional[str] = None,
+) -> PreTrainedModel:
+    """Load a pretrained model.
+    If module_path is provided, load the model using the provided module path.
 
     Args:
-        load_path (str): String representing path from which to load model.
+        model_path (Union[str, pathlib.Path]): Path to a location where the model can be loaded.
+        config (Optional[PretrainedConfig], optional): HF Configuration object. Defaults to None.
+        module_path (Optional[str], optional): Python module path that can be used to load the
+            config/model. Defaults to None.
 
     Raises:
-        AttributeError: Raised when model class cannot be found for an architecture.
-        ValueError: When the architecture cannot be determined from the model config.
+        ValueError: Raised if loading from a module_path and a configuration object is not provided.
 
     Returns:
-        Tuple[type, transformers.PretrainedConfig]: Tuple containing the model class and the loaded configuration
+        PreTrainedModel: The loaded pretrained model.
     """
 
-    load_path_ = load_path / model_prefix if model_prefix else load_path
+    if module_path is not None and config is None:
+        raise ValueError("Config must be provided when loading from a custom module_path")
 
-    conf = AutoConfig.from_pretrained(load_path_, local_files_only=True, **config_kwargs)
-    # For now assume we use models only that are compatible with HF Transformers
-    architectures = getattr(conf, "architectures", [])
+    if config is not None:
+        model_class = _get_model_class(config, module_path=module_path)
+        LOGGER.info(f"Found model class: {model_class.__name__}")
+        model = model_class.from_pretrained(model_path, config=config)
+        return model
 
-    for arch in architectures:
-        try:
-            model_class = getattr(transformers, arch)
-        except AttributeError:
-            try:
-                model_class = getattr(tsfm_public, arch)
-            except AttributeError:
-                # raise here: could not find
-                raise AttributeError("Could not find model class for architecture '{arch}'.")
-
-        return model_class, conf
-
-    raise ValueError(f"Could not retrieve `architectures` attribute from {type(conf)}.")
-
-    ...
+    model = AutoModel.from_pretrained(model_path)
+    LOGGER.info(f"Found model class: {model.__class__.__name__}")
+    return model

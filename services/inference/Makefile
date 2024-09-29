@@ -2,8 +2,11 @@ CONTAINER_BUILDER ?= docker
 
 # copies boilerplate code to suitable locations
 boilerplate:
-	cp ../boilerplate/warning.txt tsfminference/inference_payloads.py
-	cat ../boilerplate/inference_payloads.py >> tsfminference/inference_payloads.py
+	for f in ../boilerplate/*.py; do \
+		echo $$f; \
+		cat ../boilerplate/warning.txt > tsfminference/$$(basename $$f); \
+		cat $$f>>tsfminference/$$(basename $$f); \
+		done 
 	
 # starts the tsfminference service (used mainly for test cases)
 start_service_local:
