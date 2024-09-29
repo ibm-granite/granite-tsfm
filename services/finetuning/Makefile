@@ -1,8 +1,12 @@
 CONTAINER_BUILDER ?= docker
 
+# copies boilerplate code to suitable locations
 boilerplate:
-	cp ../boilerplate/warning.txt tsfmfinetuning/inference_payloads.py
-	cat ../boilerplate/inference_payloads.py >> tsfmfinetuning/inference_payloads.py
+	for f in ../boilerplate/*.py; do \
+		echo $$f; \
+		cat ../boilerplate/warning.txt > tsfmfinetuning/$$(basename $$f); \
+		cat $$f>>tsfmfinetuning/$$(basename $$f); \
+		done 
 	
 
 # starts the tsfmfinetuning service (used mainly for test cases)
