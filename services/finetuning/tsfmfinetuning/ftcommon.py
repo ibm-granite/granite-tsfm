@@ -13,7 +13,6 @@ from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 from tsfm_public.toolkit.util import select_by_fixed_fraction
 
 from .ftpayloads import BaseTuneInput, TuneOutput, TuneTypeEnum
-from .hfutil import load_model, load_model_config, load_preprocessor, prepare_model_and_preprocessor
 from .ioutils import copy_dir_to_s3, getminio, to_pandas
 
 
@@ -29,14 +28,15 @@ def _forecasting_tuning_workflow(
     LOGGER.info("in _forecasting_tuning_workflow")
 
     # set seed
-    if input.random_seed:
-        set_seed(input.random_seed)
+    if input.parameters.random_seed:
+        set_seed(input.parameters.random_seed)
 
     # get the data
-    dumped = input.model_dump()
-    train_data: pd.DataFrame = to_pandas(uri=input.data, **dumped)
+    # @todo discuss with wx.ai why we want to use "data_schema" instead
+    schema = input.schema.model_dump()
+    train_data: pd.DataFrame = to_pandas(uri=input.data, **schema)
     if input.validation_data is not None and len(input.validation_data) > 0:
-        validation_data: pd.DataFrame = to_pandas(uri=input.validation_data, **dumped)
+        validation_data: pd.DataFrame = to_pandas(uri=input.validation_data, **schema)
     else:
         validation_data = None
 
@@ -53,13 +53,13 @@ def _forecasting_tuning_workflow(
     # If no preprocessor, then we are finetuning on a new dataset -- no existing preprocessor
     if tsp is None:
         tsp = TimeSeriesPreprocessor(
-            timestamp_column=input.timestamp_column,
-            id_columns=input.id_columns,
-            target_columns=input.target_columns,
-            control_columns=input.control_columns,
-            conditional_columns=input.conditional_columns,
-            observable_columns=input.observable_columns,
-            static_categorical_columns=input.static_categorical_columns,
+            timestamp_column=schema.timestamp_column,
+            id_columns=schema.id_columns,
+            target_columns=schema.target_columns,
+            control_columns=schema.control_columns,
+            conditional_columns=schema.conditional_columns,
+            observable_columns=schema.observable_columns,
+            static_categorical_columns=schema.static_categorical_columns,
             context_length=base_config.context_length,
             prediction_length=base_config.prediction_length,
             scaling=False,
