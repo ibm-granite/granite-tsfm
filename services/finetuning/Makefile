@@ -3,7 +3,6 @@ CONTAINER_BUILDER ?= docker
 boilerplate:
 	cp ../boilerplate/warning.txt tsfmfinetuning/inference_payloads.py
 	cat ../boilerplate/inference_payloads.py >> tsfmfinetuning/inference_payloads.py
-	
 
 # starts the tsfmfinetuning service (used mainly for test cases)
 start_service_local:
@@ -30,6 +29,7 @@ test_image: start_service_image
 	pytest tests
 	$(MAKE) stop_service_image
 
-
+install_dev: boilerplate
+	pip install poetry && poetry install --with dev
 
 
