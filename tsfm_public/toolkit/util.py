@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import torch
+from pandas.api.types import is_datetime64_dtype
 
 
 def strtobool(val):
@@ -1150,10 +1151,19 @@ def convert_tsf(filename: str) -> pd.DataFrame:
     else:
         freq = None
 
+    # determine presence of timestamp column and name
+    default_start_timestamp = datetime(1900, 1, 1)
+    datetimes = [is_datetime64_dtype(d) for d in loaded_data.dtypes]
+    source_timestamp_column = None
+    if any(datetimes):
+        source_timestamp_column = loaded_data.columns[datetimes][0]
+
     dfs = []
     for index, item in loaded_data.iterrows():
-        if freq:
-            timestamps = pd.date_range(item.start_timestamp, periods=len(item.series_value), freq=freq)
+        if freq and source_timestamp_column:
+            timestamps = pd.date_range(item[source_timestamp_column], periods=len(item.series_value), freq=freq)
+        elif freq:
+            timestamps = pd.date_range(default_start_timestamp, periods=len(item.series_value), freq=freq)
         else:
             timestamps = range(len(item.series_value))
 
