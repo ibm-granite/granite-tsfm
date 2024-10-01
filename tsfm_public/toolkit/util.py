@@ -1130,6 +1130,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         "seconds": "s",
         "minutes": "min",
         "minutely": "min",
+        "weekly": "W",
         "monthly": "MS",
         "yearly": "YS",
         "quarterly": "QS",
