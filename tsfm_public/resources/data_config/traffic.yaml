@@ -1,0 +1,22 @@
+data_file: traffic.csv    
+data_path: traffic/
+id_columns: []
+timestamp_column: date    
+target_columns: []
+observable_columns: []
+control_columns: []
+conditional_columns: []
+static_categorical_columns: []
+freq: 1h
+
+scale: 
+    scaling: True
+    scaler_type: standard
+
+encode_categorical: False
+
+split:
+    train: 0.7
+    test: 0.2
+
+

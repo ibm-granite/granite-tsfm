@@ -1,34 +1,50 @@
 [build-system]
-requires = ["setuptools>=66", "wheel", "Cython"]
+requires = ["setuptools>=66", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
 name = "tsfm_public"
-requires-python = ">=3.9,<3.11"
-version = "0.0.1"
+requires-python = ">=3.9,<3.13"
+# version = "0.0.1"
+dynamic = ["version"]
 authors = [{ name = "IBM" }]
 description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
 license = { file = "LICENSE" }
-classifiers = ["Development Status :: 4 - Beta", "License :: OSI Approved :: Apache Software License"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+]
 
 dependencies = [
-    "pandas>=1.4",
+    "pandas>=2.2.0",
     "scikit-learn",
-    "transformers[torch]>=4.36.1"
+    "transformers[torch]>=4.38.0",
+    "datasets",
+    "deprecated",
+    "urllib3>=1.26.19,<2",         # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+    "numpy<2",
 ]
 
 [tool.setuptools]
-packages = ["tsfm_public", "tsfm_public.toolkit", "tsfmhfdemos"]
+packages = ["tsfm_public", "tsfmhfdemos"]
 
 [project.optional-dependencies]
 
-notebooks = ["jupyter", "matplotlib", "datasets", "ipywidgets", "plotly", "kaleido"]
-testing = ["pytest", "tsfm_public[notebooks]"]
-dev = ["pre-commit", "tsfm_public[testing]", "isort", "black[jupyter]"]
-evaluation = [
-    "tsevaluate @ git+ssh://git@github.ibm.com/srom/tsevaluate.git",
-]
+
 all = ["tsfm_public[notebooks,testing,dev]"]
+
+notebooks = [
+    "jupyter",
+    "matplotlib",
+    "datasets",
+    "ipywidgets",
+    "plotly",
+    "kaleido",
+    "tensorboard",
+]
+testing = ["pytest", "tsfm_public[notebooks]", "parameterized"]
+dev = ["pre-commit", "tsfm_public[testing]", "ruff==0.4.4"]
+
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
 ogv = ["datasets", "plotly", "kaleido"]
@@ -39,6 +55,39 @@ demos = [
     "plotly",
     "streamlit-aggrid",
     "kaleido",
-    "toml"
+    "toml",
 ]
 # ###################################################
+
+
+[tool.setuptools_scm]
+version_file = "tsfm_public/_version.py"
+
+[tool.ruff]
+
+line-length = 119
+lint.ignore = ["C901", "E501", "E741", "F402", "F823"]
+lint.select = ["C", "E", "F", "I", "W"]
+extend-exclude = ["tsfm_public/_version.py"]
+extend-include = ["*.ipynb"]
+
+# Ignore import violations in all `__init__.py` files.
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403", "F811"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+known-first-party = ["tsfm_public"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
