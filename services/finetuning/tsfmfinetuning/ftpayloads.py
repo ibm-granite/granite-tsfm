@@ -51,9 +51,8 @@ class ForecastingTuneInput(BaseTuneInput):
         description="""A supported URI pointing to data convertible to a pandas dataframe such as
         as csv file with column headings or a pyarrow feather table.""",
         max_length=500,
-        min_length=0,
+        min_length=6,
         pattern="file://.*",
-        default="",
         examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"],
     )
     schema: ForecastingMetadataInput
