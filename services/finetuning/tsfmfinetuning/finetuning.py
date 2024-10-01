@@ -78,10 +78,10 @@ class FinetuningRuntime:
         LOGGER.info("Successfully loaded model")
         return model, preprocessor
 
-    def finetuning(self, input: TinyTimeMixerForecastingTuneInput):
+    def finetuning(self, input: TinyTimeMixerForecastingTuneInput, tuned_model_name: str, output_dir: Path):
         try:
             LOGGER.info("calling forecast_common")
-            answer = self._finetuning_common(input)
+            answer = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
             LOGGER.info("done, returning.")
             return answer
         except Exception as e:
@@ -210,7 +210,6 @@ class FinetuningRuntime:
             use_cpu=True,  # only needed for testing on Mac :(
         )
 
-        # tmpdir.cleanup() ?
         callbacks = []
         if input.trainer_args.early_stopping and validation_dataset:
             # Create the early stopping callback
