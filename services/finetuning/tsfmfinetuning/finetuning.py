@@ -3,30 +3,26 @@
 """Tsfmfinetuning Runtime"""
 
 import logging
+from pathlib import Path
 from typing import Any, Dict
-from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
+
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
 from tsfm_public import TimeSeriesPreprocessor
+from tsfm_public.toolkit.dataset import ForecastDFDataset
+from tsfm_public.toolkit.util import select_by_fixed_fraction
 
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
 from .ftpayloads import (
     AsyncCallReturn,
-    TinyTimeMixerForecastingTuneInput,
     BaseTuneInput,
+    TinyTimeMixerForecastingTuneInput,
+    TuneTypeEnum,
 )
 from .hfutil import load_config, load_model, register_config
-
-from pathlib import Path
-
-from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
-
-from tsfm_public.toolkit.dataset import ForecastDFDataset
-
-from tsfm_public.toolkit.util import select_by_fixed_fraction
-
-from .ftpayloads import TuneTypeEnum
 from .ioutils import to_pandas
 
 
@@ -47,16 +43,12 @@ class FinetuningRuntime:
                 )
                 LOGGER.info(f"registered {custom_module['model_type']}")
 
-                model_map[custom_module["model_config_name"]] = custom_module[
-                    "module_path"
-                ]
+                model_map[custom_module["model_config_name"]] = custom_module["module_path"]
 
         self.model_to_module_map = model_map
 
     def add_routes(self, app):
-        self.router = APIRouter(
-            prefix=f"/{API_VERSION}/finetuning", tags=["finetuning"]
-        )
+        self.router = APIRouter(prefix=f"/{API_VERSION}/finetuning", tags=["finetuning"])
         self.router.add_api_route(
             "/tinytimemixer/forecasting",
             self.finetuning,
@@ -106,9 +98,7 @@ class FinetuningRuntime:
 
         return None
 
-    def _finetuning_common(
-        self, input: BaseTuneInput, tuned_model_name: str, tmp_dir: Path
-    ) -> Path:
+    def _finetuning_common(self, input: BaseTuneInput, tuned_model_name: str, tmp_dir: Path) -> Path:
         LOGGER.info("in _forecasting_tuning_workflow")
 
         # set seed
@@ -129,8 +119,8 @@ class FinetuningRuntime:
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
                 raise RuntimeError(
-                    f"""Could not load model {input.model_id} from {self.config['model_dir']}. 
-                    If trying to load directly from the HuggingFace Hub please ensure that 
+                    f"""Could not load model {input.model_id} from {self.config['model_dir']}.
+                    If trying to load directly from the HuggingFace Hub please ensure that
                     `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"""
                 )
 
@@ -196,11 +186,7 @@ class FinetuningRuntime:
             )
         train_dataset = ForecastDFDataset(train_data, **dataset_spec)
 
-        validation_dataset = (
-            ForecastDFDataset(validation_data, **dataset_spec)
-            if validation_data
-            else train_dataset
-        )
+        validation_dataset = ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
 
         # Configure trainer
         training_tmp_dir = Path(tmp_dir)
@@ -216,8 +202,7 @@ class FinetuningRuntime:
             save_strategy="epoch",
             logging_strategy="epoch",
             save_total_limit=3,
-            logging_dir=training_tmp_dir
-            / "logs",  # Make sure to specify a logging directory
+            logging_dir=training_tmp_dir / "logs",  # Make sure to specify a logging directory
             load_best_model_at_end=True,  # Load the best model when training ends
             metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
             greater_is_better=False,  # For loss

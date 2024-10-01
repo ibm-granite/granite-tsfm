@@ -5,7 +5,7 @@
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
 from enum import Enum
-from typing import Dict, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -13,6 +13,7 @@ from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .model_parameters import (
     TinyTimeMixerParameters,
 )
+
 
 class TuneTypeEnum(str, Enum):
     full = "full"
@@ -53,7 +54,7 @@ class ForecastingTuneInput(BaseTuneInput):
         min_length=0,
         pattern="file://.*",
         default="",
-        examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"]
+        examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"],
     )
     schema: ForecastingMetadataInput
     parameters: ForecastingParameters

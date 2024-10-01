@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from .ftcommon import forecasting_tuning_to_local
+from .finetuning import forecasting_tuning_to_local
 from .ftpayloads import TinyTimeMixerForecastingTuneInput, TuneOutput
 
 
@@ -39,9 +39,7 @@ def main():
     model_arch_type = parser.add_mutually_exclusive_group(
         help=f"""The base model architecture. The following are currently supported: {",".join(arch_choices)}"""
     )
-    model_arch_type.add_argument(
-        "--model_arch", "-a", choices=arch_choices, required=True
-    )
+    model_arch_type.add_argument("--model_arch", "-a", choices=arch_choices, required=True)
 
     # ####################Task type
     task_choices = ["forecasting"]
@@ -59,20 +57,16 @@ def main():
     # this will give us param validation
 
     if args.model_arch_type == "ttm" and args.task_type == "forecasting":
-        tune_input: TinyTimeMixerForecastingTuneInput = (
-            TinyTimeMixerForecastingTuneInput(**params)
-        )
+        tune_input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**params)
         tune_output: TuneOutput = forecasting_tuning_to_local(
             input=tune_input, target_dir=args.target_dir, model_name=args.model_name
         )
         print(tune_output)
     else:
-        raise NotImplementedError(
-            f"model arch/task type not implemented {args.model_arch_type} {args.task_type}"
-        )
+        raise NotImplementedError(f"model arch/task type not implemented {args.model_arch_type} {args.task_type}")
 
 
-""" 
+"""
 Run finetuning. TuneOutput will contain a reference to a model saved to the local file system.
 model_path: Path = _forecasting_tuning_workflow(
     input, tuned_model_name=model_name, tmp_dir=target_dir
