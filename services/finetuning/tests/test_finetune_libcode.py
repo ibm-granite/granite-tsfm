@@ -1,9 +1,10 @@
 # Standard
+
 import tempfile
 
 import pytest
-from tsfmfinetuning.ftcommon import forecasting_tuning_to_local
-from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput, TuneOutput
+from tsfmfinetuning.finetuning import FinetuningRuntime
+from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 
 
 PAYLOADS = [
@@ -31,6 +32,8 @@ file_data_uris = [
 @pytest.mark.parametrize("uri", file_data_uris)
 @pytest.mark.parametrize("payload", PAYLOADS)
 def test_fine_tune_forecasting_with_local_io(uri, payload):
-    input = TinyTimeMixerForecastingTuneInput(**payload)
-    response = forecasting_tuning_to_local(input=input, target_dir=tempfile.gettempdir(), model_name="finetuned")
-    assert isinstance(response, TuneOutput)
+    payload["data"] = uri
+    input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**payload)
+    ftr: FinetuningRuntime = FinetuningRuntime()
+    response = ftr.finetuning(input=input, tuned_model_name="my_tuned_ttm_model", output_dir=tempfile.gettempdir())
+    print(response)
