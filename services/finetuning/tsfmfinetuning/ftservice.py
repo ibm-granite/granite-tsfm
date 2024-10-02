@@ -15,7 +15,7 @@ from . import (
     TSFM_PYTHON_LOGGING_LEVEL,
 )
 from .constants import API_VERSION
-from .routes import FinetuningRuntime
+from .finetuning import FinetuningRuntime
 
 
 logging.basicConfig(
