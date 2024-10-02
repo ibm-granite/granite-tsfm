@@ -105,8 +105,8 @@ class FinetuningRuntime:
         if input.parameters.random_seed:
             set_seed(input.parameters.random_seed)
 
-        data_schema = input.schema.model_dump()
-        train_data: pd.DataFrame = to_pandas(uri=input.data, **data_schema)
+        data_schema = input.schema
+        train_data: pd.DataFrame = to_pandas(uri=input.data, **data_schema.model_dump())
 
         validation_data = FinetuningRuntime._validation_data(input)
 
@@ -147,7 +147,7 @@ class FinetuningRuntime:
                 prediction_length=base_config.prediction_length,
                 scaling=False,
                 encode_categorical=False,
-                freq=input.freq if input.freq else None,
+                freq=data_schema.freq if data_schema.freq else None,
             )
             # Should we set prediction length and context length above?
 
@@ -189,15 +189,16 @@ class FinetuningRuntime:
         validation_dataset = ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
 
         # Configure trainer
+        parameters = input.parameters
         training_tmp_dir = Path(tmp_dir)
         training_args = TrainingArguments(
             output_dir=training_tmp_dir / "output",
             overwrite_output_dir=True,
-            learning_rate=input.trainer_args.learning_rate,
-            num_train_epochs=input.trainer_args.num_train_epochs,
+            learning_rate=parameters.trainer_args.learning_rate,
+            num_train_epochs=parameters.trainer_args.num_train_epochs,
             evaluation_strategy="epoch",
-            per_device_train_batch_size=input.trainer_args.per_device_train_batch_size,
-            per_device_eval_batch_size=input.trainer_args.per_device_eval_batch_size,
+            per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
+            per_device_eval_batch_size=parameters.trainer_args.per_device_eval_batch_size,
             dataloader_num_workers=4,
             save_strategy="epoch",
             logging_strategy="epoch",
@@ -211,11 +212,11 @@ class FinetuningRuntime:
         )
 
         callbacks = []
-        if input.trainer_args.early_stopping and validation_dataset:
+        if parameters.trainer_args.early_stopping and validation_dataset:
             # Create the early stopping callback
             early_stopping_callback = EarlyStoppingCallback(
-                early_stopping_patience=input.trainer_args.early_stopping_patience,  # Number of epochs with no improvement after which to stop
-                early_stopping_threshold=input.trainer_args.early_stopping_threshold,  # Minimum improvement required to consider as improvement
+                early_stopping_patience=parameters.trainer_args.early_stopping_patience,  # Number of epochs with no improvement after which to stop
+                early_stopping_threshold=parameters.trainer_args.early_stopping_threshold,  # Minimum improvement required to consider as improvement
             )
             callbacks.append(early_stopping_callback)
         trainer_extra_args = {}

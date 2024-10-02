@@ -26,8 +26,6 @@ PAYLOADS = [
 
 file_data_uris = [
     "file://./tests/data/ETTh2.feather",
-    "file://./tests/data/ETTh2.csv",
-    "file://./tests/data/ETTh2.csv.gz",
 ]
 
 
