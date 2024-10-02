@@ -5,4 +5,4 @@ custom_modules:
     model_config_name: TinyTimeMixerConfig
 
 # path where local models will be loaded from
-model_dir: /Users/wmgifford/Downloads/
+model_dir: /tmp
