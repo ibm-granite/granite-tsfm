@@ -41,5 +41,9 @@ def test_fine_tune_forecasting_with_local_io(uri, payload):
         config = {}
 
     ftr: FinetuningRuntime = FinetuningRuntime(config=config)
-    response = ftr.finetuning(input=input, tuned_model_name="my_tuned_ttm_model", output_dir=tempfile.gettempdir())
-    print(response)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tuned_model_name = "pytest_tuned_model"
+        response = ftr.finetuning(input=input, tuned_model_name=tuned_model_name, output_dir=tmp_dir)
+        assert response.exists()
+        assert (response / "config.json").exists() and (response / "config.json").stat().st_size > 0
