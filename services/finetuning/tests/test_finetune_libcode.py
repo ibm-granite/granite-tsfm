@@ -11,7 +11,7 @@ from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 
 PAYLOADS = [
     {
-        "model_id": "ibm/tinytimemixer-monash-fl_96",
+        "model_id": "ibm-granite/granite-timeseries-ttm-v1",
         "schema": {
             "timestamp_column": "date",
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
