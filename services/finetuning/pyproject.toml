@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "tsfminference"
+name = "tsfmfinetuning"
 version = "0.0.0"
 description = "Service layer for TSFM granite models."
 authors = ["IBM"]
 license = "https://github.com/ibm-granite/granite-tsfm/blob/main/LICENSE"
-packages = [{ include = "tsfminference/**/*.py" }]
+packages = [{ include = "tsfmfinetuning/**/*.py" }]
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -14,10 +14,10 @@ vcs = "git"
 format = "{base}"
 
 #[tool.poetry-dynamic-versioning.substitution]
-#files = ["tsfminference/_version.py"]
+#files = ["tsfmfinetuning/_version.py"]
 #persistent-substitution = true
 
-[tool.poetry-dynamic-versioning.files."tsfminference/_version.py"]
+[tool.poetry-dynamic-versioning.files."tsfmfinetuning/_version.py"]
 # persistent-substitution = true # useful for editable installs
 initial-content = """
 # These version placeholders will be replaced later during substitution.
@@ -30,9 +30,9 @@ __version_tuple__ = (0, 0, 0)
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.9" }
+tsfm_public = { git = "https://github.com/IBM/tsfm.git", tag = "v0.2.10" }
 
-# trying to pick up cpu version for tsfminference
+# trying to pick up cpu version for tsfmfinetuning
 # to make image smaller
 torch = { version = ">2,<3", source = "pytorch" }
 
@@ -51,6 +51,12 @@ priority = "explicit"
 optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+redis = "*"
+
+[tool.poetry.group.redis]
+optional = true
+[tool.poetry.group.redis.dependencies]
+redis = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]

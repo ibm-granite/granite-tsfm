@@ -72,7 +72,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "parameters": {
             # "prediction_length": params["prediction_length"],
         },
-        "metadata": {
+        "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
             "target_columns": params["target_columns"],
@@ -93,7 +93,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "parameters": {
             # "prediction_length": params["prediction_length"],
         },
-        "metadata": {
+        "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
             "target_columns": params["target_columns"],
@@ -130,7 +130,7 @@ def test_trained_model_inference(ts_data, model_path):
         "parameters": {
             # "prediction_length": params["prediction_length"],
         },
-        "metadata": {
+        "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
             "target_columns": params["target_columns"],

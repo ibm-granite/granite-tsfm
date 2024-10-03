@@ -44,7 +44,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["HUFL", "HULL"],
+        example=["TARGET1", "TARGET1"],
         description="An array of column headings which constitute the target variables.",
     )
     observable_columns: List[EverythingPatternedString] = Field(
@@ -99,7 +99,7 @@ class BaseInferenceInput(BaseModel):
 
 
 class ForecastingInferenceInput(BaseInferenceInput):
-    metadata: ForecastingMetadataInput
+    schema: ForecastingMetadataInput
 
     parameters: ForecastingParameters
 

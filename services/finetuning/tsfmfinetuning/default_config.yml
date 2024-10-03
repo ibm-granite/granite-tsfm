@@ -1,0 +1,8 @@
+# custom models that will be supported
+custom_modules:
+  - module_path: tsfm_public
+    model_type: tinytimemixer
+    model_config_name: TinyTimeMixerConfig
+
+# path where local models will be loaded from
+model_dir: /tmp

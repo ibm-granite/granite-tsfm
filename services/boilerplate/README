@@ -1,0 +1,12 @@
+This directory contains boilerplate code that is
+not intended to be a standalone module. Instead
+the code from this folder gets copied to the suitable
+locations during the execution of relevant make target
+involved in the packaging and building of the various
+service runtimes.
+
+As such, we are breaking the "standalone" design
+goal of the various runtimes a bit in that they
+now have a common code dependency. This is necessary
+to avoid undue code duplication with the concurrent
+maintenance overheads it incurs.

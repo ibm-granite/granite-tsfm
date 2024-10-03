@@ -14,8 +14,8 @@ from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
-from .payloads import ForecastingInferenceInput, PredictOutput
-from .util import load_config, load_model, register_config
+from .hfutil import load_config, load_model, register_config
+from .inference_payloads import ForecastingInferenceInput, PredictOutput
 
 
 LOGGER = logging.getLogger(__file__)
@@ -84,8 +84,8 @@ class InferenceRuntime:
         # we need some sort of model registry
         # payload = input_payload.model_dump()  # do we need?
 
-        data = decode_data(input_payload.data, input_payload.metadata)
-        future_data = decode_data(input_payload.future_data, input_payload.metadata)
+        data = decode_data(input_payload.data, input_payload.schema)
+        future_data = decode_data(input_payload.future_data, input_payload.schema)
 
         model_path = Path(self.config["model_dir"]) / input_payload.model_id
 
@@ -101,7 +101,7 @@ class InferenceRuntime:
 
         model, preprocessor = self.load(model_path)
 
-        preprocessor_params = input_payload.metadata.model_dump()
+        preprocessor_params = input_payload.schema.model_dump()
 
         # preprocess
         if preprocessor is None:
@@ -156,11 +156,11 @@ class InferenceRuntime:
         )
 
 
-def decode_data(data: Dict[str, List[Any]], metadata: Dict[str, Any]) -> pd.DataFrame:
+def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFrame:
     if not data:
         return None
 
     df = pd.DataFrame.from_dict(data)
-    if ts_col := metadata.timestamp_column:
+    if ts_col := schema.timestamp_column:
         df[ts_col] = pd.to_datetime(df[ts_col])
     return df

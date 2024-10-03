@@ -140,3 +140,4 @@ notebooks/thinklab/checkpoint/**
 
 # Version
 /tsfm_public/_version.py
+**/checkpoint**/**
