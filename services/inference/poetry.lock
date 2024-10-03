@@ -2141,9 +2141,9 @@ testing = ["parameterized", "pytest", "tsfm_public[notebooks]"]
 
 [package.source]
 type = "git"
-url = "https://github.com/IBM/tsfm.git"
-reference = "v0.2.6"
-resolved_reference = "65b054dcc69093896bf36ea2db1f2d2d7e698a4a"
+url = "https://github.com/IBM-granite/granite-tsfm.git"
+reference = "v0.2.9"
+resolved_reference = "f856e5bfc739dc23b2a2dace13bbe3b45d21ceee"
 
 [[package]]
 name = "typing-extensions"
