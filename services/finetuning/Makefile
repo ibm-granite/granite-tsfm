@@ -32,7 +32,6 @@ test_local: start_service_local
 
 test_image: start_service_image
 	pytest tests
-	$(MAKE) stop_service_image
 
 install_dev: boilerplate
 	pip install poetry && poetry install --with dev
