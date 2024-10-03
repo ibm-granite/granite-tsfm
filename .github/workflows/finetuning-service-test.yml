@@ -37,5 +37,6 @@ jobs:
       run: |
         source .venv/bin/activate
         cd services/finetuning
+        make boilerplate
         pytest tests
         

@@ -37,6 +37,7 @@ jobs:
       run: |
         source .venv/bin/activate
         cd services/inference
+        make boilerplate
         make start_service_local
         sleep 20
         pytest tests

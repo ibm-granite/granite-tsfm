@@ -9,7 +9,7 @@ boilerplate:
 		done 
 	
 # starts the tsfminference service (used mainly for test cases)
-start_service_local:
+start_service_local: boilerplate
 	python -m tsfminference.main &
 	sleep 10
 stop_service_local:
