@@ -39,4 +39,10 @@ jobs:
         cd services/finetuning
         make boilerplate
         pytest tests
+    - name: Test image server tsfmfinetuning service with pytest
+      run: |
+        source .venv/bin/activate
+        cd services/finetuning
+        make image
+        make test_image
         
