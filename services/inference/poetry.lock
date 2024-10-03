@@ -2115,7 +2115,7 @@ vision = ["Pillow (>=10.0.1,<=15.0)"]
 
 [[package]]
 name = "tsfm_public"
-version = "0.2.10"
+version = "0.2.9"
 description = "Public notebooks and utilities for TSFM"
 optional = false
 python-versions = "<3.13,>=3.9"
@@ -2521,4 +2521,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "39d379842ad848f5f71014ff93b05b35b5d9fd21e3f13c3315c836ae7e9bd1a7"
+content-hash = "dcab454174f0e4df1464d36c2cbd2ec2be411ca67a17a7aefffa7c47d723010d"
