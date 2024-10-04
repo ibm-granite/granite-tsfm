@@ -24,6 +24,7 @@ def load_dataset(
     fewshot_location="first",
     dataset_root_path: str = "datasets/",
     dataset_path: Optional[str] = None,
+    use_frequency_token: bool = False,
 ):
     LOGGER.info(f"Dataset name: {dataset_name}, context length: {context_length}, prediction length {forecast_length}")
 
@@ -74,6 +75,7 @@ def load_dataset(
         split_config=split_config,
         fewshot_fraction=fewshot_fraction,
         fewshot_location=fewshot_location,
+        use_frequency_token=use_frequency_token
     )
     LOGGER.info(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 
