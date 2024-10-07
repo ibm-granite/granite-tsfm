@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 
 from . import (
     TSFM_CONFIG_FILE,
+    TSFM_MODEL_DIR,
     TSFM_PYTHON_LOGGING_FORMAT,
     TSFM_PYTHON_LOGGING_LEVEL,
 )
@@ -23,6 +24,7 @@ logging.basicConfig(
     level=TSFM_PYTHON_LOGGING_LEVEL,
 )
 
+logging.info(f"Using TSFM_MODEL_DIR {TSFM_MODEL_DIR}")
 
 if TSFM_CONFIG_FILE:
     with open(TSFM_CONFIG_FILE, "r") as file:
