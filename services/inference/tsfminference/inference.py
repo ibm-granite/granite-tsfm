@@ -4,7 +4,6 @@
 
 import datetime
 import logging
-from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -12,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
-from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
 from .hfutil import load_config, load_model, register_config
 from .inference_payloads import ForecastingInferenceInput, PredictOutput
@@ -87,7 +86,7 @@ class InferenceRuntime:
         data = decode_data(input_payload.data, input_payload.schema)
         future_data = decode_data(input_payload.future_data, input_payload.schema)
 
-        model_path = Path(self.config["model_dir"]) / input_payload.model_id
+        model_path = TSFM_MODEL_DIR / input_payload.model_id
 
         if not model_path.is_dir():
             LOGGER.info(f"Could not find model at path: {model_path}")
@@ -96,7 +95,7 @@ class InferenceRuntime:
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
                 raise RuntimeError(
-                    f"Could not load model {input_payload.model_id} from {self.config['model_dir']}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
+                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
         model, preprocessor = self.load(model_path)
