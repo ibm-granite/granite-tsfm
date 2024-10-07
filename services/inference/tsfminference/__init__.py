@@ -2,6 +2,8 @@
 #
 import logging
 import os
+import tempfile
+from pathlib import Path
 
 from .version import __version__, __version_tuple__
 
@@ -34,3 +36,9 @@ TSFM_CONFIG_FILE = os.getenv(
     "TSFM_CONFIG_FILE",
     os.path.realpath(os.path.join(os.path.dirname(__file__), "default_config.yml")),
 )
+
+# use TSFM_MODEL_DIR preferentially. If not set, use HF_HOME or the system tempdir if that's not set.
+TSFM_MODEL_DIR: Path = Path(os.environ.get("TSFM_MODEL_DIR", os.environ.get("HF_HOME", tempfile.gettempdir())))
+
+if not TSFM_MODEL_DIR.exists():
+    raise Exception(f"TSFM_MODEL_DIR {TSFM_MODEL_DIR} does not exist.")
