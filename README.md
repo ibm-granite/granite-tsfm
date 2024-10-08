@@ -30,7 +30,7 @@ pip install ".[notebooks]"
 - Getting started with `TinyTimeMixer (TTM)` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb)
 
 ## 📗 Google Colab Tutorials
-Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
+Run the TTM tutorial in Google Colab, and quickly build a forecasting application with the pre-trained TSFM models.
 - [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
 
 ## 💻 Demos Installation
