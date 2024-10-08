@@ -22,6 +22,15 @@ image: boilerplate
 start_service_image: image
 	$(CONTAINER_BUILDER) run -p 8000:8000 -d --rm --name tsfmserver tsfminference
 	sleep 10
+
+start_service_image_no_hf: image
+	$(CONTAINER_BUILDER) run -p 8000:8000 \
+	  -e "TSFM_ALLOW_LOAD_FROM_HF_HUB=0" \
+	  -e "TSFM_MODEL_DIR=/" \
+	  -v ./ibm:/ibm \
+	  --rm --name tsfmserver tsfminference
+	sleep 10
+
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
