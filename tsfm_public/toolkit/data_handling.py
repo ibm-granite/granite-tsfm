@@ -75,7 +75,7 @@ def load_dataset(
         split_config=split_config,
         fewshot_fraction=fewshot_fraction,
         fewshot_location=fewshot_location,
-        use_frequency_token=use_frequency_token
+        use_frequency_token=use_frequency_token,
     )
     LOGGER.info(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 
