@@ -13,6 +13,7 @@ from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
+from .errors import EXCEPTION_TABLE, ErrorType
 from .hfutil import load_config, load_model, register_config
 from .inference_payloads import ForecastingInferenceInput, PredictOutput
 
@@ -75,6 +76,9 @@ class InferenceRuntime:
             answer = self._forecast_common(input)
             LOGGER.info("done, returning.")
             return answer
+        except TypeError as te:
+            LOGGER.exception(te)
+            raise EXCEPTION_TABLE[ErrorType.TYPE_ERROR]
         except Exception as e:
             LOGGER.exception(e)
             raise HTTPException(status_code=500, detail=repr(e))
