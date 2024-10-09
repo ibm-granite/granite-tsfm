@@ -5,7 +5,7 @@
 import importlib
 import logging
 import pathlib
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
@@ -50,6 +50,7 @@ def load_config(
     model_type: Optional[str] = None,
     model_config_name: Optional[str] = None,
     module_path: Optional[str] = None,
+    **extra_config_kwargs: Dict[str, Any],
 ) -> PretrainedConfig:
     """Load configuration
 
@@ -68,13 +69,13 @@ def load_config(
     # load config first try autoconfig, if not then we register and load
 
     try:
-        conf = AutoConfig.from_pretrained(model_path)
+        conf = AutoConfig.from_pretrained(model_path, **extra_config_kwargs)
     except (KeyError, ValueError) as exc:  # determine error raised by autoconfig
         if model_type is None or model_config_name is None or module_path is None:
             raise ValueError("model_type, model_config_name, and module_path should be specified.") from exc
 
         register_config(model_type, model_config_name, module_path)
-        conf = AutoConfig.from_pretrained(model_path)
+        conf = AutoConfig.from_pretrained(model_path, **extra_config_kwargs)
 
     return conf
 
@@ -121,7 +122,7 @@ def load_model(
     model_path: Union[str, pathlib.Path],
     config: Optional[PretrainedConfig] = None,
     module_path: Optional[str] = None,
-) -> PreTrainedModel:
+) -> Tuple[Union[PreTrainedModel, None], Union[Exception, None]]:
     """Load a pretrained model.
     If module_path is provided, load the model using the provided module path.
 
@@ -139,14 +140,19 @@ def load_model(
     """
 
     if module_path is not None and config is None:
-        raise ValueError("Config must be provided when loading from a custom module_path")
+        return None, ValueError("Config must be provided when loading from a custom module_path")
 
-    if config is not None:
-        model_class = _get_model_class(config, module_path=module_path)
-        LOGGER.info(f"Found model class: {model_class.__name__}")
-        model = model_class.from_pretrained(model_path, config=config)
-        return model
+    try:
+        if config is not None:
+            model_class = _get_model_class(config, module_path=module_path)
+            LOGGER.info(f"Found model class: {model_class.__name__}")
+            model = model_class.from_pretrained(model_path, config=config)
+            return model, None
 
-    model = AutoModel.from_pretrained(model_path)
+        model = AutoModel.from_pretrained(model_path)
+        return model, None
+    except Exception as e:
+        return None, e
+
     LOGGER.info(f"Found model class: {model.__class__.__name__}")
-    return model
+    return model, None
