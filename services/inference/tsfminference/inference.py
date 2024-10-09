@@ -50,7 +50,7 @@ class InferenceRuntime:
         )
         app.include_router(self.router)
 
-    def load(self, model_path: str):
+    def load(self, model_path: str, **extra_config_kwargs: Dict[str, Any]):
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
@@ -59,9 +59,7 @@ class InferenceRuntime:
             LOGGER.info("No preprocessor found")
 
         # load config and model
-        conf = load_config(
-            model_path,
-        )
+        conf = load_config(model_path, **extra_config_kwargs)
 
         model = load_model(
             model_path,
@@ -103,13 +101,15 @@ class InferenceRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, preprocessor = self.load(model_path)
-
         schema_params = input_payload.schema.model_dump()
         params = input_payload.parameters.model_dump()
 
         preprocessor_params = copy.deepcopy(schema_params)
         preprocessor_params["prediction_length"] = params["prediction_length"]
+
+        model_config_kwargs = {"prediction_filter_length": preprocessor_params.get("prediction_length", None)}
+
+        model, preprocessor = self.load(model_path, **model_config_kwargs)
 
         print("Preprocessor params:", preprocessor_params)
         # preprocess

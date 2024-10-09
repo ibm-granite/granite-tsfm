@@ -5,7 +5,7 @@
 import importlib
 import logging
 import pathlib
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
@@ -50,6 +50,7 @@ def load_config(
     model_type: Optional[str] = None,
     model_config_name: Optional[str] = None,
     module_path: Optional[str] = None,
+    **extra_config_kwargs: Dict[str, Any],
 ) -> PretrainedConfig:
     """Load configuration
 
@@ -68,13 +69,13 @@ def load_config(
     # load config first try autoconfig, if not then we register and load
 
     try:
-        conf = AutoConfig.from_pretrained(model_path)
+        conf = AutoConfig.from_pretrained(model_path, **extra_config_kwargs)
     except (KeyError, ValueError) as exc:  # determine error raised by autoconfig
         if model_type is None or model_config_name is None or module_path is None:
             raise ValueError("model_type, model_config_name, and module_path should be specified.") from exc
 
         register_config(model_type, model_config_name, module_path)
-        conf = AutoConfig.from_pretrained(model_path)
+        conf = AutoConfig.from_pretrained(model_path, **extra_config_kwargs)
 
     return conf
 
