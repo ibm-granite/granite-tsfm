@@ -107,6 +107,73 @@ def test_zero_shot_forecast_inference(ts_data):
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length * num_ids
 
+    # single series, less columns
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": "ibm/test-ttm-v1",
+        "parameters": {
+            "prediction_length": params["prediction_length"] // 4,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"][:4],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    print(df_out[0].head())
+    assert df_out[0].shape[1] == 6
+
+    # single series, less columns, no id
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": "ibm/test-ttm-v1",
+        "parameters": {
+            "prediction_length": params["prediction_length"] // 4,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": [],
+            "target_columns": ["HULL"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    print(df_out[0].head())
+    assert df_out[0].shape[1] == 2
+
+    # single series, different prediction length
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": "ibm/test-ttm-v1",
+        "parameters": {
+            "prediction_length": params["prediction_length"] // 4,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length // 4
+
 
 @pytest.mark.parametrize(
     "model_path",
