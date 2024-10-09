@@ -7,7 +7,7 @@ observable_columns: []
 control_columns: []
 conditional_columns: []
 static_categorical_columns: []
-freq: 1min
+freq: 15min
 
 scale: 
     scaling: True

@@ -33,54 +33,6 @@ def ttm_model():
     return model
 
 
-@pytest.fixture(scope="module")
-def etth_data():
-    timestamp_column = "date"
-    id_columns = []
-    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
-    prediction_length = 96
-
-    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
-    train_end_index = 12 * 30 * 24
-
-    context_length = 512  # model.config.context_length
-
-    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
-    test_start_index = test_end_index - context_length - 4
-
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
-
-    train_data = select_by_index(
-        data,
-        id_columns=id_columns,
-        start_index=0,
-        end_index=train_end_index,
-    )
-    test_data = select_by_index(
-        data,
-        id_columns=id_columns,
-        start_index=test_start_index,
-        end_index=test_end_index,
-    )
-
-    params = {
-        "timestamp_column": timestamp_column,
-        "id_columns": id_columns,
-        "target_columns": target_columns,
-        "prediction_length": prediction_length,
-        "context_length": context_length,
-    }
-
-    return train_data, test_data, params
-
-
 def test_forecasting_pipeline_defaults():
     model = PatchTSTForPrediction(PatchTSTConfig(prediction_length=3, context_length=33))
 
@@ -95,7 +47,7 @@ def test_forecasting_pipeline_defaults():
     assert tspipe._preprocess_params["context_length"] == 66
 
 
-def test_forecasting_pipeline_forecasts(patchtst_model):
+def test_forecasting_pipeline_forecasts(patchtst_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
     target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
@@ -112,14 +64,10 @@ def test_forecasting_pipeline_forecasts(patchtst_model):
         freq="1h",
     )
 
-    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
     test_end_index = 12 * 30 * 24 + 8 * 30 * 24
     test_start_index = test_end_index - context_length
 
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
+    data = etth_data_base.copy()
 
     test_data = select_by_index(
         data,
@@ -172,14 +120,10 @@ def test_forecasting_pipeline_forecasts(patchtst_model):
         batch_size=10,
     )
 
-    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
     test_end_index = 12 * 30 * 24 + 8 * 30 * 24
     test_start_index = test_end_index - context_length - 9
 
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
+    data = etth_data_base.copy()
 
     test_data = select_by_index(
         data,
@@ -192,7 +136,7 @@ def test_forecasting_pipeline_forecasts(patchtst_model):
     assert forecasts.shape == (10, 2 * len(target_columns) + 1)
 
 
-def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model):
+def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
     target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
@@ -201,20 +145,11 @@ def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model):
     model = patchtst_model
     context_length = model.config.context_length
 
-    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
+    data = etth_data_base.copy()
     train_end_index = 12 * 30 * 24
 
     test_end_index = 12 * 30 * 24 + 8 * 30 * 24
     test_start_index = test_end_index - context_length - 4
-
-    data = pd.read_csv(
-        dataset_path,
-        parse_dates=[timestamp_column],
-    )
 
     train_data = select_by_index(
         data,
