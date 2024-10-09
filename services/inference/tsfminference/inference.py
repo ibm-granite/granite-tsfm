@@ -2,12 +2,14 @@
 #
 """Tsfminference Runtime"""
 
+import copy
 import datetime
 import logging
 from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from starlette import status
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
@@ -49,39 +51,44 @@ class InferenceRuntime:
         )
         app.include_router(self.router)
 
-    def load(self, model_path: str):
+    def load(self, model_path: str, **extra_config_kwargs: Dict[str, Any]):
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
         except OSError:
             preprocessor = None
             LOGGER.info("No preprocessor found")
+        except Exception as ex:
+            return None, None, ex
 
         # load config and model
-        conf = load_config(
-            model_path,
-        )
+        conf = load_config(model_path, **extra_config_kwargs)
 
-        model = load_model(
+        model, ex = load_model(
             model_path,
             config=conf,
             module_path=self.model_to_module_map.get(conf.__class__.__name__, None),
         )
+        if ex is not None:
+            return None, preprocessor, ex
+
         LOGGER.info("Successfully loaded model")
-        return model, preprocessor
+        return model, preprocessor, None
 
     def forecast(self, input: ForecastingInferenceInput):
-        try:
-            LOGGER.info("calling forecast_common")
-            answer = self._forecast_common(input)
-            LOGGER.info("done, returning.")
-            return answer
-        except TypeError as te:
-            LOGGER.exception(te)
-            raise EXCEPTION_TABLE[ErrorType.TYPE_ERROR]
-        except Exception as e:
-            LOGGER.exception(e)
-            raise HTTPException(status_code=500, detail=repr(e))
+        LOGGER.info("calling forecast_common")
+        answer, ex = self._forecast_common(input)
+
+        if ex is not None:
+            if isinstance(ex, TypeError):
+                additional_detail = repr(EXCEPTION_TABLE[ErrorType.TYPE_ERROR])
+            else:
+                additional_detail = ""
+
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=repr(ex) + additional_detail)
+
+        LOGGER.info("done, returning.")
+        return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
         # we need some sort of model registry
@@ -102,10 +109,20 @@ class InferenceRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, preprocessor = self.load(model_path)
+        schema_params = input_payload.schema.model_dump()
+        params = input_payload.parameters.model_dump()
 
-        preprocessor_params = input_payload.schema.model_dump()
+        preprocessor_params = copy.deepcopy(schema_params)
+        preprocessor_params["prediction_length"] = params["prediction_length"]
 
+        model_config_kwargs = {"prediction_filter_length": preprocessor_params.get("prediction_length", None)}
+
+        model, preprocessor, ex = self.load(model_path, **model_config_kwargs)
+
+        if ex is not None:
+            return None, ex
+
+        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
         # preprocess
         if preprocessor is None:
             preprocessor = TimeSeriesPreprocessor(
@@ -122,7 +139,7 @@ class InferenceRuntime:
 
         # warn if future data is not provided, but is needed by the model
         if preprocessor.exogenous_channel_indices and future_data is None:
-            raise ValueError(
+            return None, ValueError(
                 "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
             )
 
@@ -150,13 +167,16 @@ class InferenceRuntime:
         #     future_data = preprocessor.preprocess(future_data)
         #     future_data.drop(columns=input_payload.target_columns)
 
-        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
+        try:
+            forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
+        except Exception as e:
+            return None, e
 
         return PredictOutput(
             model_id=input_payload.model_id,
             created_at=datetime.datetime.now().isoformat(),
             results=[forecasts.to_dict(orient="list")],
-        )
+        ), None
 
 
 def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFrame:
