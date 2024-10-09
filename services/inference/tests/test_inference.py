@@ -113,7 +113,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": "ibm/test-ttm-v1",
         "parameters": {
-            "prediction_length": params["prediction_length"] // 4,
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -127,7 +127,6 @@ def test_zero_shot_forecast_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
-    print(df_out[0].head())
     assert df_out[0].shape[1] == 6
 
     # single series, less columns, no id
@@ -136,7 +135,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": "ibm/test-ttm-v1",
         "parameters": {
-            "prediction_length": params["prediction_length"] // 4,
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -150,7 +149,6 @@ def test_zero_shot_forecast_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
-    print(df_out[0].head())
     assert df_out[0].shape[1] == 2
 
     # single series, different prediction length
