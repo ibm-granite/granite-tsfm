@@ -11,7 +11,7 @@ class ErrorType(IntEnum):
 
 
 US_ENG_MESSAGES = {
-    ErrorType.TYPE_ERROR: "Invalid data type, if you specifed a timestamp column, confirm that all elements are convertable to a datetime type. For other columns like targets or features, confirm that they are numeric."
+    ErrorType.TYPE_ERROR: "Invalid data type, if you specified a timestamp column, confirm that all elements are convertable to a datetime type. For other columns like targets or features, confirm that they are numeric."
 }
 
 _messages = US_ENG_MESSAGES  # later localization if necessary
