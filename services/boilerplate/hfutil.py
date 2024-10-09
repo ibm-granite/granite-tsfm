@@ -5,7 +5,7 @@
 import importlib
 import logging
 import pathlib
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
@@ -122,7 +122,7 @@ def load_model(
     model_path: Union[str, pathlib.Path],
     config: Optional[PretrainedConfig] = None,
     module_path: Optional[str] = None,
-) -> PreTrainedModel:
+) -> Tuple[Union[PreTrainedModel, None], Union[Exception, None]]:
     """Load a pretrained model.
     If module_path is provided, load the model using the provided module path.
 
@@ -140,14 +140,19 @@ def load_model(
     """
 
     if module_path is not None and config is None:
-        raise ValueError("Config must be provided when loading from a custom module_path")
+        return None, ValueError("Config must be provided when loading from a custom module_path")
 
-    if config is not None:
-        model_class = _get_model_class(config, module_path=module_path)
-        LOGGER.info(f"Found model class: {model_class.__name__}")
-        model = model_class.from_pretrained(model_path, config=config)
-        return model
+    try:
+        if config is not None:
+            model_class = _get_model_class(config, module_path=module_path)
+            LOGGER.info(f"Found model class: {model_class.__name__}")
+            model = model_class.from_pretrained(model_path, config=config)
+            return model, None
 
-    model = AutoModel.from_pretrained(model_path)
+        model = AutoModel.from_pretrained(model_path)
+        return model, None
+    except Exception as e:
+        return None, e
+
     LOGGER.info(f"Found model class: {model.__class__.__name__}")
-    return model
+    return model, None
