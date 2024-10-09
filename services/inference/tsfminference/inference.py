@@ -2,6 +2,7 @@
 #
 """Tsfminference Runtime"""
 
+import copy
 import datetime
 import logging
 from typing import Any, Dict, List
@@ -104,8 +105,13 @@ class InferenceRuntime:
 
         model, preprocessor = self.load(model_path)
 
-        preprocessor_params = input_payload.schema.model_dump()
+        schema_params = input_payload.schema.model_dump()
+        params = input_payload.parameters.model_dump()
 
+        preprocessor_params = copy.deepcopy(schema_params)
+        preprocessor_params["prediction_length"] = params["prediction_length"]
+
+        print("Preprocessor params:", preprocessor_params)
         # preprocess
         if preprocessor is None:
             preprocessor = TimeSeriesPreprocessor(
