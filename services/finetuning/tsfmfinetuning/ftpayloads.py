@@ -55,7 +55,9 @@ class ForecastingTuneInput(BaseTuneInput):
         pattern="file://.*",
         examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"],
     )
-    schema: ForecastingMetadataInput
+    schema: ForecastingMetadataInput = Field(
+        description="An object of ForecastingMetadataInput that contains the schema metadata of the 'data' input."
+    )
     parameters: ForecastingParameters
 
 
