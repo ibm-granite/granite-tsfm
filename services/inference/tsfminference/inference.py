@@ -15,7 +15,7 @@ from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
-from .errors import EXCEPTION_TABLE, ErrorType
+from .errors import error_message
 from .hfutil import load_config, load_model, register_config
 from .inference_payloads import ForecastingInferenceInput, PredictOutput
 
@@ -80,12 +80,8 @@ class InferenceRuntime:
         answer, ex = self._forecast_common(input)
 
         if ex is not None:
-            if isinstance(ex, TypeError):
-                additional_detail = repr(EXCEPTION_TABLE[ErrorType.TYPE_ERROR])
-            else:
-                additional_detail = ""
-
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=repr(ex) + additional_detail)
+            detail = error_message(ex)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
         LOGGER.info("done, returning.")
         return answer
