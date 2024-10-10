@@ -100,25 +100,25 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
         """
         Predict future points given an input sequence, using a recursive strategy.
 
-        add requirements of model, especially with respect to exogenous
+        Assumptions: The model passed as part of the initialization, should support the following:
+         - the signature of the forward method should allow the following arguments: past_values,
+         future_vales, past_observed_mask, future_observed_mask, freq_token.
+         - the model should have a config attribute prediction_channel_indices which indicates the
+         indices in the past and future_value tensors which correspond to the channels we wish to predict
+         - if future_values is provided, it must be of shape compatible with the requested_prediction_length
 
         Args:
             past_values (torch.Tensor): Input sequence of shape (batch_size, sequence_length, num_channels).
-            self.requested_prediction_length (int): Number of future points to predict beyond the input sequence.
+            requested_prediction_length (int): Number of future points to predict beyond the input sequence.
 
         Returns:
-            predicted_sequence (torch.Tensor): Predicted sequence of shape (batch_size, self.requested_prediction_length, num_channels).
+            predicted_sequence (torch.Tensor): Predicted sequence of shape (batch_size,
+            requested_prediction_length, num_channels).
         """
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         total_runs = math.ceil(self.requested_prediction_length / self.model_prediction_length)
 
-        # this should be handled by Trainer
-        # device = self.model.device  # Get device of model
-        # past_values = past_values.to(device)
-
-        # double check need for no_grad()
-        # with torch.no_grad():
         predicted_sequence = past_values.clone()  # Initialize predicted sequence with input sequence
 
         model_prediction_length = self.model_prediction_length
@@ -131,8 +131,7 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
         prediction_channel_indices = self.model.config.prediction_channel_indices
 
         for i in range(total_runs):
-            # Predict the next time step
-            # infer model inputs and pass any matched kwargs
+            # index into the right part of the future
             future_start_idx = i * model_prediction_length
             future_end_idx = (i + 1) * model_prediction_length
 
@@ -141,12 +140,14 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
                 future_observed_mask[:, future_start_idx:future_end_idx] if future_observed_mask is not None else None
             )
 
+            # predict and concatenate results
             next_point = self.model(
                 past_values=this_past,
                 future_values=this_future,
                 past_observed_mask=this_past_observed_mask,
                 future_observed_mask=this_future_observed_mask,
                 freq_token=freq_token,
+                static_categorical_values=static_categorical_values,
             )
 
             next_point = next_point["prediction_outputs"]
@@ -175,9 +176,7 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
                 else None
             )
 
-        output = (
-            predicted_sequence  # [:, -self.requested_prediction_length :]  # Return only the predicted future points
-        )
+        output = predicted_sequence
 
         loss_val = None
 
