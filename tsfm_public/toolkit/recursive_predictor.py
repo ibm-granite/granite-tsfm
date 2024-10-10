@@ -22,7 +22,7 @@ class RecursivePredictorOutput(ModelOutput):
 
     Args:
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
-            Prediction output from the forecast head.
+            Prediction output from the prediction head.
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss.
     """
@@ -38,18 +38,23 @@ class RecursivePredictorConfig(PretrainedConfig):
     RecursivePredictorConfig
 
     Args:
-        model (PreTrainedModel): Model to load for recursive forecasts
-        requested_forecast_length (int): Total forecast length
-        model_forecast_length (int): forecast length of the model
+        model (PreTrainedModel): Model to load for recursive predictions
+        requested_prediction_length (int): Total prediction length
+        model_prediction_length (int): prediction length of the model
         loss (str): loss to report
     """
 
     def __init__(
-        self, model: PreTrainedModel, requested_forecast_length: int, model_forecast_length: int, loss: str, **kwargs
+        self,
+        model: PreTrainedModel,
+        requested_prediction_length: int,
+        model_prediction_length: int,
+        loss: str,
+        **kwargs,
     ):
         self.model = model
-        self.requested_forecast_length = requested_forecast_length
-        self.model_forecast_length = model_forecast_length
+        self.requested_prediction_length = requested_prediction_length
+        self.model_prediction_length = model_prediction_length
         self.loss = loss
         super().__init__(**kwargs)
 
@@ -70,8 +75,8 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
     def __init__(self, config: RecursivePredictorConfig):
         super().__init__(config)
         self.model = config.model
-        self.requested_forecast_length = config.requested_forecast_length
-        self.model_forecast_length = config.model_forecast_length
+        self.requested_prediction_length = config.requested_prediction_length
+        self.model_prediction_length = config.model_prediction_length
         self.use_return_dict = config.use_return_dict
         if config.loss == "mse":
             self.loss = nn.MSELoss(reduction="mean")
@@ -99,14 +104,14 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
 
         Args:
             past_values (torch.Tensor): Input sequence of shape (batch_size, sequence_length, num_channels).
-            self.requested_forecast_length (int): Number of future points to predict beyond the input sequence.
+            self.requested_prediction_length (int): Number of future points to predict beyond the input sequence.
 
         Returns:
-            predicted_sequence (torch.Tensor): Predicted sequence of shape (batch_size, self.requested_forecast_length, num_channels).
+            predicted_sequence (torch.Tensor): Predicted sequence of shape (batch_size, self.requested_prediction_length, num_channels).
         """
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        total_runs = math.ceil(self.requested_forecast_length / self.model_forecast_length)
+        total_runs = math.ceil(self.requested_prediction_length / self.model_prediction_length)
 
         # this should be handled by Trainer
         # device = self.model.device  # Get device of model
@@ -114,16 +119,65 @@ class RecursivePredictor(RecursivePredictorPreTrainedModel):
 
         # double check need for no_grad()
         # with torch.no_grad():
-        sequence_length = past_values.size(1)
         predicted_sequence = past_values.clone()  # Initialize predicted sequence with input sequence
+
+        model_prediction_length = self.model_prediction_length
+
+        this_past = past_values.clone()
+        this_past_observed_mask = past_observed_mask.clone() if past_observed_mask is not None else None
+
+        predicted_sequence = None
+
+        prediction_channel_indices = self.model.config.prediction_channel_indices
 
         for i in range(total_runs):
             # Predict the next time step
-            next_point = self.model(predicted_sequence[:, -sequence_length:], freq_token=freq_token)
-            next_point = next_point["prediction_outputs"]
-            predicted_sequence = torch.cat((predicted_sequence, next_point), dim=1)
+            # infer model inputs and pass any matched kwargs
+            future_start_idx = i * model_prediction_length
+            future_end_idx = (i + 1) * model_prediction_length
 
-        output = predicted_sequence[:, -self.requested_forecast_length :]  # Return only the predicted future points
+            this_future = future_values[:, future_start_idx:future_end_idx] if future_values is not None else None
+            this_future_observed_mask = (
+                future_observed_mask[:, future_start_idx:future_end_idx] if future_observed_mask is not None else None
+            )
+
+            next_point = self.model(
+                past_values=this_past,
+                future_values=this_future,
+                past_observed_mask=this_past_observed_mask,
+                future_observed_mask=this_future_observed_mask,
+                freq_token=freq_token,
+            )
+
+            next_point = next_point["prediction_outputs"]
+            predicted_sequence = (
+                torch.cat((predicted_sequence, next_point), dim=1) if predicted_sequence is not None else next_point
+            )
+
+            # create the new part of the past, using the current future and new predictions
+            if this_future is not None and prediction_channel_indices is not None:
+                new_past = this_future.clone()
+                new_past[:, :, self.model.config.prediction_channel_indices] = next_point
+            else:
+                new_past = next_point
+
+            # update the past observed mask by copying the future
+            if this_future_observed_mask is not None and prediction_channel_indices is not None:
+                new_past_observed_mask = this_future_observed_mask.clone()
+                new_past_observed_mask[:, :, self.model.config.prediction_channel_indices] = True
+            else:
+                new_past_observed_mask = torch.ones_like(this_future_observed_mask, dtype=torch.bool)
+
+            this_past = torch.cat([this_past[:, model_prediction_length:], new_past], dim=1)
+            this_past_observed_mask = (
+                torch.cat([this_past_observed_mask[:, model_prediction_length:], new_past_observed_mask], dim=1)
+                if this_future_observed_mask is not None
+                else None
+            )
+
+        output = (
+            predicted_sequence  # [:, -self.requested_prediction_length :]  # Return only the predicted future points
+        )
 
         loss_val = None
 
