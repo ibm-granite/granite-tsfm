@@ -3,7 +3,6 @@
 """Functions to identify candidate learning rates"""
 
 import inspect
-import logging
 import os
 import uuid
 from cmath import inf
@@ -19,6 +18,7 @@ from torch.utils.data import DataLoader
 from transformers import PreTrainedModel
 from transformers.data.data_collator import default_data_collator
 from transformers.trainer_utils import RemoveColumnsCollator
+from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -244,8 +244,6 @@ class LRFinder:
             pred = self.model(self.xb)
             loss = self.loss_func(self.yb, pred)
 
-        # print("loss = ", loss)
-
         return pred, loss
 
     def after_batch_train(self):
@@ -371,15 +369,15 @@ def optimal_lr_finder(
         `nn.Module`: The original model. This returned model should be used for subsequent training.
     """
 
-    print(
+    logger.info(
         "LR Finder: Running learning rate (LR) finder algorithm. If the suggested LR is very low, we suggest setting the LR manually."
     )
 
     if torch.cuda.is_available():
         device = torch.cuda.current_device()
-        print(f"LR Finder: Using GPU:{device}.")
+        logger.info(f"LR Finder: Using GPU:{device}.")
     else:
-        print("LR Finder: Using CPU.")
+        logger.info("LR Finder: Using CPU.")
         device = torch.device("cpu")
 
     # create the right collator in the style of HF
