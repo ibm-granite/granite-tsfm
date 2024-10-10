@@ -388,6 +388,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             replaced by 0. If True, the context window contains all the historical target information. Defaults to True.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        masking_specification (List[Tuple[str, Union[int, Tuple[int, int]]]], optional): Allow masking the history (past values) of
+            specific columns. The complete specification is a list of individual column masking specifications. A column masking
+            specification is a 2-tuple where the first index specifies a column name. The second index specifies and index/indices to
+            mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
+            will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
+            treated as python list indices; the values given by these indices will be masked.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -420,7 +426,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         autoregressive_modeling: bool = True,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
-        masking_specification: List[Tuple[str, Union[int, Tuple[int]]]] = None,
+        masking_specification: List[Tuple[str, Union[int, Tuple[int, int]]]] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
