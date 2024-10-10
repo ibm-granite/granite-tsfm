@@ -426,7 +426,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         autoregressive_modeling: bool = True,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
-        masking_specification: List[Tuple[str, Union[int, Tuple[int, int]]]] = None,
+        masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -477,7 +477,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             autoregressive_modeling: bool = True,
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
-            masking_specification: List[Tuple[str, Union[int, Tuple[int]]]] = None,
+            masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
