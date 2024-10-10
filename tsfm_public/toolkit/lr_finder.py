@@ -1,26 +1,30 @@
-# Standard
+# Copyright contributors to the TSFM project
+#
+"""Functions to identify candidate learning rates"""
+
 import inspect
+import logging
 import os
 import uuid
 from cmath import inf
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional, Tuple, Union
 
 import torch
-
-# Third Party
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel
-from torch.optim import AdamW
+from torch.optim import AdamW, Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader
-
-# First Party
+from transformers import PreTrainedModel
 from transformers.data.data_collator import default_data_collator
 from transformers.trainer_utils import RemoveColumnsCollator
 
 
-def join_path_file(file, path, ext=""):
+logger = logging.get_logger(__name__)
+
+
+def join_path_file(file: Union[str, Path], path: Union[str, Path], ext: str = ""):
     "Return `path/file` if file is a string or a `Path`, file otherwise"
     if not isinstance(file, (str, Path)):
         return file
@@ -30,12 +34,18 @@ def join_path_file(file, path, ext=""):
     return path / f"{file}{ext}"
 
 
-def get_model(model):
+def get_model(model: Union[nn.Module, PreTrainedModel]):
     "Return the model maybe wrapped inside `model`."
     return model.module if isinstance(model, (DistributedDataParallel, nn.DataParallel)) else model
 
 
-def save_model(path, model, opt, with_opt=True, pickle_protocol=2):
+def save_model(
+    path,
+    model: Union[nn.Module, PreTrainedModel],
+    opt: Optional[Optimizer],
+    with_opt: bool = True,
+    pickle_protocol: int = 2,
+):
     "Save `model` to `file` along with `opt` (if available, and if `with_opt`)"
     if opt is None:
         with_opt = False
@@ -45,7 +55,9 @@ def save_model(path, model, opt, with_opt=True, pickle_protocol=2):
     torch.save(state, path, pickle_protocol=pickle_protocol)
 
 
-def load_model(path, model, opt=None, with_opt=False, device="cpu", strict=True):
+def load_model(
+    path, model, opt: Optional[Optimizer] = None, with_opt: bool = False, device: str = "cpu", strict: bool = True
+) -> nn.Module:
     "load the saved model"
     state = torch.load(path, map_location=device)
     if not opt:
@@ -67,14 +79,14 @@ class LinearLR(_LRScheduler):
         last_epoch (int, optional): the index of last epoch. Default: -1.
     """
 
-    def __init__(self, optimizer, end_lr, num_iter, last_epoch=-1):
+    def __init__(self, optimizer: Optimizer, end_lr: float, num_iter: int, last_epoch: int = -1):
         self.end_lr = end_lr
         if num_iter <= 1:
             raise ValueError("`num_iter` must be larger than 1")
         self.num_iter = num_iter
         super(LinearLR, self).__init__(optimizer, last_epoch)
 
-    def get_lr(self):
+    def get_lr(self) -> List[float]:
         r = (self.last_epoch + 1) / (self.num_iter - 1)
         return [base_lr + r * (self.end_lr - base_lr) for base_lr in self.base_lrs]
 
@@ -89,7 +101,7 @@ class ExponentialLR(_LRScheduler):
         last_epoch (int, optional): the index of last epoch. Default: -1.
     """
 
-    def __init__(self, optimizer, end_lr, num_iter, last_epoch=-1):
+    def __init__(self, optimizer: Optimizer, end_lr: float, num_iter: int, last_epoch: int = -1):
         self.end_lr = end_lr
         self.last_epoch = last_epoch
         if num_iter <= 1:
@@ -97,12 +109,12 @@ class ExponentialLR(_LRScheduler):
         self.num_iter = num_iter
         super(ExponentialLR, self).__init__(optimizer, last_epoch)
 
-    def get_lr(self):
+    def get_lr(self) -> List[float]:
         r = (self.last_epoch + 1) / (self.num_iter - 1)
         return [base_lr * (self.end_lr / base_lr) ** r for base_lr in self.base_lrs]
 
 
-def valley(lrs: list, losses: list):
+def valley(lrs: List[float], losses: List[float]) -> float:
     "Suggests a learning rate from the longest valley and returns its index"
     n = len(losses)
     max_start, max_end = 0, 0
@@ -126,15 +138,15 @@ def valley(lrs: list, losses: list):
 class LRFinder:
     def __init__(
         self,
-        model,
-        opt,
-        device="cuda",
-        start_lr=1e-7,
-        end_lr=10,
-        num_iter=100,
-        step_mode="exp",
-        beta=0.98,
-        suggestion="valley",
+        model: Union[nn.Module, PreTrainedModel],
+        opt: Optimizer,
+        device: str = "cuda",
+        start_lr: float = 1e-7,
+        end_lr: float = 10,
+        num_iter: int = 100,
+        step_mode: str = "exp",
+        beta: float = 0.98,
+        suggestion: str = "valley",
         enable_prefix_tuning: bool = False,
     ):
         self.model = model
@@ -151,7 +163,7 @@ class LRFinder:
         self.recorder = {}
         self.enable_prefix_tuning = enable_prefix_tuning
 
-    def save(self, fname, path, **kwargs):
+    def save(self, fname: Union[str, Path], path: Union[str:Path], **kwargs) -> str:
         """
         Save model and optimizer state (if `with_opt`) to `self.path/file`
         """
@@ -159,7 +171,9 @@ class LRFinder:
         save_model(fname, self.model, getattr(self, "opt", None), **kwargs)
         return fname
 
-    def load(self, fname, with_opt=False, device="cuda", strict=True, **kwargs):
+    def load(
+        self, fname: Union[str, Path], with_opt: bool = False, device: str = "cuda", strict: bool = True, **kwargs
+    ):
         """
         load the model
         """
@@ -196,7 +210,7 @@ class LRFinder:
 
         self.model.train()
 
-    def train_batch(self, batch):
+    def train_batch(self, batch: torch.Tensor):
         # forward + get loss + backward + optimize
         pred, self.loss = self.train_step(batch)
         # zero the parameter gradients
@@ -206,11 +220,11 @@ class LRFinder:
         # update weights
         self.opt.step()
 
-    def process_data(self, x, y):
+    def process_data(self, x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x, y = x.to(self.device), y.to(self.device)
         return x, y
 
-    def train_step(self, batch):
+    def train_step(self, batch: torch.Tensor) -> Tuple[torch.Tensor, float]:
         # get the inputs
         if isinstance(batch, dict):
             self.xb, self.yb = batch["past_values"], batch["future_values"]
@@ -249,7 +263,7 @@ class LRFinder:
         if self.train_iter > self.num_iter:
             raise KeyboardInterrupt  # stop fit method
 
-    def smoothing(self, beta):
+    def smoothing(self, beta: float):
         # Smooth the loss if beta is specified
         self.aver_loss = beta * self.aver_loss + (1 - beta) * self.loss.detach().item()
         self.smoothed_loss = self.aver_loss / (1 - beta**self.train_iter)
@@ -277,7 +291,7 @@ class LRFinder:
         self.load(self.temp_path)
         os.remove(self.temp_path)
 
-    def set_lr(self, lrs):
+    def set_lr(self, lrs: List[float]):
         if not isinstance(lrs, list):
             lrs = [lrs] * len(self.opt.param_groups)
         if len(lrs) != len(self.opt.param_groups):
@@ -288,7 +302,7 @@ class LRFinder:
         for param_group, lr in zip(self.opt.param_groups, lrs):
             param_group["lr"] = lr
 
-    def plot_lr_find(self, plot_save_dir=None):
+    def plot_lr_find(self, plot_save_dir: Optional[str] = None):
         # Third Party
         import matplotlib.pyplot as plt
 
@@ -407,6 +421,6 @@ def optimal_lr_finder(
         os.makedirs(plot_save_dir, exist_ok=True)
         lr_finder.plot_lr_find(plot_save_dir=plot_save_dir)
 
-    print(f"LR Finder: Suggested learning rate = {lr_finder.suggested_lr}")
+    logger.info(f"LR Finder: Suggested learning rate = {lr_finder.suggested_lr}")
 
     return lr_finder.suggested_lr, lr_finder.model
