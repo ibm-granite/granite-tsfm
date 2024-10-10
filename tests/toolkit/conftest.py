@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import pytest
+from transformers import PatchTSTForPrediction
 
+from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 from tsfm_public.toolkit.util import select_by_index
 
 from ..util import nreps
@@ -100,3 +102,28 @@ def etth_data(etth_data_base):
     }
 
     return train_data, test_data, params
+
+
+@pytest.fixture(scope="package")
+def patchtst_base_model():
+    model_path = "ibm/test-patchtst"
+    model = PatchTSTForPrediction.from_pretrained(model_path)
+
+    return model
+
+
+@pytest.fixture(scope="module")
+def ttm_base_model():
+    model_path = "ibm/test-ttm-v1"
+
+    return TinyTimeMixerForPrediction.from_pretrained(model_path)
+
+
+@pytest.fixture(scope="module")
+def ttm_model():
+    model_path = "ibm/test-ttm-v1"
+
+    def ttm_model_func(**kwargs):
+        return TinyTimeMixerForPrediction.from_pretrained(model_path, **kwargs)
+
+    return ttm_model_func

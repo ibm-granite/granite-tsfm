@@ -16,15 +16,7 @@ from tsfm_public.toolkit.util import select_by_index
 
 
 @pytest.fixture(scope="module")
-def patchtst_model():
-    model_path = "ibm/test-patchtst"
-    model = PatchTSTForPrediction.from_pretrained(model_path)
-
-    return model
-
-
-@pytest.fixture(scope="module")
-def ttm_model():
+def ttm_dummy_model():
     # model_path = "ibm-granite/granite-timeseries-ttm-v1"
 
     conf = TinyTimeMixerConfig()
@@ -47,13 +39,13 @@ def test_forecasting_pipeline_defaults():
     assert tspipe._preprocess_params["context_length"] == 66
 
 
-def test_forecasting_pipeline_forecasts(patchtst_model, etth_data_base):
+def test_forecasting_pipeline_forecasts(patchtst_base_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
     target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
     prediction_length = 96
 
-    model = patchtst_model
+    model = patchtst_base_model
     context_length = model.config.context_length
 
     forecast_pipeline = TimeSeriesForecastingPipeline(
@@ -136,13 +128,13 @@ def test_forecasting_pipeline_forecasts(patchtst_model, etth_data_base):
     assert forecasts.shape == (10, 2 * len(target_columns) + 1)
 
 
-def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model, etth_data_base):
+def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_base_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
     target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
     prediction_length = 96
 
-    model = patchtst_model
+    model = patchtst_base_model
     context_length = model.config.context_length
 
     data = etth_data_base.copy()
@@ -198,8 +190,8 @@ def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_model, etth_d
     assert forecasts["HUFL_prediction"].mean().mean() > 10
 
 
-def test_frequency_token(ttm_model, etth_data):
-    model = ttm_model
+def test_frequency_token(ttm_dummy_model, etth_data):
+    model = ttm_dummy_model
     train_data, test_data, params = etth_data
 
     timestamp_column = params["timestamp_column"]

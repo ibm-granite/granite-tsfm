@@ -5,25 +5,13 @@
 
 import tempfile
 
-import pytest
 from transformers import Trainer, TrainingArguments
 
-from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 from tsfm_public.toolkit.dataset import (
     ForecastDFDataset,
 )
 from tsfm_public.toolkit.recursive_predictor import RecursivePredictor, RecursivePredictorConfig
 from tsfm_public.toolkit.util import select_by_index
-
-
-@pytest.fixture(scope="module")
-def ttm_model():
-    model_path = "ibm/test-ttm-v1"
-
-    def ttm_model_func(**kwargs):
-        return TinyTimeMixerForPrediction.from_pretrained(model_path, **kwargs)
-
-    return ttm_model_func
 
 
 def get_dataset_for_rolling_prediction(
