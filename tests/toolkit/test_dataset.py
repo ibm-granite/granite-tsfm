@@ -347,6 +347,7 @@ def test_datetime_handling(ts_data):
 
 
 def test_masking_specification(ts_data):
+    """Test passing a masking specification"""
     df = ts_data.copy()
 
     ds = ForecastDFDataset(
@@ -362,3 +363,21 @@ def test_masking_specification(ts_data):
 
     assert np.all(ds[0]["past_values"].numpy()[-2:, 0] == -1000)
     assert np.all(ds[0]["past_values"].numpy()[-2] == -1000)
+
+
+def test_metadata(ts_data):
+    """Test passing metadata columns"""
+    df = ts_data.copy()
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="time_date",
+        id_columns=["id"],
+        target_columns=["val", "val2"],
+        context_length=3,
+        prediction_length=2,
+        metadata_columns=["time_int", "id2"],
+    )
+
+    assert ds[0]["metadata"][0][0] == 0
+    assert ds[0]["metadata"][0][1] == "B"

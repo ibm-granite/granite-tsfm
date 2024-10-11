@@ -427,6 +427,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+        metadata_columns: List[str] = [],
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -449,6 +450,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
             masking_specification=masking_specification,
+            metadata_columns=metadata_columns,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -478,6 +480,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+            metadata_columns: List[str] = [],
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -487,6 +490,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
+            self.metadata_columns = metadata_columns
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -579,6 +583,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
             if self.static_categorical_columns:
                 categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+            if self.metadata_columns:
+                ret["metadata"] = self.data_df[self.metadata_columns].values
 
             return ret
 
