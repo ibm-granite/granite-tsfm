@@ -852,7 +852,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             seq_y[:, self._y_mask_conditional] = 0
 
             ret = {
-                "past_values": np_to_torch(np.nan_to_num(seq_x_imputed, nan=self.fill_value)),
+                "past_values": np_to_torch(seq_x_imputed),
                 "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
