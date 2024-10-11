@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsfminference
+  labels:
+    app: tsfminference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tsfminference
+  template:
+    metadata:
+      labels:
+        app: tsfminference
+    spec:
+      containers:
+      - name: tsfminference-service
+        # this assumes we're using a kind local registry
+        # change this to match your CR and container version
+        image: localhost:5001/tsfminference:latest
+        command: ["/bin/sh"]
+        args:
+          - "-c"
+          - |
+            uvicorn tsfminference.main:app --host 0.0.0.0 --port 8000
+        env:
+          #- name: TSFM_CONFIG_FILE
+          #  value: /path/to/a/config/file/on/pvc
+          - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
+            value: "0"
+          - name: TSFM_PYTHON_LOGGING_LEVEL
+            value: "INFO"
+          - name: TSFM_PYTHON_LOGGING_FORMAT
+            # lighter weight
+            value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(module)s:%(message)s"
+            # intensive but costly
+            # value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s"
+        ports:
+        - containerPort: 8000
+        resources:
+            requests:
+              # nvidia.com/gpu: 0
+              cpu: 1000m
+              memory: 4000Mi
+            limits:
+              # nvidia.com/gpu: 0
+              cpu: 8000m
+              memory: 64000Mi
+     
