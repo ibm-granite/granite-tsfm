@@ -4,7 +4,7 @@
 
 from typing import Annotated, Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
@@ -110,14 +110,6 @@ class ForecastingInferenceInput(BaseInferenceInput):
     )
 
     future_data: Optional[Dict[str, List[Any]]] = Field(description="Future data", default=None)
-
-    @model_validator(mode="before")
-    @classmethod
-    def grpcswaparoos(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "future_data" in data and data["future_data"] is None:
-                data["future_data"] = ""
-        return data
 
 
 class PredictOutput(BaseModel):
