@@ -791,6 +791,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                 fill_value=fill_value,
             )
 
+            self._X_imputed = self.X.ffill().fillna(self.fill_value)
             # create a artificially_observed_mask
             # target columns only
             # we don't mask what is already missing
@@ -830,6 +831,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
 
             seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x_imputed = self._X_imputed[time_id : time_id + self.context_length].values
 
             artificial_past_observed_seq = np.ones_like(seq_x, dtype=bool)
             artificial_past_observed_seq[:, self._artificial_missing_column_mask] = (
@@ -850,7 +852,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             seq_y[:, self._y_mask_conditional] = 0
 
             ret = {
-                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "past_values": np_to_torch(np.nan_to_num(seq_x_imputed, nan=self.fill_value)),
                 "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
