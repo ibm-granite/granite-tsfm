@@ -76,6 +76,19 @@ class InferenceRuntime:
         return model, preprocessor, None
 
     def forecast(self, input: ForecastingInferenceInput):
+        # """
+        # import tracemalloc
+
+        # tracemalloc.start()  # Start tracing memory allocations
+        # """
+
+        # import objgraph
+
+        # Before your suspected memory leak
+        # print("---before---")
+        # objgraph.show_most_common_types()
+        # objgraph.show_growth()
+
         LOGGER.info("calling forecast_common")
         answer, ex = self._forecast_common(input)
 
@@ -84,6 +97,21 @@ class InferenceRuntime:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
         LOGGER.info("done, returning.")
+
+        # """
+        # snapshot = tracemalloc.take_snapshot()
+        # top_stats = snapshot.statistics("lineno")
+
+        # print("[ Top 10 memory-consuming lines ]")
+        # for stat in top_stats[:10]:
+        #    print(stat)
+        # """
+
+        # After running the code for a while
+        # print(" *********after *****")
+        # objgraph.show_most_common_types()
+        #   objgraph.show_growth()
+
         return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
