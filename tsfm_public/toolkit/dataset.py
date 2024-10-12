@@ -619,7 +619,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
 
             if self.metadata_columns:
-                ret["metadata"] = self.data_df[self.metadata_columns].values
+                ret["metadata"] = self.data_df[self.metadata_columns].values[
+                    time_id : time_id + self.context_length + self.prediction_length, :
+                ]
 
             return ret
 
