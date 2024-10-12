@@ -381,3 +381,5 @@ def test_metadata(ts_data):
 
     assert ds[0]["metadata"][0][0] == 0
     assert ds[0]["metadata"][0][1] == "B"
+
+    assert len(ds[0]["metadata"]) == ds.context_length + ds.prediction_length
