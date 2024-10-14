@@ -80,10 +80,14 @@ class ForecastingMetadataInput(BaseMetadataInput):
 class ForecastingParameters(BaseModel):
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
-    prediction_length: Optional[int] = Field(
-        description="The prediction length for the forecast.",
-        default=None,
-    )
+    prediction_length: Optional[int] = Field(description="The prediction length for the forecast.", default=None)
+
+    # @field_validator("prediction_length")
+    # @classmethod
+    # def check_valid_fraction(cls, v: int) -> float:
+    #    if v < 1:
+    #        raise ValueError("`prediction_length` must be an integer >=1")
+    #    return v
 
 
 class BaseInferenceInput(BaseModel):
