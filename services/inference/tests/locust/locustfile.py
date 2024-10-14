@@ -15,7 +15,7 @@ class QuickstartUser(FastHttpUser):
         if forecasting_url.find("fmaas") >= 0:
             input.pop("s3credentials")
 
-        self.client.post(forecasting_url, json=self.payload)
+        self.client.post(forecasting_url, json=self.payload, timeout=None, retries=10)
 
     def on_start(self):
         self.payload = json.load(open("./payload.json"))
