@@ -163,7 +163,7 @@ class LRFinder:
         self.recorder = {}
         self.enable_prefix_tuning = enable_prefix_tuning
 
-    def save(self, fname: Union[str, Path], path: Union[str:Path], **kwargs) -> str:
+    def save(self, fname: Union[str, Path], path: Union[str, Path], **kwargs) -> str:
         """
         Save model and optimizer state (if `with_opt`) to `self.path/file`
         """
