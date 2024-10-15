@@ -4,7 +4,7 @@
 
 from typing import Annotated, Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
@@ -82,12 +82,14 @@ class ForecastingParameters(BaseModel):
 
     prediction_length: Optional[int] = Field(description="The prediction length for the forecast.", default=None)
 
-    # @field_validator("prediction_length")
-    # @classmethod
-    # def check_valid_fraction(cls, v: int) -> float:
-    #    if v < 1:
-    #        raise ValueError("`prediction_length` must be an integer >=1")
-    #    return v
+    @field_validator("prediction_length")
+    @classmethod
+    def check_prediction_length(cls, v: int) -> float:
+        if v is not None and v < 1:
+            raise ValueError(
+                """If specified, `prediction_length` must be an integer >=1 and no more than the model default prediction length. When omitted the model default prediction_length will be used."""
+            )
+        return v
 
 
 class BaseInferenceInput(BaseModel):
