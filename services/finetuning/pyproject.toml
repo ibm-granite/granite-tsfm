@@ -39,6 +39,7 @@ torch = { version = ">2,<3", source = "pytorch" }
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }
 uvicorn = { version = "*" }
+gunicorn = { version = "*" }
 setuptools = { version = "*" }
 urllib3 = { version = ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 
