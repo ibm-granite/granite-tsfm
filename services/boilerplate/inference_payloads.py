@@ -99,7 +99,7 @@ class BaseInferenceInput(BaseModel):
         description="A model identifier.",
         pattern=r"^\S+$",
         min_length=1,
-        max_length=100,
+        max_length=256,
         example="ibm/tinytimemixer-monash-fl_96",
     )
 
