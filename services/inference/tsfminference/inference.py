@@ -129,7 +129,10 @@ class InferenceRuntime:
             # we don't set context length or prediction length above because it is not needed for inference
 
             # train to estimate freq if not available
-            preprocessor.train(data)
+            try:
+                preprocessor.train(data)
+            except Exception as ex:
+                return None, ex
 
         LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
 
