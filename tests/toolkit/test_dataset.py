@@ -344,3 +344,21 @@ def test_datetime_handling(ts_data):
     )
 
     assert ds[0]["timestamp"].tz is None
+
+
+def test_masking_specification(ts_data):
+    df = ts_data.copy()
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="time_date",
+        id_columns=["id"],
+        target_columns=["val", "val2"],
+        context_length=3,
+        prediction_length=2,
+        fill_value=-1000,
+        masking_specification=[("val", -2), ("val2", (-2, -1))],
+    )
+
+    assert np.all(ds[0]["past_values"].numpy()[-2:, 0] == -1000)
+    assert np.all(ds[0]["past_values"].numpy()[-2] == -1000)
