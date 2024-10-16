@@ -44,6 +44,9 @@ uvicorn = { version = "*" }
 setuptools = { version = "*" }
 urllib3 = { version = ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 
+# ***********CVEs*************
+starlette = { version = ">=0.40.0" }
+
 [[tool.poetry.source]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
