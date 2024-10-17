@@ -31,7 +31,7 @@ pip install ".[notebooks]"
 
 ## 📗 Google Colab Tutorials
 Run the TTM tutorial in Google Colab, and quickly build a forecasting application with the pre-trained TSFM models.
-- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
+- [TTM Colab Tutorial](https://colab.research.google.com/github/ibm-granite/granite-tsfm/blob/ttm_v2_release/notebooks/hfdemo/ttm_getting_started.ipynb) 
 
 ## 💻 Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at a later date). To install the requirements use `pip`:
