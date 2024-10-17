@@ -4,7 +4,7 @@
 
 import copy
 from itertools import starmap
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -53,16 +53,20 @@ class BaseDFDataset(torch.utils.data.Dataset):
             y_cols = [y_cols]
 
         if len(x_cols) > 0:
-            assert is_cols_in_df(data_df, x_cols), f"one or more {x_cols} is not in the list of data_df columns"
+            there, missing = is_cols_in_df(data_df, x_cols)
+            assert there, f"{missing} given in {x_cols} is not a valid column identifier in the data."
 
         if len(y_cols) > 0:
-            assert is_cols_in_df(data_df, y_cols), f"one or more {y_cols} is not in the list of data_df columns"
+            there, missing = is_cols_in_df(data_df, y_cols)
+            assert there, f"{missing} given in {y_cols} is not a valid column identifier in the data."
 
         if timestamp_column:
             assert timestamp_column in list(
                 data_df.columns
-            ), f"{timestamp_column} is not in the list of data_df columns"
-            assert timestamp_column not in x_cols, f"{timestamp_column} should not be in the list of x_cols"
+            ), f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
+            assert (
+                timestamp_column not in x_cols
+            ), f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
 
         self.data_df = data_df
         self.datetime_col = timestamp_column
@@ -162,7 +166,8 @@ class BaseConcatDFDataset(torch.utils.data.ConcatDataset):
         **kwargs,
     ):
         if len(id_columns) > 0:
-            assert is_cols_in_df(data_df, id_columns), f"{id_columns} is not in the data_df columns"
+            there, missing = is_cols_in_df(data_df, id_columns)
+            assert there, f"{missing} given in {id_columns} is not a valid column in the data."
 
         self.timestamp_column = timestamp_column
         self.id_columns = id_columns
@@ -383,6 +388,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             replaced by 0. If True, the context window contains all the historical target information. Defaults to True.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        masking_specification (List[Tuple[str, Union[int, Tuple[int, int]]]], optional): Allow masking the history (past values) of
+            specific columns. The complete specification is a list of individual column masking specifications. A column masking
+            specification is a 2-tuple where the first index specifies a column name. The second index specifies and index/indices to
+            mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
+            will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
+            treated as python list indices; the values given by these indices will be masked.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -415,6 +426,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         autoregressive_modeling: bool = True,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -436,6 +448,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
+            masking_specification=masking_specification,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -464,6 +477,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             autoregressive_modeling: bool = True,
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -472,6 +486,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
+            self.masking_specification = masking_specification
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -480,6 +495,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 conditional_columns,
             )
             y_cols = copy.copy(x_cols)
+
+            self.column_name_to_index_map = {k: v for v, k in enumerate(x_cols)}
 
             # check non-autoregressive case
             if len(target_columns) == len(x_cols) and not self.autoregressive_modeling:
@@ -507,20 +524,40 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 fill_value=fill_value,
             )
 
+        def apply_masking_specification(self, past_values_tensor: np.ndarray) -> np.ndarray:
+            """Apply the desired mask defined by masking_specification.
+
+            Args:
+                past_values_tensor (np.ndarray): Tensor of past values, should have shape (context_length, num_channels)
+
+            Returns:
+                np.ndarry: Tensor with values masked
+            """
+
+            for col_name, spec in self.masking_specification:
+                col_idx = self.column_name_to_index_map[col_name]
+                if isinstance(spec, (tuple, list)) and len(spec) == 2:
+                    past_values_tensor[spec[0] : spec[1], col_idx] = np.NaN
+                else:
+                    past_values_tensor[spec:, col_idx] = np.NaN
+            return past_values_tensor
+
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
 
             time_id = index * self.stride
 
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X[time_id : time_id + self.context_length].values.astype(np.float32)
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
+
+            if self.masking_specification is not None:
+                seq_x = self.apply_masking_specification(seq_x)
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
-
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
@@ -896,8 +933,8 @@ def is_cols_in_df(df: pd.DataFrame, cols: List[str]) -> bool:
     """
     for col in cols:
         if col not in list(df.columns):
-            return False
-    return True
+            return False, col
+    return True, None
 
 
 if __name__ == "__main__":

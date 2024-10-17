@@ -111,9 +111,7 @@ class ForecastingInferenceInput(BaseInferenceInput):
 
     parameters: ForecastingParameters
 
-    data: Dict[str, List[Any]] = Field(
-        description="Data",
-    )
+    data: Dict[str, List[Any]] = Field(description="Data", min_length=1)
 
     future_data: Optional[Dict[str, List[Any]]] = Field(description="Future data", default=None)
 

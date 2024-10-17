@@ -23,5 +23,5 @@ MESSAGES = US_ENG_MESSAGES
 def error_message(ex: Exception) -> ErrorType:
     for k, v in _ex2ErrorType.items():
         if isinstance(ex, k):
-            return MESSAGES[v]
+            return f"{MESSAGES[v]}:{str(ex)}"
     return str(ex)
