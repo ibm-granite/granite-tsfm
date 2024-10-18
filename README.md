@@ -30,8 +30,8 @@ pip install ".[notebooks]"
 - Getting started with `TinyTimeMixer (TTM)` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb)
 
 ## 📗 Google Colab Tutorials
-Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
-- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
+Run the TTM tutorial in Google Colab, and quickly build a forecasting application with the pre-trained TSFM models.
+- [TTM Colab Tutorial](https://colab.research.google.com/github/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb) 
 
 ## 💻 Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at a later date). To install the requirements use `pip`:
