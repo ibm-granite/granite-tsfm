@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsfminference
+  labels:
+    app: tsfminference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tsfminference
+  template:
+    metadata:
+      labels:
+        app: tsfminference
+    spec:
+      containers:
+      - name: tsfminference-service
+        # this assumes we're using a kind local registry
+        # change this to match your CR and container version
+        # image: localhost:5001/tsfminference:latest
+        image: us.icr.io/fctkstus/tsfminference:latest
+        command: ["/bin/sh"]
+        args:
+          - "-c"
+          - |
+            gunicorn \
+            --max-requests 250 \
+            -w 4 \
+            -k uvicorn.workers.UvicornWorker \
+            --bind 0.0.0.0:8000 \
+            tsfminference.main:app
+        volumeMounts:
+        - mountPath: /nsf-storage
+          name: nsf-storage
+        env:
+          - name: TSFM_MODEL_DIR
+            value: /nsf-storage/tsfminference/tsfm_models
+          - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
+            value: "0"
+          - name: TSFM_PYTHON_LOGGING_LEVEL
+            value: "WARNING"
+          - name: TSFM_PYTHON_LOGGING_FORMAT
+            # lighter weight
+            value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(module)s:%(message)s"
+            # intensive but costly
+            # value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s"
+        ports:
+        - containerPort: 8000
+        resources:
+            requests:
+              # nvidia.com/gpu: 0
+              cpu: 1000m
+              memory: 4000Mi
+            limits:
+              # nvidia.com/gpu: 0
+              cpu: 8000m
+              memory: 64000Mi
+      volumes:
+      - name: nsf-storage
+        persistentVolumeClaim:
+          claimName: my-pvc
+     

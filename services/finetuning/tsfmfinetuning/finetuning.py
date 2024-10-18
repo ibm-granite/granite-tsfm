@@ -4,10 +4,11 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple, Union
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from starlette import status
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
 from tsfm_public import TimeSeriesPreprocessor
@@ -70,23 +71,24 @@ class FinetuningRuntime:
             model_path,
         )
 
-        model = load_model(
+        model, ex = load_model(
             model_path,
             config=conf,
             module_path=self.model_to_module_map.get(conf.__class__.__name__, None),
         )
-        LOGGER.info("Successfully loaded model")
-        return model, preprocessor
+        if ex is None:
+            LOGGER.info("Successfully loaded model")
+        else:
+            LOGGER.exception(ex)
+        return model, preprocessor, ex
 
     def finetuning(self, input: TinyTimeMixerForecastingTuneInput, tuned_model_name: str, output_dir: Path):
-        try:
-            LOGGER.info("calling forecast_common")
-            answer = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
-            LOGGER.info("done, returning.")
-            return answer
-        except Exception as e:
-            LOGGER.exception(e)
-            raise HTTPException(status_code=500, detail=repr(e))
+        answer, ex = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
+
+        if ex is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=repr(ex))
+
+        return answer
 
     @classmethod
     def _validation_data(cls, input: BaseTuneInput) -> pd.DataFrame:
@@ -98,7 +100,9 @@ class FinetuningRuntime:
 
         return None
 
-    def _finetuning_common(self, input: BaseTuneInput, tuned_model_name: str, tmp_dir: Path) -> Path:
+    def _finetuning_common(
+        self, input: BaseTuneInput, tuned_model_name: str, tmp_dir: Path
+    ) -> Tuple[Path, Union[Exception, None]]:
         LOGGER.info("in _forecasting_tuning_workflow")
 
         # set seed
@@ -124,7 +128,10 @@ class FinetuningRuntime:
                     `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"""
                 )
 
-        model, preprocessor = self.load(model_path)
+        model, preprocessor, ex = self.load(model_path)
+
+        if ex is not None:
+            return Path(), ex
 
         # @TODO (correct?)
         base_config = model.config
@@ -240,4 +247,4 @@ class FinetuningRuntime:
         save_path = training_tmp_dir / tuned_model_name
         trainer.save_model(save_path)
         preprocessor.save_pretrained(save_path)
-        return save_path
+        return save_path, None
