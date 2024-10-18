@@ -4,7 +4,7 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS builder
 
 RUN microdnf -y update && \
     microdnf -y install \
-        git shadow-utils python3.11-pip python-wheel && \
+    git shadow-utils python3.11-pip python-wheel && \
     pip3.11 install --no-cache-dir --upgrade pip wheel && \
     microdnf clean all
 
@@ -20,7 +20,7 @@ RUN pip3.11 install poetry && poetry install
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS deploy
 RUN microdnf -y update && \
     microdnf -y install \
-        shadow-utils python3.11 && \
+    shadow-utils python3.11 && \
     microdnf clean all
 
 WORKDIR /finetuning
@@ -38,4 +38,4 @@ RUN groupadd --system tsfmfinetuning --gid 1001 && \
 
 USER tsfmfinetuning
 
-CMD ["python", "-m", "uvicorn","tsfmfinetuning.main:app", "--host", "0.0.0.0", "--port", "8000" ]
+CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]

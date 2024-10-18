@@ -10,11 +10,13 @@ boilerplate:
 	
 # starts the tsfminference service (used mainly for test cases)
 start_service_local: boilerplate
-	python -m tsfminference.main &
-	sleep 10
+	python -m gunicorn \
+	-w 1 \
+	-k uvicorn.workers.UvicornWorker \
+	--bind 127.0.0.1:8000 \
+	tsfminference.main:app && true &
 stop_service_local:
 	pkill  -f 'python.*tsfminference.*'
-	sleep 10
 
 image: boilerplate
 	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .

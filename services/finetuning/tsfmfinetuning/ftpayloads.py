@@ -7,7 +7,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .model_parameters import (
@@ -55,7 +55,9 @@ class ForecastingTuneInput(BaseTuneInput):
         pattern="file://.*",
         examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"],
     )
-    schema: ForecastingMetadataInput
+    schema: ForecastingMetadataInput = Field(
+        description="An object of ForecastingMetadataInput that contains the schema metadata of the 'data' input."
+    )
     parameters: ForecastingParameters
 
 
@@ -81,12 +83,12 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
         trainer_args: TrainerArguments = Field(default=TrainerArguments())
         model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
 
-        @field_validator("fewshot_fraction")
-        @classmethod
-        def check_valid_fraction(cls, v: float) -> float:
-            if (v > 1) or (v <= 0):
-                raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
-            return v
+        # @field_validator("fewshot_fraction")
+        # @classmethod
+        # def check_valid_fraction(cls, v: float) -> float:
+        #    if (v > 1) or (v <= 0):
+        #        raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
+        #    return v
 
     parameters: Parameters
 
