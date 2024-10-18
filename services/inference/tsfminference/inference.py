@@ -10,8 +10,10 @@ from typing import Any, Dict, List
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from starlette import status
+from transformers import PretrainedConfig
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public.toolkit.util import select_by_index
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
@@ -51,7 +53,8 @@ class InferenceRuntime:
         )
         app.include_router(self.router)
 
-    def load(self, model_path: str, **extra_config_kwargs: Dict[str, Any]):
+    def load_preprocessor(self, model_path: str):
+        # load preprocessor
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
@@ -59,21 +62,28 @@ class InferenceRuntime:
             preprocessor = None
             LOGGER.info("No preprocessor found")
         except Exception as ex:
-            return None, None, ex
+            return None, ex
 
-        # load config and model
+        return preprocessor, None
+
+    def load_config(self, model_path: str, **extra_config_kwargs: Dict[str, Any]):
+        # load config, separate from load model, since we may need to inspect config first
         conf = load_config(model_path, **extra_config_kwargs)
 
+        return conf
+
+    def load_model(self, model_path: str, config: PretrainedConfig):
+        # load model
         model, ex = load_model(
             model_path,
-            config=conf,
-            module_path=self.model_to_module_map.get(conf.__class__.__name__, None),
+            config=config,
+            module_path=self.model_to_module_map.get(config.__class__.__name__, None),
         )
         if ex is not None:
-            return None, preprocessor, ex
+            return None, ex
 
         LOGGER.info("Successfully loaded model")
-        return model, preprocessor, None
+        return model, None
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
@@ -90,8 +100,11 @@ class InferenceRuntime:
         # we need some sort of model registry
         # payload = input_payload.model_dump()  # do we need?
 
-        data = decode_data(input_payload.data, input_payload.schema)
-        future_data = decode_data(input_payload.future_data, input_payload.schema)
+        schema_params = input_payload.schema.model_dump()
+        params = input_payload.parameters.model_dump()
+
+        data = decode_data(input_payload.data, schema_params)
+        future_data = decode_data(input_payload.future_data, schema_params)
 
         model_path = TSFM_MODEL_DIR / input_payload.model_id
 
@@ -105,21 +118,15 @@ class InferenceRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        schema_params = input_payload.schema.model_dump()
-        params = input_payload.parameters.model_dump()
-
+        # preprocessor load
         preprocessor_params = copy.deepcopy(schema_params)
         preprocessor_params["prediction_length"] = params["prediction_length"]
+        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
 
-        model_config_kwargs = {"prediction_filter_length": preprocessor_params.get("prediction_length", None)}
-
-        model, preprocessor, ex = self.load(model_path, **model_config_kwargs)
-
+        preprocessor, ex = self.load_preprocessor(model_path)
         if ex is not None:
             return None, ex
 
-        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
-        # preprocess
         if preprocessor is None:
             preprocessor = TimeSeriesPreprocessor(
                 **preprocessor_params,
@@ -133,7 +140,6 @@ class InferenceRuntime:
                 preprocessor.train(data)
             except Exception as ex:
                 return None, ex
-
         LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
 
         # warn if future data is not provided, but is needed by the model
@@ -142,6 +148,43 @@ class InferenceRuntime:
                 "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
             )
 
+        # config and model load
+        model_config_kwargs = {
+            "prediction_filter_length": preprocessor_params.get("prediction_length", None),
+            "num_input_channels": preprocessor.num_input_channels,
+        }
+        config = self.load_config(model_path, **model_config_kwargs)
+
+        model, ex = self.load_model(model_path, config=config)
+
+        if ex is not None:
+            return None, ex
+
+        context_length = model.config.context_length
+
+        # collect and check underlying time series lengths
+        if preprocessor_params["id_columns"]:
+            data_lengths = data.groupby(preprocessor_params["id_columns"]).apply(len)
+            min_len_index = data_lengths.argmin()
+            data_length = data_lengths.iloc[min_len_index]
+        else:
+            data_length = len(data)
+
+        LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {data_length}")
+
+        if data_length < context_length:
+            err_str = "Data should have time series of length that is at least the required model context length. "
+            if preprocessor_params["id_columns"]:
+                err_str += f"Received {data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {context_length} time points"
+            else:
+                err_str += f"Received {data_length} time points, but model requires {context_length} time points"
+
+            return None, ValueError(err_str)
+
+        # truncate data length
+        if data_length > context_length:
+            data = select_by_index(data, id_columns=preprocessor_params["id_columns"], start_index=-context_length)
+
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=model,
             explode_forecasts=True,
@@ -149,22 +192,6 @@ class InferenceRuntime:
             add_known_ground_truth=False,
             freq=preprocessor.freq,
         )
-
-        # truncate data length when exploding
-        # context_length = model.config.context_length
-        # if explode_forecasts and len(data) > context_length:
-        #     data = select_by_index(
-        #         data, id_columns=input.id_columns, start_index=-context_length
-        #     )
-
-        # test_data = preprocessor.preprocess(data)
-
-        # if future_data is not None:
-        #     # future data needs some values for targets, but they are unused
-        #     # Eventually this will be part of the forecast pipeline.
-        #     future_data[input_payload.target_columns] = 0
-        #     future_data = preprocessor.preprocess(future_data)
-        #     future_data.drop(columns=input_payload.target_columns)
 
         try:
             forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
@@ -183,6 +210,6 @@ def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFr
         return None
 
     df = pd.DataFrame.from_dict(data)
-    if ts_col := schema.timestamp_column:
+    if ts_col := schema["timestamp_column"]:
         df[ts_col] = pd.to_datetime(df[ts_col])
     return df
