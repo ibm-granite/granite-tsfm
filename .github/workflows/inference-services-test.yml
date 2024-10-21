@@ -37,9 +37,9 @@ jobs:
       run: |
         source .venv/bin/activate
         cd services/inference
-        make test_service_local
+        make test_local
     - name: Test image server tsfminference service with pytest
       run: |
         source .venv/bin/activate
         cd services/inference
-        make test_service_image
+        make test_image
