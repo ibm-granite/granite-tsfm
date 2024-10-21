@@ -11,7 +11,7 @@ boilerplate:
 image:
 	$(CONTAINER_BUILDER) build -t tsfmfinetuning -f Dockerfile .
 
-test_local boilerplate:
+test_local: boilerplate
 	pytest tests
 
 install_dev: boilerplate
