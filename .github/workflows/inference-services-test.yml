@@ -42,7 +42,7 @@ jobs:
         source .venv/bin/activate
         cd services/inference
         make boilerplate
-        TSFM_MODEL_DIR = "/tmp/test-tsfm" make start_service_local
+        TSFM_MODEL_DIR=/tmp/test-tsfm make start_service_local
         sleep 20
         pytest tests
         make stop_service_local || true
