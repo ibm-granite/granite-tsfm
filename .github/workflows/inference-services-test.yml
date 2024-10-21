@@ -36,9 +36,12 @@ jobs:
     - name: Test local server tsfminference service with pytest
       run: |
         source .venv/bin/activate
-        cd services/inference
+        cd services/tsfminference
         make boilerplate
-        make start_service_local
-        sleep 20
         pytest tests
-        make stop_service_local || true
+    - name: Test image server tsfminference service with pytest
+      run: |
+        source .venv/bin/activate
+        cd services/tsfminference
+        make image
+        make test_image
