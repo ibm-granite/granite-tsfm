@@ -11,6 +11,7 @@ RUN microdnf -y update && \
         python${PYTHON_VERSION}-pip \
         python$(PYTHON_VERSION)-wheel && \
     pip${PYTHON_VERSION} install --no-cache-dir --upgrade pip wheel && \
+    microdnf remove python3.9 python-unversioned-command python3-setuptools python3-wheel -y && \
     microdnf clean all
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1
