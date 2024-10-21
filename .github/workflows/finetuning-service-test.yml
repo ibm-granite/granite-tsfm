@@ -37,9 +37,14 @@ jobs:
     # for much, we just want to make sure
     # that it continues to build until we
     # do so
-    - name: Test image build
+    - name: image build
       run: |
         source .venv/bin/activate
         cd services/finetuning
         make image
+    - name: test local
+      run: |
+        source .venv/bin/activate
+        cd services/finetuning
+        make test_local
         
