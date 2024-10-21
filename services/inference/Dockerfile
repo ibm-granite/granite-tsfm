@@ -1,11 +1,15 @@
 # based on https://github.com/opendatahub-io/caikit-tgis-serving/blob/main/Dockerfile
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS builder
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 ARG PYTHON_VERSION=3.12
 
 RUN microdnf -y update && \
     microdnf -y install \
-        git shadow-utils python${PYTHON_VERSION}-pip python$(PYTHON_VERSION)-wheel && \
+        git \
+        shadow-utils \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-pip \
+        python$(PYTHON_VERSION)-wheel && \
     pip${PYTHON_VERSION} install --no-cache-dir --upgrade pip wheel && \
     microdnf clean all
 
@@ -18,15 +22,6 @@ COPY poetry.lock /inference/
 WORKDIR /inference
 RUN pip${PYTHON_VERSION} install poetry && poetry install
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS deploy
-RUN microdnf -y update && \
-    microdnf -y install \
-        shadow-utils python${PYTHON_VERSION} && \
-    microdnf clean all
-
-WORKDIR /inference
-
-COPY --from=builder /inference /inference
 
 ENV VIRTUAL_ENV=/inference/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
