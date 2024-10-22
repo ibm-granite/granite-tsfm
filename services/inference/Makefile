@@ -21,24 +21,38 @@ stop_service_local:
 image: boilerplate
 	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
 
-start_service_image: image
-	$(CONTAINER_BUILDER) run -p 8000:8000 -d --rm --name tsfmserver tsfminference
+start_service_image: clone_models image
+	$(CONTAINER_BUILDER) run -p 8000:8000 \
+	-d --rm --name tsfmserver \
+	-e TSFM_MODEL_DIR=/tsfm_models \
+	-e TSFM_ALLOW_LOAD_FROM_HF_HUB=0 \
+	-v mytest-tsfm:/tsfm_models \
+	tsfminference
 	sleep 5
 
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
-test_local: boilerplate start_service_local
-	pytest tests
+test_local: clone_models boilerplate start_service_local
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=0 TSFM_MODEL_DIR=./mytest-tsfm \
+	 pytest tests
 	$(MAKE) stop_service_local
+	$(MAKE) delete_models
 
 test_image: start_service_image
 	pytest tests
 	$(MAKE) stop_service_image
+	$(MAKE) delete_models
 
 install_dev: boilerplate
 	pip install poetry && poetry install --with dev
 
+clone_models:
+	git lfs install || true
+	git clone https://huggingface.co/ibm/test-tsfm mytest-tsfm || true
+
+delete_models:
+	rm -rf mytest-tsfm || true
 
 
 
