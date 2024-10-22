@@ -33,16 +33,18 @@ jobs:
         cd services/finetuning
         poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev
-    - name: Test local server tsfmfinetuning service with pytest
-      run: |
-        source .venv/bin/activate
-        cd services/finetuning
-        make boilerplate
-        pytest tests
-    - name: Test image server tsfmfinetuning service with pytest
+    # for not we're not really using the image
+    # for much, we just want to make sure
+    # that it continues to build until we
+    # do so
+    - name: image build
       run: |
         source .venv/bin/activate
         cd services/finetuning
         make image
-        make test_image
+    - name: test local
+      run: |
+        source .venv/bin/activate
+        cd services/finetuning
+        make test_local
         

@@ -1,11 +1,17 @@
 # based on https://github.com/opendatahub-io/caikit-tgis-serving/blob/main/Dockerfile
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS builder
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+ARG PYTHON_VERSION=3.12
 
 RUN microdnf -y update && \
     microdnf -y install \
-    git shadow-utils python3.11-pip python-wheel && \
-    pip3.11 install --no-cache-dir --upgrade pip wheel && \
+        git \
+        shadow-utils \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-pip \
+        python$(PYTHON_VERSION)-wheel && \
+    pip${PYTHON_VERSION} install --no-cache-dir --upgrade pip wheel && \
+    microdnf remove python3.9 python-unversioned-command python3-setuptools python3-wheel -y && \
     microdnf clean all
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1
@@ -15,17 +21,8 @@ COPY tsfmfinetuning/* /finetuning/tsfmfinetuning/
 COPY pyproject.toml /finetuning/
 COPY poetry.lock /finetuning/
 WORKDIR /finetuning
-RUN pip3.11 install poetry && poetry install
+RUN pip${PYTHON_VERSION} install poetry && poetry install
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS deploy
-RUN microdnf -y update && \
-    microdnf -y install \
-    shadow-utils python3.11 && \
-    microdnf clean all
-
-WORKDIR /finetuning
-
-COPY --from=builder /finetuning /finetuning
 
 ENV VIRTUAL_ENV=/finetuning/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -38,4 +35,5 @@ RUN groupadd --system tsfmfinetuning --gid 1001 && \
 
 USER tsfmfinetuning
 
-CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]
+# currently finetuning is not a service hosting platform
+# CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]
