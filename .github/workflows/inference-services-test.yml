@@ -33,17 +33,13 @@ jobs:
         cd services/inference
         poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev
-    - name: Clone models directory
-      run: |
-        git lfs install
-        git clone https://huggingface.co/ibm/test-tsfm mytest-tsfm
-    - name: Test local server tsfminference service with pytest
+    - name: Test local server
       run: |
         source .venv/bin/activate
         cd services/inference
-        TSFM_ALLOW_LOAD_FROM_HF_HUB=0 TSFM_MODEL_DIR=mytest-tsfm make test_local
-    - name: Test image server tsfminference service with pytest
+        make test_local
+    - name: Test image
       run: |
         source .venv/bin/activate
         cd services/inference
-        TSFM_ALLOW_LOAD_FROM_HF_HUB=0 TSFM_MODEL_DIR=mytest-tsfm make test_image
+        make test_image
