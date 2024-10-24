@@ -221,12 +221,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             + self.control_columns
             + self.conditional_columns
             + self.static_categorical_columns
+            + self.id_columns
         ):
             counter[c] += 1
 
         if max(counter.values()) > 1:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+                "A column name should appear only once in `id_columns`, target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
             )
 
     def to_dict(self) -> Dict[str, Any]:
