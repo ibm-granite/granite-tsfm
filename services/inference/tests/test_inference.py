@@ -135,7 +135,7 @@ def test_zero_shot_forecast_inference(ts_data):
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
-            # "id_columns": params["id_columns"],
+            "id_columns": params["id_columns"],
             "target_columns": params["target_columns"],
         },
         "data": encode_data(test_data_.iloc[:2], params["timestamp_column"]),
