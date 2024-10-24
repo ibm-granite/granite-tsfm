@@ -10,7 +10,8 @@ boilerplate:
 	
 # starts the tsfminference service (used mainly for test cases)
 start_service_local: boilerplate
-	TSFM_MODEL_DIR=./mytest-tsfm python -m gunicorn \
+	TSFM_MODEL_DIR=./mytest-tsfm TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
+	python -m gunicorn \
 	-w 1 \
 	-k uvicorn.workers.UvicornWorker \
 	--bind 127.0.0.1:8000 \
@@ -36,13 +37,12 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 TSFM_MODEL_DIR=./mytest-tsfm \
-	 pytest tests
+	pytest tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 
 test_image: clone_models start_service_image
-	TSFM_MODEL_DIR=./ pytest tests
+	pytest tests
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 
