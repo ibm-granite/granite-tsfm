@@ -9,7 +9,6 @@ import json
 import logging
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
-from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -467,7 +466,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             if token is not None:
                 return token
 
-        warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        logging.warning(f"Frequency token {token_name} was not found in the frequncy token mapping.")
         token = self.frequency_mapping["oov"]
 
         return token
