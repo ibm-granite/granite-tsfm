@@ -6,6 +6,7 @@ import copy
 import datetime
 import enum
 import json
+import logging
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from warnings import warn
@@ -31,6 +32,9 @@ from .util import (
     join_list_without_repeat,
     select_by_fixed_fraction,
 )
+
+
+LOGGER = logging.getLogger(__file__)
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -532,8 +536,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             else:
                 df_subset = df
 
-            # to do: make more robust
-            self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
+            self.freq = estimate_frequency(df_subset[self.timestamp_column])
 
             if not isinstance(self.freq, (str, int)):
                 self.freq = str(self.freq)
@@ -932,8 +935,12 @@ def create_timestamps(
         raise ValueError("Neither `freq` nor `time_sequence` provided, cannot determine frequency.")
 
     if freq is None:
-        # to do: make more robust
-        freq = time_sequence[-1] - time_sequence[-2]
+        freq = estimate_frequency(time_sequence)
+
+    if freq is None:
+        raise ValueError(
+            "Could not extend time series because frequency was not provided and could not be estimated from the available data."
+        )
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
@@ -958,6 +965,17 @@ def create_timestamps(
     else:
         # numerical timestamp column
         return [last_timestamp + i * freq for i in range(1, periods + 1)]
+
+
+def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
+    if len(timestamp_data) < 2:
+        LOGGER.warning("Provided time series data is too short to estimate frequency.")
+        return None
+
+    if isinstance(timestamp_data, pd.Series):
+        return timestamp_data.iloc[-1] - timestamp_data.iloc[-2]
+    else:
+        return timestamp_data[-1] - timestamp_data[-2]
 
 
 def extend_time_series(
