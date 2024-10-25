@@ -1,8 +1,5 @@
 # Copyright contributors to the TSFM project
 #
-import os
-import tempfile
-from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
@@ -100,10 +97,7 @@ def test_zero_shot_forecast_inference(ts_data):
     prediction_length = params["prediction_length"]
     context_length = params["context_length"]
     model_id = params["model_id"]
-    model_dir = (
-        Path(os.getenv("TSFM_MODEL_DIR")) if os.getenv("TSFM_MODEL_DIR") else Path(tempfile.gettempdir()) / "test-tsfm"
-    )
-    model_id_path: Path = (model_dir / model_id).as_posix()
+    model_id_path: str = model_id
 
     id_columns = params["id_columns"]
 
