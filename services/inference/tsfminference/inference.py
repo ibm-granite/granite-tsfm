@@ -212,4 +212,12 @@ def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFr
     df = pd.DataFrame.from_dict(data)
     if ts_col := schema["timestamp_column"]:
         df[ts_col] = pd.to_datetime(df[ts_col])
+
+    sort_columns = copy.copy(schema["id_columns"]) if schema["id_columns"] else []
+
+    if ts_col:
+        sort_columns.append(ts_col)
+    if sort_columns:
+        return df.sort_values(sort_columns)
+
     return df
