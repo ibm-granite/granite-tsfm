@@ -176,7 +176,7 @@ def test_forecasting_df_dataset(ts_data_with_categorical):
     assert np.all(ds[0]["future_values"][:, 2].numpy() == 0)
 
 
-def test_short_forecasting_df_dataset(ts_data_with_categorical):
+def test_short_forecasting_df_dataset():
     prediction_length = 3
     context_length = 4
     target_columns = ["value1"]
@@ -202,6 +202,42 @@ def test_short_forecasting_df_dataset(ts_data_with_categorical):
     )
 
     assert ds[0]["timestamp"] is pd.NaT
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 0
+
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(range(10)),
+            "id": ["B"] * 10,
+            "value1": range(10),
+        }
+    )
+
+    df = pd.concat([df, df2])
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 4
+    assert len(ds.datasets[0]) == 0
+    assert len(ds.datasets[1]) == 4
 
 
 def test_forecasting_df_dataset_stride(ts_data_with_categorical):

@@ -3,6 +3,7 @@
 """Tools for building torch datasets"""
 
 import copy
+import logging
 from itertools import starmap
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -11,6 +12,9 @@ import pandas as pd
 import torch
 
 from .util import join_list_without_repeat
+
+
+LOGGER = logging.getLogger(__file__)
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
@@ -91,6 +95,10 @@ class BaseDFDataset(torch.utils.data.Dataset):
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
         if zero_padding:
             data_df = self.pad_zero(data_df)
+        elif len(data_df) < self.context_length + self.prediction_length:
+            LOGGER.warning(
+                f"Padding is disabled and input data is shorter than required length. Received {len(data_df)} time point, but require at least {self.context_length + self.prediction_length} time points."
+            )
 
         if timestamp_column in list(data_df.columns):
             self.timestamps = data_df[timestamp_column].to_list()  # .values coerces timestamps
@@ -125,7 +133,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         )
 
     def __len__(self):
-        return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
+        return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
     def __getitem__(self, index: int):
         """
@@ -394,6 +402,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
             will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
             treated as python list indices; the values given by these indices will be masked.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -427,6 +437,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+        enable_padding: bool = True,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -440,6 +451,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             fill_value=fill_value,
             cls=self.BaseForecastDFDataset,
             stride=stride,
+            enable_padding=enable_padding,
             # extra_args
             target_columns=target_columns,
             observable_columns=observable_columns,
@@ -478,6 +490,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+            enable_padding: bool = True,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -522,6 +535,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def apply_masking_specification(self, past_values_tensor: np.ndarray) -> np.ndarray:
@@ -583,7 +597,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return ret
 
         def __len__(self):
-            return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
+            return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
 
 class RegressionDFDataset(BaseConcatDFDataset):
