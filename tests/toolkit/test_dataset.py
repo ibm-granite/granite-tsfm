@@ -125,6 +125,22 @@ def test_regression_df_dataset(ts_data):
     np.testing.assert_allclose(ds[6]["target_values"].numpy(), np.asarray([204]))
     assert ds[6]["id"] == ("B",)
 
+    ts_data3 = ts_data.copy().iloc[:4]
+    ts_data3["id"] = "C"
+    ts_data3["val2"] = ts_data3["val2"] + 100
+    ts_data3 = pd.concat([ts_data3, ts_data2], axis=0)
+
+    ds = RegressionDFDataset(
+        ts_data3,
+        id_columns=["id"],
+        timestamp_column="time_date",
+        input_columns=["val"],
+        target_columns=["val2"],
+        context_length=5,
+        enable_padding=False,
+    )
+    assert len(ds) == 12
+
 
 def test_forecasting_df_dataset(ts_data_with_categorical):
     prediction_length = 2
@@ -381,6 +397,23 @@ def test_clasification_df_dataset(ts_data):
     b = next(iter(dl))
 
     assert len(b["target_values"].shape) == 1
+
+    data2 = data.copy()[:3]
+    data2["id"] = "C"
+
+    data2 = pd.concat([data2, data])
+
+    ds = ClassificationDFDataset(
+        data2,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column=["label"],
+        id_columns=["id", "id2"],
+        context_length=4,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 7
 
 
 def test_datetime_handling(ts_data):

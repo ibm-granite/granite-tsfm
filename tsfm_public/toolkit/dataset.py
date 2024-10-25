@@ -283,6 +283,9 @@ class PretrainDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
 
     The resulting dataset returns records (dictionaries) containing:
@@ -302,6 +305,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         super().__init__(
             data_df=data,
@@ -314,6 +318,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             target_columns=target_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
         self.n_inp = 1
 
@@ -330,6 +335,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             target_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.target_columns = target_columns
 
@@ -348,6 +354,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
@@ -616,6 +623,9 @@ class RegressionDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
@@ -638,6 +648,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         # self.y_cols = y_cols
 
@@ -654,6 +665,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
 
         self.n_inp = 2
@@ -677,6 +689,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.target_columns = target_columns
             self.input_columns = input_columns
@@ -697,6 +710,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
@@ -740,6 +754,9 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
@@ -762,6 +779,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         super().__init__(
             data_df=data,
@@ -776,6 +794,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
 
         self.n_inp = 2
@@ -795,6 +814,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.label_column = label_column
             self.input_columns = input_columns
@@ -815,6 +835,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
