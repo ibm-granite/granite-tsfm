@@ -62,7 +62,7 @@ class InferenceRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, e = ServiceHandler.load(model_path)
+        handler, e = ServiceHandler.load(model_path)
         if e is not None:
             return None, e
 
@@ -72,7 +72,7 @@ class InferenceRuntime:
         future_data = decode_data(input_payload.future_data, schema)
 
         # collect and check underlying time series lengths
-        if model.tsfm_config.get("minimum_context_length", None):
+        if handler.tsfm_config.get("minimum_context_length", None):
             if schema.id_columns:
                 data_lengths = data.groupby(schema.id_columns).apply(len)
                 min_len_index = data_lengths.argmin()
@@ -82,28 +82,28 @@ class InferenceRuntime:
                 min_data_length = max_data_length = len(data)
             LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
 
-            if min_data_length < model.tsfm_config["minimum_context_length"]:
+            if min_data_length < handler.tsfm_config["minimum_context_length"]:
                 err_str = "Data should have time series of length that is at least the required model context length. "
                 if schema.id_columns:
-                    err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {model.tsfm_config['minimum_context_length']} time points"
+                    err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {handler.tsfm_config['minimum_context_length']} time points"
                 else:
-                    err_str += f"Received {min_data_length} time points, but model requires {model.tsfm_config['minimum_context_length']} time points"
+                    err_str += f"Received {min_data_length} time points, but model requires {handler.tsfm_config['minimum_context_length']} time points"
 
                 return None, ValueError(err_str)
 
         # truncate data length
-        if model.tsfm_config.get("maximum_context_length", None):
-            if max_data_length > model.tsfm_config["maximum_context_length"]:
-                LOGGER.info(f"Truncating series lengths to {model.tsfm_config['maximum_context_length']}")
+        if handler.tsfm_config.get("maximum_context_length", None):
+            if max_data_length > handler.tsfm_config["maximum_context_length"]:
+                LOGGER.info(f"Truncating series lengths to {handler.tsfm_config['maximum_context_length']}")
                 data = select_by_index(
-                    data, id_columns=schema.id_columns, start_index=-model.tsfm_config["maximum_context_length"]
+                    data, id_columns=schema.id_columns, start_index=-handler.tsfm_config["maximum_context_length"]
                 )
 
-        _, e = model.prepare(schema=schema, parameters=parameters)
+        _, e = handler.prepare(schema=schema, parameters=parameters)
         if e is not None:
             return None, e
 
-        output, e = model.run(data=data, future_data=future_data, schema=schema, parameters=parameters)
+        output, e = handler.run(data=data, future_data=future_data, schema=schema, parameters=parameters)
 
         if e is not None:
             return None, e
