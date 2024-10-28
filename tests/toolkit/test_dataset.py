@@ -125,6 +125,22 @@ def test_regression_df_dataset(ts_data):
     np.testing.assert_allclose(ds[6]["target_values"].numpy(), np.asarray([204]))
     assert ds[6]["id"] == ("B",)
 
+    ts_data3 = ts_data.copy().iloc[:4]
+    ts_data3["id"] = "C"
+    ts_data3["val2"] = ts_data3["val2"] + 100
+    ts_data3 = pd.concat([ts_data3, ts_data2], axis=0)
+
+    ds = RegressionDFDataset(
+        ts_data3,
+        id_columns=["id"],
+        timestamp_column="time_date",
+        input_columns=["val"],
+        target_columns=["val2"],
+        context_length=5,
+        enable_padding=False,
+    )
+    assert len(ds) == 12
+
 
 def test_forecasting_df_dataset(ts_data_with_categorical):
     prediction_length = 2
@@ -176,7 +192,7 @@ def test_forecasting_df_dataset(ts_data_with_categorical):
     assert np.all(ds[0]["future_values"][:, 2].numpy() == 0)
 
 
-def test_short_forecasting_df_dataset(ts_data_with_categorical):
+def test_short_forecasting_df_dataset():
     prediction_length = 3
     context_length = 4
     target_columns = ["value1"]
@@ -202,6 +218,42 @@ def test_short_forecasting_df_dataset(ts_data_with_categorical):
     )
 
     assert ds[0]["timestamp"] is pd.NaT
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 0
+
+    df2 = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(range(10)),
+            "id": ["B"] * 10,
+            "value1": range(10),
+        }
+    )
+
+    df = pd.concat([df, df2])
+
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 4
+    assert len(ds.datasets[0]) == 0
+    assert len(ds.datasets[1]) == 4
 
 
 def test_forecasting_df_dataset_stride(ts_data_with_categorical):
@@ -345,6 +397,23 @@ def test_clasification_df_dataset(ts_data):
     b = next(iter(dl))
 
     assert len(b["target_values"].shape) == 1
+
+    data2 = data.copy()[:3]
+    data2["id"] = "C"
+
+    data2 = pd.concat([data2, data])
+
+    ds = ClassificationDFDataset(
+        data2,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column=["label"],
+        id_columns=["id", "id2"],
+        context_length=4,
+        enable_padding=False,
+    )
+
+    assert len(ds) == 7
 
 
 def test_datetime_handling(ts_data):
