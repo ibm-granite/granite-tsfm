@@ -1,4 +1,5 @@
-import copy
+"""Base serivce handlers"""
+
 import datetime
 import importlib
 import json
@@ -10,7 +11,7 @@ from typing import Any, Dict, Optional, Union
 import pandas as pd
 from transformers import PretrainedConfig, PreTrainedModel
 
-from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public import TimeSeriesPreprocessor
 
 from .hfutil import load_config, load_model, register_config
 from .inference_payloads import (
@@ -21,8 +22,6 @@ from .inference_payloads import (
 
 
 LOGGER = logging.getLogger(__file__)
-
-# tsfm service wrapper
 
 
 class ServiceHandler(ABC):
@@ -67,8 +66,8 @@ class ServiceHandler(ABC):
             text = reader.read()
         config = json.loads(text)
 
-        wrapper_class = get_service_model_class(config)
         try:
+            wrapper_class = get_service_model_class(config)
             return wrapper_class(model_id=model_id, tsfm_config=config), None
         except Exception as e:
             return None, e
@@ -157,12 +156,13 @@ class HuggingFaceHandler(ServiceHandler):
     ):
         super().__init__(model_id=model_id, tsfm_config=tsfm_config)
 
-        register_config(
-            tsfm_config["model_type"],
-            tsfm_config["model_config_name"],
-            tsfm_config["module_path"],
-        )
-        LOGGER.info(f"registered {tsfm_config['model_type']}")
+        if "model_type" in tsfm_config and "model_config_name" in tsfm_config and "module_path" in tsfm_config:
+            register_config(
+                tsfm_config["model_type"],
+                tsfm_config["model_config_name"],
+                tsfm_config["module_path"],
+            )
+            LOGGER.info(f"registered {tsfm_config['model_type']}")
 
     def load_preprocessor(self, model_path: str) -> Union[Optional[TimeSeriesPreprocessor], Optional[Exception]]:
         # load preprocessor
@@ -200,83 +200,14 @@ class HuggingFaceHandler(ServiceHandler):
         return model
 
 
-class TinyTimeMixerHandler(HuggingFaceHandler):
-    def _prepare(
-        self,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> "TinyTimeMixerHandler":
-        # to do: use config parameters below
-        # issue: _load may need to know data length to set parameters upon model load (multst)
-
-        preprocessor_params = copy.deepcopy(schema.model_dump())
-        preprocessor_params["prediction_length"] = parameters.prediction_length
-
-        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
-
-        preprocessor = self.load_preprocessor(self.model_id)
-
-        if preprocessor is None:
-            preprocessor = TimeSeriesPreprocessor(
-                **preprocessor_params,
-                scaling=False,
-                encode_categorical=False,
-            )
-            # we don't set context length or prediction length above because it is not needed for inference
-
-        model_config_kwargs = {
-            "prediction_filter_length": parameters.prediction_length,
-            "num_input_channels": preprocessor.num_input_channels,
-        }
-        LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
-        model_config = self.load_hf_config(self.model_id, **model_config_kwargs)
-
-        model = self.load_hf_model(self.model_id, config=model_config)
-
-        self.config = model_config
-        self.model = model
-        self.preprocessor = preprocessor
-
-        return self
-
-    def _run(
-        self,
-        data: pd.DataFrame,
-        future_data: Optional[pd.DataFrame] = None,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> pd.DataFrame:
-        # tbd, can this be moved to the HFWrapper?
-        # error checking once data available
-        if self.preprocessor.freq is None:
-            # train to estimate freq if not available
-            self.preprocessor.train(data)
-            LOGGER.info(f"Data frequency determined: {self.preprocessor.freq}")
-
-        # warn if future data is not provided, but is needed by the model
-        if self.preprocessor.exogenous_channel_indices and future_data is None:
-            ValueError(
-                "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
-            )
-
-        forecast_pipeline = TimeSeriesForecastingPipeline(
-            model=self.model,
-            explode_forecasts=True,
-            feature_extractor=self.preprocessor,
-            add_known_ground_truth=False,
-            freq=self.preprocessor.freq,
-        )
-        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
-
-        return forecasts
-
-    def _train(
-        self,
-    ): ...
-
-
 def get_service_model_class(config: Dict[str, Any]):
-    module = importlib.import_module(config["service_wrapper_module_path"])
-    my_class = getattr(module, config["service_wrapper_class_name"])
+    if "service_handler_module_path" in config and "service_handler_class_name" in config:
+        module = importlib.import_module(config["service_handler_module_path"])
+        my_class = getattr(module, config["service_handler_class_name"])
+
+    else:
+        from .tsfm_service_handler import DefaultHandler
+
+        my_class = DefaultHandler
 
     return my_class

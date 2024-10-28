@@ -18,7 +18,7 @@ from .constants import API_VERSION
 from .dataframe_checks import check
 from .errors import error_message
 from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
-from .tsfm_model import TSFMWrapperBase
+from .service_handler import ServiceHandler
 
 
 LOGGER = logging.getLogger(__file__)
@@ -98,6 +98,7 @@ class InferenceRuntime:
 
         if ex is not None:
             detail = error_message(ex)
+            LOGGER.error(detail)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
         LOGGER.info("done, returning.")
@@ -112,11 +113,13 @@ class InferenceRuntime:
                 model_path = input_payload.model_id
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
-                raise RuntimeError(
+                return None, RuntimeError(
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, e = TSFMWrapperBase.load(model_path)
+        model, e = ServiceHandler.load(model_path)
+        if e is not None:
+            return None, e
 
         parameters = input_payload.parameters
         schema = input_payload.schema
