@@ -103,7 +103,15 @@ class ForecastingMetadataInput(BaseMetadataInput):
 class ForecastingParameters(BaseModel):
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
-    prediction_length: Optional[int] = Field(description="The prediction length for the forecast.", default=None)
+    prediction_length: Optional[int] = Field(
+        description="The prediction length for the forecast."
+        " The service will return this many periods beyond the last"
+        " timestamp in the inference data payload."
+        " If specified, `prediction_length` must be an integer >=1"
+        " and no more than the model default prediction length."
+        " When omitted the model default prediction_length will be used.",
+        default=None,
+    )
 
     @field_validator("prediction_length")
     @classmethod
