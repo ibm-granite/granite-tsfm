@@ -200,7 +200,14 @@ class ForecastingInferenceInput(BaseInferenceInput):
         " effectively be ignored by the model when making forecasting predictions."
         " If no `target_columns` are specified, then all columns except `timestamp_column`"
         " will be considered to be targets for prediction. Pandas users can generate the"
-        " `data` portion of this content by calling DataFrame.to_dict(orient='list').",
+        " `data` portion of this content by calling DataFrame.to_dict(orient='list')."
+        " The service makes a few assumptions about your data:"
+        " * All time series are of equal length and are uniform in nature (the time difference between"
+        " two successive rows is constant);"
+        " * The above implies that there are no missing rows of data;"
+        " * You can not have any missing cells of data within in a row (no null NaN values either);"
+        " * The above constraints mean that you are responsible for performing your own imputation on your"
+        " data before passing it to the service.",
         min_length=1,
     )
 
