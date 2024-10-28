@@ -2,6 +2,7 @@
 #
 """Tsfminference Runtime"""
 
+import copy
 import logging
 import os
 from typing import Any, Dict, List
@@ -179,7 +180,7 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
     if ts_col := schema.timestamp_column:
         df[ts_col] = pd.to_datetime(df[ts_col])
 
-    sort_columns = copy.copy(schema["id_columns"]) if schema["id_columns"] else []
+    sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
 
     if ts_col:
         sort_columns.append(ts_col)
