@@ -4,18 +4,16 @@ import importlib
 import json
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import pandas as pd
 from transformers import PretrainedConfig, PreTrainedModel
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
-from tsfm_public.toolkit.util import select_by_index
 
-from .hfutil import load_config, load_model
-from .inference import decode_data
+from .hfutil import load_config, load_model, register_config
 from .inference_payloads import (
-    ForecastingInferenceInput,
     ForecastingMetadataInput,
     ForecastingParameters,
     PredictOutput,
@@ -27,45 +25,24 @@ LOGGER = logging.getLogger(__file__)
 # tsfm service wrapper
 
 
-class TSFMWrapperBase(ABC):
-    def __init__(self, config: Dict[str, Any], model: Any):
-        self.model = model
-        self.config = config
+class ServiceHandler(ABC):
+    def __init__(
+        self,
+        model_id: Union[str, Path],
+        tsfm_config: Dict[str, Any],
+    ):
+        """_summary_
+
+        Args:
+            tsfm_config (Dict[str, Any]): TSFM Service configuration
+        """
+        self.model_id = model_id
+        self.tsfm_config = tsfm_config
+        self.prepared = False
 
     @classmethod
-    def load(
-        cls,
-        model_id: str,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> Union[Optional["TSFMWrapperBase"], Optional[Exception]]:
-        """Load all the components needed to use the model."""
-
-        config = cls.load_config(model_id)
-        wrapper_class = get_service_model_class(config)
-        # service_class.load(service_wrapper_config)
-
-        try:
-            return wrapper_class._load(model_id, config=config, schema=schema, parameters=parameters), None
-        except Exception as e:
-            return None, e
-
-    @classmethod
-    @abstractmethod
-    def _load(
-        cls,
-        model_id: str,
-        config: Dict[str, Any] = {},
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> "TSFMWrapperBase":
-        """Load implementation to be implemented in derived class"""
-        ...
-
-    @classmethod
-    def load_config(cls, tsfm_config_path: str):
-        """Load the configuration of the service wrapper for tsfmservices
-
+    def load(cls, model_id: Union[str, Path]) -> Union[Optional["ServiceHandler"], Optional[Exception]]:
+        """Load the tsfm_config  -- the tsfm service config for this model
 
         tsfm_config_path is expected to point to a folder containing the tsfm_config.json file
         to do: can we make this work with HF Hub?
@@ -83,58 +60,63 @@ class TSFMWrapperBase(ABC):
         # supports variable context length, etc.?
 
         """
-        with open(tsfm_config_path, "r", encoding="utf-8") as reader:
+
+        tsfm_config_path = Path(model_id) if isinstance(model_id, str) else model_id
+
+        with open((tsfm_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
             text = reader.read()
-        return json.loads(text)
+        config = json.loads(text)
+
+        wrapper_class = get_service_model_class(config)
+        try:
+            return wrapper_class(model_id=model_id, tsfm_config=config), None
+        except Exception as e:
+            return None, e
+
+    def prepare(
+        self,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Union[Optional["ServiceHandler"], Optional[Exception]]:
+        """Prepare the wrapper by loading all the components needed to use the model."""
+
+        try:
+            self._prepare(schema=schema, parameters=parameters)
+            self.prepared = True
+            return self, None
+        except Exception as e:
+            return self, e
+
+    @abstractmethod
+    def _prepare(
+        self,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> "ServiceHandler":
+        """Prepare implementation to be implemented in derived class"""
+        ...
 
     def run(
         self,
-        input_payload: ForecastingInferenceInput,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
     ) -> Union[Optional[PredictOutput], Optional[Exception]]:
         """Perform an inference request on a loaded model"""
 
-        schema = input_payload.schema.model_dump()
-
-        data = decode_data(input_payload.data, schema)
-        future_data = decode_data(input_payload.future_data, schema)
-
-        # collect and check underlying time series lengths
-        if self.config.minimum_context_length:
-            if schema["id_columns"]:
-                data_lengths = data.groupby(schema["id_columns"]).apply(len)
-                min_len_index = data_lengths.argmin()
-                max_len_index = data_lengths.argmax()
-                min_data_length = data_lengths.iloc[min_len_index]
-                max_data_length = data_lengths.iloc[max_len_index]
-            else:
-                data_length = len(data)
-            LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {data_length}")
-
-            if data_length < self.config.minimum_context_length:
-                err_str = "Data should have time series of length that is at least the required model context length. "
-                if schema.id_columns:
-                    err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {self.coonfig.minimum_context_length} time points"
-                else:
-                    err_str += f"Received {min_data_length} time points, but model requires {self.coonfig.minimum_context_length} time points"
-
-                return None, ValueError(err_str)
-
-        # truncate data length
-        if self.config.max_context_length:
-            if max_data_length > self.config.max_context_length:
-                data = select_by_index(
-                    data, id_columns=schema["id_columns"], start_index=-self.config.max_context_length
-                )
+        if not self.prepared:
+            return None, RuntimeError("Service wrapper has not yet been prepared; run `model.prepare()` first.")
 
         try:
             result = self._run(
                 data,
                 future_data=future_data,
-                schema=input_payload.schema,
-                parameters=input_payload.parameters,
+                schema=schema,
+                parameters=parameters,
             )
             return PredictOutput(
-                model_id=input_payload.model_id,
+                model_id=str(self.model_id),
                 created_at=datetime.datetime.now().isoformat(),
                 results=[result.to_dict(orient="list")],
             ), None
@@ -167,10 +149,20 @@ class TSFMWrapperBase(ABC):
         ...
 
 
-class HFWrapper(TSFMWrapperBase):
-    def __init__(self, config: Dict[str, Any], model: PreTrainedModel, preprocessor: TimeSeriesPreprocessor):
-        super().__init__(config=config, model=model)
-        self.preprocessor = preprocessor
+class HuggingFaceHandler(ServiceHandler):
+    def __init__(
+        self,
+        model_id: Union[str, Path],
+        tsfm_config: Dict[str, Any],
+    ):
+        super().__init__(model_id=model_id, tsfm_config=tsfm_config)
+
+        register_config(
+            tsfm_config["model_type"],
+            tsfm_config["model_config_name"],
+            tsfm_config["module_path"],
+        )
+        LOGGER.info(f"registered {tsfm_config['model_type']}")
 
     def load_preprocessor(self, model_path: str) -> Union[Optional[TimeSeriesPreprocessor], Optional[Exception]]:
         # load preprocessor
@@ -195,17 +187,58 @@ class HFWrapper(TSFMWrapperBase):
         self, model_path: str, config: PretrainedConfig
     ) -> Union[Optional[PreTrainedModel], Optional[Exception]]:
         # load model
-        model = load_model(
+        # TO DO: needs cleanup
+        model, e = load_model(
             model_path,
             config=config,
-            module_path=self.model_to_module_map.get(config.__class__.__name__, None),
+            module_path=self.tsfm_config["module_path"],
         )
 
+        if e is not None:
+            raise (e)
         LOGGER.info("Successfully loaded model")
         return model
 
 
-class TinyTimeMixerModel(HFWrapper):
+class TinyTimeMixerHandler(HuggingFaceHandler):
+    def _prepare(
+        self,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> "TinyTimeMixerHandler":
+        # to do: use config parameters below
+        # issue: _load may need to know data length to set parameters upon model load (multst)
+
+        preprocessor_params = copy.deepcopy(schema.model_dump())
+        preprocessor_params["prediction_length"] = parameters.prediction_length
+
+        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
+
+        preprocessor = self.load_preprocessor(self.model_id)
+
+        if preprocessor is None:
+            preprocessor = TimeSeriesPreprocessor(
+                **preprocessor_params,
+                scaling=False,
+                encode_categorical=False,
+            )
+            # we don't set context length or prediction length above because it is not needed for inference
+
+        model_config_kwargs = {
+            "prediction_filter_length": parameters.prediction_length,
+            "num_input_channels": preprocessor.num_input_channels,
+        }
+        LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
+        model_config = self.load_hf_config(self.model_id, **model_config_kwargs)
+
+        model = self.load_hf_model(self.model_id, config=model_config)
+
+        self.config = model_config
+        self.model = model
+        self.preprocessor = preprocessor
+
+        return self
+
     def _run(
         self,
         data: pd.DataFrame,
@@ -233,49 +266,17 @@ class TinyTimeMixerModel(HFWrapper):
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
         )
-
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
         return forecasts
 
-    def _load(
-        cls,
-        model_path: str,
-        config: Dict[str, any] = {},
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> "TinyTimeMixerModel":
-        # to do: use config parameters below
-        # issue: _load may need to know data length to set parameters upon model load (multst)
-
-        preprocessor_params = copy.deepcopy(schema.model_dump())
-        preprocessor_params["prediction_length"] = parameters.prediction_length
-
-        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
-
-        preprocessor = cls.load_preprocessor(model_path)
-
-        if preprocessor is None:
-            preprocessor = TimeSeriesPreprocessor(
-                **preprocessor_params,
-                scaling=False,
-                encode_categorical=False,
-            )
-            # we don't set context length or prediction length above because it is not needed for inference
-
-        model_config_kwargs = {
-            "prediction_filter_length": parameters.prediction_length,
-            "num_input_channels": preprocessor.num_input_channels,
-        }
-        model_config = cls.load_hf_config(model_path, **model_config_kwargs)
-
-        model = cls.load_hf_model(model_path, config=model_config)
-
-        return TinyTimeMixerModel(config=config, model=model, preprocessor=preprocessor)
+    def _train(
+        self,
+    ): ...
 
 
 def get_service_model_class(config: Dict[str, Any]):
-    module = importlib.import_module(config["service_wraper_module_path"])
-    my_class = getattr(module, config["service_class_name"])
+    module = importlib.import_module(config["service_wrapper_module_path"])
+    my_class = getattr(module, config["service_wrapper_class_name"])
 
     return my_class
