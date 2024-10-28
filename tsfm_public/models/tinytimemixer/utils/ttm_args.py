@@ -138,11 +138,28 @@ def get_ttm_args():
         default=1,
         help="Whether to freeze the backbone during few-shot finetuning.",
     )
+    parser.add_argument(
+        "--enable_prefix_tuning",
+        "-ept",
+        type=int,
+        required=False,
+        default=0,
+        help="Enable prefix tuning in TTM.",
+    )
+    parser.add_argument(
+        "--hf_model_path",
+        "-hmp",
+        type=str,
+        required=False,
+        default="ibm-granite/granite-timeseries-ttm-r2",
+        help="Hugginface model card path.",
+    )
 
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
     args.freeze_backbone = int_to_bool(args.freeze_backbone)
+    args.enable_prefix_tuning = int_to_bool(args.enable_prefix_tuning)
     args.d_model = args.patch_length * args.d_model_scale
     args.decoder_d_model = args.patch_length * args.decoder_d_model_scale
 
