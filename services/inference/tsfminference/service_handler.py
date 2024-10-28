@@ -62,9 +62,13 @@ class ServiceHandler(ABC):
 
         tsfm_config_path = Path(model_id) if isinstance(model_id, str) else model_id
 
-        with open((tsfm_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
-            text = reader.read()
-        config = json.loads(text)
+        try:
+            with open((tsfm_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
+                text = reader.read()
+            config = json.loads(text)
+        except FileNotFoundError:
+            LOGGER.info("TSFM Config file not found.")
+            config = {}
 
         try:
             wrapper_class = get_service_model_class(config)
@@ -191,7 +195,7 @@ class HuggingFaceHandler(ServiceHandler):
         model, e = load_model(
             model_path,
             config=config,
-            module_path=self.tsfm_config["module_path"],
+            module_path=self.tsfm_config.get("module_path", None),
         )
 
         if e is not None:
