@@ -792,6 +792,7 @@ def get_datasets(
     fewshot_location: str = FractionLocation.LAST.value,
     as_univariate: bool = False,
     use_frequency_token: bool = False,
+    enable_padding: bool = True,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -824,6 +825,10 @@ def get_datasets(
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
         use_frequency_token (bool): If True, datasets are created that include the frequency token. Defaults to False.
+        enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
+            time series) when there is insufficient data to form one record. If False, no padding is done and one or
+            more datasets may be empty.
+
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
@@ -874,6 +879,7 @@ def get_datasets(
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
     params["stride"] = stride
+    params["enable_padding"] = enable_padding
     if use_frequency_token:
         params["frequency_token"] = ts_preprocessor.get_frequency_token(ts_preprocessor.freq)
 
@@ -903,7 +909,12 @@ def get_datasets(
         params["target_columns"] = ["value"]
         params["id_columns"] = params["id_columns"] + ["column_id"]
 
-    return tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    datasets = tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    for dset_name, dset in zip(["train", "valid", "test"], datasets):
+        if len(dset) == 0:
+            raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
+
+    return datasets
 
 
 def create_timestamps(
