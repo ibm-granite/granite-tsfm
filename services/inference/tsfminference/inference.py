@@ -24,21 +24,8 @@ LOGGER = logging.getLogger(__file__)
 
 class InferenceRuntime:
     def __init__(self, config: Dict[str, Any] = {}):
+        # to do: assess the need for config
         self.config = config
-        # model_map = {}
-
-        # if "custom_modules" in config:
-        #     for custom_module in config["custom_modules"]:
-        #         register_config(
-        #             custom_module["model_type"],
-        #             custom_module["model_config_name"],
-        #             custom_module["module_path"],
-        #         )
-        #         LOGGER.info(f"registered {custom_module['model_type']}")
-
-        #         model_map[custom_module["model_config_name"]] = custom_module["module_path"]
-
-        # self.model_to_module_map = model_map
 
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
@@ -49,38 +36,6 @@ class InferenceRuntime:
             response_model=PredictOutput,
         )
         app.include_router(self.router)
-
-    # def load_preprocessor(self, model_path: str):
-    #     # load preprocessor
-    #     try:
-    #         preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
-    #         LOGGER.info("Successfully loaded preprocessor")
-    #     except OSError:
-    #         preprocessor = None
-    #         LOGGER.info("No preprocessor found")
-    #     except Exception as ex:
-    #         return None, ex
-
-    #     return preprocessor, None
-
-    # def load_config(self, model_path: str, **extra_config_kwargs: Dict[str, Any]):
-    #     # load config, separate from load model, since we may need to inspect config first
-    #     conf = load_config(model_path, **extra_config_kwargs)
-
-    #     return conf
-
-    # def load_model(self, model_path: str, config: PretrainedConfig):
-    #     # load model
-    #     model, ex = load_model(
-    #         model_path,
-    #         config=config,
-    #         module_path=self.model_to_module_map.get(config.__class__.__name__, None),
-    #     )
-    #     if ex is not None:
-    #         return None, ex
-
-    #     LOGGER.info("Successfully loaded model")
-    #     return model, None
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
