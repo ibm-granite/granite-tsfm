@@ -355,6 +355,31 @@ def test_get_datasets(ts_data):
     assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
 
 
+def test_get_datasets_padding(ts_data):
+    tsp = TimeSeriesPreprocessor(
+        id_columns=["id"],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=13,
+    )
+
+    train, valid, test = get_datasets(
+        tsp,
+        ts_data,
+        split_config={"train": [0, 1 / 3], "valid": [1 / 3, 2 / 3], "test": [2 / 3, 1]},
+    )
+
+    assert len(train) == 3
+
+    with pytest.raises(RuntimeError):
+        train, valid, test = get_datasets(
+            tsp,
+            ts_data,
+            split_config={"train": [0, 1 / 3], "valid": [1 / 3, 2 / 3], "test": [2 / 3, 1]},
+            enable_padding=False,
+        )
+
+
 def test_train_without_targets(ts_data):
     # no targets or other columns specified
     tsp = TimeSeriesPreprocessor(id_columns=["id", "id2"], timestamp_column="timestamp")

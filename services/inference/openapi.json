@@ -1,0 +1,356 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "FM for Time Series API",
+        "description": "This FastAPI application provides service endpoints for performing inference tasks on TSFM HF models.",
+        "version": "v1"
+    },
+    "paths": {
+        "/v1/inference/forecasting": {
+            "post": {
+                "tags": [
+                    "inference"
+                ],
+                "summary": "Forecast",
+                "operationId": "forecast_v1_inference_forecasting_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ForecastingInferenceInput"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PredictOutput"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/": {
+            "get": {
+                "summary": "Root",
+                "operationId": "root__get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ForecastingInferenceInput": {
+                "properties": {
+                    "model_id": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "pattern": "^\\S+$",
+                        "title": "Model Id",
+                        "description": "A model identifier.",
+                        "example": "ibm/tinytimemixer-monash-fl_96"
+                    },
+                    "schema": {
+                        "$ref": "#/components/schemas/ForecastingMetadataInput",
+                        "description": "An object of ForecastingMetadataInput that contains the schema metadata of the data input."
+                    },
+                    "parameters": {
+                        "$ref": "#/components/schemas/ForecastingParameters"
+                    },
+                    "data": {
+                        "additionalProperties": {
+                            "items": {},
+                            "type": "array"
+                        },
+                        "type": "object",
+                        "minProperties": 1,
+                        "title": "Data",
+                        "description": "A payload of data matching the schema provided. Let's suppose you have columnar data that looks  like this (this happens to be csv but it could also be pandas data, for example):\n\n         date,ID1,ID2,TARGET1,VAL2\n         2024-10-18T01:00:21+00:00,I1,J1,1.05,10.0\n         2024-10-18T01:00:22+00:00,I1,J1,1.75,10.1\n         2024-10-18T01:00:21+00:00,I1,J2,2.01,12.8\n         2024-10-18T01:00:22+00:00,I1,J2,2.13,13.6\n If these data are for two timeseries (each beginning at 2024-10-18T01:00:21 and ending at 2024-10-18T01:00:22) given by the compound primary key comprised of ID1 and ID2 and you wish to create predictions only for 'TARGET1', then your data and schema payload would like like this:\n\n        {\n            \"schema\": {\n                \"timestamp_column\": \"date\",\n                \"id_columns\": [\n                    \"ID1\",\n                    \"ID2\"\n                ],\n                \"target_columns\": [\n                    \"TARGET1\"\n                ]\n            },\n            \"data\": {\n                \"date\": [\n                    \"2024-10-18T01:00:21+00:00\",\n                    \"2024-10-18T01:00:22+00:00\",\n                    \"2024-10-18T01:00:21+00:00\",\n                    \"2024-10-18T01:00:22+00:00\"\n                ],\n                \"ID1\": [\n                    \"I1\",\n                    \"J1\",\n                    \"I1\",\n                    \"J1\"\n                ],\n                \"ID2\": [\n                    \"I1\",\n                    \"J2\",\n                    \"I1\",\n                    \"J2\"\n                ],\n                \"TARGET1\": [\n                    1.05,\n                    1.75,\n                    2.01,\n                    2.13\n                ],\n                \"VAL2\": [\n                    10.0,\n                    10.1,\n                    12.8,\n                    13.6\n                ]\n            }\n        }\nNote that we make no mention of `VAL2` in the schema which means that it will effectively be ignored by the model when making forecasting predictions. If no `target_columns` are specified, then all columns except `timestamp_column` will be considered to be targets for prediction. Pandas users can generate the `data` portion of this content by calling DataFrame.to_dict(orient='list'). The service makes a few assumptions about your data: * All time series are of equal length and are uniform in nature (the time difference between two successive rows is constant); * The above implies that there are no missing rows of data; * You can not have any missing cells of data within in a row (no null NaN values either); * The above constraints mean that you are responsible for performing your own imputation on your data before passing it to the service."
+                    },
+                    "future_data": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": {
+                                    "items": {},
+                                    "type": "array"
+                                },
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Future Data",
+                        "description": "Exogenous or supporting features that extend into the forecasting horizon (e.g., a weather forecast or calendar of special promotions) which are known in advance. `future_data` would be in the same format as `data` except  that all timestamps would be in the forecast horizon and it would not include previously specified target columns. Here's an example payload for such data:\n\n        {\n            \"future_data\": {\n                \"date\": [\n                    \"2024-10-18T01:00:23+00:00\",\n                    \"2024-10-18T01:00:24+00:00\",\n                    \"2024-10-18T01:00:23+00:00\",\n                    \"2024-10-18T01:00:24+00:00\"\n                ],\n                \"ID1\": [\n                    \"I1\",\n                    \"J1\",\n                    \"I1\",\n                    \"J1\"\n                ],\n                \"ID2\": [\n                    \"I1\",\n                    \"J2\",\n                    \"I1\",\n                    \"J2\"\n                ],\n                \"VAL2\": [\n                    11.0,\n                    11.1,\n                    13.8,\n                    14.6\n                ]\n            }\n        }\nNote that we make no mention of `TARGET1` (from the `data` field example) and that all timestamps are in the _future_ relative to the `data` you provided. Given these `future_data` the model (when supported) will factor in `VAL2` when making predictions for `TARGET1`."
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "model_id",
+                    "schema",
+                    "parameters",
+                    "data"
+                ],
+                "title": "ForecastingInferenceInput"
+            },
+            "ForecastingMetadataInput": {
+                "properties": {
+                    "timestamp_column": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "pattern": ".*",
+                        "title": "Timestamp Column",
+                        "description": "A valid column in the data that should be treated as the timestamp. Although not absolutely necessary, if using calendar dates  (simple integer time offsets are also allowed), users should consider using a format such as ISO 8601 that includes a UTC offset (e.g., '2024-10-18T01:09:21.454746+00:00'). This will avoid potential issues such as duplicate dates appearing due to daylight savings change overs. There are many date formats in existence and inferring the correct one can be a challenge so please do consider adhering to ISO 8601.",
+                        "example": "date"
+                    },
+                    "id_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 10,
+                        "minItems": 0,
+                        "title": "Id Columns",
+                        "description": "Columns that define a unique key for time series. This is similar to a compound primary key in a database table.",
+                        "example": [
+                            "ID1",
+                            "ID2"
+                        ]
+                    },
+                    "freq": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "maxLength": 100,
+                                "minLength": 0,
+                                "pattern": "\\d+[B|D|W|M|Q|Y|h|min|s|ms|us|ns]|^\\s*$"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Freq",
+                        "description": "A frequency indicator for the given timestamp_column. See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the allowed values. If not provided, we will attempt to infer it from the data.",
+                        "example": "1h"
+                    },
+                    "target_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 500,
+                        "minItems": 0,
+                        "title": "Target Columns",
+                        "description": "An array of column headings which constitute the target variables in the data. These are the data that will be forecasted.",
+                        "example": [
+                            "TARGET1",
+                            "TARGET2"
+                        ]
+                    },
+                    "observable_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 500,
+                        "minItems": 0,
+                        "title": "Observable Columns",
+                        "description": "An optional array of column headings which identify the observables in the data. Observables are features (commonly called channels in timeseries forecasting problems) which we have knowledge about in the past and future. For example, weather conditions such as temperature or precipitation may be known or estimated in the future but cannot be changed. This field supports specialized uses of timeseries forecasting that the average user is unlikely to encounter.",
+                        "example": [
+                            "OBS1",
+                            "OBS2"
+                        ]
+                    },
+                    "control_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 500,
+                        "minItems": 0,
+                        "title": "Control Columns",
+                        "description": "An optional array of column headings which identify the control channels in the input. Control channels are similar to observable channels, except that future values may be controlled. For example, the discount percentage of a particular product is known and controllable in the future. Similar to observable_columns, control_columns is intended for advanced use cases not typical in most timeseries forecasting problems.",
+                        "example": [
+                            "CNTRL1",
+                            "CNTRL2"
+                        ]
+                    },
+                    "conditional_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 500,
+                        "minItems": 0,
+                        "title": "Conditional Columns",
+                        "description": "An optional array of column headings which constitute the conditional variables. The conditional_columns in the data are those known in the past, but not known in the future.",
+                        "example": [
+                            "CONDL1",
+                            "CONDL2"
+                        ]
+                    },
+                    "static_categorical_columns": {
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 0,
+                            "pattern": ".*"
+                        },
+                        "type": "array",
+                        "maxItems": 500,
+                        "minItems": 0,
+                        "title": "Static Categorical Columns",
+                        "description": "An optional array of column headings which identify categorical-valued channels in the input which are fixed over time.",
+                        "example": [
+                            "SCV1",
+                            "SCV2"
+                        ]
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "timestamp_column"
+                ],
+                "title": "ForecastingMetadataInput"
+            },
+            "ForecastingParameters": {
+                "properties": {
+                    "prediction_length": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Prediction Length",
+                        "description": "The prediction length for the forecast."
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "title": "ForecastingParameters"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "PredictOutput": {
+                "properties": {
+                    "model_id": {
+                        "type": "string",
+                        "title": "Model Id",
+                        "description": "Model identifier for the model that produced the prediction."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "title": "Created At",
+                        "description": "Timestamp indicating when the prediction was created. ISO 8601 format."
+                    },
+                    "results": {
+                        "items": {
+                            "additionalProperties": {
+                                "items": {},
+                                "type": "array"
+                            },
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Results",
+                        "description": "List of prediction results."
+                    }
+                },
+                "type": "object",
+                "title": "PredictOutput"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        }
+    }
+}

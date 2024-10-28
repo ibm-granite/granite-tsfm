@@ -1,8 +1,5 @@
 # Copyright contributors to the TSFM project
 #
-import os
-import tempfile
-from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
@@ -100,10 +97,7 @@ def test_zero_shot_forecast_inference(ts_data):
     prediction_length = params["prediction_length"]
     context_length = params["context_length"]
     model_id = params["model_id"]
-    model_dir = (
-        Path(os.getenv("TSFM_MODEL_DIR")) if os.getenv("TSFM_MODEL_DIR") else Path(tempfile.gettempdir()) / "test-tsfm"
-    )
-    model_id_path: Path = (model_dir / model_id).as_posix()
+    model_id_path: str = model_id
 
     id_columns = params["id_columns"]
 
@@ -130,6 +124,26 @@ def test_zero_shot_forecast_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+
+    # test single, very short (length 2)
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_.iloc[:2], params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    out = get_inference_response(msg)
+    assert "Received 2 time points for id a" in out.text
 
     # test single, more data
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -367,3 +381,41 @@ def test_trained_model_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+
+
+# def test_simple():
+#     import numpy as np
+#     import pandas as pd
+
+#     series_length = 512
+#     timestamps = pd.date_range("2021-01-01", periods=series_length).to_list()
+#     num_series = 5
+
+#     def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
+#         df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
+#         data_payload = df.to_dict(orient="list")
+#         return data_payload
+
+#     test_data = pd.DataFrame(
+#         {
+#             "date": timestamps * num_series,
+#             "id": np.array([f"id{i}" for i in range(num_series)]).repeat(series_length),
+#             "target": np.tile(np.arange(series_length).astype(float), num_series),
+#         }
+#     )
+
+#     msg = {
+#         "model_id": "ttm-r2",
+#         "parameters": {
+#             "prediction_length": 96,
+#         },
+#         "schema": {
+#             "timestamp_column": "date",
+#             "id_columns": ["id"],
+#             "target_columns": ["target"],
+#         },
+#         "data": encode_data(test_data, "date"),
+#     }
+
+#     df_out = get_inference_response(msg)
+#     print(df_out)

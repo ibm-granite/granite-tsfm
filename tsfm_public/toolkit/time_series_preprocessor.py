@@ -6,9 +6,9 @@ import copy
 import datetime
 import enum
 import json
+import logging
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
-from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,9 @@ from .util import (
     join_list_without_repeat,
     select_by_fixed_fraction,
 )
+
+
+LOGGER = logging.getLogger(__file__)
 
 
 INTERNAL_ID_COLUMN = "__id"
@@ -463,7 +466,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             if token is not None:
                 return token
 
-        warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        logging.warning(f"Frequency token {token_name} was not found in the frequncy token mapping.")
         token = self.frequency_mapping["oov"]
 
         return token
@@ -532,8 +535,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             else:
                 df_subset = df
 
-            # to do: make more robust
-            self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
+            self.freq = estimate_frequency(df_subset[self.timestamp_column])
 
             if not isinstance(self.freq, (str, int)):
                 self.freq = str(self.freq)
@@ -790,6 +792,7 @@ def get_datasets(
     fewshot_location: str = FractionLocation.LAST.value,
     as_univariate: bool = False,
     use_frequency_token: bool = False,
+    enable_padding: bool = True,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -822,6 +825,10 @@ def get_datasets(
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
         use_frequency_token (bool): If True, datasets are created that include the frequency token. Defaults to False.
+        enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
+            time series) when there is insufficient data to form one record. If False, no padding is done and one or
+            more datasets may be empty.
+
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
@@ -872,6 +879,7 @@ def get_datasets(
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
     params["stride"] = stride
+    params["enable_padding"] = enable_padding
     if use_frequency_token:
         params["frequency_token"] = ts_preprocessor.get_frequency_token(ts_preprocessor.freq)
 
@@ -901,7 +909,12 @@ def get_datasets(
         params["target_columns"] = ["value"]
         params["id_columns"] = params["id_columns"] + ["column_id"]
 
-    return tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    datasets = tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    for dset_name, dset in zip(["train", "valid", "test"], datasets):
+        if len(dset) == 0:
+            raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
+
+    return datasets
 
 
 def create_timestamps(
@@ -932,8 +945,12 @@ def create_timestamps(
         raise ValueError("Neither `freq` nor `time_sequence` provided, cannot determine frequency.")
 
     if freq is None:
-        # to do: make more robust
-        freq = time_sequence[-1] - time_sequence[-2]
+        freq = estimate_frequency(time_sequence)
+
+    if freq is None:
+        raise ValueError(
+            "Could not extend time series because frequency was not provided and could not be estimated from the available data."
+        )
 
     # more complex logic is required to support all edge cases
     if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
@@ -958,6 +975,17 @@ def create_timestamps(
     else:
         # numerical timestamp column
         return [last_timestamp + i * freq for i in range(1, periods + 1)]
+
+
+def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
+    if len(timestamp_data) < 2:
+        LOGGER.warning("Provided time series data is too short to estimate frequency.")
+        return None
+
+    if isinstance(timestamp_data, pd.Series):
+        return timestamp_data.iloc[-1] - timestamp_data.iloc[-2]
+    else:
+        return timestamp_data[-1] - timestamp_data[-2]
 
 
 def extend_time_series(
