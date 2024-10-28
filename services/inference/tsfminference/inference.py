@@ -166,23 +166,24 @@ class InferenceRuntime:
         if preprocessor_params["id_columns"]:
             data_lengths = data.groupby(preprocessor_params["id_columns"]).apply(len)
             min_len_index = data_lengths.argmin()
-            data_length = data_lengths.iloc[min_len_index]
+            min_data_length = data_lengths.iloc[min_len_index]
+            max_data_length = data_lengths.max()
         else:
-            data_length = len(data)
+            min_data_length = max_data_length = len(data)
 
-        LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {data_length}")
+        LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
 
-        if data_length < context_length:
+        if min_data_length < context_length:
             err_str = "Data should have time series of length that is at least the required model context length. "
             if preprocessor_params["id_columns"]:
-                err_str += f"Received {data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {context_length} time points"
+                err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {context_length} time points"
             else:
-                err_str += f"Received {data_length} time points, but model requires {context_length} time points"
+                err_str += f"Received {min_data_length} time points, but model requires {context_length} time points"
 
             return None, ValueError(err_str)
 
         # truncate data length
-        if data_length > context_length:
+        if max_data_length > context_length:
             data = select_by_index(data, id_columns=preprocessor_params["id_columns"], start_index=-context_length)
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
