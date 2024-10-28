@@ -2,6 +2,7 @@
 #
 """Tsfminference Runtime"""
 
+import copy
 import logging
 from typing import Any, Dict, List
 
@@ -116,24 +117,6 @@ class InferenceRuntime:
         future_data = decode_data(input_payload.future_data, schema)
 
         # collect and check underlying time series lengths
-<<<<<<< HEAD
-        if preprocessor_params["id_columns"]:
-            data_lengths = data.groupby(preprocessor_params["id_columns"]).apply(len)
-            min_len_index = data_lengths.argmin()
-            min_data_length = data_lengths.iloc[min_len_index]
-            max_data_length = data_lengths.max()
-        else:
-            min_data_length = max_data_length = len(data)
-
-        LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
-
-        if min_data_length < context_length:
-            err_str = "Data should have time series of length that is at least the required model context length. "
-            if preprocessor_params["id_columns"]:
-                err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {context_length} time points"
-            else:
-                err_str += f"Received {min_data_length} time points, but model requires {context_length} time points"
-=======
         if model.tsfm_config.get("minimum_context_length", None):
             if schema.id_columns:
                 data_lengths = data.groupby(schema.id_columns).apply(len)
@@ -143,7 +126,6 @@ class InferenceRuntime:
             else:
                 min_data_length = max_data_length = len(data)
             LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
->>>>>>> f9a5f05 (use new abstraction)
 
             if min_data_length < model.tsfm_config["minimum_context_length"]:
                 err_str = "Data should have time series of length that is at least the required model context length. "
@@ -155,17 +137,12 @@ class InferenceRuntime:
                 return None, ValueError(err_str)
 
         # truncate data length
-<<<<<<< HEAD
-        if max_data_length > context_length:
-            data = select_by_index(data, id_columns=preprocessor_params["id_columns"], start_index=-context_length)
-=======
         if model.tsfm_config.get("maximum_context_length", None):
             if max_data_length > model.tsfm_config["maximum_context_length"]:
                 LOGGER.info(f"Truncating series lengths to {model.tsfm_config['maximum_context_length']}")
                 data = select_by_index(
                     data, id_columns=schema.id_columns, start_index=-model.tsfm_config["maximum_context_length"]
                 )
->>>>>>> f9a5f05 (use new abstraction)
 
         _, e = model.prepare(schema=schema, parameters=parameters)
         if e is not None:
@@ -187,7 +164,7 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
     if ts_col := schema.timestamp_column:
         df[ts_col] = pd.to_datetime(df[ts_col])
 
-    sort_columns = copy.copy(schema["id_columns"]) if schema["id_columns"] else []
+    sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
 
     if ts_col:
         sort_columns.append(ts_col)
