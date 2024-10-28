@@ -97,6 +97,27 @@ class InferenceRuntime:
         return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
+        model_path = TSFM_MODEL_DIR / input_payload.model_id
+
+        if not model_path.is_dir():
+            LOGGER.info(f"Could not find model at path: {model_path}")
+            if TSFM_ALLOW_LOAD_FROM_HF_HUB:
+                model_path = input_payload.model_id
+                LOGGER.info(f"Using HuggingFace Hub: {model_path}")
+            else:
+                raise RuntimeError(
+                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
+                )
+
+        from tsfm_model import TSFMWrapperBase
+
+        # service_wrapper_config = TSFMWrapperBase.load_config(model_path)
+        # service_class = get_service_model_class(service_wrapper_config)
+        # service_class.load(service_wrapper_config)
+
+        model = TSFMWrapperBase.load(model_path)
+
+    def _forecast_common_old(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
         # we need some sort of model registry
         # payload = input_payload.model_dump()  # do we need?
 
