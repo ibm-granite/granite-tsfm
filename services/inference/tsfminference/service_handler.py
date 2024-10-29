@@ -2,7 +2,6 @@
 
 import datetime
 import importlib
-import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -15,6 +14,7 @@ from .inference_payloads import (
     ForecastingParameters,
     PredictOutput,
 )
+from .tsfm_config import TSFMConfig
 
 
 LOGGER = logging.getLogger(__file__)
@@ -61,17 +61,23 @@ class ServiceHandler(ABC):
         """
 
         handler_config_path = Path(model_path) if isinstance(model_path, str) else model_path
-        try:
-            with open((handler_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
-                text = reader.read()
-            config = json.loads(text)
-        except FileNotFoundError:
-            LOGGER.info("TSFM Config file not found.")
-            config = {}
+        # try:
+        #     with open((handler_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
+        #         text = reader.read()
+        #     config = json.loads(text)
+        # except FileNotFoundError:
+        #     LOGGER.info("TSFM Config file not found.")
+        #     config = {}
 
         try:
-            handler_class = get_service_handler_class(config)
-            return handler_class(model_id=model_id, model_path=model_path, handler_config=config), None
+            config = TSFMConfig.from_pretrained(handler_config_path)
+        except (FileNotFoundError, OSError):
+            LOGGER.info("TSFM Config file not found.")
+            config = TSFMConfig()
+        try:
+            config_dict = config.to_dict()
+            handler_class = get_service_handler_class(config_dict)
+            return handler_class(model_id=model_id, model_path=model_path, handler_config=config_dict), None
         except Exception as e:
             return None, e
 
