@@ -26,10 +26,11 @@ LOGGER = logging.getLogger(__file__)
 class HuggingFaceHandler(ServiceHandler):
     def __init__(
         self,
-        model_id: Union[str, Path],
+        model_id: str,
+        model_path: Union[str, Path],
         handler_config: Dict[str, Any],
     ):
-        super().__init__(model_id=model_id, handler_config=handler_config)
+        super().__init__(model_id=model_id, model_path=model_path, handler_config=handler_config)
 
         if (
             "model_type" in handler_config
@@ -107,9 +108,9 @@ class HuggingFaceHandler(ServiceHandler):
             preprocessor=preprocessor,
         )
         LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
-        model_config = self.load_hf_config(self.model_id, **model_config_kwargs)
+        model_config = self.load_hf_config(self.model_path, **model_config_kwargs)
 
-        model = self.load_hf_model(self.model_id, config=model_config)
+        model = self.load_hf_model(self.model_path, config=model_config)
 
         self.config = model_config
         self.model = model

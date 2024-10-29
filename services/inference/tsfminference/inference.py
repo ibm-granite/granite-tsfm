@@ -62,7 +62,7 @@ class InferenceRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        handler, e = ServiceHandler.load(model_path)
+        handler, e = ServiceHandler.load(model_id=input_payload.model_id, model_path=model_path)
         if e is not None:
             return None, e
 
