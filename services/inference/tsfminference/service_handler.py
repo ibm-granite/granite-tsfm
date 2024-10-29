@@ -154,8 +154,8 @@ def get_service_model_class(config: Dict[str, Any]):
         my_class = getattr(module, config["service_handler_class_name"])
 
     else:
-        from .tsfm_service_handler import DefaultHandler
+        from .hf_service_handler import HuggingFaceHandler
 
-        my_class = DefaultHandler
+        my_class = HuggingFaceHandler
 
     return my_class
