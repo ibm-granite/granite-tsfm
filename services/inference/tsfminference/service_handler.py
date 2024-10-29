@@ -24,22 +24,22 @@ class ServiceHandler(ABC):
     def __init__(
         self,
         model_id: Union[str, Path],
-        tsfm_config: Dict[str, Any],
+        handler_config: Dict[str, Any],
     ):
         """_summary_
 
         Args:
-            tsfm_config (Dict[str, Any]): TSFM Service configuration
+            handler_config (Dict[str, Any]): TSFM Service configuration
         """
         self.model_id = model_id
-        self.tsfm_config = tsfm_config
+        self.handler_config = handler_config
         self.prepared = False
 
     @classmethod
     def load(cls, model_id: Union[str, Path]) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
-        """Load the tsfm_config  -- the tsfm service config for this model
+        """Load the handler_config  -- the tsfm service config for this model
 
-        tsfm_config_path is expected to point to a folder containing the tsfm_config.json file
+        handler_config_path is expected to point to a folder containing the tsfm_config.json file
         to do: can we make this work with HF Hub?
 
         tsfm_config.json contents:
@@ -56,10 +56,10 @@ class ServiceHandler(ABC):
 
         """
 
-        tsfm_config_path = Path(model_id) if isinstance(model_id, str) else model_id
+        handler_config_path = Path(model_id) if isinstance(model_id, str) else model_id
 
         try:
-            with open((tsfm_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
+            with open((handler_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
                 text = reader.read()
             config = json.loads(text)
         except FileNotFoundError:
@@ -67,8 +67,8 @@ class ServiceHandler(ABC):
             config = {}
 
         try:
-            wrapper_class = get_service_model_class(config)
-            return wrapper_class(model_id=model_id, tsfm_config=config), None
+            wrapper_class = get_service_handler_class(config)
+            return wrapper_class(model_id=model_id, handler_config=config), None
         except Exception as e:
             return None, e
 
@@ -148,7 +148,7 @@ class ServiceHandler(ABC):
         ...
 
 
-def get_service_model_class(config: Dict[str, Any]) -> "ServiceHandler":
+def get_service_handler_class(config: Dict[str, Any]) -> "ServiceHandler":
     if "service_handler_module_path" in config and "service_handler_class_name" in config:
         module = importlib.import_module(config["service_handler_module_path"])
         my_class = getattr(module, config["service_handler_class_name"])

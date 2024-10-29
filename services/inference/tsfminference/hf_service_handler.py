@@ -27,17 +27,21 @@ class HuggingFaceHandler(ServiceHandler):
     def __init__(
         self,
         model_id: Union[str, Path],
-        tsfm_config: Dict[str, Any],
+        handler_config: Dict[str, Any],
     ):
-        super().__init__(model_id=model_id, tsfm_config=tsfm_config)
+        super().__init__(model_id=model_id, handler_config=handler_config)
 
-        if "model_type" in tsfm_config and "model_config_name" in tsfm_config and "module_path" in tsfm_config:
+        if (
+            "model_type" in handler_config
+            and "model_config_name" in handler_config
+            and "module_path" in handler_config
+        ):
             register_config(
-                tsfm_config["model_type"],
-                tsfm_config["model_config_name"],
-                tsfm_config["module_path"],
+                handler_config["model_type"],
+                handler_config["model_config_name"],
+                handler_config["module_path"],
             )
-            LOGGER.info(f"registered {tsfm_config['model_type']}")
+            LOGGER.info(f"registered {handler_config['model_type']}")
 
     def load_preprocessor(self, model_path: str) -> TimeSeriesPreprocessor:
         # load preprocessor
@@ -62,7 +66,7 @@ class HuggingFaceHandler(ServiceHandler):
         model = load_model(
             model_path,
             config=config,
-            module_path=self.tsfm_config.get("module_path", None),
+            module_path=self.handler_config.get("module_path", None),
         )
 
         LOGGER.info("Successfully loaded model")
