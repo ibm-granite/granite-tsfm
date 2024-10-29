@@ -23,7 +23,8 @@ LOGGER = logging.getLogger(__file__)
 class ServiceHandler(ABC):
     def __init__(
         self,
-        model_id: Union[str, Path],
+        model_id: str,
+        model_path: Union[str, Path],
         handler_config: Dict[str, Any],
     ):
         """_summary_
@@ -32,11 +33,14 @@ class ServiceHandler(ABC):
             handler_config (Dict[str, Any]): TSFM Service configuration
         """
         self.model_id = model_id
+        self.model_path = model_path
         self.handler_config = handler_config
         self.prepared = False
 
     @classmethod
-    def load(cls, model_id: Union[str, Path]) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
+    def load(
+        cls, model_id: str, model_path: Union[str, Path]
+    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
         """Load the handler_config  -- the tsfm service config for this model
 
         handler_config_path is expected to point to a folder containing the tsfm_config.json file
@@ -56,8 +60,7 @@ class ServiceHandler(ABC):
 
         """
 
-        handler_config_path = Path(model_id) if isinstance(model_id, str) else model_id
-
+        handler_config_path = Path(model_path) if isinstance(model_path, str) else model_path
         try:
             with open((handler_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
                 text = reader.read()
@@ -67,8 +70,8 @@ class ServiceHandler(ABC):
             config = {}
 
         try:
-            wrapper_class = get_service_handler_class(config)
-            return wrapper_class(model_id=model_id, handler_config=config), None
+            handler_class = get_service_handler_class(config)
+            return handler_class(model_id=model_id, model_path=model_path, handler_config=config), None
         except Exception as e:
             return None, e
 
