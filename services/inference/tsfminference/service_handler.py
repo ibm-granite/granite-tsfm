@@ -1,4 +1,4 @@
-"""Base serivce handlers"""
+"""Base serivce handler"""
 
 import datetime
 import importlib
@@ -6,7 +6,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -36,7 +36,7 @@ class ServiceHandler(ABC):
         self.prepared = False
 
     @classmethod
-    def load(cls, model_id: Union[str, Path]) -> Union[Optional["ServiceHandler"], Optional[Exception]]:
+    def load(cls, model_id: Union[str, Path]) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
         """Load the tsfm_config  -- the tsfm service config for this model
 
         tsfm_config_path is expected to point to a folder containing the tsfm_config.json file
@@ -76,7 +76,7 @@ class ServiceHandler(ABC):
         self,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
-    ) -> Union[Optional["ServiceHandler"], Optional[Exception]]:
+    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
         """Prepare the wrapper by loading all the components needed to use the model."""
 
         try:
@@ -101,7 +101,7 @@ class ServiceHandler(ABC):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
-    ) -> Union[Optional[PredictOutput], Optional[Exception]]:
+    ) -> Tuple[PredictOutput, None] | Tuple[None, Exception]:
         """Perform an inference request on a loaded model"""
 
         if not self.prepared:
@@ -143,12 +143,12 @@ class ServiceHandler(ABC):
     @abstractmethod
     def _train(
         self,
-    ):
+    ) -> "ServiceHandler":
         """Abstract method to be implemented by model owner"""
         ...
 
 
-def get_service_model_class(config: Dict[str, Any]):
+def get_service_model_class(config: Dict[str, Any]) -> "ServiceHandler":
     if "service_handler_module_path" in config and "service_handler_class_name" in config:
         module = importlib.import_module(config["service_handler_module_path"])
         my_class = getattr(module, config["service_handler_class_name"])

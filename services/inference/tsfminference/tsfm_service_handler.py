@@ -1,7 +1,7 @@
 """Service Handler for TSFM Models"""
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from tsfm_public import TimeSeriesPreprocessor
 
@@ -19,7 +19,7 @@ class TinyTimeMixerHandler(HuggingFaceHandler):
         self,
         parameters: Optional[ForecastingParameters] = None,
         preprocessor: Optional[TimeSeriesPreprocessor] = None,
-    ):
+    ) -> Dict[str, Any]:
         config_kwargs = {
             "num_input_channels": preprocessor.num_input_channels,
             "prediction_filter_length": parameters.prediction_length,
