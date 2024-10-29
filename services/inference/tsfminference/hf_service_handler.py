@@ -39,7 +39,7 @@ class HuggingFaceHandler(ServiceHandler):
             )
             LOGGER.info(f"registered {tsfm_config['model_type']}")
 
-    def load_preprocessor(self, model_path: str) -> Union[Optional[TimeSeriesPreprocessor], Optional[Exception]]:
+    def load_preprocessor(self, model_path: str) -> TimeSeriesPreprocessor:
         # load preprocessor
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
@@ -58,9 +58,7 @@ class HuggingFaceHandler(ServiceHandler):
 
         return conf
 
-    def load_hf_model(
-        self, model_path: str, config: PretrainedConfig
-    ) -> Union[Optional[PreTrainedModel], Optional[Exception]]:
+    def load_hf_model(self, model_path: str, config: PretrainedConfig) -> PreTrainedModel:
         model = load_model(
             model_path,
             config=config,
@@ -74,7 +72,7 @@ class HuggingFaceHandler(ServiceHandler):
         self,
         parameters: Optional[ForecastingParameters] = None,
         preprocessor: Optional[TimeSeriesPreprocessor] = None,
-    ):
+    ) -> Dict[str, Any]:
         return {}
 
     def _prepare(
@@ -148,7 +146,7 @@ class HuggingFaceHandler(ServiceHandler):
 
     def _train(
         self,
-    ): ...
+    ) -> "HuggingFaceHandler": ...
 
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
