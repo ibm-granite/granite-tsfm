@@ -57,9 +57,7 @@ final_df = pd.concat(all_data, ignore_index=True)
 custom_order = ["etth1", "etth2", "ettm1", "ettm2", "weather", "electricity", "traffic"]
 
 
-final_df["dataset_sorted"] = pd.Categorical(
-    final_df["dataset"], categories=[prefix for prefix in custom_order], ordered=True
-)
+final_df["dataset_sorted"] = pd.Categorical(final_df["dataset"], categories=custom_order, ordered=True)
 
 final_df = final_df.sort_values(by=["CL", "dataset_sorted", "FL"], ascending=[True, True, True])
 
