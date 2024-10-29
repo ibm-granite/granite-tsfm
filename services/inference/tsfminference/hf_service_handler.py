@@ -275,19 +275,11 @@ def load_model(
     """
 
     if module_path is not None and config is None:
-        return None, ValueError("Config must be provided when loading from a custom module_path")
+        return ValueError("Config must be provided when loading from a custom module_path")
 
-    try:
-        if config is not None:
-            model_class = _get_model_class(config, module_path=module_path)
-            LOGGER.info(f"Found model class: {model_class.__name__}")
-            model = model_class.from_pretrained(model_path, config=config)
-            return model, None
+    if config is not None:
+        model_class = _get_model_class(config, module_path=module_path)
+        LOGGER.info(f"Found model class: {model_class.__name__}")
+        return model_class.from_pretrained(model_path, config=config)
 
-        model = AutoModel.from_pretrained(model_path)
-        return model, None
-    except Exception as e:
-        return None, e
-
-    LOGGER.info(f"Found model class: {model.__class__.__name__}")
-    return model, None
+    return AutoModel.from_pretrained(model_path)
