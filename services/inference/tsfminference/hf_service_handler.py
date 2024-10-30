@@ -18,17 +18,30 @@ from .inference_payloads import (
     ForecastingParameters,
 )
 from .service_handler import ServiceHandler
+from .tsfm_config import TSFMConfig
 
 
 LOGGER = logging.getLogger(__file__)
 
 
 class HuggingFaceHandler(ServiceHandler):
+    """Handler for HuggingFace-like models
+
+    Underlying assumption is that the model makes use of PretrainedConfig/PreTrainedModel
+    conventions. During init we register the config using HF AutoConfig.
+
+    Args:
+        model_id (str): ID of the model
+        model_path (Union[str, Path]): Full path to the model folder.
+        handler_config (TSFMConfig): Configuration for the service handler
+
+    """
+
     def __init__(
         self,
         model_id: str,
         model_path: Union[str, Path],
-        handler_config: Dict[str, Any],
+        handler_config: TSFMConfig,
     ):
         super().__init__(model_id=model_id, model_path=model_path, handler_config=handler_config)
 
@@ -38,14 +51,25 @@ class HuggingFaceHandler(ServiceHandler):
             and "module_path" in handler_config
         ):
             register_config(
-                handler_config["model_type"],
-                handler_config["model_config_name"],
-                handler_config["module_path"],
+                handler_config.model_type,
+                handler_config.model_config_name,
+                handler_config.module_path,
             )
-            LOGGER.info(f"registered {handler_config['model_type']}")
+            LOGGER.info(f"registered {handler_config.model_type}")
 
     def load_preprocessor(self, model_path: str) -> TimeSeriesPreprocessor:
-        # load preprocessor
+        """Load TSFM preprocessor
+
+        Args:
+            model_path (str): Local path or HF Hub path to the preprocessor.
+        Raises:
+            Exception if there is an issue loading the preprocessor. OSError is caught to allow
+            loading models when there is no preprocessor.
+
+        Returns:
+            TimeSeriesPreprocessor: _description_
+        """
+
         try:
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
@@ -58,16 +82,37 @@ class HuggingFaceHandler(ServiceHandler):
         return preprocessor
 
     def load_hf_config(self, model_path: str, **extra_config_kwargs: Dict[str, Any]) -> PretrainedConfig:
+        """Load a HuggingFace config
+
+        Args:
+            model_path (str): Local path or HF Hub path for the config.
+            extra_config_kwarg: Extra keyword arguments that are passed while loading the config.
+
+        Returns:
+            PretrainedConfig: The loaded config
+        """
         # load config, separate from load model, since we may need to inspect config first
         conf = load_config(model_path, **extra_config_kwargs)
 
         return conf
 
     def load_hf_model(self, model_path: str, config: PretrainedConfig) -> PreTrainedModel:
+        """Load a HuggingFace model from the HF Hub
+
+        Uses the module_path from the handler_config if available to identify the proper class to load
+        the model.
+
+        Args:
+            model_path (str): Local path or HF Hub path for the model.
+            config (PretrainedConfig): A pretrained config object.
+
+        Returns:
+            PreTrainedModel: The loaded model.
+        """
         model = load_model(
             model_path,
             config=config,
-            module_path=self.handler_config.get("module_path", None),
+            module_path=self.handler_config.module_path,
         )
 
         LOGGER.info("Successfully loaded model")
@@ -78,6 +123,16 @@ class HuggingFaceHandler(ServiceHandler):
         parameters: Optional[ForecastingParameters] = None,
         preprocessor: Optional[TimeSeriesPreprocessor] = None,
     ) -> Dict[str, Any]:
+        """Helper function to return additional configuration arguments that are used during config load.
+        Can be overridden in a subclass to allow specialized model functionality.
+
+        Args:
+            parameters (Optional[ForecastingParameters], optional): Request parameters. Defaults to None.
+            preprocessor (Optional[TimeSeriesPreprocessor], optional): Time seres preprocessor. Defaults to None.
+
+        Returns:
+            Dict[str, Any]: Dictionary of additional arguments that are used later as keyword arguments to the config.
+        """
         return {}
 
     def _prepare(

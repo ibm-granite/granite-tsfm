@@ -5,7 +5,7 @@ import importlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import pandas as pd
 
@@ -21,17 +21,20 @@ LOGGER = logging.getLogger(__file__)
 
 
 class ServiceHandler(ABC):
+    """Abstraction to enable serving of various models.
+
+    Args:
+        model_id (str): A string identifier for the model.
+        model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
+        handler_config (TSFMConfig): A handler configuration object.
+    """
+
     def __init__(
         self,
         model_id: str,
         model_path: Union[str, Path],
-        handler_config: Dict[str, Any],
+        handler_config: TSFMConfig,
     ):
-        """_summary_
-
-        Args:
-            handler_config (Dict[str, Any]): TSFM Service configuration
-        """
         self.model_id = model_id
         self.model_path = model_path
         self.handler_config = handler_config
@@ -41,22 +44,15 @@ class ServiceHandler(ABC):
     def load(
         cls, model_id: str, model_path: Union[str, Path]
     ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
-        """Load the handler_config  -- the tsfm service config for this model
+        """Load the handler_config -- the tsfm service config for this model, returning the proper
+        handler to use the model.
 
-        handler_config_path is expected to point to a folder containing the tsfm_config.json file
-        to do: can we make this work with HF Hub?
+        model_path is expected to point to a folder containing the tsfm_config.json file. This can be a local folder
+        or with a model on the HuggingFace Hub.
 
-        tsfm_config.json contents:
-
-
-        module_path: tsfm_public
-        model_type: tinytimemixer
-        model_config_name: TinyTimeMixerConfig
-        model_class_name: TinyTimeMixerForPrediction
-
-        # do we need a list of capabilities, like:
-        # supports variable prediction length
-        # supports variable context length, etc.?
+        Args:
+            model_id (str): A string identifier for the model.
+            model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
 
         """
 
@@ -75,9 +71,8 @@ class ServiceHandler(ABC):
             LOGGER.info("TSFM Config file not found.")
             config = TSFMConfig()
         try:
-            config_dict = config.to_dict()
-            handler_class = get_service_handler_class(config_dict)
-            return handler_class(model_id=model_id, model_path=model_path, handler_config=config_dict), None
+            handler_class = get_service_handler_class(config)
+            return handler_class(model_id=model_id, model_path=model_path, handler_config=config), None
         except Exception as e:
             return None, e
 
@@ -86,8 +81,23 @@ class ServiceHandler(ABC):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
-        """Prepare the wrapper by loading all the components needed to use the model."""
+        """Prepare the wrapper by loading all the components needed to use the model.
 
+        The actual preparation is done in the `_prepare()` method -- which should be overridden for a
+        particular model implementation. This is separate from `load()` above because we may need to know
+        certain details about the model (learned from the handler config) before we can effectively load
+        and configure the model artifacts.
+
+        Args:
+            schema (Optional[ForecastingMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            Tuple(ServiceHandler, None) or Tuple(None, Exception): In the first case, a tuple containing
+                a prepared service handler is returned. The prepared service handler contains all the
+                necessary artifacts for performing subsequent inference or training tasks. In the second
+                case, the tuple contains an error object.
+        """
         try:
             self._prepare(schema=schema, parameters=parameters)
             self.prepared = True
@@ -101,7 +111,15 @@ class ServiceHandler(ABC):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> "ServiceHandler":
-        """Prepare implementation to be implemented in derived class"""
+        """Prepare implementation to be implemented by model owner in derived class
+
+        Args:
+            schema (Optional[ForecastingMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            ServiceHandler: The prepared service handler.
+        """
         ...
 
     def run(
@@ -111,7 +129,18 @@ class ServiceHandler(ABC):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> Tuple[PredictOutput, None] | Tuple[None, Exception]:
-        """Perform an inference request on a loaded model"""
+        """Perform an inference request
+
+        Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            future_data (Optional[pd.DataFrame], optional): A pandas dataframe containing future data. Defaults to None.
+            schema (Optional[ForecastingMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            Tuple[PredictOutput, None] | Tuple[None, Exception]: If successful, returns a tuple containing a PredictionOutput
+                object as the first element. If unsuccessful, a tuple with an exception as the second element will be returned.
+        """
 
         if not self.prepared:
             return None, RuntimeError("Service wrapper has not yet been prepared; run `model.prepare()` first.")
@@ -140,27 +169,27 @@ class ServiceHandler(ABC):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> pd.DataFrame:
-        """Abstract method to be implemented by model owner"""
+        """Abstract method for run to be implemented by model owner in derived class"""
         ...
 
     def train(
         self,
     ):
-        """comming soon"""
+        """Perform a fine-tuning request"""
         ...
 
     @abstractmethod
     def _train(
         self,
     ) -> "ServiceHandler":
-        """Abstract method to be implemented by model owner"""
+        """Abstract method for train to be implemented by model owner in derived class"""
         ...
 
 
-def get_service_handler_class(config: Dict[str, Any]) -> "ServiceHandler":
-    if "service_handler_module_path" in config and "service_handler_class_name" in config:
-        module = importlib.import_module(config["service_handler_module_path"])
-        my_class = getattr(module, config["service_handler_class_name"])
+def get_service_handler_class(config: TSFMConfig) -> "ServiceHandler":
+    if config.service_handler_module_path and config.service_handler_class_name:
+        module = importlib.import_module(config.service_handler_module_path)
+        my_class = getattr(module, config.service_handler_class_name)
 
     else:
         from .hf_service_handler import HuggingFaceHandler
