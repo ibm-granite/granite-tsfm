@@ -57,6 +57,10 @@ class HuggingFaceHandler(ServiceHandler):
             )
             LOGGER.info(f"registered {handler_config.model_type}")
 
+        self.config = None
+        self.model = None
+        self.preprocessor = None
+
     def load_preprocessor(self, model_path: str) -> TimeSeriesPreprocessor:
         """Load TSFM preprocessor
 
@@ -67,7 +71,7 @@ class HuggingFaceHandler(ServiceHandler):
             loading models when there is no preprocessor.
 
         Returns:
-            TimeSeriesPreprocessor: _description_
+            TimeSeriesPreprocessor: the loaded preprocessor.
         """
 
         try:
@@ -89,7 +93,7 @@ class HuggingFaceHandler(ServiceHandler):
             extra_config_kwarg: Extra keyword arguments that are passed while loading the config.
 
         Returns:
-            PretrainedConfig: The loaded config
+            PretrainedConfig: The loaded config.
         """
         # load config, separate from load model, since we may need to inspect config first
         conf = load_config(model_path, **extra_config_kwargs)
@@ -133,15 +137,28 @@ class HuggingFaceHandler(ServiceHandler):
         Returns:
             Dict[str, Any]: Dictionary of additional arguments that are used later as keyword arguments to the config.
         """
-        return {}
+        return {"num_input_channels": preprocessor.num_input_channels}
 
     def _prepare(
         self,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> "HuggingFaceHandler":
-        # to do: use config parameters below
-        # issue: may need to know data length to set parameters upon model load (multst)
+        """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
+        preprocessor and forecasting pipeline. This method:
+        1) loades the preprocessor, creating a new one if the model does not already have a preprocessor
+        2) updates model configuration arguments by calling _get_config_kwargs
+        3) loads the HuggingFace model, passing the updated config object
+
+        Args:
+            schema (Optional[ForecastingMetadataInput], optional): Schema information from the original inference
+                request. Includes information about columns and their role. Defaults to None.
+            parameters (Optional[ForecastingParameters], optional): Parameters from the original inference
+                request. Defaults to None.
+
+        Returns:
+            HuggingFaceHandler: The updated service handler object.
+        """
 
         preprocessor_params = copy.deepcopy(schema.model_dump())
         preprocessor_params["prediction_length"] = parameters.prediction_length
@@ -180,7 +197,21 @@ class HuggingFaceHandler(ServiceHandler):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> pd.DataFrame:
-        # tbd, can this be moved to the HFWrapper?
+        """_summary_
+
+        Args:
+            data (pd.DataFrame): Input historical time series data.
+            future_data (Optional[pd.DataFrame], optional): Input future time series data, useful for
+                passing future exogenous if known. Defaults to None.
+            schema (Optional[ForecastingMetadataInput], optional): Schema information from the original inference
+                request. Includes information about columns and their role. Defaults to None.
+            parameters (Optional[ForecastingParameters], optional): Parameters from the original inference
+                request. Defaults to None.
+
+        Returns:
+            pd.DataFrame: The forecasts produced by the model.
+        """
+
         # error checking once data available
         if self.preprocessor.freq is None:
             # train to estimate freq if not available
@@ -262,7 +293,6 @@ def load_config(
         PretrainedConfig: The configuration object corresponding to the pretrained model.
     """
     # load config first try autoconfig, if not then we register and load
-
     try:
         conf = AutoConfig.from_pretrained(model_path, **extra_config_kwargs)
     except (KeyError, ValueError) as exc:  # determine error raised by autoconfig
