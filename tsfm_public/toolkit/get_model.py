@@ -1,12 +1,17 @@
+import logging
 import os
+from importlib import resources
 
 import yaml
 
 from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 
 
+LOGGER = logging.getLogger(__file__)
+
+
 def check_ttm_model_path(model_path):
-    if "ibm-granite/granite-timeseries-ttm-r1" in model_path:
+    if "ibm-granite/granite-timeseries-ttm-r1" in model_path or "ibm/TTM" in model_path:
         return 1
     elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
         return 2
@@ -20,7 +25,7 @@ class GetTTM(TinyTimeMixerForPrediction):
     @classmethod
     def from_pretrained(cls, model_path, context_length=None, forecast_length=None, **kwargs):
         # Custom behavior before calling the superclass method
-        print(f"Loading model from: {model_path}")
+        LOGGER.info(f"Loading model from: {model_path}")
 
         model_path_type = check_ttm_model_path(model_path)
         prediction_filter_length = 0
@@ -30,10 +35,8 @@ class GetTTM(TinyTimeMixerForPrediction):
                 raise ValueError("Provide `context_length` and `forecast_length` for hugginface model path.")
 
             # Get right TTM model
-            # Get the current directory of this file and add the models folder to sys.path
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
-            config_dir = os.path.join(parent_dir, "resources/model_paths_config")
+            config_dir = resources.files("tsfm_public.resources.model_paths_config")
+
             with open(os.path.join(config_dir, "ttm.yaml"), "r") as file:
                 model_revisions = yaml.safe_load(file)
 
@@ -48,25 +51,20 @@ class GetTTM(TinyTimeMixerForPrediction):
             else:
                 raise ValueError("Currently supported maximum forecast_length = 720")
 
-            print("Selected forecast_length =", selected_forecast_length)
+            LOGGER.info("Selected forecast_length =", selected_forecast_length)
 
-            prediction_filter_length = selected_forecast_length - forecast_length
+            prediction_filter_length = forecast_length
 
             try:
-                if model_path_type == 1:
-                    ttm_model_revision = model_revisions["ibm-granite"]["r1"]["revision"][context_length][
-                        selected_forecast_length
-                    ]
-                elif model_path_type == 2:
-                    ttm_model_revision = model_revisions["ibm-granite"]["r2"]["revision"][context_length][
-                        selected_forecast_length
-                    ]
-                elif model_path_type == 3:
-                    ttm_model_revision = model_revisions["research-use"]["r2"]["revision"][context_length][
-                        selected_forecast_length
-                    ]
-                else:
-                    ttm_model_revision = None
+                model_paths = {
+                    1: model_revisions["ibm-granite"]["r1"]["revision"],
+                    2: model_revisions["ibm-granite"]["r2"]["revision"],
+                    3: model_revisions["research-use"]["r2"]["revision"],
+                }
+                ttm_model_revision = (
+                    model_paths.get(model_path_type, {}).get(context_length, {}).get(selected_forecast_length)
+                )
+
             except KeyError:
                 raise ValueError("Model not found, possibly because of wrong context_length.")
 
@@ -80,10 +78,10 @@ class GetTTM(TinyTimeMixerForPrediction):
                 prediction_filter_length=prediction_filter_length,
                 **kwargs,
             )
-
-        # Custom behavior after loading the model, such as modifying weights, freezing layers, etc.
-        print("Model loaded successfully!")
-        print(f"[TTM] context_len = {model.config.context_length}, forecast_len = {model.config.prediction_length}")
+        LOGGER.info("Model loaded successfully!")
+        LOGGER.info(
+            f"[TTM] context_len = {model.config.context_length}, forecast_len = {model.config.prediction_length}"
+        )
 
         return model
 
