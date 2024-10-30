@@ -19,12 +19,21 @@ LOGGER = logging.getLogger(__file__)
 class TSFMConfig(PushToHubMixin):
     def __init__(self, **kwargs):
         # Attributes with defaults
-        # self.return_dict = kwargs.pop("return_dict", True)
+        self.service_handler_module_path = kwargs.pop("service_handler_module_path", None)
+        self.service_handler_class_name = kwargs.pop("service_handler_class_name", None)
+        self.module_path = kwargs.pop("module_path", None)
+
+        # "maximum_prediction_length": 96,
+        # "minimum_context_length": 512,
+        # "maximum_context_length": 512,
+        # "model_type": "tinytimemixer",
+        # "model_config_name": "TinyTimeMixerConfig",
+        # "model_class_name": "TinyTimeMixerForPrediction"
 
         # Name or path to the config
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
         # Config hash
-        self._commit_hash = kwargs.pop("_commit_hash", None)
+        # self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
