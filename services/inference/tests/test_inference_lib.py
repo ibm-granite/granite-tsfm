@@ -44,23 +44,61 @@ else:
 MODEL_ID = "mytest-tsfm/ttm-r1"
 
 
-def test_forecast_with_good_data(ts_data_base: pd.DataFrame):
-    df: pd.DataFrame = ts_data_base
-    runtime: InferenceRuntime = InferenceRuntime(config=config)
+@pytest.fixture(scope="module")
+def forecasting_input_base() -> ForecastingInferenceInput:
+    # df: pd.DataFrame = ts_data_base
     schema: ForecastingMetadataInput = ForecastingMetadataInput(
         timestamp_column="date", id_columns=["ID"], target_columns=["VAL"]
     )
     parameters: ForecastingParameters = ForecastingParameters()
     input: ForecastingInferenceInput = ForecastingInferenceInput(
-        model_id=MODEL_ID, schema=schema, parameters=parameters, data=df.to_dict(orient="list")
+        model_id=MODEL_ID,
+        schema=schema,
+        parameters=parameters,
+        data={
+            "date": [
+                "2024-10-18T01:00:21+00:00",
+            ],
+            "ID1": [
+                "I1",
+            ],
+            "VAL": [
+                10.0,
+            ],
+        },  # this should get replaced in each test case anyway,
     )
-    po: PredictOutput = runtime.forecast(input=input)
+    return input
 
-    results = pd.DataFrame.from_dict(po.results[0])
 
+def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
     # expected length
     assert len(results) == 96
     # expected start time
     assert results["date"].iloc[0] - df["date"].iloc[-1] == timedelta(hours=1)
     # expected end time
     assert results["date"].iloc[-1] - df["date"].iloc[-1] == timedelta(hours=96)
+
+
+def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input = forecasting_input_base
+    df = ts_data_base
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    _basic_result_checks(results, df)
+
+
+def test_forecast_with_schema_missing_target_columns(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input = forecasting_input_base
+    input.schema.target_columns = []
+    df = ts_data_base
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    _basic_result_checks(results, df)
