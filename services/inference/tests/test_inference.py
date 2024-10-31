@@ -79,11 +79,13 @@ def get_inference_response(
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
         return df
     else:
+        print(req.text)
         return req
 
 
 def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
-    df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
+    if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
+        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
     data_payload = df.to_dict(orient="list")
     return data_payload
 
@@ -101,7 +103,6 @@ def test_zero_shot_forecast_inference(ts_data):
 
     id_columns = params["id_columns"]
 
-    prediction_length = 96
     num_ids = test_data[id_columns[0]].nunique()
 
     # test single
@@ -343,6 +344,42 @@ def test_zero_shot_forecast_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length // 4
+
+
+@pytest.mark.parametrize("ts_data", ["ttm-r1"], indirect=True)
+def test_zero_shot_forecast_inference_no_timestamp(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    # test single with integer as timestamp
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    test_data_["int_timestamp"] = range(len(test_data_))
+    test_data_ = test_data_.drop(columns=params["timestamp_column"])
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": "int_timestamp",
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, "int_timestamp"),
+        "future_data": {},
+    }
+
+    df_out = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    print(df_out[0].head())
 
 
 @pytest.mark.parametrize(

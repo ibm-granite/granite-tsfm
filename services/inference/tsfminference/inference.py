@@ -116,7 +116,7 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
         return None
 
     df = pd.DataFrame.from_dict(data)
-    if ts_col := schema.timestamp_column:
+    if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
         df[ts_col] = pd.to_datetime(df[ts_col])
 
     sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
