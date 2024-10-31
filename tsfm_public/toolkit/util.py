@@ -1118,7 +1118,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         forecast_horizon,
         contain_missing_values,
         contain_equal_length,
-    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.NaN)
+    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.nan)
 
     id_column_name = "id"
     timestamp_column_name = "timestamp"
