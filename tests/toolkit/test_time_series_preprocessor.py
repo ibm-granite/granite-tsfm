@@ -177,6 +177,60 @@ def test_augment_time_series(ts_data):
 
 
 def test_create_timestamps():
+    base_last_timestamp = datetime(2020, 1, 1)
+    base_timedelta = timedelta(days=1)
+    base_timedelta_strs = ["1d", "1 days 00:00:00", "24h"]
+    num_periods = 4
+    base_expected = [base_last_timestamp + base_timedelta * i for i in range(1, num_periods + 1)]
+
+    date_types = [datetime, pd.Timestamp, np.datetime64]
+    timedelta_types = [timedelta, pd.Timedelta, np.timedelta64]
+
+    test_cases = []
+    for date_type in date_types:
+        for timedelta_type in timedelta_types:
+            test_cases.append(
+                {
+                    "last_timestamp": base_last_timestamp
+                    if isinstance(base_last_timestamp, date_type)
+                    else date_type(base_last_timestamp),
+                    "freq": base_timedelta
+                    if isinstance(base_timedelta, timedelta_type)
+                    else timedelta_type(base_timedelta),
+                    "periods": 4,
+                    "expected": [d if isinstance(d, date_type) else date_type(d) for d in base_expected],
+                }
+            )
+
+    for date_type in date_types:
+        for freq in base_timedelta_strs:
+            test_cases.append(
+                {
+                    "last_timestamp": base_last_timestamp
+                    if isinstance(base_last_timestamp, date_type)
+                    else date_type(base_last_timestamp),
+                    "freq": freq,
+                    "periods": 4,
+                    "expected": [d if isinstance(d, date_type) else date_type(d) for d in base_expected],
+                }
+            )
+
+    test_cases.extend(
+        [
+            {"last_timestamp": 100, "freq": 3, "periods": 2, "expected": [103, 106]},
+            {"last_timestamp": 100, "freq": 3.5, "periods": 2, "expected": [103.5, 107.0]},
+            {"last_timestamp": 100, "freq": "3.5", "periods": 2, "expected": [103.5, 107.0]},
+            {"last_timestamp": np.float32(100), "freq": "3.5", "periods": 2, "expected": [103.5, 107.0]},
+        ]
+    )
+
+    for test_record in test_cases:
+        expected = test_record.pop("expected")
+        out = create_timestamps(**test_record)
+        assert out == expected
+
+
+def test_create_timestamps_with_sequence():
     # start, freq, sequence, periods, expected
     test_cases = [
         (
