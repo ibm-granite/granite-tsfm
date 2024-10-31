@@ -5,7 +5,7 @@ import importlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -152,10 +152,11 @@ class ServiceHandler(ABC):
                 schema=schema,
                 parameters=parameters,
             )
+            encoded_result = encode_dataframe(result)
             return PredictOutput(
                 model_id=str(self.model_id),
                 created_at=datetime.datetime.now().isoformat(),
-                results=[result.to_dict(orient="list")],
+                results=[encoded_result],
             ), None
 
         except Exception as e:
@@ -197,3 +198,9 @@ def get_service_handler_class(config: TSFMConfig) -> "ServiceHandler":
         my_class = HuggingFaceHandler
 
     return my_class
+
+
+def encode_dataframe(result: pd.DataFrame, timestamp_column: str = None) -> Dict[str, List[Any]]:
+    if timestamp_column and pd.api.types.is_datetime64_any_dtype(result[timestamp_column]):
+        result[timestamp_column] = result[timestamp_column].apply(lambda x: x.isoformat())
+    return result.to_dict(orient="list")

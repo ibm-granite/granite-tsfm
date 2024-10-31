@@ -966,8 +966,24 @@ def create_timestamps(
             "Could not extend time series because frequency was not provided and could not be estimated from the available data."
         )
 
+    def convert_numeric(val: Any):
+        if isinstance(val, str):
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return val
+        return val
+
     # more complex logic is required to support all edge cases
-    if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+    freq = convert_numeric(freq)
+    if isinstance(freq, (int, float, np.floating, np.integer)) and isinstance(
+        last_timestamp, (int, float, np.floating, np.integer)
+    ):
+        return [last_timestamp + i * freq for i in range(1, periods + 1)]
+    elif isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
         try:
             # try date range directly
             return pd.date_range(
@@ -987,8 +1003,9 @@ def create_timestamps(
             else:
                 raise e
     else:
-        # numerical timestamp column
-        return [last_timestamp + i * freq for i in range(1, periods + 1)]
+        raise ValueError(
+            f"Could not create timestamps, given the following inputs: last_timestamp={last_timestamp}, freq={freq}, periods={periods}."
+        )
 
 
 def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
