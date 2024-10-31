@@ -932,17 +932,19 @@ def get_datasets(
 
 
 def create_timestamps(
-    last_timestamp: Union[datetime.datetime, pd.Timestamp],
-    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, np.timedelta64, str]] = None,
+    last_timestamp: Union[datetime.datetime, pd.Timestamp, np.datetime64, int, float, np.integer, np.floating],
+    freq: Optional[
+        Union[int, float, np.integer, np.floating, datetime.timedelta, pd.Timedelta, np.timedelta64, str]
+    ] = None,
     time_sequence: Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]] = None,
     periods: int = 1,
 ) -> List[pd.Timestamp]:
     """Simple utility to create a list of timestamps based on start, delta and number of periods
 
     Args:
-        last_timestamp (Union[datetime.datetime, pd.Timestamp]): The last observed timestamp, new timestamps will be created
+        last_timestamp (Union[datetime.datetime, pd.Timestamp, int, float, np.integer, np.floating]): The last observed timestamp, new timestamps will be created
             after this timestamp.
-        freq (Optional[Union[int, float, datetime.timedelta, pd.Timedelta, np.timedelta, str]], optional): The frequency at which timestamps
+        freq (Optional[Union[int, float, np.integer, np.floating, datetime.timedelta, pd.Timedelta, np.timedelta, str]], optional): The frequency at which timestamps
             should be generated. Defaults to None.
         time_sequence (Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]], optional): A time sequence
             from which the frequency can be inferred. Defaults to None.
@@ -978,31 +980,45 @@ def create_timestamps(
                     return val
         return val
 
-    # more complex logic is required to support all edge cases
-    freq = convert_numeric(freq)
-    if isinstance(freq, (int, float, np.floating, np.integer, np.timedelta64)) and isinstance(
-        last_timestamp, (int, float, np.floating, np.integer, pd.Timestamp)
-    ):
-        return [last_timestamp + i * freq for i in range(1, periods + 1)]
-    elif isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+    if isinstance(freq, str):
+        freq = convert_numeric(freq)
+
+    # freq is str, which is not convertible to numeric
+    if isinstance(freq, str):
+        # try to convert to pd.timedelta
         try:
-            # try date range directly
+            freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+        except ValueError:
+            pass
+
+        return pd.date_range(
+            last_timestamp,
+            freq=freq,
+            periods=periods + 1,
+        ).tolist()[1:]
+    # frequency is timedelta like object
+    elif isinstance(freq, (pd.Timedelta, np.timedelta64, datetime.timedelta)):
+        if isinstance(last_timestamp, (np.datetime64, pd.Timestamp, datetime.datetime)):
             return pd.date_range(
                 last_timestamp,
-                freq=freq,
+                freq=pd.Timedelta(freq) if isinstance(freq, np.timedelta64) else freq,
                 periods=periods + 1,
             ).tolist()[1:]
-        except ValueError as e:
-            # if it fails, we can try to compute a timedelta from the provided string
-            if isinstance(freq, str):
-                freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
-                return pd.date_range(
-                    last_timestamp,
-                    freq=freq,
-                    periods=periods + 1,
-                ).tolist()[1:]
-            else:
-                raise e
+            # [last_timestamp + i * freq for i in range(1, periods + 1)]
+        # last_timestamp is not date type, but freq is timedelta type -- ambiguous
+        else:
+            raise ValueError(
+                f"Ambiguous last_timestamp {last_timestamp} (type: {type(last_timestamp)}) with freq {freq}."
+            )
+    # frequency is numeric
+    elif isinstance(freq, (int, float, np.integer, np.floating)):
+        if isinstance(last_timestamp, (int, float, np.floating, np.integer)):
+            return [last_timestamp + i * freq for i in range(1, periods + 1)]
+        # last_timestamp is a date type, but freq is numeric -- ambiguous
+        else:
+            raise ValueError(
+                f"Ambiguous frequency {freq} with last_timestamp {last_timestamp} (type: {type(last_timestamp)})."
+            )
     else:
         raise ValueError(
             f"Could not create timestamps, given the following inputs: last_timestamp={last_timestamp}, freq={freq}, periods={periods}."
