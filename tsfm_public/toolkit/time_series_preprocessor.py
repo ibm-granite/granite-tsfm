@@ -919,7 +919,7 @@ def get_datasets(
 
 def create_timestamps(
     last_timestamp: Union[datetime.datetime, pd.Timestamp],
-    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]] = None,
+    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, np.timedelta64, str]] = None,
     time_sequence: Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]] = None,
     periods: int = 1,
 ) -> List[pd.Timestamp]:
@@ -928,7 +928,7 @@ def create_timestamps(
     Args:
         last_timestamp (Union[datetime.datetime, pd.Timestamp]): The last observed timestamp, new timestamps will be created
             after this timestamp.
-        freq (Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]], optional): The frequency at which timestamps
+        freq (Optional[Union[int, float, datetime.timedelta, pd.Timedelta, np.timedelta, str]], optional): The frequency at which timestamps
             should be generated. Defaults to None.
         time_sequence (Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]], optional): A time sequence
             from which the frequency can be inferred. Defaults to None.
@@ -953,6 +953,7 @@ def create_timestamps(
         )
 
     def convert_numeric(val: Any):
+        """Helper function to convert strings to numerical values"""
         if isinstance(val, str):
             try:
                 return int(val)
@@ -965,8 +966,8 @@ def create_timestamps(
 
     # more complex logic is required to support all edge cases
     freq = convert_numeric(freq)
-    if isinstance(freq, (int, float, np.floating, np.integer)) and isinstance(
-        last_timestamp, (int, float, np.floating, np.integer)
+    if isinstance(freq, (int, float, np.floating, np.integer, np.timedelta64)) and isinstance(
+        last_timestamp, (int, float, np.floating, np.integer, pd.Timestamp)
     ):
         return [last_timestamp + i * freq for i in range(1, periods + 1)]
     elif isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
