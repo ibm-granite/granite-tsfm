@@ -433,7 +433,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             for i, c in enumerate(kwargs["target_columns"]):
                 ground_truth = input["future_values"][:, :, i].numpy()
                 missing = ~input["future_observed_mask"][:, :, i].numpy()
-                ground_truth[missing] = np.NaN
+                ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
         if "timestamp_column" in kwargs:
