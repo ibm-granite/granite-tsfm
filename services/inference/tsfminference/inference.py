@@ -112,7 +112,7 @@ class InferenceRuntime:
                     data, id_columns=schema.id_columns, start_index=-handler.handler_config.maximum_context_length
                 )
 
-        _, e = handler.prepare(schema=schema, parameters=parameters)
+        _, e = handler.prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
         if e is not None:
             return None, e
 

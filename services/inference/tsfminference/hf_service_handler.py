@@ -141,6 +141,8 @@ class HuggingFaceHandler(ServiceHandler):
 
     def _prepare(
         self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> "HuggingFaceHandler":
@@ -151,6 +153,8 @@ class HuggingFaceHandler(ServiceHandler):
         3) loads the HuggingFace model, passing the updated config object
 
         Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            future_data (Optional[pd.DataFrame], optional): A pandas dataframe containing future data. Defaults to None.
             schema (Optional[ForecastingMetadataInput], optional): Schema information from the original inference
                 request. Includes information about columns and their role. Defaults to None.
             parameters (Optional[ForecastingParameters], optional): Parameters from the original inference
@@ -173,7 +177,9 @@ class HuggingFaceHandler(ServiceHandler):
                 scaling=False,
                 encode_categorical=False,
             )
-            # we don't set context length or prediction length above because it is not needed for inference
+            # train to estimate freq
+            preprocessor.train(data)
+            LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
 
         model_config_kwargs = self._get_config_kwargs(
             parameters=parameters,
@@ -211,12 +217,6 @@ class HuggingFaceHandler(ServiceHandler):
         Returns:
             pd.DataFrame: The forecasts produced by the model.
         """
-
-        # error checking once data available
-        if self.preprocessor.freq is None:
-            # train to estimate freq if not available
-            self.preprocessor.train(data)
-            LOGGER.info(f"Data frequency determined: {self.preprocessor.freq}")
 
         # warn if future data is not provided, but is needed by the model
         if self.preprocessor.exogenous_channel_indices and future_data is None:
