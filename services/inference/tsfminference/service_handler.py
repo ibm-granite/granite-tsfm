@@ -78,6 +78,8 @@ class ServiceHandler(ABC):
 
     def prepare(
         self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
@@ -89,6 +91,8 @@ class ServiceHandler(ABC):
         and configure the model artifacts.
 
         Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            future_data (Optional[pd.DataFrame], optional): A pandas dataframe containing future data. Defaults to None.
             schema (Optional[ForecastingMetadataInput], optional): Service request schema. Defaults to None.
             parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
 
@@ -99,7 +103,7 @@ class ServiceHandler(ABC):
                 case, the tuple contains an error object.
         """
         try:
-            self._prepare(schema=schema, parameters=parameters)
+            self._prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
             self.prepared = True
             return self, None
         except Exception as e:
@@ -108,12 +112,16 @@ class ServiceHandler(ABC):
     @abstractmethod
     def _prepare(
         self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
     ) -> "ServiceHandler":
         """Prepare implementation to be implemented by model owner in derived class
 
         Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            future_data (Optional[pd.DataFrame], optional): A pandas dataframe containing future data. Defaults to None.
             schema (Optional[ForecastingMetadataInput], optional): Service request schema. Defaults to None.
             parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
 
