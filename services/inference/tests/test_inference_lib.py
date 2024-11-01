@@ -1,12 +1,14 @@
 # Copyright contributors to the TSFM project
 #
 
+import copy
 from datetime import timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from fastapi import HTTPException
 from tsfminference import TSFM_CONFIG_FILE
 from tsfminference.inference import InferenceRuntime
 from tsfminference.inference_payloads import (
@@ -19,6 +21,7 @@ from tsfminference.inference_payloads import (
 
 SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
+MODEL_ID = "mytest-tsfm/ttm-r1"
 
 
 @pytest.fixture(scope="module")
@@ -44,8 +47,6 @@ if TSFM_CONFIG_FILE:
         config = yaml.safe_load(file)
 else:
     config = {}
-
-MODEL_ID = "mytest-tsfm/ttm-r1"
 
 
 @pytest.fixture(scope="module")
@@ -85,9 +86,8 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
 
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
-    df = ts_data_base
+    df = copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
-
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
@@ -99,9 +99,8 @@ def test_forecast_with_schema_missing_target_columns(
 ):
     input = forecasting_input_base
     input.schema.target_columns = []
-    df = ts_data_base
+    df = copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
-
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
@@ -112,19 +111,65 @@ def test_forecast_with_integer_timestamps(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
     input: ForecastingInferenceInput = forecasting_input_base
-    df = ts_data_base
-    df[input.schema.timestamp_column] = df[input.schema.timestamp_column].astype(int)
-    df[input.schema.timestamp_column] = range(1, SERIES_LENGTH + 1)
-    print(df)
-    print(df.dtypes)
-    input.data = df.to_dict(orient="list")
+    df = copy.deepcopy(ts_data_base)
 
+    timestamp_column = input.schema.timestamp_column
+    df[timestamp_column] = df[timestamp_column].astype(int)
+    df[timestamp_column] = range(1, SERIES_LENGTH + 1)
+    input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
+    assert results[timestamp_column].iloc[0] == SERIES_LENGTH + 1
+    assert results[timestamp_column].iloc[-1] - df[timestamp_column].iloc[-1] == FORECAST_LENGTH
+    assert results.dtypes[timestamp_column] == df.dtypes[timestamp_column]
 
-    print(results)
-    print(results.dtypes)
 
-    # assert results.iloc[0] == SERIES_LENGTH + 1
-    # assert results.iloc[-1] - df.iloc[-1] == FORECAST_LENGTH
+def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = forecasting_input_base
+    df = copy.deepcopy(ts_data_base)
+
+    timestamp_column = input.schema.timestamp_column
+    df[timestamp_column] = df[timestamp_column].astype(str)
+    df[timestamp_column] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    input.data = df.to_dict(orient="list")
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    with pytest.raises(HTTPException) as _:
+        runtime.forecast(input=input)
+
+
+def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = forecasting_input_base
+    df = copy.deepcopy(ts_data_base)
+    df["VAL"] = df["VAL"].astype(str)
+    df["VAL"] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    input.data = df.to_dict(orient="list")
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    with pytest.raises(HTTPException) as _:
+        runtime.forecast(input=input)
+
+
+def test_forecast_with_bogus_mode_id(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = forecasting_input_base
+    df = copy.deepcopy(ts_data_base)
+    input.data = df.to_dict(orient="list")
+    input.model_id = "hoo-hah"
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    with pytest.raises(HTTPException) as _:
+        runtime.forecast(input=input)
+
+
+def test_forecast_with_insufficient_context_length(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input: ForecastingInferenceInput = forecasting_input_base
+    df = copy.deepcopy(ts_data_base)
+    df = df.iloc[0:-100]
+
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    with pytest.raises(HTTPException) as ex:
+        runtime.forecast(input=input)
+        print(ex)
