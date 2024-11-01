@@ -85,7 +85,9 @@ class InferenceRuntime:
         future_data = decode_data(input_payload.future_data, schema)
 
         # collect and check underlying time series lengths
-        if getattr(handler.handler_config, "minimum_context_length", None):
+        if getattr(handler.handler_config, "minimum_context_length", None) or getattr(
+            handler.handler_config, "maximum_context_length", None
+        ):
             if schema.id_columns:
                 data_lengths = data.groupby(schema.id_columns).apply(len)
                 min_len_index = data_lengths.argmin()
@@ -93,8 +95,11 @@ class InferenceRuntime:
                 max_data_length = data_lengths.max()
             else:
                 min_data_length = max_data_length = len(data)
-            LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
+            LOGGER.info(
+                f"Data length recieved {len(data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
+            )
 
+        if getattr(handler.handler_config, "minimum_context_length", None):
             if min_data_length < handler.handler_config.minimum_context_length:
                 err_str = "Data should have time series of length that is at least the required model context length. "
                 if schema.id_columns:
