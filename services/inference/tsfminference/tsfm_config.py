@@ -78,6 +78,14 @@ class TSFMConfig(PushToHubMixin):
                 LOGGER.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
+    @property
+    def name_or_path(self) -> str:
+        return getattr(self, "_name_or_path", None)
+
+    @name_or_path.setter
+    def name_or_path(self, value):
+        self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
+
     @staticmethod
     def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
