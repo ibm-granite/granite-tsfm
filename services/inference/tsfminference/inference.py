@@ -90,7 +90,7 @@ class InferenceRuntime:
             handler.handler_config, "maximum_context_length", None
         ):
             if schema.id_columns:
-                data_lengths = data.groupby(schema.id_columns).apply(len)
+                data_lengths = data.groupby(schema.id_columns)[schema.id_columns].apply(len)
                 min_len_index = data_lengths.argmin()
                 min_data_length = data_lengths.iloc[min_len_index]
                 max_data_length = data_lengths.max()
