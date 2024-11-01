@@ -17,10 +17,14 @@ from tsfminference.inference_payloads import (
 )
 
 
+SERIES_LENGTH = 512
+FORECAST_LENGTH = 96
+
+
 @pytest.fixture(scope="module")
 def ts_data_base() -> pd.DataFrame:
     # Generate a date range
-    length = 512
+    length = SERIES_LENGTH
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="H")
 
     # Create a DataFrame
@@ -72,11 +76,11 @@ def forecasting_input_base() -> ForecastingInferenceInput:
 
 def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
     # expected length
-    assert len(results) == 96
+    assert len(results) == FORECAST_LENGTH
     # expected start time
     assert results["date"].iloc[0] - df["date"].iloc[-1] == timedelta(hours=1)
     # expected end time
-    assert results["date"].iloc[-1] - df["date"].iloc[-1] == timedelta(hours=96)
+    assert results["date"].iloc[-1] - df["date"].iloc[-1] == timedelta(hours=FORECAST_LENGTH)
 
 
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
@@ -102,3 +106,25 @@ def test_forecast_with_schema_missing_target_columns(
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df)
+
+
+def test_forecast_with_integer_timestamps(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input: ForecastingInferenceInput = forecasting_input_base
+    df = ts_data_base
+    df[input.schema.timestamp_column] = df[input.schema.timestamp_column].astype(int)
+    df[input.schema.timestamp_column] = range(1, SERIES_LENGTH + 1)
+    print(df)
+    print(df.dtypes)
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+
+    print(results)
+    print(results.dtypes)
+
+    # assert results.iloc[0] == SERIES_LENGTH + 1
+    # assert results.iloc[-1] - df.iloc[-1] == FORECAST_LENGTH
