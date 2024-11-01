@@ -46,9 +46,9 @@ class HuggingFaceHandler(ServiceHandler):
         super().__init__(model_id=model_id, model_path=model_path, handler_config=handler_config)
 
         if (
-            "model_type" in handler_config
-            and "model_config_name" in handler_config
-            and "module_path" in handler_config
+            getattr(handler_config, "model_type", None)
+            and getattr(handler_config, "model_config_name", None)
+            and getattr(handler_config, "module_path", None)
         ):
             register_config(
                 handler_config.model_type,

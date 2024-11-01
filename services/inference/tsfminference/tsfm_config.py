@@ -17,11 +17,46 @@ LOGGER = logging.getLogger(__file__)
 
 
 class TSFMConfig(PushToHubMixin):
+    """A configuration class used by the time series serving framework.
+
+    Args:
+        service_handler_module_path (str, optional): module path where the service handler class is located.
+        service_handler_class_name (str, optional): class name for the service handler. If ommitted, the default
+            HFServiceHandler will be used.
+        module_path (str, optional): module path where the model class is located.
+        model_type (str, optional): An identifier for the model type, serialized into the model config JSON file, and used
+            to recreate the correct object in AutoConfig. For this config, it should match the model_type of the model that
+            will be served.
+        model_config_name (str, optional): the name of the model configuration class.
+        model_class_name (str, optional): the class name of the model.
+        exogenous_support (bool, optional): True if the model supports exogenous covariates. Defaults to False.
+        multivariate_support (bool, optional): True if the model supports multivariate inputs/outputs. Defaults to True.
+        missing_value_support (bool, optional): True if hte model supports missing values in the input. Defaults to False.
+        minimum_context_length (int, optional): Minimum context length required by the model. Defaults to 1.
+        maximum_context_length (int, optional): Maximum input context length consumable by the model. Use None to indicate
+            no maximum. Defaults to None.
+        maximum_prediction_length (int, optional): Maximum prediction length produced by the model. Use None to indicate
+            no maximum. Defaults to None.
+
+    Notes:
+        If module_path, model_type, model_config_name, model_class_name are absent, and the HFServiceHandler is used, the
+        model will be loaded using standard AutoConfig/AutoModel functions from HF.
+    """
+
     def __init__(self, **kwargs):
         # Attributes with defaults
         self.service_handler_module_path = kwargs.pop("service_handler_module_path", None)
         self.service_handler_class_name = kwargs.pop("service_handler_class_name", None)
         self.module_path = kwargs.pop("module_path", None)
+        self.model_type = kwargs.pop("model_type", None)
+        self.model_config_name = kwargs.pop("model_config_name", None)
+        self.model_class_name = kwargs.pop("model_class_name", None)
+        self.exogenous_support = kwargs.pop("exogenous_support", False)
+        self.multivariate_support = kwargs.pop("multivariate_support", True)
+        self.missing_value_support = kwargs.pop("missing_value_support", False)
+        self.minimum_context_length = kwargs.pop("minimum_context_length", 1)
+        self.maximum_context_length = kwargs.pop("maximum_context_length", None)
+        self.maximum_prediction_length = kwargs.pop("maximum_prediction_length", None)
 
         # "maximum_prediction_length": 96,
         # "minimum_context_length": 512,
@@ -42,6 +77,14 @@ class TSFMConfig(PushToHubMixin):
             except AttributeError as err:
                 LOGGER.error(f"Can't set {key} with value {value} for {self}")
                 raise err
+
+    @property
+    def name_or_path(self) -> str:
+        return getattr(self, "_name_or_path", None)
+
+    @name_or_path.setter
+    def name_or_path(self, value):
+        self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @staticmethod
     def _set_token_in_kwargs(kwargs, token=None):
