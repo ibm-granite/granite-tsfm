@@ -17,7 +17,7 @@ start_service_local: boilerplate
 	--bind 127.0.0.1:8000 \
 	tsfminference.main:app && true &
 stop_service_local:
-	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
+	pkill  -f 'python.*tsfminference.*'
 
 image: boilerplate
 	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
@@ -37,10 +37,9 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	pytest --cov=tsfminference --cov-report term-missing tests
+	pytest tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
-	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
 	pytest tests
