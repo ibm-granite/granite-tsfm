@@ -110,7 +110,7 @@ def test_forecast_with_schema_missing_target_columns(
 def test_forecast_with_integer_timestamps(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
-    input: ForecastingInferenceInput = forecasting_input_base
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
 
     timestamp_column = input.schema.timestamp_column
@@ -126,7 +126,7 @@ def test_forecast_with_integer_timestamps(
 
 
 def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
-    input: ForecastingInferenceInput = forecasting_input_base
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
 
     timestamp_column = input.schema.timestamp_column
@@ -139,7 +139,7 @@ def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_
 
 
 def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
-    input: ForecastingInferenceInput = forecasting_input_base
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
     df["VAL"] = df["VAL"].astype(str)
     df["VAL"] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
@@ -149,8 +149,8 @@ def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_inpu
         runtime.forecast(input=input)
 
 
-def test_forecast_with_bogus_mode_id(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
-    input: ForecastingInferenceInput = forecasting_input_base
+def test_forecast_with_bogus_model_id(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
     input.model_id = "hoo-hah"
@@ -163,13 +163,42 @@ def test_forecast_with_bogus_mode_id(ts_data_base: pd.DataFrame, forecasting_inp
 def test_forecast_with_insufficient_context_length(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
-    input: ForecastingInferenceInput = forecasting_input_base
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
     df = df.iloc[0:-100]
 
     input.data = df.to_dict(orient="list")
 
     runtime: InferenceRuntime = InferenceRuntime(config=config)
-    with pytest.raises(HTTPException) as ex:
+    with pytest.raises(HTTPException) as _:
         runtime.forecast(input=input)
-        print(ex)
+
+
+@pytest.mark.skip
+def test_forecast_with_nan_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
+    df = copy.deepcopy(ts_data_base)
+    df.iloc[0, df.columns.get_loc("VAL")] = np.nan
+
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    with pytest.raises(HTTPException) as _:
+        runtime.forecast(input=input)
+
+
+@pytest.mark.skip
+def test_forecast_with_missing_row(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
+    df = copy.deepcopy(ts_data_base)
+    df = df.drop(index=10)
+
+    # append a row to give it the correct length
+    # don't forget to update the timestamp accordingly in the
+    # appended row
+
+    input.data = df.to_dict(orient="list")
+
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    # with pytest.raises(HTTPException) as _:
+    runtime.forecast(input=input)
