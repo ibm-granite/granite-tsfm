@@ -60,7 +60,6 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 locust = "*"
-pytest-coverage = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]

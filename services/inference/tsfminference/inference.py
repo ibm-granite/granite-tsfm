@@ -79,11 +79,8 @@ class InferenceRuntime:
 
         parameters = input_payload.parameters
         schema = input_payload.schema
-        try:
-            data = decode_data(input_payload.data, schema)
-            future_data = decode_data(input_payload.future_data, schema)
-        except Exception as ex:
-            return None, ex
+        data = decode_data(input_payload.data, schema)
+        future_data = decode_data(input_payload.future_data, schema)
 
         # collect and check underlying time series lengths
         if getattr(handler.handler_config, "minimum_context_length", None) or getattr(
