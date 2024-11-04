@@ -114,7 +114,7 @@ for DATASET in list_datasets:
         #############################################################
         # Load model
         zeroshot_model = get_model(
-            model_path=MODEL_PATH, context_length=CONTEXT_LENGTH, forecast_length=FORECAST_LENGTH
+            model_path=MODEL_PATH, context_length=CONTEXT_LENGTH, prediction_length=FORECAST_LENGTH
         )
 
         # zeroshot_trainer
@@ -180,14 +180,14 @@ for DATASET in list_datasets:
                 finetune_forecast_model = get_model(
                     model_path=MODEL_PATH,
                     context_length=CONTEXT_LENGTH,
-                    forecast_length=FORECAST_LENGTH,
+                    prediction_length=FORECAST_LENGTH,
                     head_dropout=0.7,
                 )
             else:
                 finetune_forecast_model = get_model(
                     model_path=MODEL_PATH,
                     context_length=CONTEXT_LENGTH,
-                    forecast_length=FORECAST_LENGTH,
+                    prediction_length=FORECAST_LENGTH,
                 )
 
             if FREEZE_BACKBONE:
