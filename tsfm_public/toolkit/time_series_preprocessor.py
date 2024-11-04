@@ -529,9 +529,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
             if self.id_columns:
-                # to do: be more efficient
                 grps = df.groupby(self.id_columns)
-                _, df_subset = list(grps)[0]
+                _, df_subset = next(iter(grps))
             else:
                 df_subset = df
 
@@ -624,7 +623,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         else:
             id_columns = INTERNAL_ID_COLUMN
 
-        df_inv = df.groupby(id_columns, group_keys=False).apply(
+        df_inv = df.groupby(id_columns, group_keys=False)[df.columns].apply(
             inverse_scale_func,
             id_columns=id_columns,
         )
@@ -673,7 +672,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             else:
                 id_columns = INTERNAL_ID_COLUMN
 
-            df_out = df.groupby(id_columns, group_keys=False).apply(
+            df_out = df.groupby(id_columns, group_keys=False)[df.columns].apply(
                 scale_func,
                 id_columns=id_columns,
             )
