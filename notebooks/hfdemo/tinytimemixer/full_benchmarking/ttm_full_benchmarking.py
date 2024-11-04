@@ -24,7 +24,7 @@ from transformers.integrations import INTEGRATION_TO_CALLBACK
 
 from tsfm_public import TrackingCallback, count_parameters, load_dataset
 from tsfm_public.models.tinytimemixer.utils import get_ttm_args
-from tsfm_public.toolkit.get_model import GetTTM
+from tsfm_public.toolkit.get_model import get_model
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 from tsfm_public.toolkit.visualization import plot_predictions
 
@@ -113,7 +113,7 @@ for DATASET in list_datasets:
         ##### Use the pretrained model in zero-shot forecasting #####
         #############################################################
         # Load model
-        zeroshot_model = GetTTM.from_pretrained(
+        zeroshot_model = get_model(
             model_path=MODEL_PATH, context_length=CONTEXT_LENGTH, forecast_length=FORECAST_LENGTH
         )
 
@@ -177,14 +177,14 @@ for DATASET in list_datasets:
 
             # change head dropout to 0.7 for ett datasets
             if "ett" in DATASET:
-                finetune_forecast_model = GetTTM.from_pretrained(
+                finetune_forecast_model = get_model(
                     model_path=MODEL_PATH,
                     context_length=CONTEXT_LENGTH,
                     forecast_length=FORECAST_LENGTH,
                     head_dropout=0.7,
                 )
             else:
-                finetune_forecast_model = GetTTM.from_pretrained(
+                finetune_forecast_model = get_model(
                     model_path=MODEL_PATH,
                     context_length=CONTEXT_LENGTH,
                     forecast_length=FORECAST_LENGTH,

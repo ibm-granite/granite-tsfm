@@ -1,46 +1,160 @@
-ibm-granite:
-    r1:
-        model_card: "ibm-granite/granite-timeseries-ttm-r1"
-        revision:
-            512: 
-                96: "main"
-            1024: 
-                96: "1024_96_v1"
-    r2:
-        model_card: "ibm-granite/granite-timeseries-ttm-r2"
-        revision:
-            512: 
-                96: "main"
-                192: "512-192-r2"
-                336: "512-336-r2"
-                720: "512-720-r2"
-            1024:
-                96: "1024-96-r2"
-                192: "1024-192-r2"
-                336: "1024-336-r2"
-                720: "1024-720-r2"
-            1536: 
-                96: "1536-96-r2"
-                192: "1536-192-r2"
-                336: "1536-336-r2"
-                720: "1536-720-r2"
+ibm-granite-models:
+    r1-512-96-nofreq:
+        release: r1
+        model_card: ibm-granite/granite-timeseries-ttm-r1
+        revision: main
+        context_length: 512
+        prediction_length: 96
+    r1-1024-96-nofreq:
+        release: r1
+        model_card: ibm-granite/granite-timeseries-ttm-r1
+        revision: 1024_96_v1
+        context_length: 1024
+        prediction_length: 96
+    r2-512-96-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: main
+        context_length: 512
+        prediction_length: 96
+    r2-512-192-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 512-192-r2
+        context_length: 512
+        prediction_length: 192
+    r2-512-336-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 512-336-r2
+        context_length: 512
+        prediction_length: 336
+    r2-512-720-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 512-720-r2
+        context_length: 512
+        prediction_length: 720
+    r2-1024-96-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1024-96-r2
+        context_length: 1024
+        prediction_length: 96
+    r2-1024-192-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1024-192-r2
+        context_length: 1024
+        prediction_length: 192
+    r2-1024-336-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1024-336-r2
+        context_length: 1024
+        prediction_length: 336
+    r2-1024-720-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1024-720-r2
+        context_length: 1024
+        prediction_length: 720
+    r2-1536-96-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1536-96-r2
+        context_length: 1536
+        prediction_length: 96
+    r2-1536-192-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1536-192-r2
+        context_length: 1536
+        prediction_length: 192
+    r2-1536-336-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1536-336-r2
+        context_length: 1536
+        prediction_length: 336
+    r2-1536-720-nofreq:
+        release: r2
+        model_card: ibm-granite/granite-timeseries-ttm-r2
+        revision: 1536-720-r2
+        context_length: 1536
+        prediction_length: 720
 
-research-use:
-    r2:
-        model_card: "ibm/ttm-research-r2"
-        revision:
-            512: 
-                96: "main"
-                192: "512-192-ft-r2"
-                336: "512-336-ft-r2"
-                720: "512-720-ft-r2"
-            1024: 
-                96: "1024-96-ft-r2"
-                192: "1024-192-ft-r2"
-                336: "1024-336-ft-r2"
-                720: "1024-720-ft-r2"
-            1536:
-                96: "1536-96-ft-r2"
-                192: "1536-192-ft-r2"
-                336: "1536-336-ft-r2"
-                720: "1536-720-ft-r2"   
+
+research-use-models:
+    r2-512-96-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: main
+        context_length: 512
+        prediction_length: 96
+    r2-512-192-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 512-192-ft-r2
+        context_length: 512
+        prediction_length: 192
+    r2-512-336-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 512-336-ft-r2
+        context_length: 512
+        prediction_length: 336
+    r2-512-720-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 512-720-ft-r2
+        context_length: 512
+        prediction_length: 720
+    r2-1024-96-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1024-96-ft-r2
+        context_length: 1024
+        prediction_length: 96
+    r2-1024-192-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1024-192-ft-r2
+        context_length: 1024
+        prediction_length: 192
+    r2-1024-336-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1024-336-ft-r2
+        context_length: 1024
+        prediction_length: 336
+    r2-1024-720-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1024-720-ft-r2
+        context_length: 1024
+        prediction_length: 720
+    r2-1536-96-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1536-96-ft-r2
+        context_length: 1536
+        prediction_length: 96
+    r2-1536-192-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1536-192-ft-r2
+        context_length: 1536
+        prediction_length: 192
+    r2-1536-336-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1536-336-ft-r2
+        context_length: 1536
+        prediction_length: 336
+    r2-1536-720-freq:
+        release: r2
+        model_card: ibm/ttm-research-r2
+        revision: 1536-720-ft-r2
+        context_length: 1536
+        prediction_length: 720

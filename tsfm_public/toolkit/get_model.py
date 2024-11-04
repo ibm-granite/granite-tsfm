@@ -10,29 +10,25 @@ from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 LOGGER = logging.getLogger(__file__)
 
 
-def check_ttm_model_path(model_path):
-    if "ibm-granite/granite-timeseries-ttm-r1" in model_path or "ibm/TTM" in model_path:
-        return 1
-    elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
-        return 2
-    elif "ibm/ttm-research-r2" in model_path:
-        return 3
-    else:
-        return 0
+def get_model(
+    model_path,
+    model_name: str = "ttm",
+    context_length: int = None,
+    prediction_length: int = None,
+    freq_prefix_tuning: bool = None,
+    **kwargs,
+):
+    LOGGER.info(f"Loading model from: {model_path}")
 
-
-class GetTTM(TinyTimeMixerForPrediction):
-    @classmethod
-    def from_pretrained(cls, model_path, context_length=None, forecast_length=None, **kwargs):
-        # Custom behavior before calling the superclass method
-        LOGGER.info(f"Loading model from: {model_path}")
-
+    if model_name.lower() == "ttm":
         model_path_type = check_ttm_model_path(model_path)
         prediction_filter_length = 0
         ttm_model_revision = None
         if model_path_type != 0:
-            if context_length is None or forecast_length is None:
-                raise ValueError("Provide `context_length` and `forecast_length` for hugginface model path.")
+            if context_length is None or prediction_length is None:
+                raise ValueError(
+                    "Provide `context_length` and `prediction_length` when `model_path` is a hugginface model path."
+                )
 
             # Get right TTM model
             config_dir = resources.files("tsfm_public.resources.model_paths_config")
@@ -40,39 +36,59 @@ class GetTTM(TinyTimeMixerForPrediction):
             with open(os.path.join(config_dir, "ttm.yaml"), "r") as file:
                 model_revisions = yaml.safe_load(file)
 
-            if forecast_length <= 96:
-                selected_forecast_length = 96
-            elif forecast_length <= 192:
-                selected_forecast_length = 192
-            elif forecast_length <= 336:
-                selected_forecast_length = 336
-            elif forecast_length <= 720:
-                selected_forecast_length = 720
+            if prediction_length <= 96:
+                selected_prediction_length = 96
+            elif prediction_length <= 192:
+                selected_prediction_length = 192
+            elif prediction_length <= 336:
+                selected_prediction_length = 336
+            elif prediction_length <= 720:
+                selected_prediction_length = 720
             else:
-                raise ValueError("Currently supported maximum forecast_length = 720")
+                raise ValueError("Currently supported maximum prediction_length = 720")
 
-            LOGGER.info("Selected forecast_length =", selected_forecast_length)
+            LOGGER.info("Selected prediction_length =", selected_prediction_length)
 
-            prediction_filter_length = forecast_length
+            prediction_filter_length = prediction_length
+
+            if freq_prefix_tuning is None:
+                # Default model preference (freq / nofreq)
+                if model_path_type == 1 or model_path_type == 2:  # for granite use nofreq models
+                    freq_prefix = "nofreq"
+                elif model_path_type == 3:  # for research-use use freq models
+                    freq_prefix = "freq"
+                else:
+                    freq_prefix = None
+            else:
+                if freq_prefix_tuning:
+                    freq_prefix = "freq"
+                else:
+                    freq_prefix = "nofreq"
 
             try:
-                model_paths = {
-                    1: model_revisions["ibm-granite"]["r1"]["revision"],
-                    2: model_revisions["ibm-granite"]["r2"]["revision"],
-                    3: model_revisions["research-use"]["r2"]["revision"],
-                }
-                ttm_model_revision = (
-                    model_paths.get(model_path_type, {}).get(context_length, {}).get(selected_forecast_length)
-                )
-
+                if model_path_type == 1 or model_path_type == 2:
+                    ttm_model_revision = model_revisions["ibm-granite-models"][
+                        f"r{model_path_type}-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                    ]["revision"]
+                elif model_path_type == 3:
+                    ttm_model_revision = model_revisions["research-use-models"][
+                        f"r2-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                    ]["revision"]
+                else:
+                    raise Exception(
+                        "Wrong model path type calculation. Possible reason: the model card path is wrong."
+                    )
             except KeyError:
                 raise ValueError("Model not found, possibly because of wrong context_length.")
 
         # Load model
         if prediction_filter_length == 0:
-            model = super().from_pretrained(model_path, revision=ttm_model_revision, **kwargs)
+            model = TinyTimeMixerForPrediction.from_pretrained(model_path, revision=ttm_model_revision, **kwargs)
         else:
-            model = super().from_pretrained(
+            LOGGER.warning(
+                "Requested `prediction_length` is not exactly equal to any of the available TTM prediction lengths. Hence, TTM will forecast using the `prediction_filter_length` argument to provide the requested prediction length."
+            )
+            model = TinyTimeMixerForPrediction.from_pretrained(
                 model_path,
                 revision=ttm_model_revision,
                 prediction_filter_length=prediction_filter_length,
@@ -82,20 +98,18 @@ class GetTTM(TinyTimeMixerForPrediction):
         LOGGER.info(
             f"[TTM] context_len = {model.config.context_length}, forecast_len = {model.config.prediction_length}"
         )
+    else:
+        raise ValueError("Currently supported values for `model_name` = 'ttm'.")
 
-        return model
+    return model
 
 
-if __name__ == "__main__":
-    mp = "ibm-granite/granite-timeseries-ttm-r2"
-    cl = 512
-    fl = 10
-    model = GetTTM.from_pretrained(model_path=mp, context_length=cl, forecast_length=fl, dropout=0.4)
-
-    mp = "ibm-granite/granite-timeseries-ttm-r1"
-    cl = 1024
-    fl = 56
-    model = GetTTM.from_pretrained(model_path=mp, context_length=cl, forecast_length=fl, dropout=0.3)
-
-    mp = "/dccstor/tsfm23/vj_share/models/neurips_ttm/512/720/vj_ttm_512_freq-ver12-r-ef42ed98/models/ttm_model/"
-    model = GetTTM.from_pretrained(model_path=mp)
+def check_ttm_model_path(model_path):
+    if "ibm-granite/granite-timeseries-ttm-r1" in model_path or "ibm/TTM" in model_path:
+        return 1
+    elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
+        return 2
+    elif "ibm/ttm-research-r2" in model_path:
+        return 3
+    else:
+        return 0
