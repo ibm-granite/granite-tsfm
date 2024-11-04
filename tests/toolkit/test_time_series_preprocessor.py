@@ -103,7 +103,7 @@ def test_time_series_preprocessor_scales(ts_data):
     # check scaled result
     out = tsp.preprocess(df)
     assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x)), 0.0)
-    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x)), 1.0)
+    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0)), 1.0)
 
     # check inverse scale result
     out_inv = tsp.inverse_scale_targets(out)
@@ -112,8 +112,8 @@ def test_time_series_preprocessor_scales(ts_data):
         == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x))
     )
     assert np.all(
-        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
-        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
+        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0))
+        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0))
     )
 
     # check inverse scale result, with suffix
