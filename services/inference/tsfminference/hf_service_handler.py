@@ -4,6 +4,7 @@ import copy
 import importlib
 import logging
 import pathlib
+from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
@@ -13,11 +14,8 @@ from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedMode
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
 
-from .inference_payloads import (
-    ForecastingMetadataInput,
-    ForecastingParameters,
-)
-from .service_handler import ServiceHandler
+from .inference_payloads import BaseParameters, ForecastingMetadataInput, ForecastingParameters
+from .service_handler import ForecastingServiceHandler, ServiceHandler
 from .tsfm_config import TSFMConfig
 
 
@@ -122,6 +120,47 @@ class HuggingFaceHandler(ServiceHandler):
         LOGGER.info("Successfully loaded model")
         return model
 
+    @abstractmethod
+    def _get_config_kwargs(
+        self,
+        parameters: Optional[BaseParameters] = None,
+        preprocessor: Optional[TimeSeriesPreprocessor] = None,
+    ) -> Dict[str, Any]:
+        """Helper function to return additional configuration arguments that are used during config load.
+        Can be overridden in a subclass to allow specialized model functionality.
+
+        Args:
+            parameters (Optional[ForecastingParameters], optional): Request parameters. Defaults to None.
+            preprocessor (Optional[TimeSeriesPreprocessor], optional): Time seres preprocessor. Defaults to None.
+
+        Returns:
+            Dict[str, Any]: Dictionary of additional arguments that are used later as keyword arguments to the config.
+        """
+        ...
+
+
+class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandler):
+    """Handler for HuggingFace-like models
+
+    Underlying assumption is that the model makes use of PretrainedConfig/PreTrainedModel
+    conventions. During init we register the config using HF AutoConfig.
+
+    Args:
+        model_id (str): ID of the model
+        model_path (Union[str, Path]): Full path to the model folder.
+        handler_config (TSFMConfig): Configuration for the service handler
+
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        model_path: Union[str, Path],
+        handler_config: TSFMConfig,
+    ):
+        # !!! Double check which init
+        super().__init__(model_id=model_id, model_path=model_path, handler_config=handler_config)
+
     def _get_config_kwargs(
         self,
         parameters: Optional[ForecastingParameters] = None,
@@ -145,7 +184,7 @@ class HuggingFaceHandler(ServiceHandler):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
-    ) -> "HuggingFaceHandler":
+    ) -> "ForecastingHuggingFaceHandler":
         """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
         preprocessor and forecasting pipeline. This method:
         1) loades the preprocessor, creating a new one if the model does not already have a preprocessor
@@ -161,7 +200,7 @@ class HuggingFaceHandler(ServiceHandler):
                 request. Defaults to None.
 
         Returns:
-            HuggingFaceHandler: The updated service handler object.
+            ForecastingHuggingFaceHandler: The updated service handler object.
         """
 
         preprocessor_params = copy.deepcopy(schema.model_dump())
@@ -237,7 +276,7 @@ class HuggingFaceHandler(ServiceHandler):
 
     def _train(
         self,
-    ) -> "HuggingFaceHandler": ...
+    ) -> "ForecastingHuggingFaceHandler": ...
 
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
