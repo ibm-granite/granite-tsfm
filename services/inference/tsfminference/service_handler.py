@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import pandas as pd
 
 from .inference_payloads import (
+    BaseMetadataInput,
+    BaseParameters,
     ForecastingMetadataInput,
     ForecastingParameters,
     PredictOutput,
@@ -79,6 +81,134 @@ class ServiceHandler(ABC):
     def prepare(
         self,
         data: pd.DataFrame,
+        schema: Optional[BaseMetadataInput] = None,
+        parameters: Optional[BaseParameters] = None,
+        **kwargs,
+    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
+        """Prepare the wrapper by loading all the components needed to use the model.
+
+        The actual preparation is done in the `_prepare()` method -- which should be overridden for a
+        particular model implementation. This is separate from `load()` above because we may need to know
+        certain details about the model (learned from the handler config) before we can effectively load
+        and configure the model artifacts.
+
+        Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            schema (Optional[BaseMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[BaseParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            Tuple(ServiceHandler, None) or Tuple(None, Exception): In the first case, a tuple containing
+                a prepared service handler is returned. The prepared service handler contains all the
+                necessary artifacts for performing subsequent inference or training tasks. In the second
+                case, the tuple contains an error object.
+        """
+        try:
+            self._prepare(data=data, schema=schema, parameters=parameters, **kwargs)
+            self.prepared = True
+            return self, None
+        except Exception as e:
+            return self, e
+
+    @abstractmethod
+    def _prepare(
+        self,
+        data: pd.DataFrame,
+        schema: Optional[BaseMetadataInput] = None,
+        parameters: Optional[BaseParameters] = None,
+        **kwargs,
+    ) -> "ServiceHandler":
+        """Prepare implementation to be implemented by model owner in derived class
+
+        Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            schema (Optional[BaseMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[BaseParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            ServiceHandler: The prepared service handler.
+        """
+        ...
+
+    def run(
+        self,
+        data: pd.DataFrame,
+        schema: Optional[BaseMetadataInput] = None,
+        parameters: Optional[BaseParameters] = None,
+        **kwargs,
+    ) -> Tuple[PredictOutput, None] | Tuple[None, Exception]:
+        """Perform an inference request
+
+        Args:
+            data (pd.DataFrame): A pandas dataframe containing historical data.
+            schema (Optional[BaseMetadataInput], optional): Service request schema. Defaults to None.
+            parameters (Optional[BaseParameters], optional): Service requst parameters. Defaults to None.
+
+        Returns:
+            Tuple[PredictOutput, None] | Tuple[None, Exception]: If successful, returns a tuple containing a PredictionOutput
+                object as the first element. If unsuccessful, a tuple with an exception as the second element will be returned.
+        """
+
+        if not self.prepared:
+            return None, RuntimeError("Service wrapper has not yet been prepared; run `model.prepare()` first.")
+
+        try:
+            result = self._run(data, schema=schema, parameters=parameters, **kwargs)
+            encoded_result = encode_dataframe(result)
+            return PredictOutput(
+                model_id=str(self.model_id),
+                created_at=datetime.datetime.now().isoformat(),
+                results=[encoded_result],
+            ), None
+
+        except Exception as e:
+            return None, e
+
+    @abstractmethod
+    def _run(
+        self,
+        data: pd.DataFrame,
+        schema: Optional[BaseMetadataInput] = None,
+        parameters: Optional[BaseParameters] = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """Abstract method for run to be implemented by model owner in derived class"""
+        ...
+
+    def train(
+        self,
+    ) -> "ServiceHandler":
+        """Perform a fine-tuning request"""
+        ...
+
+    @abstractmethod
+    def _train(
+        self,
+    ) -> "ServiceHandler":
+        """Abstract method for train to be implemented by model owner in derived class"""
+        ...
+
+
+class ForecastingServiceHandler(ServiceHandler):
+    """Abstraction to enable serving of various models.
+
+    Args:
+        model_id (str): A string identifier for the model.
+        model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
+        handler_config (TSFMConfig): A handler configuration object.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        model_path: Union[str, Path],
+        handler_config: TSFMConfig,
+    ):
+        super().__init__(model_id, model_path, handler_config)
+
+    def prepare(
+        self,
+        data: pd.DataFrame,
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
@@ -102,12 +232,8 @@ class ServiceHandler(ABC):
                 necessary artifacts for performing subsequent inference or training tasks. In the second
                 case, the tuple contains an error object.
         """
-        try:
-            self._prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
-            self.prepared = True
-            return self, None
-        except Exception as e:
-            return self, e
+
+        return super().prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
 
     @abstractmethod
     def _prepare(
@@ -116,7 +242,7 @@ class ServiceHandler(ABC):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
-    ) -> "ServiceHandler":
+    ) -> "ForecastingServiceHandler":
         """Prepare implementation to be implemented by model owner in derived class
 
         Args:
@@ -126,7 +252,7 @@ class ServiceHandler(ABC):
             parameters (Optional[ForecastingParameters], optional): Service requst parameters. Defaults to None.
 
         Returns:
-            ServiceHandler: The prepared service handler.
+            ForecastingServiceHandler: The prepared service handler.
         """
         ...
 
@@ -150,25 +276,7 @@ class ServiceHandler(ABC):
                 object as the first element. If unsuccessful, a tuple with an exception as the second element will be returned.
         """
 
-        if not self.prepared:
-            return None, RuntimeError("Service wrapper has not yet been prepared; run `model.prepare()` first.")
-
-        try:
-            result = self._run(
-                data,
-                future_data=future_data,
-                schema=schema,
-                parameters=parameters,
-            )
-            encoded_result = encode_dataframe(result)
-            return PredictOutput(
-                model_id=str(self.model_id),
-                created_at=datetime.datetime.now().isoformat(),
-                results=[encoded_result],
-            ), None
-
-        except Exception as e:
-            return None, e
+        return super().run(data, future_data=future_data, schema=schema, parameters=parameters)
 
     @abstractmethod
     def _run(
@@ -183,14 +291,14 @@ class ServiceHandler(ABC):
 
     def train(
         self,
-    ):
+    ) -> "ForecastingServiceHandler":
         """Perform a fine-tuning request"""
         ...
 
     @abstractmethod
     def _train(
         self,
-    ) -> "ServiceHandler":
+    ) -> "ForecastingServiceHandler":
         """Abstract method for train to be implemented by model owner in derived class"""
         ...
 
@@ -201,9 +309,10 @@ def get_service_handler_class(config: TSFMConfig) -> "ServiceHandler":
         my_class = getattr(module, config.service_handler_class_name)
 
     else:
-        from .hf_service_handler import HuggingFaceHandler
+        # Default to forecasting task
+        from .hf_service_handler import ForecastingHuggingFaceHandler
 
-        my_class = HuggingFaceHandler
+        my_class = ForecastingHuggingFaceHandler
 
     return my_class
 

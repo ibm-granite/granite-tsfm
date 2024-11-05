@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 from tsfm_public import TimeSeriesPreprocessor
 
-from .hf_service_handler import HuggingFaceHandler
+from .hf_service_handler import ForecastingHuggingFaceHandler
 from .inference_payloads import (
     ForecastingParameters,
 )
@@ -14,7 +14,7 @@ from .inference_payloads import (
 LOGGER = logging.getLogger(__file__)
 
 
-class TinyTimeMixerHandler(HuggingFaceHandler):
+class TinyTimeMixerHandler(ForecastingHuggingFaceHandler):
     """Service handler for the tiny time mixer model"""
 
     def _get_config_kwargs(
