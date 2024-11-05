@@ -100,6 +100,10 @@ class ForecastingMetadataInput(BaseMetadataInput):
     )
 
 
+class BaseParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+
 class ForecastingParameters(BaseModel):
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
