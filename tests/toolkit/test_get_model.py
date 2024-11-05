@@ -12,7 +12,7 @@ def test_get_model():
     mp = "ibm-granite/granite-timeseries-ttm-r2"
     cl = 512
     fl = 10
-    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=5)
+    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
     assert model.config.prediction_length == 96
     assert model.config.context_length == cl
     assert model.config.d_model == 192

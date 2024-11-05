@@ -9,6 +9,34 @@ from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
 
 LOGGER = logging.getLogger(__file__)
 
+SUPPORTED_LENGTHS = {
+    1: {"CL": [512, 1024], "FL": [96]},
+    2: {
+        "CL": [512, 1024, 1536],
+        "FL": [96, 192, 336, 720],
+    },
+    3: {
+        "CL": [512, 1024, 1536],
+        "FL": [96, 192, 336, 720],
+    },
+}
+
+
+def check_ttm_model_path(model_path):
+    if (
+        "ibm/TTM" in model_path
+        or "ibm-granite/granite-timeseries-ttm-r1" in model_path
+        or "ibm-granite/granite-timeseries-ttm-v1" in model_path
+        or "ibm-granite/granite-timeseries-ttm-1m" in model_path
+    ):
+        return 1
+    elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
+        return 2
+    elif "ibm/ttm-research-r2" in model_path:
+        return 3
+    else:
+        return 0
+
 
 def get_model(
     model_path,
@@ -47,7 +75,7 @@ def get_model(
             else:
                 raise ValueError("Currently supported maximum prediction_length = 720")
 
-            LOGGER.info("Selected prediction_length =", selected_prediction_length)
+            LOGGER.info(f"Selected prediction_length = {selected_prediction_length}")
 
             prediction_filter_length = prediction_length
 
@@ -79,14 +107,19 @@ def get_model(
                         "Wrong model path type calculation. Possible reason: the model card path is wrong."
                     )
             except KeyError:
-                raise ValueError("Model not found, possibly because of wrong context_length.")
+                raise ValueError(
+                    f"Model not found, possibly because of wrong context_length. Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are {SUPPORTED_LENGTHS[model_path_type]}"
+                )
 
         # Load model
         if prediction_filter_length == 0:
             model = TinyTimeMixerForPrediction.from_pretrained(model_path, revision=ttm_model_revision, **kwargs)
         else:
             LOGGER.warning(
-                "Requested `prediction_length` is not exactly equal to any of the available TTM prediction lengths. Hence, TTM will forecast using the `prediction_filter_length` argument to provide the requested prediction length."
+                f"Requested `prediction_length` ({prediction_length}) is not exactly equal to any of the available TTM prediction lengths.\n\
+                Hence, TTM will forecast using the `prediction_filter_length` argument to provide the requested prediction length.\n\
+                Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are\n\
+                {SUPPORTED_LENGTHS[model_path_type]}"
             )
             model = TinyTimeMixerForPrediction.from_pretrained(
                 model_path,
@@ -104,12 +137,24 @@ def get_model(
     return model
 
 
-def check_ttm_model_path(model_path):
-    if "ibm-granite/granite-timeseries-ttm-r1" in model_path or "ibm/TTM" in model_path:
-        return 1
-    elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
-        return 2
-    elif "ibm/ttm-research-r2" in model_path:
-        return 3
-    else:
-        return 0
+if __name__ == "__main__":
+    mp = "ibm-granite/granite-timeseries-ttm-r2"
+    cl = 512
+    fl = 10
+    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
+    assert model.config.prediction_length == 96
+    assert model.config.context_length == cl
+    assert model.config.d_model == 192
+
+    mp = "ibm-granite/granite-timeseries-ttm-r1"
+    cl = 512
+    fl = 20
+    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
+    assert model.config.prediction_length == 96
+    assert model.config.context_length == cl
+    assert model.config.d_model == 192
+
+    mp = "ibm-granite/granite-timeseries-ttm-v1"
+    cl = 500
+    fl = 96
+    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
