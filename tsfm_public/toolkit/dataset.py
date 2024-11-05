@@ -558,9 +558,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
             for col_name, spec in self.masking_specification:
                 col_idx = self.column_name_to_index_map[col_name]
                 if isinstance(spec, (tuple, list)) and len(spec) == 2:
-                    past_values_tensor[spec[0] : spec[1], col_idx] = np.NaN
+                    past_values_tensor[spec[0] : spec[1], col_idx] = np.nan
                 else:
-                    past_values_tensor[spec:, col_idx] = np.NaN
+                    past_values_tensor[spec:, col_idx] = np.nan
             return past_values_tensor
 
         def __getitem__(self, index):
