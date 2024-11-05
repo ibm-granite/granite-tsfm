@@ -135,26 +135,3 @@ def get_model(
         raise ValueError("Currently supported values for `model_name` = 'ttm'.")
 
     return model
-
-
-if __name__ == "__main__":
-    mp = "ibm-granite/granite-timeseries-ttm-r2"
-    cl = 512
-    fl = 10
-    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
-    assert model.config.prediction_length == 96
-    assert model.config.context_length == cl
-    assert model.config.d_model == 192
-
-    mp = "ibm-granite/granite-timeseries-ttm-r1"
-    cl = 512
-    fl = 20
-    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
-    assert model.config.prediction_length == 96
-    assert model.config.context_length == cl
-    assert model.config.d_model == 192
-
-    mp = "ibm-granite/granite-timeseries-ttm-v1"
-    cl = 500
-    fl = 96
-    model = get_model(model_path=mp, context_length=cl, prediction_length=fl, dropout=0.4, decoder_num_layers=1)
