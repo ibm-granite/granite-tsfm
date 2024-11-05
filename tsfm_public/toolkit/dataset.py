@@ -135,6 +135,16 @@ class BaseDFDataset(torch.utils.data.Dataset):
     def __len__(self):
         return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
+    def _check_index(self, index: int) -> int:
+        if index >= len(self):
+            raise IndexError("Index exceeds dataset length")
+
+        if index < 0:
+            if -index > len(self):
+                raise ValueError("Absolute value of index should not exceed dataset length")
+            index = len(self) + index
+        return index
+
     def __getitem__(self, index: int):
         """
         Args:
@@ -358,6 +368,8 @@ class PretrainDFDataset(BaseConcatDFDataset):
             )
 
         def __getitem__(self, index):
+            index = self._check_index(index)
+
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {
@@ -565,6 +577,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
 
@@ -715,6 +728,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
@@ -840,6 +854,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
