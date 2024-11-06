@@ -212,6 +212,7 @@ class ForecastingServiceHandler(ServiceHandler):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
         """Prepare the wrapper by loading all the components needed to use the model.
 
@@ -233,7 +234,7 @@ class ForecastingServiceHandler(ServiceHandler):
                 case, the tuple contains an error object.
         """
 
-        return super().prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
+        return super().prepare(data=data, future_data=future_data, schema=schema, parameters=parameters, **kwargs)
 
     @abstractmethod
     def _prepare(
@@ -242,6 +243,7 @@ class ForecastingServiceHandler(ServiceHandler):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> "ForecastingServiceHandler":
         """Prepare implementation to be implemented by model owner in derived class
 
@@ -262,6 +264,7 @@ class ForecastingServiceHandler(ServiceHandler):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> Tuple[PredictOutput, None] | Tuple[None, Exception]:
         """Perform an inference request
 
@@ -276,7 +279,7 @@ class ForecastingServiceHandler(ServiceHandler):
                 object as the first element. If unsuccessful, a tuple with an exception as the second element will be returned.
         """
 
-        return super().run(data, future_data=future_data, schema=schema, parameters=parameters)
+        return super().run(data, future_data=future_data, schema=schema, parameters=parameters, **kwargs)
 
     @abstractmethod
     def _run(
@@ -285,6 +288,7 @@ class ForecastingServiceHandler(ServiceHandler):
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """Abstract method for run to be implemented by model owner in derived class"""
         ...
