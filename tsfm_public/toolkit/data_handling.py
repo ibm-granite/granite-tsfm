@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 """Utilities for handling datasets"""
 
 import glob

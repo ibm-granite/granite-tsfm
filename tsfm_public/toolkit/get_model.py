@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Utilities to support model loading"""
+
 import logging
 import os
 from importlib import resources
