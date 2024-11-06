@@ -184,6 +184,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> "ForecastingHuggingFaceHandler":
         """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
         preprocessor and forecasting pipeline. This method:
@@ -241,6 +242,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         future_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """_summary_
 
