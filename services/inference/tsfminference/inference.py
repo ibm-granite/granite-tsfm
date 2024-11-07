@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from prometheus_client import Summary
 from starlette import status
 from transformers import PretrainedConfig
 
@@ -23,6 +24,8 @@ from .inference_payloads import ForecastingInferenceInput, PredictOutput
 
 
 LOGGER = logging.getLogger(__file__)
+
+FORECAST_PROMETHEUS_SUMMARY = Summary("forecast:", "Time spent processing request")
 
 
 class InferenceRuntime:
@@ -85,6 +88,7 @@ class InferenceRuntime:
         LOGGER.info("Successfully loaded model")
         return model, None
 
+    @FORECAST_PROMETHEUS_SUMMARY.time()
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
         answer, ex = self._forecast_common(input)
