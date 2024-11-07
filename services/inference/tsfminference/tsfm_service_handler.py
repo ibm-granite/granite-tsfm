@@ -14,7 +14,7 @@ from .inference_payloads import (
 LOGGER = logging.getLogger(__file__)
 
 
-class TinyTimeMixerHandler(ForecastingHuggingFaceHandler):
+class TinyTimeMixerForecastingHandler(ForecastingHuggingFaceHandler):
     """Service handler for the tiny time mixer model"""
 
     def _get_config_kwargs(
