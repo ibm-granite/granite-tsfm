@@ -792,6 +792,7 @@ def get_datasets(
     as_univariate: bool = False,
     use_frequency_token: bool = False,
     enable_padding: bool = True,
+    **dataset_kwargs,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -827,6 +828,7 @@ def get_datasets(
         enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
             time series) when there is insufficient data to form one record. If False, no padding is done and one or
             more datasets may be empty.
+        dataset_kwargs: additional keyword arguments to pass to the torch datasets during creation.
 
 
     Returns:
@@ -907,6 +909,8 @@ def get_datasets(
 
         params["target_columns"] = ["value"]
         params["id_columns"] = params["id_columns"] + ["column_id"]
+
+    params.update(**dataset_kwargs)
 
     datasets = tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
     for dset_name, dset in zip(["train", "valid", "test"], datasets):
