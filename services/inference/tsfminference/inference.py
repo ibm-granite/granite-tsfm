@@ -19,6 +19,7 @@ from tsfm_public.toolkit.util import select_by_index
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
+from .dataframe_checks import check
 from .errors import error_message
 from .hfutil import load_config, load_model, register_config
 from .inference_payloads import ForecastingInferenceInput, PredictOutput
@@ -114,8 +115,13 @@ class InferenceRuntime:
         schema_params = input_payload.schema.model_dump()
         params = input_payload.parameters.model_dump()
 
-        data = decode_data(input_payload.data, schema_params)
-        future_data = decode_data(input_payload.future_data, schema_params)
+        data, ex = decode_data(input_payload.data, schema_params)
+        if ex:
+            return None, ValueError("data:" + str(ex))
+
+        future_data, ex = decode_data(input_payload.future_data, schema_params)
+        if ex:
+            return None, ValueError("future_data:" + str(ex))
 
         model_path = TSFM_MODEL_DIR / input_payload.model_id
 
@@ -219,9 +225,14 @@ class InferenceRuntime:
 
 def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFrame:
     if not data:
-        return None
+        return None, None
 
     df = pd.DataFrame.from_dict(data)
+    rc, msg = check(df, schema)
+
+    if rc != 0:
+        return None, ValueError(msg)
+
     if ts_col := schema["timestamp_column"]:
         df[ts_col] = pd.to_datetime(df[ts_col])
 
@@ -230,6 +241,6 @@ def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFr
     if ts_col:
         sort_columns.append(ts_col)
     if sort_columns:
-        return df.sort_values(sort_columns)
+        return df.sort_values(sort_columns), None
 
-    return df
+    return df, None
