@@ -9,7 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
-            "env": {"TSFM_MODEL_DIR": "./mytest-tsfm"},
+            "env": {"TSFM_MODEL_DIR": "./mytest-tsfm", "PROMETHEUS_MULTIPROC_DIR" : "/tmp"},
             "cwd": "${workspaceFolder}/services/inference",
             "args": [
                 "tsfminference.main:app",
