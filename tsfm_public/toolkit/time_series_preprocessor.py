@@ -870,10 +870,9 @@ def get_datasets(
     }
 
     # handle fewshot operation
+    if (fewshot_fraction is not None) and not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
+        raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
     if fewshot_fraction is not None and fewshot_location != FractionLocation.UNIFORM.value:
-        if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
-            raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
-
         train_data = select_by_fixed_fraction(
             train_data,
             id_columns=ts_preprocessor.id_columns,
@@ -924,9 +923,6 @@ def get_datasets(
             raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
 
     if fewshot_fraction is not None and fewshot_location == FractionLocation.UNIFORM.value:
-        if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
-            raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
-
         lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
         few_shot_train = Subset(datasets[0], lst.tolist())
 
