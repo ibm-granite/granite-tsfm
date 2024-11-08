@@ -5,11 +5,12 @@
 import copy
 import datetime
 import logging
+import os
 from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from prometheus_client import Summary
+from prometheus_client import Histogram
 from starlette import status
 from transformers import PretrainedConfig
 
@@ -25,7 +26,8 @@ from .inference_payloads import ForecastingInferenceInput, PredictOutput
 
 LOGGER = logging.getLogger(__file__)
 
-FORECAST_PROMETHEUS_SUMMARY = Summary("forecast:", "Time spent processing request")
+FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
+FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
 
 
 class InferenceRuntime:
@@ -88,10 +90,15 @@ class InferenceRuntime:
         LOGGER.info("Successfully loaded model")
         return model, None
 
-    @FORECAST_PROMETHEUS_SUMMARY.time()
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
+        user_start_time = os.times().user
+        st = datetime.datetime.now()
         answer, ex = self._forecast_common(input)
+        td: datetime.timedelta = datetime.datetime.now() - st
+        print(td.total_seconds(), file=open("/tmp/timings", "a"))
+        FORECAST_PROMETHEUS_TIME_SPENT.observe(td.total_seconds())
+        FORECAST_PROMETHEUS_CPU_USED.observe(os.times().user - user_start_time)
 
         if ex is not None:
             detail = error_message(ex)
