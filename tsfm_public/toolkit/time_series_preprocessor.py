@@ -18,6 +18,7 @@ from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
+from torch.utils.data import Subset
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
     PreTrainedFeatureExtractor,
@@ -792,6 +793,7 @@ def get_datasets(
     as_univariate: bool = False,
     use_frequency_token: bool = False,
     enable_padding: bool = True,
+    seed: int = 42,
     **dataset_kwargs,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
@@ -818,9 +820,10 @@ def get_datasets(
             Defaults to 1.
         fewshot_fraction (float, optional): When non-null, return this percent of the original training
             dataset. This is done to support fewshot fine-tuning.
-        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
+        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first", "last" and "uniform"
             as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
-            of the training dataset (i.e., "last").
+            of the training dataset (i.e., "last"). If fewshot enabled before windowing, then we support first and last,
+            if fewshot enabled after windowing, then we support uniform sampling.
         as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
@@ -828,12 +831,15 @@ def get_datasets(
         enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
             time series) when there is insufficient data to form one record. If False, no padding is done and one or
             more datasets may be empty.
+        seed (int): Seed to use.
         dataset_kwargs: additional keyword arguments to pass to the torch datasets during creation.
 
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
     """
+
+    rng = np.random.default_rng(seed=seed)
 
     if not ts_preprocessor.context_length:
         raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
@@ -864,7 +870,7 @@ def get_datasets(
     }
 
     # handle fewshot operation
-    if fewshot_fraction is not None:
+    if fewshot_fraction is not None and fewshot_location != FractionLocation.UNIFORM.value:
         if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
             raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
 
@@ -916,6 +922,15 @@ def get_datasets(
     for dset_name, dset in zip(["train", "valid", "test"], datasets):
         if len(dset) == 0:
             raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
+
+    if fewshot_fraction is not None and fewshot_location == FractionLocation.UNIFORM.value:
+        if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
+            raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
+
+        lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
+        few_shot_train = Subset(datasets[0], lst.tolist())
+
+        datasets = (few_shot_train, datasets[1], datasets[2])
 
     return datasets
 

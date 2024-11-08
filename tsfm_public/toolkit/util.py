@@ -32,10 +32,14 @@ def strtobool(val):
 
 
 class FractionLocation(enum.Enum):
-    """`Enum` for the different locations where a fraction of data can be chosen."""
+    """`Enum` for the different locations where a fraction of data can be chosen.
+    If fewshot enabled before windowing, then we support first and last,
+    if fewshot enabled after windowing, then we support uniform
+    """
 
     FIRST = "first"
     LAST = "last"
+    UNIFORM = "uniform"
 
 
 def select_by_timestamp(
