@@ -32,9 +32,9 @@ def strtobool(val):
 
 
 class FractionLocation(enum.Enum):
-    """`Enum` for the different locations where a fraction of data can be chosen.
-    If fewshot enabled before windowing, then we support first and last,
-    if fewshot enabled after windowing, then we support uniform
+    """`Enum` for the different methods of choosing the fraction of data. Options first and last are used
+    to select the fraction of data from of the begining or end of the full dataset. Uniform chooses windows
+    uniformly sampled from the dataset.
     """
 
     FIRST = "first"
