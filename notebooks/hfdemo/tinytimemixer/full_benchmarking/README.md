@@ -1,13 +1,25 @@
 # Steps to run the full benchmarking
 
+## Fetching the data
+The evaluation data can be downloaded from the [Time-Series-Library](https://github.com/thuml/Time-Series-Library). The authors of that library have shared the data through this [download link](https://drive.google.com/drive/folders/1vE0ONyqPlym2JaaAoEe0XNDR8FS_d322). The ETT datasets can also be downloaded from [ETT-Github-Repository](https://github.com/zhouhaoyi/ETDataset).
+
+Download and save the datasets in a directory. For example, in `data_root_path`.
+
+## Running the scripts
+
 1. In terminal, the any one of the three bash scripts `granite-r2.sh`, `granite-r1.sh`, or `research-use-r2.sh`.
 2. Run `summarize_results.py`. For example, 
 ```
-sh granite-r2.sh
+sh granite-r2.sh data_root_path/
 python summarize_results.py -rd=results-granite-r2/
 ```
 
 It will run all benchmarking and dump the results. The dumped results are available in the CSV files. 
+
+
+## Benchmarking Results 
+Note that, although random seed has been set, the mean squared error (MSE) scores might not match the below scores exactly depending on the runtime environment. The following results were obtained in a Unix-based machine equipped with one NVIDIA A-100 GPU.
+
 1. TTM-Research-Use model results:
     - `combined_results-research-use-r2.csv`: Across all datasets, all TTM models, and all forecast horizons.
     - `combined_avg_results-research-use-r2.csv`: Across all datasets and all TTM models average over forecast horizons.
