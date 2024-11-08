@@ -28,6 +28,8 @@ def load_dataset(
     dataset_path: Optional[str] = None,
     use_frequency_token: bool = False,
     enable_padding: bool = True,
+    seed: int = 42,
+    **dataset_kwargs,
 ):
     LOGGER.info(f"Dataset name: {dataset_name}, context length: {context_length}, prediction length {forecast_length}")
 
@@ -80,6 +82,8 @@ def load_dataset(
         fewshot_location=fewshot_location,
         use_frequency_token=use_frequency_token,
         enable_padding=enable_padding,
+        seed=seed,
+        **dataset_kwargs,
     )
     LOGGER.info(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 
