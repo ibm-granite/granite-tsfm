@@ -354,6 +354,22 @@ def test_get_datasets(ts_data):
 
     assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
 
+    full_train_size = len(train)
+
+    train, valid, test = get_datasets(
+        tsp,
+        ts_data,
+        split_config={
+            "train": 0.7,
+            "test": 0.2,
+        },
+        fewshot_fraction=0.2,
+        fewshot_location=FractionLocation.UNIFORM.value,
+        seed=42,
+    )
+
+    assert len(train) == int(full_train_size * 0.2)
+
 
 def test_get_datasets_padding(ts_data):
     tsp = TimeSeriesPreprocessor(
@@ -452,6 +468,22 @@ def test_get_datasets_with_frequency_token(ts_data):
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2}, use_frequency_token=True)
 
     assert train[0]["freq_token"] == DEFAULT_FREQUENCY_MAPPING["d"]
+
+
+def test_masking_specification(ts_data):
+    ts_data = ts_data.drop(columns=["id", "id2"])
+    tsp = TimeSeriesPreprocessor(timestamp_column="timestamp", prediction_length=2, context_length=5, freq="d")
+
+    train, _, _ = get_datasets(
+        tsp,
+        ts_data,
+        split_config={"train": 0.7, "test": 0.2},
+        use_frequency_token=True,
+        fill_value=-1000,
+        masking_specification=[("value1", -2)],
+    )
+
+    assert np.all(train[0]["past_values"].numpy()[-2:, 0] == -1000)
 
 
 def test_get_frequency_token():

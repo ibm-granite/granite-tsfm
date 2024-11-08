@@ -78,7 +78,7 @@ def get_inference_response(
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
         return df
     else:
-        print(req.text)  # please leave
+        print(req.text)
         return req
 
 
