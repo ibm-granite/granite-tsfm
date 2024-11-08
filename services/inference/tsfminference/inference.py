@@ -97,7 +97,6 @@ class InferenceRuntime:
         st = datetime.datetime.now()
         answer, ex = self._forecast_common(input)
         td: datetime.timedelta = datetime.datetime.now() - st
-        print(td.total_seconds(), file=open("/tmp/timings", "a"))
         FORECAST_PROMETHEUS_TIME_SPENT.observe(td.total_seconds())
         FORECAST_PROMETHEUS_CPU_USED.observe(os.times().user - user_start_time)
 
