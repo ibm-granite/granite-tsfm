@@ -354,6 +354,22 @@ def test_get_datasets(ts_data):
 
     assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
 
+    full_train_size = len(train)
+
+    train, valid, test = get_datasets(
+        tsp,
+        ts_data,
+        split_config={
+            "train": 0.7,
+            "test": 0.2,
+        },
+        fewshot_fraction=0.2,
+        fewshot_location=FractionLocation.UNIFORM.value,
+        seed=42,
+    )
+
+    assert len(train) == int(full_train_size * 0.2)
+
 
 def test_get_datasets_padding(ts_data):
     tsp = TimeSeriesPreprocessor(
