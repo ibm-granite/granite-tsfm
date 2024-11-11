@@ -359,7 +359,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                     raise ValueError(f"Future time series input contains an unknown column {c}.")
 
             if id_columns:
-                id_count = time_series[id_columns].unique().shape[0]
+                id_count = time_series[id_columns].drop_duplicates().shape[0]
             else:
                 id_count = 1
 
