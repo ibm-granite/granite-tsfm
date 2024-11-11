@@ -45,6 +45,8 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
+	pwd
+	ls -lR ../
 	pytest -s tests ../tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
