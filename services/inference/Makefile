@@ -8,9 +8,15 @@ boilerplate:
 		cat $$f>>tsfminference/$$(basename $$f); \
 		done 
 	
+create_prometheus_metrics_dir:
+	rm -rf prometheus_metrics > /dev/null 2>&1 | true
+	mkdir -m go+rwX prometheus_metrics
+
 # starts the tsfminference service (used mainly for test cases)
-start_service_local: boilerplate
-	TSFM_MODEL_DIR=./mytest-tsfm TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
+start_service_local: create_prometheus_metrics_dir boilerplate
+	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
+	TSFM_MODEL_DIR=./mytest-tsfm \
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 	python -m gunicorn \
 	-w 1 \
 	-k uvicorn.workers.UvicornWorker \
@@ -22,14 +28,16 @@ stop_service_local:
 image: boilerplate
 	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
 
-start_service_image: image
+start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
 		--name tsfmserver \
         -e TSFM_MODEL_DIR=/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
+		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
         -v ./mytest-tsfm:/mytest-tsfm \
+		-v ./prometheus_metrics:/prometheus_metrics \
         tsfminference
 	sleep 5
 
@@ -37,12 +45,12 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	pytest tests
+	pytest -s tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 
 test_image: clone_models start_service_image
-	pytest tests
+	pytest -s tests
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 

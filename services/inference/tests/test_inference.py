@@ -75,10 +75,10 @@ def get_inference_response(
     #
     if req.ok:
         resp = req.json()
-
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
         return df
     else:
+        print(req.text)
         return req
 
 
@@ -162,6 +162,7 @@ def test_zero_shot_forecast_inference(ts_data):
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
             "target_columns": params["target_columns"],
+            "freq": "1h",
         },
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": {},

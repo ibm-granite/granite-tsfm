@@ -135,6 +135,16 @@ class BaseDFDataset(torch.utils.data.Dataset):
     def __len__(self):
         return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
+    def _check_index(self, index: int) -> int:
+        if index >= len(self):
+            raise IndexError("Index exceeds dataset length")
+
+        if index < 0:
+            if -index > len(self):
+                raise ValueError("Absolute value of index should not exceed dataset length")
+            index = len(self) + index
+        return index
+
     def __getitem__(self, index: int):
         """
         Args:
@@ -358,6 +368,8 @@ class PretrainDFDataset(BaseConcatDFDataset):
             )
 
         def __getitem__(self, index):
+            index = self._check_index(index)
+
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
             ret = {
@@ -445,6 +457,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         fill_value: Union[float, int] = 0.0,
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         enable_padding: bool = True,
+        metadata_columns: List[str] = [],
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -468,6 +481,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
             masking_specification=masking_specification,
+            metadata_columns=metadata_columns,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -498,6 +512,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             fill_value: Union[float, int] = 0.0,
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
             enable_padding: bool = True,
+            metadata_columns: List[str] = [],
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -507,6 +522,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
+            self.metadata_columns = metadata_columns
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -565,6 +581,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
 
@@ -600,6 +617,11 @@ class ForecastDFDataset(BaseConcatDFDataset):
             if self.static_categorical_columns:
                 categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
                 ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+            if self.metadata_columns:
+                ret["metadata"] = self.data_df[self.metadata_columns].values[
+                    time_id : time_id + self.context_length + self.prediction_length, :
+                ]
 
             return ret
 
@@ -715,6 +737,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values
@@ -840,6 +863,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
             seq_x = self.X[time_id : time_id + self.context_length].values

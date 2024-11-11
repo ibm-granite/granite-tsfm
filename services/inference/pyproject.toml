@@ -42,6 +42,7 @@ gunicorn = { version = "*" }
 # necessary for fast-api compatible uvicorn.workers.UvicornWorker worker
 uvicorn = { version = "*" }
 setuptools = { version = "*" }
+prometheus_client = { version = "*" }
 
 # ***********CVEs*************
 starlette = { version = ">=0.40.0" }
