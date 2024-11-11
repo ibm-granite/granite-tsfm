@@ -1038,28 +1038,35 @@ def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
 
 def extend_time_series(
     time_series: pd.DataFrame,
-    # last_known_timestamp,
     timestamp_column: str,
     grouping_columns: List[str],
     freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta]] = None,
-    periods: int = 1,
-    # delta: datetime.timedelta = datetime.timedelta(days=1),
+    periods: int = None,
+    total_periods: Optional[int] = None,
 ):
     """Extends the provided time series with empty data for the number of periods specified. For each time series, based
     on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
     only timestamps and grouping indicators, remaining fields will be null.
+
+    One of periods or total_periods must be specified.
 
     Args:
         time_series (pd.DataFrame): _description_
         start_timestamp (_type_): _description_
         column_name (str): _description_
         grouping_columns (List[str]): _description_
+        freq:
         periods (int, optional): _description_. Defaults to 1.
-        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+        total_periods (int, optional): total length of the series after extending. Defaults to None.
     """
 
-    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+    def augment_one_series(
+        group: Union[pd.Series, pd.DataFrame], periods: Optional[int] = None, total_periods: Optional[int] = None
+    ):
         last_timestamp = group[timestamp_column].iloc[-1]
+
+        if periods is None:
+            periods = total_periods - len(group)
 
         new_data = pd.DataFrame(
             {
@@ -1078,10 +1085,15 @@ def extend_time_series(
         )
         return df.reset_index(drop=True)
 
+    if (periods is None and total_periods is None) or (periods is not None and total_periods is not None):
+        raise ValueError("Exactly one of `periods` or `total_periods` must be specified")
+
     if grouping_columns == []:
-        new_time_series = augment_one_series(time_series)
+        new_time_series = augment_one_series(time_series, periods=periods, total_periods=total_periods)
     else:
-        new_time_series = time_series.groupby(grouping_columns).apply(augment_one_series, include_groups=False)
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False, periods=periods, total_periods=total_periods
+        )
         idx_names = list(new_time_series.index.names)
         idx_names[-1] = "__delete"
         new_time_series = new_time_series.reset_index(names=idx_names)

@@ -13,6 +13,7 @@ import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 from tsfm_public.toolkit.util import select_by_index
 
 from .inference_payloads import BaseParameters, ForecastingMetadataInput, ForecastingParameters
@@ -284,7 +285,11 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
             # if data is too short, raise error
             prediction_length = self.config.get("prediction_filter_length", None)
-            prediction_length = prediction_length if prediction_length is not None else self.config.prediction_length
+            has_prediction_filter = prediction_length is not None
+
+            model_prediction_length = self.config.prediction_length
+
+            prediction_length = prediction_length if prediction_length is not None else model_prediction_length
             if fd_min_data_length < prediction_length:
                 err_str = (
                     "Future data should have time series of length that is at least the specified prediction length."
@@ -295,13 +300,25 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                     err_str += (
                         f"Received {fd_min_data_length} time points, but expected {prediction_length} time points"
                     )
-
                 raise ValueError(err_str)
 
             # if data exceeds prediction filter length, truncate
-            if fd_max_data_length > prediction_length:
-                LOGGER.info(f"Truncating future series lengths to {prediction_length}")
-                future_data = select_by_index(future_data, id_columns=schema.id_columns, end_index=prediction_length)
+            if fd_max_data_length > model_prediction_length:
+                LOGGER.info(f"Truncating future series lengths to {model_prediction_length}")
+                future_data = select_by_index(
+                    future_data, id_columns=schema.id_columns, end_index=model_prediction_length
+                )
+
+            # if provided data is greater than prediction_filter_length, but less than model_prediction_length we extend
+            if has_prediction_filter and fd_min_data_length < model_prediction_length:
+                future_data = extend_time_series(
+                    time_series=future_data,
+                    freq=self.preprocessor.freq,
+                    timestamp_column=schema.timestamp_column,
+                    grouping_columns=schema.id_columns,
+                    periods=model_prediction_length,
+                )
+                pass
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,

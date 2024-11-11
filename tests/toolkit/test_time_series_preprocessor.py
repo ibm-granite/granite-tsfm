@@ -20,6 +20,8 @@ from tsfm_public.toolkit.time_series_preprocessor import (
 )
 from tsfm_public.toolkit.util import FractionLocation
 
+from ..util import nreps
+
 
 def test_standard_scaler(sample_data):
     scaler = StandardScaler()
@@ -155,7 +157,7 @@ def test_time_series_preprocessor_inv_scales_lists(ts_data):
     assert out_inv["value2"].mean()[0] == df["value2"].mean()
 
 
-def test_augment_time_series(ts_data):
+def test_extend_time_series(ts_data):
     periods = 5
     a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)
 
@@ -174,6 +176,21 @@ def test_augment_time_series(ts_data):
     # check that length increases by periods for each id
     assert a.shape[0] == ts_data.shape[0] + 3 * periods
     assert a.shape[1] == ts_data.shape[1]
+
+    # test different lengths
+
+    ts_data_2 = pd.DataFrame(
+        {
+            "id": list(nreps(["A", "B"], 50)) + ["C"] * 20,
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 2
+            + [datetime(2021, 1, 1) + timedelta(days=i) for i in range(20)],
+            "value1": range(120),
+        }
+    )
+
+    a = extend_time_series(ts_data_2, timestamp_column="timestamp", grouping_columns=["id"], total_periods=60)
+
+    assert len(a) == 180
 
 
 def test_create_timestamps():
