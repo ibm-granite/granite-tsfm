@@ -7,7 +7,7 @@ boilerplate:
 		cat ../boilerplate/warning.txt > tsfminference/$$(basename $$f); \
 		cat $$f>>tsfminference/$$(basename $$f); \
 		done 
-	
+
 create_prometheus_metrics_dir:
 	rm -rf prometheus_metrics > /dev/null 2>&1 | true
 	mkdir -m go+rwX prometheus_metrics
@@ -45,12 +45,12 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	pytest -s tests
+	pytest -s tests ../tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 
 test_image: clone_models start_service_image
-	pytest -s tests
+	pytest -s tests ../tests
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 

@@ -93,12 +93,11 @@ class InferenceRuntime:
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
-        user_start_time = os.times().user
-        st = datetime.datetime.now()
+        start = os.times()
         answer, ex = self._forecast_common(input)
-        td: datetime.timedelta = datetime.datetime.now() - st
-        FORECAST_PROMETHEUS_TIME_SPENT.observe(td.total_seconds())
-        FORECAST_PROMETHEUS_CPU_USED.observe(os.times().user - user_start_time)
+        finish = os.times()
+        FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
+        FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
 
         if ex is not None:
             detail = error_message(ex)
@@ -187,7 +186,7 @@ class InferenceRuntime:
         else:
             min_data_length = max_data_length = len(data)
 
-        LOGGER.info(f"Data length recieved {len(data)}, minimum series length: {min_data_length}")
+        LOGGER.info(f"Data length received {len(data)}, minimum series length: {min_data_length}")
 
         if min_data_length < context_length:
             err_str = "Data should have time series of length that is at least the required model context length. "
