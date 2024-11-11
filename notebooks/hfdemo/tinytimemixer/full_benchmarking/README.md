@@ -1,9 +1,10 @@
 # Steps to run the full benchmarking
 
 ## Fetching the data
-The evaluation data can be downloaded from the [Time-Series-Library](https://github.com/thuml/Time-Series-Library). The authors of that library have shared the data through this [download link](https://drive.google.com/drive/folders/1vE0ONyqPlym2JaaAoEe0XNDR8FS_d322). The ETT datasets can also be downloaded from [ETT-Github-Repository](https://github.com/zhouhaoyi/ETDataset).
+The evaluation data can be downloaded from any of the previous time-series github repos like autoformer or timesnet or informer. [Sample download link](https://drive.google.com/drive/folders/1vE0ONyqPlym2JaaAoEe0XNDR8FS_d322). The ETT datasets can also be downloaded from [ETT-Github-Repository](https://github.com/zhouhaoyi/ETDataset).
 
-Download and save the datasets in a directory. For example, in `data_root_path`.
+Download and save the datasets in a directory. For example, in `data_root_path`. 
+CSVs of each data should reside in location `data_root_path/$dataset_name/$dataset_name.csv` for our data utils to process them automatically.
 
 ## Running the scripts
 
