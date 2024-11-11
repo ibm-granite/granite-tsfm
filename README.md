@@ -4,7 +4,6 @@ Public notebooks, utilities, and serving components for working with Time Series
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
 [here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](services/inference/README.md).
 
-
 ## Python Version
 The current Python versions supported are 3.9, 3.10, 3.11, 3.12.
 
@@ -28,6 +27,7 @@ pip install ".[notebooks]"
 - Transfer learning with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_transfer.ipynb)
 - Transfer learning with `PatchTST` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
 - Getting started with `TinyTimeMixer (TTM)` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb)
+- `TTM` full benchmarking scripts and results are available [[here]](https://github.com/ibm-granite/granite-tsfm/tree/main/notebooks/hfdemo/tinytimemixer/full_benchmarking)
 
 ## 📗 Google Colab Tutorials
 Run the TTM tutorial in Google Colab, and quickly build a forecasting application with the pre-trained TSFM models.
