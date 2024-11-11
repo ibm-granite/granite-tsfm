@@ -3,6 +3,7 @@
 """Tsfminference Runtime"""
 
 import copy
+import datetime
 import logging
 import os
 from typing import Any, Dict, List
@@ -79,8 +80,14 @@ class InferenceRuntime:
 
         parameters = input_payload.parameters
         schema = input_payload.schema
-        data = decode_data(input_payload.data, schema)
-        future_data = decode_data(input_payload.future_data, schema)
+
+        data, ex = decode_data(input_payload.data, schema)
+        if ex:
+            return None, ValueError("data:" + str(ex))
+
+        future_data, ex = decode_data(input_payload.future_data, schema)
+        if ex:
+            return None, ValueError("future_data:" + str(ex))
 
         # collect and check underlying time series lengths
         if getattr(handler.handler_config, "minimum_context_length", None) or getattr(
@@ -132,7 +139,7 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
         return None, None
 
     df = pd.DataFrame.from_dict(data)
-    rc, msg = check(df, schema)
+    rc, msg = check(df, schema.model_dump())
 
     if rc != 0:
         return None, ValueError(msg)
