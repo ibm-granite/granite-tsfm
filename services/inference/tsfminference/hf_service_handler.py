@@ -271,7 +271,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             raise ValueError("Future data future data was provided, but model does not support exogenous")
 
         # future_data checks
-        if future_data:
+        if future_data is not None:
             if schema.id_columns:
                 data_lengths = future_data.groupby(schema.id_columns)[schema.id_columns].apply(len)
                 fd_min_len_index = data_lengths.argmin()
@@ -284,7 +284,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             )
 
             # if data is too short, raise error
-            prediction_length = self.config.get("prediction_filter_length", None)
+            prediction_length = getattr(self.config, "prediction_filter_length", None)
             has_prediction_filter = prediction_length is not None
 
             model_prediction_length = self.config.prediction_length

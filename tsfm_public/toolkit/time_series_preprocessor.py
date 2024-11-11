@@ -1068,6 +1068,9 @@ def extend_time_series(
         if periods is None:
             periods = total_periods - len(group)
 
+        if periods < 1:
+            return group
+
         new_data = pd.DataFrame(
             {
                 timestamp_column: create_timestamps(

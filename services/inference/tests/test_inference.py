@@ -346,7 +346,59 @@ def test_zero_shot_forecast_inference(ts_data):
     assert df_out[0].shape[0] == prediction_length // 4
 
 
-@pytest.mark.parametrize("ts_data", ["ttm-r1"], indirect=True)
+@pytest.mark.parametrize("ts_data", ["ttm-r2"], indirect=True)
+def test_future_data_forecast_inference(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    num_ids = test_data[id_columns[0]].nunique()
+
+    # test single
+    # test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    test_data_ = test_data.copy()
+    print(test_data_.tail())
+
+    target_columns = ["OT"]
+
+    future_data = extend_time_series(
+        test_data_,
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=25,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    prediction_length = 20
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": prediction_length,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": target_columns,
+            "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+
+    df_out = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length * num_ids
+
+
+@pytest.mark.parametrize(
+    "ts_data", ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"], indirect=True
+)
 def test_zero_shot_forecast_inference_no_timestamp(ts_data):
     test_data, params = ts_data
 
