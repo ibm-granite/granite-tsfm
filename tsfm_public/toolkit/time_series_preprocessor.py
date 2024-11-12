@@ -922,10 +922,14 @@ def get_datasets(
         if len(dset) == 0:
             raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
 
-    if fewshot_fraction is not None and fewshot_location == FractionLocation.UNIFORM.value:
-        lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
-        few_shot_train = Subset(datasets[0], lst.tolist())
-
+    if fewshot_fraction is not None and fewshot_fraction < 1.0 and fewshot_location in (FractionLocation.UNIFORM.value, FractionLocation.UNIFORMRANDOM.value):
+        if fewshot_location == FractionLocation.UNIFORM.value:
+            lst = range(0, len(datasets[0]), int(1/fewshot_fraction))
+            lst = list(lst)
+        elif fewshot_location == FractionLocation.UNIFORMRANDOM.value:
+            lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
+            lst = lst.tolist()
+        few_shot_train = Subset(datasets[0], lst)
         datasets = (few_shot_train, datasets[1], datasets[2])
 
     return datasets

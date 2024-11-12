@@ -39,6 +39,7 @@ class FractionLocation(enum.Enum):
 
     FIRST = "first"
     LAST = "last"
+    UNIFORMRANDOM = "uniform_random"
     UNIFORM = "uniform"
 
 

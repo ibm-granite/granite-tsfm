@@ -174,6 +174,7 @@ for DATASET in list_datasets:
                 CONTEXT_LENGTH,
                 FORECAST_LENGTH,
                 fewshot_fraction=fewshot_percent / 100,
+                fewshot_location="uniform",
                 dataset_root_path=DATA_ROOT_PATH,
                 use_frequency_token=args.enable_prefix_tuning,
                 # enable_padding=False,
