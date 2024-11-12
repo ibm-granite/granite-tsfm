@@ -379,7 +379,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             # no additional exogenous data provided, extend with empty periods
             time_series = extend_time_series(
                 time_series=time_series,
-                freq=self.feature_extractor.freq if self.feature_extractor else None,
                 timestamp_column=timestamp_column,
                 freq=self.feature_extractor.freq if self.feature_extractor else None,
                 grouping_columns=id_columns,
