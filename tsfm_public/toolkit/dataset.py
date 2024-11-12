@@ -88,8 +88,8 @@ class BaseDFDataset(torch.utils.data.Dataset):
 
         # sort the data by datetime
         if timestamp_column in list(data_df.columns):
-            if not isinstance(data_df[timestamp_column].iloc[0], pd.Timestamp):
-                data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
+            # if not isinstance(data_df[timestamp_column].iloc[0], pd.Timestamp):
+            #     data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
             data_df = data_df.sort_values(timestamp_column, ignore_index=True)
 
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
