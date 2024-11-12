@@ -381,6 +381,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 time_series=time_series,
                 freq=self.feature_extractor.freq if self.feature_extractor else None,
                 timestamp_column=timestamp_column,
+                freq=self.feature_extractor.freq if self.feature_extractor else None,
                 grouping_columns=id_columns,
                 periods=prediction_length,
             )

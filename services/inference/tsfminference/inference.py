@@ -3,7 +3,6 @@
 """Tsfminference Runtime"""
 
 import copy
-import datetime
 import logging
 import os
 from typing import Any, Dict, List
@@ -46,12 +45,11 @@ class InferenceRuntime:
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
-        user_start_time = os.times().user
-        st = datetime.datetime.now()
+        start = os.times()
         answer, ex = self._forecast_common(input)
-        td: datetime.timedelta = datetime.datetime.now() - st
-        FORECAST_PROMETHEUS_TIME_SPENT.observe(td.total_seconds())
-        FORECAST_PROMETHEUS_CPU_USED.observe(os.times().user - user_start_time)
+        finish = os.times()
+        FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
+        FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
 
         if ex is not None:
             detail = error_message(ex)
