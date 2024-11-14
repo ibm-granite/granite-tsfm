@@ -1,0 +1,20 @@
+data_file: ZafNoo.csv    
+data_path: ZafNoo
+id_columns: ["cols"]
+timestamp_column: date    
+target_columns: ["data"]
+observable_columns: []
+control_columns: []
+conditional_columns: []
+static_categorical_columns: []
+freq: 30min
+
+scale: 
+    scaling: True
+    scaler_type: standard
+
+encode_categorical: False
+
+split:
+    train: 0.7
+    test: 0.2

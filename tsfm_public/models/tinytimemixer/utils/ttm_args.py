@@ -155,6 +155,39 @@ def get_ttm_args():
         help="Hugginface model card path.",
     )
 
+    parser.add_argument(
+        "--datasets",
+        type=str,
+        default=None,
+        help="List of datasets, comma separated",
+    )
+
+    parser.add_argument(
+        "--zeroshot",
+        "-zs",
+        type=int,
+        required=False,
+        default=1,
+        help="Run Zeroshot",
+    )
+
+    parser.add_argument(
+        "--fewshot",
+        "-fs",
+        type=int,
+        required=False,
+        default=1,
+        help="Run Zeroshot",
+    )
+
+    parser.add_argument(
+        "--plot",
+        type=int,
+        required=False,
+        default=1,
+        help="Enable plotting",
+    )
+
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
