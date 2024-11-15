@@ -13,17 +13,18 @@ from transformers.training_args import TrainingArguments
 class TrackingCallback(TrainerCallback):
     """Simple tracking callback that tracks per epoch run times and calculates some statistics after training completes."""
 
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose
+
     def on_train_begin(
         self,
         args: TrainingArguments,
         state: TrainerState,
         control: TrainerControl,
-        verbose: bool = False,
         **kwargs,
     ):
         self.all_epoch_times = []
         self.train_start_time = time.time()
-        self.verbose = verbose
         return super().on_train_begin(args, state, control, **kwargs)
 
     def on_train_end(
