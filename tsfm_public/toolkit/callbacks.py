@@ -11,7 +11,11 @@ from transformers.training_args import TrainingArguments
 
 
 class TrackingCallback(TrainerCallback):
-    """Simple tracking callback that tracks per epoch run times and calculates some statistics after training completes."""
+    """Simple tracking callback that tracks per epoch run times and calculates some statistics after training completes.
+
+    Args:
+        verbose (bool, optional): If true, prints additional information at the completion of each epoch. Defaults to False.
+    """
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
