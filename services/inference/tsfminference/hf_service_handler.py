@@ -75,6 +75,7 @@ class HuggingFaceHandler(ServiceHandler):
         """
 
         try:
+            LOGGER.info(f"LOAD PREPROCESSOR {model_path}")
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
         except OSError:
@@ -211,7 +212,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
         LOGGER.info(f"Preprocessor params: {preprocessor_params}")
 
-        preprocessor = self.load_preprocessor(self.model_id)
+        preprocessor = self.load_preprocessor(self.model_path)
 
         if preprocessor is None:
             preprocessor = TimeSeriesPreprocessor(
@@ -222,6 +223,24 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             # train to estimate freq
             preprocessor.train(data)
             LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+        else:
+            # check payload, but only certain parameters
+            to_check = [
+                "freq",
+                "timestamp_column",
+                "target_columns",
+                "conditional_columns",
+                "control_columns",
+                "observable_columns",
+            ]
+
+            for param in to_check:
+                param_val = preprocessor_params[param]
+                param_val_saved = getattr(preprocessor, param)
+                if param_val != param_val_saved:
+                    raise ValueError(
+                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                    )
 
         model_config_kwargs = self._get_config_kwargs(
             parameters=parameters,
