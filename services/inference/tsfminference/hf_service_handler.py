@@ -75,7 +75,6 @@ class HuggingFaceHandler(ServiceHandler):
         """
 
         try:
-            LOGGER.info(f"LOAD PREPROCESSOR {model_path}")
             preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
             LOGGER.info("Successfully loaded preprocessor")
         except OSError:

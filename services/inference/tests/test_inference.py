@@ -490,7 +490,6 @@ def test_finetuned_model_inference(ts_data):
     df_out = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
-    print(df_out[0].head())
 
 
 @pytest.mark.parametrize(
