@@ -353,6 +353,49 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         self,
     ) -> "ForecastingHuggingFaceHandler": ...
 
+    def _calculate_data_point_counts(
+        self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
+        output_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Dict[str, int]:
+        """Implementation for counting datapoints in input and output
+
+        Assumes data/future data are already the proper length"""
+
+        input_ts_columns = sum(
+            [
+                len(c)
+                for c in [
+                    schema.target_columns,
+                    schema.conditional_columns,
+                    schema.control_columns,
+                    schema.observable_columns,
+                ]
+            ]
+        )
+        input_static_columns = len(schema.static_categorical_columns)
+        num_target_columns = (
+            len(schema.target_columns) if schema.target_columns != [] else data.shape[1] - len(schema.id_columns) - 1
+        )
+        unique_ts = len(data.drop_duplicates(subset=schema.id_columns)) if schema.id_columns else 1
+        has_future_data = future_data is not None
+
+        counts = {
+            "input_data_points": input_ts_columns * data.shape[0]
+            + input_static_columns * unique_ts
+            + (
+                (input_ts_columns - num_target_columns) * future_data.shape[0] + input_static_columns * unique_ts
+                if has_future_data
+                else 0
+            ),
+            "output_data_points": output_data.shape[0] * num_target_columns,
+        }
+        LOGGER.info(f"Counts: {counts}")
+        return counts
+
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
     """Register a configuration for a particular model architecture

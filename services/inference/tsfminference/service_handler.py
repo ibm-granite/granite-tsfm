@@ -155,10 +155,14 @@ class ServiceHandler(ABC):
         try:
             result = self._run(data, schema=schema, parameters=parameters, **kwargs)
             encoded_result = encode_dataframe(result)
+            counts = self._calculate_data_point_counts(
+                data, output_data=result, schema=schema, parameters=parameters, **kwargs
+            )
             return PredictOutput(
                 model_id=str(self.model_id),
                 created_at=datetime.datetime.now().isoformat(),
                 results=[encoded_result],
+                **counts,
             ), None
 
         except Exception as e:
@@ -186,6 +190,17 @@ class ServiceHandler(ABC):
         self,
     ) -> "ServiceHandler":
         """Abstract method for train to be implemented by model owner in derived class"""
+        ...
+
+    @abstractmethod
+    def _calculate_data_point_counts(
+        self,
+        data: pd.DataFrame,
+        output_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Dict[str, int]:
+        """Abstract method for counting datapoints in input and output implemented by model owner in derived class"""
         ...
 
 
@@ -304,6 +319,18 @@ class ForecastingServiceHandler(ServiceHandler):
         self,
     ) -> "ForecastingServiceHandler":
         """Abstract method for train to be implemented by model owner in derived class"""
+        ...
+
+    @abstractmethod
+    def _calculate_data_point_counts(
+        self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
+        output_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Dict[str, int]:
+        """Abstract method for counting datapoints in input and output implemented by model owner in derived class"""
         ...
 
 

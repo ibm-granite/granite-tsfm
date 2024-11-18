@@ -283,3 +283,6 @@ class PredictOutput(BaseModel):
         description="List of prediction results.",
         default=None,
     )
+
+    input_data_points: int = Field(description="Count of input data points.", default=None)
+    output_data_points: int = Field(description="Count of output data points.", default=None)
