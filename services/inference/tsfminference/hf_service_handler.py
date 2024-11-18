@@ -363,7 +363,9 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
     ) -> Dict[str, int]:
         """Implementation for counting datapoints in input and output
 
-        Assumes data/future data are already the proper length"""
+        Assumes data has been truncated
+        Future data may not be truncated
+        """
 
         input_ts_columns = sum(
             [
@@ -376,6 +378,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                 ]
             ]
         )
+        input_ts_columns = input_ts_columns if input_ts_columns != 0 else data.shape[1] - len(schema.id_columns) - 1
         input_static_columns = len(schema.static_categorical_columns)
         num_target_columns = (
             len(schema.target_columns) if schema.target_columns != [] else data.shape[1] - len(schema.id_columns) - 1
@@ -383,17 +386,18 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         unique_ts = len(data.drop_duplicates(subset=schema.id_columns)) if schema.id_columns else 1
         has_future_data = future_data is not None
 
+        # we don't count the static columns in the future data
+        # we only count future data which falls within forecast horizon "causal assumption"
+        # note that output_data.shape[0] = unique_ts * prediction_length
+        future_data_points = (input_ts_columns - num_target_columns) * output_data.shape[0] if has_future_data else 0
+
         counts = {
             "input_data_points": input_ts_columns * data.shape[0]
             + input_static_columns * unique_ts
-            + (
-                (input_ts_columns - num_target_columns) * future_data.shape[0] + input_static_columns * unique_ts
-                if has_future_data
-                else 0
-            ),
+            + future_data_points,
             "output_data_points": output_data.shape[0] * num_target_columns,
         }
-        LOGGER.info(f"Counts: {counts}")
+        LOGGER.info(f"Data point counts: {counts}")
         return counts
 
 
