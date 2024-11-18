@@ -466,7 +466,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             if token is not None:
                 return token
 
-        logging.warning(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        logging.warning(f"Frequency token {token_name} was not found in the frequency token mapping.")
         token = self.frequency_mapping["oov"]
 
         return token
