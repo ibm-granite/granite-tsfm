@@ -4,22 +4,28 @@
 
 import copy
 import logging
+import os
 from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from prometheus_client import Histogram
 from starlette import status
 
 from tsfm_public.toolkit.util import select_by_index
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
+from .dataframe_checks import check
 from .errors import error_message
 from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 from .service_handler import ForecastingServiceHandler
 
 
 LOGGER = logging.getLogger(__file__)
+
+FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
+FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
 
 
 class InferenceRuntime:
@@ -63,7 +69,11 @@ class InferenceRuntime:
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
+        start = os.times()
         answer, ex = self._forecast_common(input)
+        finish = os.times()
+        FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
+        FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
 
         if ex is not None:
             detail = error_message(ex)
@@ -92,8 +102,14 @@ class InferenceRuntime:
 
         parameters = input_payload.parameters
         schema = input_payload.schema
-        data = decode_data(input_payload.data, schema)
-        future_data = decode_data(input_payload.future_data, schema)
+
+        data, ex = decode_data(input_payload.data, schema)
+        if ex:
+            return None, ValueError("data:" + str(ex))
+
+        future_data, ex = decode_data(input_payload.future_data, schema)
+        if ex:
+            return None, ValueError("future_data:" + str(ex))
 
         # collect and check underlying time series lengths
         if getattr(handler.handler_config, "minimum_context_length", None) or getattr(
@@ -142,9 +158,14 @@ class InferenceRuntime:
 
 def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) -> pd.DataFrame:
     if not data:
-        return None
+        return None, None
 
     df = pd.DataFrame.from_dict(data)
+    rc, msg = check(df, schema.model_dump())
+
+    if rc != 0:
+        return None, ValueError(msg)
+
     if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
         df[ts_col] = pd.to_datetime(df[ts_col])
 
@@ -153,6 +174,6 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
     if ts_col:
         sort_columns.append(ts_col)
     if sort_columns:
-        return df.sort_values(sort_columns)
+        return df.sort_values(sort_columns), None
 
-    return df
+    return df, None

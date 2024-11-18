@@ -18,6 +18,7 @@ from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
+from torch.utils.data import Subset
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
     PreTrainedFeatureExtractor,
@@ -529,9 +530,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
             if self.id_columns:
-                # to do: be more efficient
                 grps = df.groupby(self.id_columns)
-                _, df_subset = list(grps)[0]
+                _, df_subset = next(iter(grps))
             else:
                 df_subset = df
 
@@ -624,7 +624,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         else:
             id_columns = INTERNAL_ID_COLUMN
 
-        df_inv = df.groupby(id_columns, group_keys=False).apply(
+        df_inv = df.groupby(id_columns, group_keys=False)[df.columns].apply(
             inverse_scale_func,
             id_columns=id_columns,
         )
@@ -673,7 +673,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             else:
                 id_columns = INTERNAL_ID_COLUMN
 
-            df_out = df.groupby(id_columns, group_keys=False).apply(
+            df_out = df.groupby(id_columns, group_keys=False)[df.columns].apply(
                 scale_func,
                 id_columns=id_columns,
             )
@@ -793,6 +793,8 @@ def get_datasets(
     as_univariate: bool = False,
     use_frequency_token: bool = False,
     enable_padding: bool = True,
+    seed: int = 42,
+    **dataset_kwargs,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -818,9 +820,10 @@ def get_datasets(
             Defaults to 1.
         fewshot_fraction (float, optional): When non-null, return this percent of the original training
             dataset. This is done to support fewshot fine-tuning.
-        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
+        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first", "last" and "uniform"
             as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
-            of the training dataset (i.e., "last").
+            of the training dataset (i.e., "last"). If fewshot enabled before windowing, then we support first and last,
+            if fewshot enabled after windowing, then we support uniform sampling.
         as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
@@ -828,11 +831,15 @@ def get_datasets(
         enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
             time series) when there is insufficient data to form one record. If False, no padding is done and one or
             more datasets may be empty.
+        seed (int): Seed to use.
+        dataset_kwargs: additional keyword arguments to pass to the torch datasets during creation.
 
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
     """
+
+    rng = np.random.default_rng(seed=seed)
 
     if not ts_preprocessor.context_length:
         raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
@@ -863,10 +870,9 @@ def get_datasets(
     }
 
     # handle fewshot operation
-    if fewshot_fraction is not None:
-        if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
-            raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
-
+    if (fewshot_fraction is not None) and not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
+        raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
+    if fewshot_fraction is not None and fewshot_location != FractionLocation.UNIFORM.value:
         train_data = select_by_fixed_fraction(
             train_data,
             id_columns=ts_preprocessor.id_columns,
@@ -909,10 +915,18 @@ def get_datasets(
         params["target_columns"] = ["value"]
         params["id_columns"] = params["id_columns"] + ["column_id"]
 
+    params.update(**dataset_kwargs)
+
     datasets = tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
     for dset_name, dset in zip(["train", "valid", "test"], datasets):
         if len(dset) == 0:
             raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
+
+    if fewshot_fraction is not None and fewshot_location == FractionLocation.UNIFORM.value:
+        lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
+        few_shot_train = Subset(datasets[0], lst.tolist())
+
+        datasets = (few_shot_train, datasets[1], datasets[2])
 
     return datasets
 
@@ -1024,28 +1038,38 @@ def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
 
 def extend_time_series(
     time_series: pd.DataFrame,
-    # last_known_timestamp,
     timestamp_column: str,
     grouping_columns: List[str],
     freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta]] = None,
-    periods: int = 1,
-    # delta: datetime.timedelta = datetime.timedelta(days=1),
+    periods: int = None,
+    total_periods: Optional[int] = None,
 ):
     """Extends the provided time series with empty data for the number of periods specified. For each time series, based
     on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
     only timestamps and grouping indicators, remaining fields will be null.
+
+    One of periods or total_periods must be specified.
 
     Args:
         time_series (pd.DataFrame): _description_
         start_timestamp (_type_): _description_
         column_name (str): _description_
         grouping_columns (List[str]): _description_
+        freq:
         periods (int, optional): _description_. Defaults to 1.
-        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+        total_periods (int, optional): total length of the series after extending. Defaults to None.
     """
 
-    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+    def augment_one_series(
+        group: Union[pd.Series, pd.DataFrame], periods: Optional[int] = None, total_periods: Optional[int] = None
+    ):
         last_timestamp = group[timestamp_column].iloc[-1]
+
+        if periods is None:
+            periods = total_periods - len(group)
+
+        if periods < 1:
+            return group
 
         new_data = pd.DataFrame(
             {
@@ -1064,10 +1088,15 @@ def extend_time_series(
         )
         return df.reset_index(drop=True)
 
+    if (periods is None and total_periods is None) or (periods is not None and total_periods is not None):
+        raise ValueError("Exactly one of `periods` or `total_periods` must be specified")
+
     if grouping_columns == []:
-        new_time_series = augment_one_series(time_series)
+        new_time_series = augment_one_series(time_series, periods=periods, total_periods=total_periods)
     else:
-        new_time_series = time_series.groupby(grouping_columns).apply(augment_one_series, include_groups=False)
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False, periods=periods, total_periods=total_periods
+        )
         idx_names = list(new_time_series.index.names)
         idx_names[-1] = "__delete"
         new_time_series = new_time_series.reset_index(names=idx_names)

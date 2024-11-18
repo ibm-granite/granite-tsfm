@@ -13,6 +13,8 @@ import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
 from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
+from tsfm_public.toolkit.util import select_by_index
 
 from .inference_payloads import BaseParameters, ForecastingMetadataInput, ForecastingParameters
 from .service_handler import ForecastingServiceHandler, ServiceHandler
@@ -209,7 +211,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
         LOGGER.info(f"Preprocessor params: {preprocessor_params}")
 
-        preprocessor = self.load_preprocessor(self.model_id)
+        preprocessor = self.load_preprocessor(self.model_path)
 
         if preprocessor is None:
             preprocessor = TimeSeriesPreprocessor(
@@ -220,6 +222,24 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             # train to estimate freq
             preprocessor.train(data)
             LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+        else:
+            # check payload, but only certain parameters
+            to_check = [
+                "freq",
+                "timestamp_column",
+                "target_columns",
+                "conditional_columns",
+                "control_columns",
+                "observable_columns",
+            ]
+
+            for param in to_check:
+                param_val = preprocessor_params[param]
+                param_val_saved = getattr(preprocessor, param)
+                if param_val != param_val_saved:
+                    raise ValueError(
+                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                    )
 
         model_config_kwargs = self._get_config_kwargs(
             parameters=parameters,
@@ -261,9 +281,62 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
         # warn if future data is not provided, but is needed by the model
         if self.preprocessor.exogenous_channel_indices and future_data is None:
-            ValueError(
+            raise ValueError(
                 "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
             )
+
+        if not self.preprocessor.exogenous_channel_indices and future_data is not None:
+            raise ValueError("Future data future data was provided, but model does not support exogenous")
+
+        # future_data checks
+        if future_data is not None:
+            if schema.id_columns:
+                data_lengths = future_data.groupby(schema.id_columns)[schema.id_columns].apply(len)
+                fd_min_len_index = data_lengths.argmin()
+                fd_min_data_length = data_lengths.iloc[fd_min_len_index]
+                fd_max_data_length = data_lengths.max()
+            else:
+                fd_min_data_length = fd_max_data_length = len(future_data)
+            LOGGER.info(
+                f"Future Data length recieved {len(future_data)}, minimum series length: {fd_min_data_length}, maximum series length: {fd_max_data_length}"
+            )
+
+            # if data is too short, raise error
+            prediction_length = getattr(self.config, "prediction_filter_length", None)
+            has_prediction_filter = prediction_length is not None
+
+            model_prediction_length = self.config.prediction_length
+
+            prediction_length = prediction_length if prediction_length is not None else model_prediction_length
+            if fd_min_data_length < prediction_length:
+                err_str = (
+                    "Future data should have time series of length that is at least the specified prediction length."
+                )
+                if schema.id_columns:
+                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points"
+                else:
+                    err_str += (
+                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points"
+                    )
+                raise ValueError(err_str)
+
+            # if data exceeds prediction filter length, truncate
+            if fd_max_data_length > model_prediction_length:
+                LOGGER.info(f"Truncating future series lengths to {model_prediction_length}")
+                future_data = select_by_index(
+                    future_data, id_columns=schema.id_columns, end_index=model_prediction_length
+                )
+
+            # if provided data is greater than prediction_filter_length, but less than model_prediction_length we extend
+            if has_prediction_filter and fd_min_data_length < model_prediction_length:
+                future_data = extend_time_series(
+                    time_series=future_data,
+                    freq=self.preprocessor.freq,
+                    timestamp_column=schema.timestamp_column,
+                    grouping_columns=schema.id_columns,
+                    periods=model_prediction_length,
+                )
+                pass
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,

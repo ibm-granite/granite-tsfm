@@ -20,6 +20,8 @@ from tsfm_public.toolkit.time_series_preprocessor import (
 )
 from tsfm_public.toolkit.util import FractionLocation
 
+from ..util import nreps
+
 
 def test_standard_scaler(sample_data):
     scaler = StandardScaler()
@@ -103,7 +105,7 @@ def test_time_series_preprocessor_scales(ts_data):
     # check scaled result
     out = tsp.preprocess(df)
     assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x)), 0.0)
-    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x)), 1.0)
+    assert np.allclose(out.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0)), 1.0)
 
     # check inverse scale result
     out_inv = tsp.inverse_scale_targets(out)
@@ -112,8 +114,8 @@ def test_time_series_preprocessor_scales(ts_data):
         == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.mean(x))
     )
     assert np.all(
-        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
-        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x))
+        out_inv.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0))
+        == df.groupby(tsp.id_columns)[tsp.target_columns].apply(lambda x: np.std(x, axis=0))
     )
 
     # check inverse scale result, with suffix
@@ -155,7 +157,7 @@ def test_time_series_preprocessor_inv_scales_lists(ts_data):
     assert out_inv["value2"].mean()[0] == df["value2"].mean()
 
 
-def test_augment_time_series(ts_data):
+def test_extend_time_series(ts_data):
     periods = 5
     a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)
 
@@ -174,6 +176,21 @@ def test_augment_time_series(ts_data):
     # check that length increases by periods for each id
     assert a.shape[0] == ts_data.shape[0] + 3 * periods
     assert a.shape[1] == ts_data.shape[1]
+
+    # test different lengths
+
+    ts_data_2 = pd.DataFrame(
+        {
+            "id": list(nreps(["A", "B"], 50)) + ["C"] * 20,
+            "timestamp": [datetime(2021, 1, 1) + timedelta(days=i) for i in range(50)] * 2
+            + [datetime(2021, 1, 1) + timedelta(days=i) for i in range(20)],
+            "value1": range(120),
+        }
+    )
+
+    a = extend_time_series(ts_data_2, timestamp_column="timestamp", grouping_columns=["id"], total_periods=60)
+
+    assert len(a) == 180
 
 
 def test_create_timestamps():
@@ -408,6 +425,22 @@ def test_get_datasets(ts_data):
 
     assert len(valid) == 150 - int(150 * 0.2) - int(150 * 0.7) - tsp.prediction_length + 1
 
+    full_train_size = len(train)
+
+    train, valid, test = get_datasets(
+        tsp,
+        ts_data,
+        split_config={
+            "train": 0.7,
+            "test": 0.2,
+        },
+        fewshot_fraction=0.2,
+        fewshot_location=FractionLocation.UNIFORM.value,
+        seed=42,
+    )
+
+    assert len(train) == int(full_train_size * 0.2)
+
 
 def test_get_datasets_padding(ts_data):
     tsp = TimeSeriesPreprocessor(
@@ -506,6 +539,22 @@ def test_get_datasets_with_frequency_token(ts_data):
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2}, use_frequency_token=True)
 
     assert train[0]["freq_token"] == DEFAULT_FREQUENCY_MAPPING["d"]
+
+
+def test_masking_specification(ts_data):
+    ts_data = ts_data.drop(columns=["id", "id2"])
+    tsp = TimeSeriesPreprocessor(timestamp_column="timestamp", prediction_length=2, context_length=5, freq="d")
+
+    train, _, _ = get_datasets(
+        tsp,
+        ts_data,
+        split_config={"train": 0.7, "test": 0.2},
+        use_frequency_token=True,
+        fill_value=-1000,
+        masking_specification=[("value1", -2)],
+    )
+
+    assert np.all(train[0]["past_values"].numpy()[-2:, 0] == -1000)
 
 
 def test_get_frequency_token():

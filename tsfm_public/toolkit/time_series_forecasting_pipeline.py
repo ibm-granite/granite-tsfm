@@ -359,7 +359,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                     raise ValueError(f"Future time series input contains an unknown column {c}.")
 
             if id_columns:
-                id_count = time_series[id_columns].unique().shape[0]
+                id_count = time_series[id_columns].drop_duplicates().shape[0]
             else:
                 id_count = 1
 
@@ -381,6 +381,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 time_series=time_series,
                 freq=self.feature_extractor.freq if self.feature_extractor else None,
                 timestamp_column=timestamp_column,
+                freq=self.feature_extractor.freq if self.feature_extractor else None,
                 grouping_columns=id_columns,
                 periods=prediction_length,
             )
@@ -434,7 +435,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             for i, c in enumerate(kwargs["target_columns"]):
                 ground_truth = input["future_values"][:, :, i].numpy()
                 missing = ~input["future_observed_mask"][:, :, i].numpy()
-                ground_truth[missing] = np.NaN
+                ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
         if "timestamp_column" in kwargs:

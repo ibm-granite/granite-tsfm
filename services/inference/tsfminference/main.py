@@ -8,6 +8,7 @@ import starlette.status as status
 import yaml
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+from prometheus_client import CollectorRegistry, make_asgi_app, multiprocess
 
 from . import (
     TSFM_CONFIG_FILE,
@@ -38,6 +39,20 @@ app = FastAPI(
     version=API_VERSION,
     description="This FastAPI application provides service endpoints for performing inference tasks on TSFM HF models.",
 )
+
+
+# ############# PROMETHEUS METRICS ##############
+# Using multiprocess collector for registry
+def make_metrics_app():
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    return make_asgi_app(registry=registry)
+
+
+metrics_app = make_metrics_app()
+app.mount("/metrics", metrics_app)
+# ##############################################
+
 ir = InferenceRuntime(config=config)
 ir.add_routes(app)
 

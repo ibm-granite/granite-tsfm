@@ -32,10 +32,14 @@ def strtobool(val):
 
 
 class FractionLocation(enum.Enum):
-    """`Enum` for the different locations where a fraction of data can be chosen."""
+    """`Enum` for the different methods of choosing the fraction of data. Options first and last are used
+    to select the fraction of data from of the begining or end of the full dataset. Uniform chooses windows
+    uniformly sampled from the dataset.
+    """
 
     FIRST = "first"
     LAST = "last"
+    UNIFORM = "uniform"
 
 
 def select_by_timestamp(
@@ -1118,7 +1122,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         forecast_horizon,
         contain_missing_values,
         contain_equal_length,
-    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.NaN)
+    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.nan)
 
     id_column_name = "id"
     timestamp_column_name = "timestamp"
