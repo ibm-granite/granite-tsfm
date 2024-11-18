@@ -160,7 +160,11 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
     if not data:
         return None, None
 
-    df = pd.DataFrame.from_dict(data)
+    try:
+        df = pd.DataFrame.from_dict(data)
+    except Exception as ex:
+        return None, ValueError(str(ex))
+
     rc, msg = check(df, schema.model_dump())
 
     if rc != 0:
