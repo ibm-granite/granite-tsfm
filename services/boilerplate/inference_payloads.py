@@ -146,7 +146,9 @@ class ForecastingInferenceInput(BaseInferenceInput):
         description="An object of ForecastingMetadataInput that contains the schema" " metadata of the data input.",
     )
 
-    parameters: ForecastingParameters
+    parameters: ForecastingParameters = Field(
+        description="additional parameters affecting behavior of the forecast.", default_factory=dict
+    )
 
     data: Dict[str, List[Any]] = Field(
         description="A payload of data matching the schema provided."
