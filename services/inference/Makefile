@@ -15,6 +15,7 @@ create_prometheus_metrics_dir:
 # starts the tsfminference service (used mainly for test cases)
 start_service_local: create_prometheus_metrics_dir boilerplate
 	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
+	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 	python -m gunicorn \
