@@ -29,13 +29,37 @@ class InferenceRuntime:
 
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
+        # /forecasting
         self.router.add_api_route(
             "/forecasting",
             self.forecast,
             methods=["POST"],
             response_model=PredictOutput,
         )
+        # /modelspec
+        self.router.add_api_route("/modelspec", self._modelspec, methods=["GET"])
         app.include_router(self.router)
+
+    def _modelspec(self, model_id: str):
+        model_path = TSFM_MODEL_DIR / model_id
+        if not model_path.exists():
+            raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
+        handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
+        if handler.handler_config:
+            answer = {}
+            atts = [
+                "multivariate_support",
+                "missing_value_support",
+                "minimum_context_length",
+                "maximum_context_length",
+                "maximum_prediction_length",
+            ]
+            for at in atts:
+                if hasattr(handler.handler_config, at):
+                    answer[at] = getattr(handler.handler_config, at)
+            return answer
+        else:
+            raise HTTPException(status_code=404, detail=str(e))
 
     def forecast(self, input: ForecastingInferenceInput):
         LOGGER.info("calling forecast_common")
