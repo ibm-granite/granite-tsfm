@@ -62,15 +62,25 @@ MODEL_PATH = args.hf_model_path
 print(f"{'*' * 20} Pre-training a TTM for context len = {CONTEXT_LENGTH}, forecast len = {FORECAST_LENGTH} {'*' * 20}")
 
 ## List of benchmark datasets (TTM was not pre-trained on any of these)
-list_datasets = [
-    "etth1",
-    "etth2",
-    "ettm1",
-    "ettm2",
-    "weather",
-    "electricity",
-    "traffic",
-]
+
+if args.datasets is None:
+    list_datasets = [
+        "etth1",
+        "etth2",
+        "ettm1",
+        "ettm2",
+        "weather",
+        "electricity",
+        "traffic",
+        # "exchange",
+        # "zafnoo",
+        # "solar" # please note that, solar is part of TTM pre-training.
+        #         # But, adding here to do in-distribution testing.
+        #         # solar results should be ignored for TTM for zero-shot ranking.
+    ]
+
+else:
+    list_datasets = [dataset.strip() for dataset in args.datasets.split(",")]
 
 
 all_results = {
@@ -135,15 +145,17 @@ for DATASET in list_datasets:
         print("+" * 60)
 
         # Plot
-        plot_predictions(
-            model=zeroshot_trainer.model,
-            dset=dset_test,
-            plot_dir=SUBDIR,
-            num_plots=10,
-            plot_prefix="test_zeroshot",
-            channel=0,
-        )
-        plt.close()
+
+        if args.plot:
+            plot_predictions(
+                model=zeroshot_trainer.model,
+                dset=dset_test,
+                plot_dir=SUBDIR,
+                num_plots=10,
+                plot_prefix="test_zeroshot",
+                channel=0,
+            )
+            plt.close()
 
         # write results
         all_results["dataset"].append(DATASET)
@@ -159,6 +171,8 @@ for DATASET in list_datasets:
     ## Use the pretrained model in few-shot 5% and 10% forecasting #
     ################################################################
     try:
+        if args.fewshot == 0:
+            raise Exception("fewshot is not enabled")
         for fewshot_percent in [5]:
             # Set learning rate
             learning_rate = None  # `None` value indicates that the optimal_lr_finder() will be used
@@ -280,22 +294,24 @@ for DATASET in list_datasets:
             print(fewshot_output)
             print("+" * 60)
 
-            # Plot
-            plot_predictions(
-                model=finetune_forecast_trainer.model,
-                dset=dset_test,
-                plot_dir=SUBDIR,
-                num_plots=10,
-                plot_prefix=f"test_fewshot_{fewshot_percent}",
-                channel=0,
-            )
-            plt.close()
+            if args.plot:
+                # Plot
+                plot_predictions(
+                    model=finetune_forecast_trainer.model,
+                    dset=dset_test,
+                    plot_dir=SUBDIR,
+                    num_plots=10,
+                    plot_prefix=f"test_fewshot_{fewshot_percent}",
+                    channel=0,
+                )
+                plt.close()
 
             # write results
             all_results[f"fs{fewshot_percent}_mse"].append(fewshot_output["eval_loss"])
 
     except Exception as e:
         print(f"Reason for exception: {e}")
+        fewshot_percent = 5
         # write dummy results
         all_results[f"fs{fewshot_percent}_mse"].append(np.nan)
 
