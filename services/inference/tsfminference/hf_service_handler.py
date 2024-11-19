@@ -310,13 +310,13 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             prediction_length = prediction_length if prediction_length is not None else model_prediction_length
             if fd_min_data_length < prediction_length:
                 err_str = (
-                    "Future data should have time series of length that is at least the specified prediction length."
+                    "Future data should have time series of length that is at least the specified prediction length. "
                 )
                 if schema.id_columns:
-                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points"
+                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points."
                 else:
                     err_str += (
-                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points"
+                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points."
                     )
                 raise ValueError(err_str)
 
@@ -329,14 +329,14 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
             # if provided data is greater than prediction_filter_length, but less than model_prediction_length we extend
             if has_prediction_filter and fd_min_data_length < model_prediction_length:
+                LOGGER.info(f"Extending time series to match model prediction length: {model_prediction_length}")
                 future_data = extend_time_series(
                     time_series=future_data,
                     freq=self.preprocessor.freq,
                     timestamp_column=schema.timestamp_column,
                     grouping_columns=schema.id_columns,
-                    periods=model_prediction_length,
+                    total_periods=model_prediction_length,
                 )
-                pass
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
