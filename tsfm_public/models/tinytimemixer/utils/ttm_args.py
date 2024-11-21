@@ -188,6 +188,38 @@ def get_ttm_args():
         help="Enable plotting",
     )
 
+    parser.add_argument(
+        "--num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="Number of  layers",
+    )
+
+    parser.add_argument(
+        "--decoder_num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="Number of  decoder layers",
+    )
+
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        required=False,
+        default=0.2,
+        help="Dropout",
+    )
+
+    parser.add_argument(
+        "--head_dropout",
+        type=float,
+        required=False,
+        default=0.2,
+        help="head_dropout",
+    )
+
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
