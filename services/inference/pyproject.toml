@@ -60,6 +60,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 locust = "*"
+pytest-coverage = "*"
 
 # ***********Extras***********
 [tool.poetry.group.chronos]

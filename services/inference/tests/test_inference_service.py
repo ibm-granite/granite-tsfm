@@ -81,7 +81,7 @@ def get_inference_response(
         resp = req.json()
 
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
-        return df
+        return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
         print(req.text)
         return req
@@ -128,9 +128,11 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
 
     # test single, very short (length 2)
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -178,9 +180,11 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
 
     # test multi-time series
     test_data_ = test_data.copy()
@@ -199,10 +203,12 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
 
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length * num_ids
+    assert counts["input_data_points"] == context_length * len(params["target_columns"]) * num_ids
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"]) * num_ids
 
     # test multi-time series, errors
     test_data_ = test_data.copy()
@@ -265,10 +271,12 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert df_out[0].shape[1] == 6
+    assert counts["input_data_points"] == context_length * len(params["target_columns"][:4])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"][:4])
 
     # single series, less columns, no id
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -287,10 +295,12 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert df_out[0].shape[1] == 2
+    assert counts["input_data_points"] == context_length
+    assert counts["output_data_points"] == prediction_length
 
     # single series, different prediction length
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -309,9 +319,11 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length // 4
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"])
 
     # single series
     # error wrong prediction length
@@ -351,9 +363,11 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length // 4
+    assert counts["input_data_points"] == context_length * len(params["target_columns"][1:])
+    assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"][1:])
 
 
 @pytest.mark.parametrize("ts_data", ["chronos-t5-small"], indirect=True)
@@ -393,6 +407,7 @@ def test_future_data_forecast_inference(ts_data):
     test_data, params = ts_data
 
     prediction_length = params["prediction_length"]
+    context_length = params["context_length"]
     model_id = params["model_id"]
     model_id_path: str = model_id
 
@@ -400,15 +415,48 @@ def test_future_data_forecast_inference(ts_data):
 
     num_ids = test_data[id_columns[0]].nunique()
 
-    # test single
-    # test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    # test multi series, too short future data
     test_data_ = test_data.copy()
-    print(test_data_.tail())
 
     target_columns = ["OT"]
 
     future_data = extend_time_series(
-        test_data_,
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=25,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    prediction_length = 30
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": prediction_length,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": target_columns,
+            "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+    out = get_inference_response(msg)
+    assert (
+        "Future data should have time series of length that is at least the specified prediction length." in out.text
+    )
+
+    # test multi series, longer future data
+    test_data_ = test_data.copy()
+
+    target_columns = ["OT"]
+
+    future_data = extend_time_series(
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
         timestamp_column=params["timestamp_column"],
         grouping_columns=params["id_columns"],
         total_periods=25,
@@ -435,9 +483,18 @@ def test_future_data_forecast_inference(ts_data):
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
 
-    df_out = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length * num_ids
+    assert (
+        counts["input_data_points"]
+        == (
+            context_length * len(params["target_columns"])
+            + prediction_length * (len(params["target_columns"]) - len(target_columns))
+        )
+        * num_ids
+    )
+    assert counts["output_data_points"] == prediction_length * 1 * num_ids
 
 
 @pytest.mark.parametrize(
@@ -474,10 +531,9 @@ def test_zero_shot_forecast_inference_no_timestamp(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
-    print(df_out[0].head())
 
 
 @pytest.mark.parametrize(
@@ -532,7 +588,7 @@ def test_finetuned_model_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
 
@@ -570,6 +626,6 @@ def test_trained_model_inference(ts_data):
         "future_data": {},
     }
 
-    df_out = get_inference_response(msg)
+    df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length

@@ -15,6 +15,7 @@ create_prometheus_metrics_dir:
 # starts the tsfminference service (used mainly for test cases)
 start_service_local: create_prometheus_metrics_dir boilerplate
 	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
+	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 	python -m gunicorn \
@@ -23,7 +24,7 @@ start_service_local: create_prometheus_metrics_dir boilerplate
 	--bind 127.0.0.1:8000 \
 	tsfminference.main:app && true &
 stop_service_local:
-	pkill  -f 'python.*tsfminference.*'
+	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
 image: boilerplate
 	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
@@ -45,9 +46,10 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	pytest -s tests ../tests
+	pytest --cov=tsfminference --cov-report term-missing tests ../tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
+	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
 	pytest -s tests ../tests

@@ -310,13 +310,13 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             prediction_length = prediction_length if prediction_length is not None else model_prediction_length
             if fd_min_data_length < prediction_length:
                 err_str = (
-                    "Future data should have time series of length that is at least the specified prediction length."
+                    "Future data should have time series of length that is at least the specified prediction length. "
                 )
                 if schema.id_columns:
-                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points"
+                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points."
                 else:
                     err_str += (
-                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points"
+                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points."
                     )
                 raise ValueError(err_str)
 
@@ -329,14 +329,14 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
             # if provided data is greater than prediction_filter_length, but less than model_prediction_length we extend
             if has_prediction_filter and fd_min_data_length < model_prediction_length:
+                LOGGER.info(f"Extending time series to match model prediction length: {model_prediction_length}")
                 future_data = extend_time_series(
                     time_series=future_data,
                     freq=self.preprocessor.freq,
                     timestamp_column=schema.timestamp_column,
                     grouping_columns=schema.id_columns,
-                    periods=model_prediction_length,
+                    total_periods=model_prediction_length,
                 )
-                pass
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -352,6 +352,53 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
     def _train(
         self,
     ) -> "ForecastingHuggingFaceHandler": ...
+
+    def _calculate_data_point_counts(
+        self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
+        output_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Dict[str, int]:
+        """Implementation for counting datapoints in input and output
+
+        Assumes data has been truncated
+        Future data may not be truncated
+        """
+
+        input_ts_columns = sum(
+            [
+                len(c)
+                for c in [
+                    schema.target_columns,
+                    schema.conditional_columns,
+                    schema.control_columns,
+                    schema.observable_columns,
+                ]
+            ]
+        )
+        input_ts_columns = input_ts_columns if input_ts_columns != 0 else data.shape[1] - len(schema.id_columns) - 1
+        input_static_columns = len(schema.static_categorical_columns)
+        num_target_columns = (
+            len(schema.target_columns) if schema.target_columns != [] else data.shape[1] - len(schema.id_columns) - 1
+        )
+        unique_ts = len(data.drop_duplicates(subset=schema.id_columns)) if schema.id_columns else 1
+        has_future_data = future_data is not None
+
+        # we don't count the static columns in the future data
+        # we only count future data which falls within forecast horizon "causal assumption"
+        # note that output_data.shape[0] = unique_ts * prediction_length
+        future_data_points = (input_ts_columns - num_target_columns) * output_data.shape[0] if has_future_data else 0
+
+        counts = {
+            "input_data_points": input_ts_columns * data.shape[0]
+            + input_static_columns * unique_ts
+            + future_data_points,
+            "output_data_points": output_data.shape[0] * num_target_columns,
+        }
+        LOGGER.info(f"Data point counts: {counts}")
+        return counts
 
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
