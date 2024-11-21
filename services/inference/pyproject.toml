@@ -30,7 +30,7 @@ __version_tuple__ = (0, 0, 0)
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.13", markers = "sys_platform != 'win32'" }
+tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.16", markers = "sys_platform != 'win32'" }
 
 # trying to pick up cpu version for tsfminference
 # to make image smaller
@@ -48,7 +48,7 @@ prometheus_client = { version = "*" }
 starlette = { version = ">=0.40.0" }
 Werkzeug = { version = ">=3.0.6" }
 urllib3 = { version = ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-
+aiohttp = { version = ">=3.10.11" }
 
 [[tool.poetry.source]]
 name = "pytorch"
@@ -60,6 +60,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 locust = "*"
+pytest-coverage = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
