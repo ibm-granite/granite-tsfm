@@ -1,5 +1,5 @@
 {
-  "model_id": "ibm/test-ttm-v1",
+  "model_id": "mytest-tsfm/ttm-1024-96-r2",
   "parameters": {
     "prediction_length": 1
   },

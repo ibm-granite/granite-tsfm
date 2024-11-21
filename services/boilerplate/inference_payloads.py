@@ -100,6 +100,10 @@ class ForecastingMetadataInput(BaseMetadataInput):
     )
 
 
+class BaseParameters(BaseModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+
 class ForecastingParameters(BaseModel):
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
@@ -142,7 +146,9 @@ class ForecastingInferenceInput(BaseInferenceInput):
         description="An object of ForecastingMetadataInput that contains the schema" " metadata of the data input.",
     )
 
-    parameters: ForecastingParameters
+    parameters: ForecastingParameters = Field(
+        description="additional parameters affecting behavior of the forecast.", default_factory=dict
+    )
 
     data: Dict[str, List[Any]] = Field(
         description="A payload of data matching the schema provided."
@@ -277,3 +283,6 @@ class PredictOutput(BaseModel):
         description="List of prediction results.",
         default=None,
     )
+
+    input_data_points: int = Field(description="Count of input data points.", default=None)
+    output_data_points: int = Field(description="Count of output data points.", default=None)

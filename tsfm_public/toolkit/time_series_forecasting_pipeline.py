@@ -379,13 +379,13 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             # no additional exogenous data provided, extend with empty periods
             time_series = extend_time_series(
                 time_series=time_series,
-                timestamp_column=timestamp_column,
                 freq=self.feature_extractor.freq if self.feature_extractor else None,
+                timestamp_column=timestamp_column,
                 grouping_columns=id_columns,
                 periods=prediction_length,
             )
 
-        # use forecasing dataset to do the preprocessing
+        # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
             time_series,
             **kwargs,
