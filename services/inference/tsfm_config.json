@@ -1,0 +1,11 @@
+{
+    "service_handler_module_path": "tsfminference.chronos_service_handler",
+    "service_handler_class_name": "ChronosForecastingHandler",
+    "maximum_prediction_length": 64,
+    "minimum_context_length": 256,
+    "maximum_context_length": 512,
+    "module_path": "chronos",
+    "model_type": "chronos-t5-small",
+    "model_config_name": "T5Config",
+    "model_class_name": "ChronosPipeline"
+}
