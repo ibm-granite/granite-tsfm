@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__file__)
 class ChronosForecastingHandler(ForecastingServiceHandler):
     """Handler for Chronos model family
 
-    Supports chronos-t5-small at this point.
+    Supports chronos-t5-tiny at this point.
 
     Args:
         model_id (str): ID of the model
@@ -38,9 +38,7 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         model_path: Union[str, Path],
         handler_config: TSFMConfig,
     ):
-        super().__init__(
-            model_id=model_id, model_path=model_path, handler_config=handler_config
-        )
+        super().__init__(model_id=model_id, model_path=model_path, handler_config=handler_config)
 
     def _prepare(
         self,
@@ -65,13 +63,28 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         """
 
         model = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-tiny",
+            self.model_path,
         )
         self.model = model
         self.config = model.model.model.config
         self.chronos_config = self.config.chronos_config
 
         return self
+
+    def _calculate_data_point_counts(
+        self,
+        data: pd.DataFrame,
+        future_data: Optional[pd.DataFrame] = None,
+        output_data: Optional[pd.DataFrame] = None,
+        schema: Optional[ForecastingMetadataInput] = None,
+        parameters: Optional[ForecastingParameters] = None,
+    ) -> Dict[str, int]:
+        """Implementation for counting datapoints in input and output
+
+        Assumes data has been truncated
+        Future data may not be truncated
+        """
+        return {}  # to be implemented
 
     def _run(
         self,
@@ -97,9 +110,7 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         """
 
         target_columns = schema.target_columns or data.columns.tolist()
-        prediction_length = (
-            parameters.prediction_length or self.chronos_config["prediction_length"]
-        )
+        prediction_length = parameters.prediction_length or self.chronos_config["prediction_length"]
 
         num_samples = self.chronos_config["num_samples"]
         temperature = self.chronos_config["temperature"]
@@ -119,13 +130,9 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         )
         median_forecast_arr = []
         for i in range(len(target_columns)):
-            median_forecast_arr.append(
-                np.quantile(forecasts[i].numpy(), [0.5], axis=0).flatten()
-            )
+            median_forecast_arr.append(np.quantile(forecasts[i].numpy(), [0.5], axis=0).flatten())
 
-        result = pd.DataFrame(
-            np.array(median_forecast_arr).transpose(), columns=target_columns
-        )
+        result = pd.DataFrame(np.array(median_forecast_arr).transpose(), columns=target_columns)
         return result
 
     def _train(
