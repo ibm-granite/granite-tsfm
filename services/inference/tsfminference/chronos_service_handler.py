@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__file__)
 class ChronosForecastingHandler(ForecastingServiceHandler):
     """Handler for Chronos model family
 
-    Supports chronos-t5-tiny at this point.
+    Supports chronos-t5-small at this point.
 
     Args:
         model_id (str): ID of the model
