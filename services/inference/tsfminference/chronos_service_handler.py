@@ -38,7 +38,6 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         model_path: Union[str, Path],
         handler_config: TSFMConfig,
     ):
-        # !!! Double check which init
         super().__init__(
             model_id=model_id, model_path=model_path, handler_config=handler_config
         )
