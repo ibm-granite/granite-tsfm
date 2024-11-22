@@ -57,6 +57,7 @@ class TSFMConfig(PushToHubMixin):
         self.minimum_context_length = kwargs.pop("minimum_context_length", 1)
         self.maximum_context_length = kwargs.pop("maximum_context_length", None)
         self.maximum_prediction_length = kwargs.pop("maximum_prediction_length", None)
+        self.is_finetuned = kwargs.pop("is_finetuned", False)
 
         # "maximum_prediction_length": 96,
         # "minimum_context_length": 512,

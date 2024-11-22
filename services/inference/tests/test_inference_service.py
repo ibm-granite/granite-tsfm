@@ -551,6 +551,76 @@ def test_finetuned_model_inference(ts_data):
 @pytest.mark.parametrize(
     "ts_data",
     [
+        "ttm-r2",
+    ],
+    indirect=True,
+)
+def test_improper_use_of_zero_shot_model_inference(ts_data):
+    test_data, params = ts_data
+    id_columns = params["id_columns"]
+    model_id = params["model_id"]
+
+    # conditional columns for non-conditional model
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": ["OT"],
+            "freq": "1h",
+            "conditional_columns": [c for c in params["target_columns"] if c != "OT"],
+        },
+        "data": encoded_data,
+        "future_data": {},
+    }
+
+    out = get_inference_response(msg)
+    assert (
+        "Unexpected parameter conditional_columns for a zero-shot model, please confirm you have the correct model_id and schema."
+        in out.text
+    )
+
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    future_data = extend_time_series(
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=25,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": ["OT"],
+            "freq": "1h",
+        },
+        "data": encoded_data,
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+
+    out = get_inference_response(msg)
+    assert "Future data was provided, but the model does not support or require future exogenous." in out.text
+
+
+@pytest.mark.parametrize(
+    "ts_data",
+    [
         "ibm/test-patchtst",
         "ibm/test-patchtsmixer",
     ],
