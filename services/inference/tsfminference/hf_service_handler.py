@@ -213,7 +213,21 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
 
         preprocessor = self.load_preprocessor(self.model_path)
 
+        if self.handler_config.is_finetuned and preprocessor is None:
+            raise ValueError("Model indicates that it is finetuned but no preprocessor was found.")
+
+        if not self.handler_config.is_finetuned and preprocessor is not None:
+            raise ValueError("Unexpected: model indicates that it is not finetuned but a preprocessor was found.")
+
         if preprocessor is None:
+            to_check = ["conditional_columns", "control_columns", "observable_columns", "static_categorical_columns"]
+
+            for param in to_check:
+                if param in preprocessor_params and preprocessor_params[param]:
+                    raise ValueError(
+                        f"Unexpected parameter {param} for a zero-shot model, please confirm you have the correct model_id and schema."
+                    )
+
             preprocessor = TimeSeriesPreprocessor(
                 **preprocessor_params,
                 scaling=False,
@@ -280,13 +294,14 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         """
 
         # warn if future data is not provided, but is needed by the model
+        # Remember preprocessor.exogenous_channel_indices are the exogenous for which future data is available
         if self.preprocessor.exogenous_channel_indices and future_data is None:
             raise ValueError(
                 "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
             )
 
         if not self.preprocessor.exogenous_channel_indices and future_data is not None:
-            raise ValueError("Future data future data was provided, but model does not support exogenous")
+            raise ValueError("Future data was provided, but the model does not support or require future exogenous.")
 
         # future_data checks
         if future_data is not None:
