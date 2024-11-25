@@ -82,7 +82,7 @@ def get_inference_response(
         return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
         print(req.text)
-        return req
+        return req, {}
 
 
 def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
