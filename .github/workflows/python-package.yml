@@ -5,9 +5,9 @@ name: Python package
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "new_model_integrations" ]
   pull_request:
-    branches: [ "main", "services_chronos_support", "destiny" ]
+    branches: [ "main", "new_model_integrations" ]
 
 jobs:
   build:
