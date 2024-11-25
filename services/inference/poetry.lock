@@ -525,6 +525,32 @@ files = [
 ]
 
 [[package]]
+name = "chronos"
+version = "1.2.1"
+description = ""
+optional = false
+python-versions = ">=3.8"
+files = []
+develop = false
+
+[package.dependencies]
+accelerate = "*"
+torch = ">=2.0,<3.0"
+transformers = ">=4.30,<5.0"
+
+[package.extras]
+evaluation = ["datasets", "gluonts[pro]", "numpy", "typer"]
+test = ["numpy (>=1.21,<2.0)", "pytest (>=8.0,<9.0)"]
+training = ["gluonts[pro]", "joblib", "numpy", "scikit-learn", "tensorboard", "typer", "typer-config"]
+typecheck = ["mypy (>=1.9,<2.0)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/amazon-science/chronos-forecasting.git"
+reference = "HEAD"
+resolved_reference = "d0c114c81ddc66b75604d24f296ffac65dd42157"
+
+[[package]]
 name = "click"
 version = "8.1.7"
 description = "Composable command line interface toolkit"
@@ -3673,4 +3699,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "d924af4b902af92ec1feec7a7ba735681842772f4c197afd78bec42983d93dd9"
+content-hash = "810cf1f2888a38e3887ae8475a5c65a037b76468fcb60673daadfebdaf802745"
