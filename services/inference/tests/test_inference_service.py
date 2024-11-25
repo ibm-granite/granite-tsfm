@@ -150,7 +150,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert "Received 2 time points for id a" in out.text
 
     # test single, more data
@@ -227,7 +227,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert f"Received {context_length-3} time points for id a" in out.text
 
     # test multi-time series, multi-id
@@ -250,7 +250,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert f"Received {context_length-3} time points for id ('a', 'a')" in out.text
 
     # single series, less columns
@@ -342,7 +342,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert "prediction_filter_length should be positive" in out.text
 
     # single series, different prediction length
@@ -445,7 +445,7 @@ def test_future_data_forecast_inference(ts_data):
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert (
         "Future data should have time series of length that is at least the specified prediction length." in out.text
     )
@@ -569,7 +569,7 @@ def test_finetuned_model_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert "Attempted to use a fine-tuned model with a different schema" in out.text
 
     test_data_ = test_data_.drop(columns=params["timestamp_column"])
@@ -626,7 +626,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert (
         "Unexpected parameter conditional_columns for a zero-shot model, please confirm you have the correct model_id and schema."
         in out.text
@@ -660,7 +660,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
 
-    out = get_inference_response(msg)
+    out, _ = get_inference_response(msg)
     assert "Future data was provided, but the model does not support or require future exogenous." in out.text
 
 
