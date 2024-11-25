@@ -5,9 +5,9 @@ name: tsfmfinetuning Service Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "new_model_integrations" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "new_model_integrations" ]
 
 jobs:
   build:
