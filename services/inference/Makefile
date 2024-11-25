@@ -65,6 +65,3 @@ clone_models:
 
 delete_models:
 	rm -rf mytest-tsfm || true
-
-
-
