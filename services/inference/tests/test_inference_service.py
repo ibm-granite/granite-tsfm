@@ -20,6 +20,7 @@ model_param_map = {
     "ttm-1536-96-r2": {"context_length": 1536, "prediction_length": 96},
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
     "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
+    "chronos-t5-tiny": {"context_length": 512, "prediction_length": 96},
 }
 
 
@@ -92,7 +93,9 @@ def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    "ts_data", ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"], indirect=True
+    "ts_data",
+    ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"],
+    indirect=True,
 )
 def test_zero_shot_forecast_inference(ts_data):
     test_data, params = ts_data
@@ -153,7 +156,11 @@ def test_zero_shot_forecast_inference(ts_data):
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
 
     test_data_ = extend_time_series(
-        test_data_, params["timestamp_column"], grouping_columns=id_columns, freq="1h", periods=10
+        test_data_,
+        params["timestamp_column"],
+        grouping_columns=id_columns,
+        freq="1h",
+        periods=10,
     )
     test_data_ = test_data_.fillna(0)
 
@@ -361,6 +368,38 @@ def test_zero_shot_forecast_inference(ts_data):
     assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"][1:])
 
 
+@pytest.mark.parametrize("ts_data", ["chronos-t5-tiny"], indirect=True)
+def test_zero_shot_forecast_inference_chronos(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    # test single
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, counts = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+
+
 @pytest.mark.parametrize("ts_data", ["ttm-r2"], indirect=True)
 def test_future_data_forecast_inference(ts_data):
     test_data, params = ts_data
@@ -455,7 +494,9 @@ def test_future_data_forecast_inference(ts_data):
 
 
 @pytest.mark.parametrize(
-    "ts_data", ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"], indirect=True
+    "ts_data",
+    ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"],
+    indirect=True,
 )
 def test_zero_shot_forecast_inference_no_timestamp(ts_data):
     test_data, params = ts_data

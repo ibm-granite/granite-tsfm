@@ -62,6 +62,8 @@ install_dev: boilerplate
 clone_models:
 	git lfs install || true
 	git clone https://huggingface.co/ibm/test-tsfm mytest-tsfm || true
+	git clone https://huggingface.co/amazon/chronos-t5-tiny mytest-tsfm/chronos-t5-tiny || true
+	cp tsfm_config.json mytest-tsfm/chronos-t5-tiny || true
 
 delete_models:
 	rm -rf mytest-tsfm || true
