@@ -100,13 +100,10 @@ class ForecastingMetadataInput(BaseMetadataInput):
     )
 
 
-class BaseParameters(BaseModel):
-    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+class BaseParameters(BaseModel): ...
 
 
-class ForecastingParameters(BaseModel):
-    model_config = ConfigDict(extra="forbid", protected_namespaces=())
-
+class ForecastingParameters(BaseParameters):
     prediction_length: Optional[int] = Field(
         description="The prediction length for the forecast."
         " The service will return this many periods beyond the last"
