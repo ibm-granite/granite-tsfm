@@ -21,7 +21,8 @@ from tsfminference.inference_payloads import (
 
 SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
-MODEL_ID = "mytest-tsfm/ttm-r1"
+TTM_MODEL_ID = "mytest-tsfm/ttm-r1"
+CHRONOS_MODEL_ID = "mytest-tsfm/chronos-t5-tiny"
 
 
 @pytest.fixture(scope="module")
@@ -50,14 +51,14 @@ else:
 
 
 @pytest.fixture(scope="module")
-def forecasting_input_base() -> ForecastingInferenceInput:
+def forecasting_input_base(request) -> ForecastingInferenceInput:
     # df: pd.DataFrame = ts_data_base
     schema: ForecastingMetadataInput = ForecastingMetadataInput(
         timestamp_column="date", id_columns=["ID"], target_columns=["VAL"]
     )
-    parameters: ForecastingParameters = ForecastingParameters()
+    parameters: ForecastingParameters = ForecastingParameters(prediction_length=FORECAST_LENGTH)
     input: ForecastingInferenceInput = ForecastingInferenceInput(
-        model_id=MODEL_ID,
+        model_id=request.param,
         schema=schema,
         parameters=parameters,
         data={
@@ -84,6 +85,7 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
     assert results["date"].iloc[-1] - df["date"].iloc[-1] == timedelta(hours=FORECAST_LENGTH)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
     df = copy.deepcopy(ts_data_base)
@@ -94,6 +96,7 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
     _basic_result_checks(results, df)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_schema_missing_target_columns(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
@@ -107,6 +110,7 @@ def test_forecast_with_schema_missing_target_columns(
     _basic_result_checks(results, df)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_integer_timestamps(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
@@ -125,6 +129,7 @@ def test_forecast_with_integer_timestamps(
     assert results.dtypes[timestamp_column] == df.dtypes[timestamp_column]
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
@@ -138,6 +143,7 @@ def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_
         runtime.forecast(input=input)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
@@ -149,6 +155,7 @@ def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_inpu
         runtime.forecast(input=input)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_bogus_model_id(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
@@ -160,6 +167,7 @@ def test_forecast_with_bogus_model_id(ts_data_base: pd.DataFrame, forecasting_in
         runtime.forecast(input=input)
 
 
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_insufficient_context_length(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
@@ -175,6 +183,7 @@ def test_forecast_with_insufficient_context_length(
 
 
 @pytest.mark.skip
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_nan_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
@@ -188,6 +197,7 @@ def test_forecast_with_nan_data(ts_data_base: pd.DataFrame, forecasting_input_ba
 
 
 # @pytest.mark.skip
+@pytest.mark.parametrize("forecasting_input_base", [TTM_MODEL_ID], indirect=True)
 def test_forecast_with_missing_row(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
@@ -202,3 +212,17 @@ def test_forecast_with_missing_row(ts_data_base: pd.DataFrame, forecasting_input
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     with pytest.raises(HTTPException) as _:
         runtime.forecast(input=input)
+
+
+@pytest.mark.parametrize("forecasting_input_base", [CHRONOS_MODEL_ID], indirect=True)
+def test_forecast_with_good_data_chronos(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    # set model dir
+    input = forecasting_input_base
+    df = copy.deepcopy(ts_data_base)
+    input.data = df.to_dict(orient="list")
+    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    assert len(results) == FORECAST_LENGTH
