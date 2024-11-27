@@ -128,6 +128,9 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             pd.DataFrame: The forecasts produced by the model.
         """
 
+        if self.preprocessor.exogenous_channel_indices or future_data is not None:
+            raise ValueError("Chronos does not support or require future exogenous.")
+
         target_columns = self.preprocessor.target_columns
         prediction_length = self.preprocessor.prediction_length
 

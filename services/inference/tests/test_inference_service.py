@@ -396,9 +396,39 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
         "future_data": {},
     }
 
-    df_out, counts = get_inference_response(msg)
+    df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    future_data = extend_time_series(
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=25,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": ["OT"],
+            "freq": "1h",
+        },
+        "data": encoded_data,
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+
+    out, _ = get_inference_response(msg)
+    assert "Chronos does not support future data and exogenous variables." in out.text
 
 
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
