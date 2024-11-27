@@ -428,7 +428,7 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
     }
 
     out, _ = get_inference_response(msg)
-    assert "Chronos does not support future data and exogenous variables." in out.text
+    assert "Chronos does not support or require future exogenous." in out.text
 
 
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
