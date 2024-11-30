@@ -1,5 +1,6 @@
 """Service handler for Chronos"""
 
+import copy
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -8,6 +9,9 @@ import numpy as np
 import pandas as pd
 import torch
 from chronos import ChronosPipeline
+
+from tsfm_public import TimeSeriesPreprocessor
+from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 
 from .inference_payloads import (
     ForecastingMetadataInput,
@@ -69,6 +73,21 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         self.config = model.model.model.config
         self.chronos_config = self.config.chronos_config
 
+        preprocessor_params = copy.deepcopy(schema.model_dump())
+        preprocessor_params["prediction_length"] = (
+            parameters.prediction_length or self.chronos_config["prediction_length"]
+        )
+
+        LOGGER.info("initializing TSFM TimeSeriesPreprocessor")
+        preprocessor = TimeSeriesPreprocessor(
+            **preprocessor_params,
+            scaling=False,
+            encode_categorical=False,
+        )
+        preprocessor.train(data)
+        LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+        self.preprocessor = preprocessor
+
         return self
 
     def _calculate_data_point_counts(
@@ -109,8 +128,11 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             pd.DataFrame: The forecasts produced by the model.
         """
 
-        target_columns = schema.target_columns or data.columns.tolist()
-        prediction_length = parameters.prediction_length or self.chronos_config["prediction_length"]
+        if self.preprocessor.exogenous_channel_indices or future_data is not None:
+            raise ValueError("Chronos does not support or require future exogenous.")
+
+        target_columns = self.preprocessor.target_columns
+        prediction_length = self.preprocessor.prediction_length
 
         num_samples = self.chronos_config["num_samples"]
         temperature = self.chronos_config["temperature"]
@@ -133,6 +155,19 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             median_forecast_arr.append(np.quantile(forecasts[i].numpy(), [0.5], axis=0).flatten())
 
         result = pd.DataFrame(np.array(median_forecast_arr).transpose(), columns=target_columns)
+        LOGGER.info("extend the time series.")
+        time_series = extend_time_series(
+            time_series=data,
+            freq=self.preprocessor.freq,
+            timestamp_column=schema.timestamp_column,
+            grouping_columns=schema.id_columns,
+            periods=prediction_length,
+        )
+        # append time stamp column to the result
+        result[schema.timestamp_column] = (
+            time_series[schema.timestamp_column].tail(result.shape[0]).reset_index(drop=True)
+        )
+
         return result
 
     def _train(

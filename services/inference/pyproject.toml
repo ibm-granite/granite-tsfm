@@ -13,10 +13,6 @@ vcs = "git"
 # style = "semver"
 format = "{base}"
 
-#[tool.poetry-dynamic-versioning.substitution]
-#files = ["tsfminference/_version.py"]
-#persistent-substitution = true
-
 [tool.poetry-dynamic-versioning.files."tsfminference/_version.py"]
 # persistent-substitution = true # useful for editable installs
 initial-content = """
@@ -25,12 +21,14 @@ __version__ = "0.0.0"
 __version_tuple__ = (0, 0, 0)
 """
 
-
 [tool.poetry.dependencies]
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
+
+#                                                                        change in dev too!
 tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.16", markers = "sys_platform != 'win32'" }
+#                                                                        change in dev too!
 
 # trying to pick up cpu version for tsfminference
 # to make image smaller
@@ -61,6 +59,9 @@ priority = "explicit"
 [tool.poetry.group.dev]
 optional = true
 [tool.poetry.group.dev.dependencies]
+tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.16", markers = "sys_platform != 'win32'", extras = [
+    "testing",
+] }
 pytest = "*"
 locust = "*"
 pytest-coverage = "*"
