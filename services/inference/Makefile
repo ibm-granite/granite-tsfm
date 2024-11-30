@@ -23,6 +23,17 @@ start_service_local: create_prometheus_metrics_dir boilerplate
 	-k uvicorn.workers.UvicornWorker \
 	--bind 127.0.0.1:8000 \
 	tsfminference.main:app && true &
+
+# this is a local service using uvicorn which
+# will watch code changes (useful for development)
+start_service_watched: create_prometheus_metrics_dir boilerplate
+	TSFM_MODEL_DIR=./mytest-tsfm \
+	PROMETHEUS_MULTIPROC_DIR=/tmp \
+	python -m uvicorn tsfminference.main:app \
+    	--reload \
+        --workers 1 \
+        --host 127.0.0.1 --port 8000
+
 stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
