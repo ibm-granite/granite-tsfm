@@ -22,7 +22,7 @@ from tsfminference.inference_payloads import (
 SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
 
-MODEL_IDS = ["mytest-tsfm/ttm-r1", "mytest-tsfm/chronos-t5-tiny"]
+MODEL_IDS = ["mytest-tsfm/ttm-r1"]
 
 
 @pytest.fixture(scope="module")
@@ -51,14 +51,14 @@ else:
 
 
 @pytest.fixture(scope="module")
-def forecasting_input_base() -> ForecastingInferenceInput:
+def forecasting_input_base(request) -> ForecastingInferenceInput:
     # df: pd.DataFrame = ts_data_base
     schema: ForecastingMetadataInput = ForecastingMetadataInput(
         timestamp_column="date", id_columns=["ID"], target_columns=["VAL"]
     )
     parameters: ForecastingParameters = ForecastingParameters()
     input: ForecastingInferenceInput = ForecastingInferenceInput(
-        model_id=MODEL_ID,
+        model_id=request.param,
         schema=schema,
         parameters=parameters,
         data={
