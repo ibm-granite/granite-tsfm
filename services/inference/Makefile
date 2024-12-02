@@ -57,13 +57,13 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver
 
 test_local: clone_models boilerplate start_service_local
-	TSFM_MODEL_DIR="mytest-tsfm" pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	TSFM_MODEL_DIR="mytest-tsfm" pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
-	pytest -s tests ../tests
+	TSFM_MODEL_DIR="mytest-tsfm" pytest -s tests ../tests
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 
