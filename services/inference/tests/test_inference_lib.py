@@ -30,13 +30,13 @@ FORECAST_LENGTH = 96
 MODEL_IDS = [
     os.path.basename(dirpath)
     for dirpath, _, _ in os.walk("./mytest-tsfm")
-    if ".git" not in dirpath and "./mytest-tsfm" != dirpath and "finetuned" not in dirpath
+    if ".git" not in dirpath and "./mytest-tsfm" != dirpath and "finetuned" not in dirpath and "figures" not in dirpath
 ]
 
 
 def min_context_length(model_id):
     model_path: Path = TSFM_MODEL_DIR / model_id
-    assert model_path.exists()
+    assert model_path.exists(), f"{model_path} does not exist!"
     handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
     return handler.handler_config.minimum_context_length
 
