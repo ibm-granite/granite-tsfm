@@ -2,14 +2,17 @@
 #
 
 import copy
+import os
 from datetime import timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
 from fastapi import HTTPException
-from tsfminference import TSFM_CONFIG_FILE
+from pytest import FixtureRequest
+from tsfminference import TSFM_CONFIG_FILE, TSFM_MODEL_DIR
 from tsfminference.inference import InferenceRuntime
 from tsfminference.inference_payloads import (
     ForecastingInferenceInput,
@@ -17,19 +20,32 @@ from tsfminference.inference_payloads import (
     ForecastingParameters,
     PredictOutput,
 )
+from tsfminference.service_handler import ForecastingServiceHandler
 
 
-SERIES_LENGTH = 512
+# SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
 
-MODEL_IDS = ["mytest-tsfm/ttm-r1", "mytest-tsfm/chronos-t5-tiny"]
+
+MODEL_IDS = [
+    os.path.basename(dirpath)
+    for dirpath, _, _ in os.walk("./mytest-tsfm")
+    if ".git" not in dirpath and "./mytest-tsfm" != dirpath and "finetuned" not in dirpath
+]
+
+
+def min_context_length(model_id):
+    model_path: Path = TSFM_MODEL_DIR / model_id
+    assert model_path.exists()
+    handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
+    return handler.handler_config.minimum_context_length
 
 
 @pytest.fixture(scope="module")
-def ts_data_base() -> pd.DataFrame:
+def ts_data_base(request: type[FixtureRequest]) -> pd.DataFrame:
     # Generate a date range
-    length = SERIES_LENGTH
-    date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
+    length = min_context_length(request.param)
+    date_range = pd.date_range(start="2023-10-01", periods=length, freq="H")
 
     # Create a DataFrame
     df = pd.DataFrame(
@@ -40,7 +56,7 @@ def ts_data_base() -> pd.DataFrame:
         }
     )
 
-    return df
+    return df, request.param
 
 
 if TSFM_CONFIG_FILE:
@@ -51,7 +67,7 @@ else:
 
 
 @pytest.fixture(scope="module")
-def forecasting_input_base(request) -> ForecastingInferenceInput:
+def forecasting_input_base(request: type[FixtureRequest]) -> ForecastingInferenceInput:
     # df: pd.DataFrame = ts_data_base
     schema: ForecastingMetadataInput = ForecastingMetadataInput(
         timestamp_column="date", id_columns=["ID"], target_columns=["VAL"]
@@ -86,9 +102,15 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
@@ -97,12 +119,19 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_schema_missing_target_columns(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
     input = forecasting_input_base
     input.schema.target_columns = []
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+
+    df = copy.deepcopy(data)
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
@@ -111,32 +140,45 @@ def test_forecast_with_schema_missing_target_columns(
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_integer_timestamps(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
+    series_length = len(df)
 
     timestamp_column = input.schema.timestamp_column
     df[timestamp_column] = df[timestamp_column].astype(int)
-    df[timestamp_column] = range(1, SERIES_LENGTH + 1)
+    df[timestamp_column] = range(1, series_length + 1)
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
-    assert results[timestamp_column].iloc[0] == SERIES_LENGTH + 1
+    assert results[timestamp_column].iloc[0] == series_length + 1
     assert results[timestamp_column].iloc[-1] - df[timestamp_column].iloc[-1] == FORECAST_LENGTH
     assert results.dtypes[timestamp_column] == df.dtypes[timestamp_column]
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
-
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
+    series_length = len(df)
     timestamp_column = input.schema.timestamp_column
     df[timestamp_column] = df[timestamp_column].astype(str)
-    df[timestamp_column] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    df[timestamp_column] = [str(x) for x in range(1, series_length + 1)]
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     with pytest.raises(ValueError) as _:
@@ -144,11 +186,18 @@ def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
+    series_length = len(df)
     df["VAL"] = df["VAL"].astype(str)
-    df["VAL"] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    df["VAL"] = [str(x) for x in range(1, series_length + 1)]
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     with pytest.raises(HTTPException) as _:
@@ -156,9 +205,15 @@ def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_inpu
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_bogus_model_id(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
     input.data = df.to_dict(orient="list")
     input.model_id = "hoo-hah"
 
@@ -168,12 +223,18 @@ def test_forecast_with_bogus_model_id(ts_data_base: pd.DataFrame, forecasting_in
 
 
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_insufficient_context_length(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
-    df = df.iloc[0:-100]
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
+    df = df.iloc[0:10]  # should be well below the min context lengths for our models
 
     input.data = df.to_dict(orient="list")
 
@@ -184,9 +245,15 @@ def test_forecast_with_insufficient_context_length(
 
 @pytest.mark.skip
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_nan_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
     df.iloc[0, df.columns.get_loc("VAL")] = np.nan
 
     input.data = df.to_dict(orient="list")
@@ -198,15 +265,16 @@ def test_forecast_with_nan_data(ts_data_base: pd.DataFrame, forecasting_input_ba
 
 # @pytest.mark.skip
 @pytest.mark.parametrize("forecasting_input_base", MODEL_IDS, indirect=True)
+@pytest.mark.parametrize("ts_data_base", MODEL_IDS, indirect=True)
 def test_forecast_with_missing_row(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
-    df = copy.deepcopy(ts_data_base)
-    df = df.drop(index=10)
-
-    # append a row to give it the correct length
-    # don't forget to update the timestamp accordingly in the
-    # appended row
-
+    data, model_id = ts_data_base
+    # since we're sometimes generating non-sensible combinations
+    # skip those
+    if input.model_id != model_id:
+        return
+    df = copy.deepcopy(data)
+    df.drop(index=10, inplace=True)
     input.data = df.to_dict(orient="list")
 
     runtime: InferenceRuntime = InferenceRuntime(config=config)
