@@ -115,6 +115,17 @@ def get_model(
                     {SUPPORTED_LENGTHS[model_path_type]}"
                 )
 
+            # Choose closest context length
+            available_context_lens = sorted(SUPPORTED_LENGTHS[model_path_type]["CL"], reverse=True)
+            selected_context_length = None
+            for cl in available_context_lens:
+                if cl <= context_length:
+                    selected_context_length = cl
+                    break
+            if selected_context_length is None:
+                raise ValueError(f"Requested context length is too short. Requested = {context_length}.\n\
+                                 Available lengths for model_type = {model_path_type} are: {available_context_lens}.")
+
             if freq_prefix_tuning is None:
                 # Default model preference (freq / nofreq)
                 if model_path_type == 1 or model_path_type == 2:  # for granite use nofreq models
@@ -135,11 +146,11 @@ def get_model(
             try:
                 if model_path_type == 1 or model_path_type == 2:
                     ttm_model_revision = model_revisions["ibm-granite-models"][
-                        f"r{model_path_type}-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                        f"r{model_path_type}-{selected_context_length}-{selected_prediction_length}-{freq_prefix}"
                     ]["revision"]
                 elif model_path_type == 3:
                     ttm_model_revision = model_revisions["research-use-models"][
-                        f"r2-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                        f"r2-{selected_context_length}-{selected_prediction_length}-{freq_prefix}"
                     ]["revision"]
                 else:
                     raise Exception(
@@ -149,9 +160,10 @@ def get_model(
                 raise ValueError(
                     f"Model not found, possibly because of wrong context_length. Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are {SUPPORTED_LENGTHS[model_path_type]}"
                 )
+        else:
+            prediction_filter_length = prediction_length
 
         # Load model
-
         model = TinyTimeMixerForPrediction.from_pretrained(
             model_path,
             revision=ttm_model_revision,

@@ -309,7 +309,7 @@ def plot_predictions(
                 if k in signature_keys:
                     random_samples[k] = torch.stack([dset[i][k] for i in indices]).to(device=device)
             output = model(**random_samples)
-            predictions_subset = output.prediction_outputs[:, :, channel].squeeze().cpu().numpy()
+            predictions_subset = output.prediction_outputs[:, :, channel].cpu().numpy()
             prediction_length = predictions_subset.shape[1]
         using_pipeline = False
         plot_test_data = True
