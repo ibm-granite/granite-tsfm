@@ -2,12 +2,13 @@ import bisect
 from typing import Union
 
 import numpy as np
-import torch
 from gluonts.dataset.split import InputDataset, LabelDataset, TrainingDataset
 from gluonts.itertools import batcher
 from gluonts.transform.feature import LastValueImputation
 from torch.utils.data import Dataset
 from tqdm import tqdm
+
+from tsfm_public.toolkit.dataset import _torch
 
 
 def impute_series(target):
@@ -21,17 +22,6 @@ def impute_series(target):
         else:
             raise Exception("Only 1D and 2D arrays are accepted by the impute_series() function.")
     return target
-
-
-def np_to_torch(np):
-    if np.dtype == "float" or np.dtype == "float32":
-        return torch.from_numpy(np).float()
-    elif np.dtype == "int":
-        return torch.from_numpy(np)
-
-
-def _torch(*nps):
-    return tuple(np_to_torch(x) for x in nps)
 
 
 class StandardScalingGluonTSDataset:

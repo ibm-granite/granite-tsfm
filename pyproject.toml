@@ -31,7 +31,7 @@ packages = ["tsfm_public", "tsfmhfdemos"]
 [project.optional-dependencies]
 
 
-all = ["tsfm_public[notebooks,testing,dev]"]
+all = ["tsfm_public[notebooks,external,testing,dev]"]
 
 notebooks = [
     "jupyter",
@@ -42,7 +42,8 @@ notebooks = [
     "kaleido",
     "tensorboard",
 ]
-testing = ["pytest", "tsfm_public[notebooks]", "parameterized"]
+external = ["tsfm_public[notebooks]", "gluonts"]
+testing = ["pytest", "tsfm_public[external]", "parameterized"]
 dev = ["pre-commit", "tsfm_public[testing]", "ruff==0.4.4"]
 
 # ogv deployments will already have jupyter
