@@ -83,7 +83,6 @@ class TTMGluonTSPredictor:
             upper_bound_fewshot_samples (bool, optional): If True, number of x% fewshot will be upper-bounded
                 to FEWSHOT_MAX_NUM_SAMPLES. Defaults to True.
         """
-        self.context_length = context_length
         self.prediction_length = prediction_length
         self.test_data_label = test_data_label
         self.scale = scale
@@ -105,10 +104,12 @@ class TTMGluonTSPredictor:
         # Call get_model() function to load TTM model automatically.
         self.ttm = get_model(
             model_path,
-            context_length=self.context_length,
+            context_length=context_length,
             prediction_length=min(self.prediction_length, TTM_MAX_FORECAST_HORIZON),
+            force_return=True,
             **kwargs,
         ).to(self.device)
+        self.context_length = self.ttm.config.context_length
 
     def _process_time_series(self, dataset: TrainingDataset) -> List:
         """

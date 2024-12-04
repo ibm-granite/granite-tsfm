@@ -48,6 +48,7 @@ def get_model(
     context_length: int = None,
     prediction_length: int = None,
     freq_prefix_tuning: bool = None,
+    force_return: bool = False,
     **kwargs,
 ):
     """
@@ -102,7 +103,14 @@ def get_model(
             elif prediction_length <= 720:
                 selected_prediction_length = 720
             else:
-                raise ValueError("Currently supported maximum prediction_length = 720")
+                if force_return:
+                    selected_prediction_length = 720
+                    LOGGER.warning(
+                        "The requested forecast horizon is greater than the maximum supported horizon (720).\n\
+                                   Returning TTM model with horizon 720 since `force_return=True`."
+                    )
+                else:
+                    raise ValueError("Currently supported maximum prediction_length = 720")
 
             LOGGER.info(f"Selected prediction_length = {selected_prediction_length}")
 
@@ -121,10 +129,21 @@ def get_model(
             for cl in available_context_lens:
                 if cl <= context_length:
                     selected_context_length = cl
+                    if cl < context_length:
+                        LOGGER.warning(
+                            f"Selecting TTM context length ({selected_context_length}) < Requested context length ({context_length} since exact match was not found.)"
+                        )
                     break
             if selected_context_length is None:
-                raise ValueError(f"Requested context length is too short. Requested = {context_length}.\n\
-                                 Available lengths for model_type = {model_path_type} are: {available_context_lens}.")
+                if force_return:
+                    selected_context_length = available_context_lens[-1]
+                    LOGGER.warning(f"Requested context length is too short. Requested = {context_length}.\n\
+                                    Available lengths for model_type = {model_path_type} are: {available_context_lens}.\n\
+                                    Returning the shortest context length model possible since `force_return=True`.")
+                else:
+                    raise ValueError(f"Requested context length is too short. Requested = {context_length}.\n\
+                                    Available lengths for model_type = {model_path_type} are: {available_context_lens}.\n\
+                                    To return the shortest context length model possible, set `force_return=True`.")
 
             if freq_prefix_tuning is None:
                 # Default model preference (freq / nofreq)
