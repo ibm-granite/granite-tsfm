@@ -5,6 +5,7 @@
 import copy
 import math
 import os
+import sys
 import tempfile
 from typing import List
 
@@ -27,14 +28,17 @@ from tsfm_public import (
     count_parameters,
 )
 from tsfm_public.toolkit.get_model import get_model
-from tsfm_public.toolkit.gluonts_data_wrapper import (
+from tsfm_public.toolkit.lr_finder import optimal_lr_finder
+from tsfm_public.toolkit.visualization import plot_predictions
+
+
+sys.path.append(os.path.realpath("../../../"))
+from extras.gluonts.data.gluonts_data_wrapper import (
     StandardScalingGluonTSDataset,
     TorchDatasetFromGluonTSTestDataset,
     TorchDatasetFromGluonTSTrainingDataset,
     impute_series,
 )
-from tsfm_public.toolkit.lr_finder import optimal_lr_finder
-from tsfm_public.toolkit.visualization import plot_predictions
 
 
 logger = logging.get_logger(__name__)
