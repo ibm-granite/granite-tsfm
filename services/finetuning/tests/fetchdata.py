@@ -23,8 +23,6 @@ def fetch_etth():
 
 def fetch_finetune_json():
     """Doesn't really fetch, generates it from what fetch_etth"""
-    df: pd.DataFrame = pd.read_feather("data/ETTh1.feather")
-
     payload = {
         "data": "file://./data/ETTh1.csv",
         "model_id": "mytest-tsfm/ttm-r1",
