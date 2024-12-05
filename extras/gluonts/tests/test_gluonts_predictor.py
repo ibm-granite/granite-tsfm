@@ -3,12 +3,17 @@
 
 """Tests get_model"""
 
+import os
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 from gluonts.dataset.common import ListDataset
 
-from tsfm_public.models.tinytimemixer.gluonts import TTMGluonTSPredictor
+
+sys.path.append(os.path.realpath("../../"))
+from extras.gluonts.models.tinytimemixer import TTMGluonTSPredictor
 
 
 @pytest.fixture(scope="module")

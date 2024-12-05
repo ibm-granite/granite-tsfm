@@ -3,13 +3,18 @@
 
 """Tests get_model"""
 
+import os
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 from gluonts.dataset.common import ListDataset
 from gluonts.dataset.split import split
 
-from tsfm_public.toolkit.gluonts_data_wrapper import (
+
+sys.path.append(os.path.realpath("../../../"))
+from extras.gluonts.data.gluonts_data_wrapper import (
     StandardScalingGluonTSDataset,
     TorchDatasetFromGluonTSTestDataset,
     TorchDatasetFromGluonTSTrainingDataset,
