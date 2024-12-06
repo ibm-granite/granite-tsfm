@@ -58,7 +58,7 @@ priority = "explicit"
 optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
-redis = "*"
+wget = "*"
 
 [tool.poetry.group.redis]
 optional = true

@@ -12,7 +12,7 @@ from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 PAYLOADS = [
     {
         "data": "file://./path/to/pandas.csv/or/pandas.feather/or/pandas.csv.gz",
-        "model_id": "ibm/test-ttm-v1",
+        "model_id": "mytest-tsfm/ttm-r1",
         "schema": {
             "timestamp_column": "date",
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -26,7 +26,9 @@ PAYLOADS = [
 ]
 
 file_data_uris = [
-    "file://./tests/data/ETTh2.feather",
+    "file://./data/ETTh1.feather",
+    "file://./data/ETTh1.csv",
+    "file://./data/ETTh1.csv.gz",
 ]
 
 

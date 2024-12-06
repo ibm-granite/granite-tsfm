@@ -203,7 +203,7 @@ class FinetuningRuntime:
             overwrite_output_dir=True,
             learning_rate=parameters.trainer_args.learning_rate,
             num_train_epochs=parameters.trainer_args.num_train_epochs,
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
             per_device_eval_batch_size=parameters.trainer_args.per_device_eval_batch_size,
             dataloader_num_workers=4,
