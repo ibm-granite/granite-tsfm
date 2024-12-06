@@ -16,6 +16,7 @@ model_param_map = {
     "ttm-1024-96-r1": {"context_length": 1024, "prediction_length": 96},
     "ttm-r2": {"context_length": 512, "prediction_length": 96},
     "ttm-r2-etth-finetuned": {"context_length": 512, "prediction_length": 96},
+    "ttm-r2-etth-finetuned-control": {"context_length": 512, "prediction_length": 96},
     "ttm-1024-96-r2": {"context_length": 1024, "prediction_length": 96},
     "ttm-1536-96-r2": {"context_length": 1536, "prediction_length": 96},
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
@@ -361,7 +362,7 @@ def test_zero_shot_forecast_inference(ts_data):
     assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"][1:])
 
 
-@pytest.mark.parametrize("ts_data", ["ttm-r2"], indirect=True)
+@pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
 def test_future_data_forecast_inference(ts_data):
     test_data, params = ts_data
 
@@ -400,6 +401,7 @@ def test_future_data_forecast_inference(ts_data):
             "id_columns": params["id_columns"],
             "target_columns": target_columns,
             "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+            "freq": "1h",
         },
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
@@ -409,8 +411,10 @@ def test_future_data_forecast_inference(ts_data):
         "Future data should have time series of length that is at least the specified prediction length." in out.text
     )
 
-    # test multi series, longer future data
-    test_data_ = test_data.copy()
+    # test single series, longer future data
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    num_ids = 1
+    # test_data_ = test_data.copy()
 
     target_columns = ["OT"]
 
@@ -435,6 +439,7 @@ def test_future_data_forecast_inference(ts_data):
             "id_columns": params["id_columns"],
             "target_columns": target_columns,
             "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+            "freq": "1h",
         },
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
@@ -546,6 +551,76 @@ def test_finetuned_model_inference(ts_data):
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+
+
+@pytest.mark.parametrize(
+    "ts_data",
+    [
+        "ttm-r2",
+    ],
+    indirect=True,
+)
+def test_improper_use_of_zero_shot_model_inference(ts_data):
+    test_data, params = ts_data
+    id_columns = params["id_columns"]
+    model_id = params["model_id"]
+
+    # conditional columns for non-conditional model
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": ["OT"],
+            "freq": "1h",
+            "conditional_columns": [c for c in params["target_columns"] if c != "OT"],
+        },
+        "data": encoded_data,
+        "future_data": {},
+    }
+
+    out = get_inference_response(msg)
+    assert (
+        "Unexpected parameter conditional_columns for a zero-shot model, please confirm you have the correct model_id and schema."
+        in out.text
+    )
+
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    future_data = extend_time_series(
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=25,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": ["OT"],
+            "freq": "1h",
+        },
+        "data": encoded_data,
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+
+    out = get_inference_response(msg)
+    assert "Future data was provided, but the model does not support or require future exogenous." in out.text
 
 
 @pytest.mark.parametrize(

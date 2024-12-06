@@ -31,7 +31,7 @@ MODEL_ID = "mytest-tsfm/ttm-r1"
 def ts_data_base() -> pd.DataFrame:
     # Generate a date range
     length = SERIES_LENGTH
-    date_range = pd.date_range(start="2023-10-01", periods=length, freq="H")
+    date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
     # Create a DataFrame
     df = pd.DataFrame(
