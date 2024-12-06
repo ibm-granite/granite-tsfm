@@ -1802,6 +1802,15 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         Returns:
 
         """
+        if past_values.dim() != 3:
+            raise ValueError(
+                "`past_values` must have 3 dimensions of shape `(batch_size, sequence_length, num_input_channels)`."
+            )
+        if past_values.shape[1] > self.config.context_length:
+            past_values = past_values[:, -self.config.context_length :, :]
+        elif past_values.shape[1] < self.config.context_length:
+            raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
+
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
         elif self.loss == "mae":
