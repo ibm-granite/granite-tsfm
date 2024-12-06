@@ -17,6 +17,7 @@ from tsfm_public.toolkit.util import select_by_index
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
 from .dataframe_checks import check
+from .dirutil import resolve_model_path
 from .errors import error_message
 from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 from .service_handler import ForecastingServiceHandler
@@ -47,8 +48,8 @@ class InferenceRuntime:
         app.include_router(self.router)
 
     def _modelspec(self, model_id: str):
-        model_path = TSFM_MODEL_DIR / model_id
-        if not model_path.exists():
+        model_path = resolve_model_path(TSFM_MODEL_DIR, model_id)
+        if not model_path:
             raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
         handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
         if handler.handler_config:
@@ -84,16 +85,16 @@ class InferenceRuntime:
         return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
-        model_path = TSFM_MODEL_DIR / input_payload.model_id
+        model_path = resolve_model_path(TSFM_MODEL_DIR, input_payload.model_id)
 
-        if not model_path.is_dir():
+        if not model_path:
             LOGGER.info(f"Could not find model at path: {model_path}")
             if TSFM_ALLOW_LOAD_FROM_HF_HUB:
                 model_path = input_payload.model_id
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
                 return None, RuntimeError(
-                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
+                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
         handler, e = ForecastingServiceHandler.load(model_id=input_payload.model_id, model_path=model_path)
