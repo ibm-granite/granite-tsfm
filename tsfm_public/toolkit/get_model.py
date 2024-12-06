@@ -148,8 +148,8 @@ def get_model(
                 else:
                     freq_prefix = None
             else:
-                raise Exception(
-                    "In current implementation, set freq_prefix_tuning to None for automatic model selection accordingly.."
+                raise ValueError(
+                    "In the current implementation, set `freq_prefix_tuning` to None for automatic model selection accordingly."
                 )
                 if freq_prefix_tuning:
                     freq_prefix = "freq"
