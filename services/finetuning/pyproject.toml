@@ -59,6 +59,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 wget = "*"
+kubeflow-training = "*"
 
 [tool.poetry.group.redis]
 optional = true
