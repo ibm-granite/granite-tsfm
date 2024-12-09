@@ -17,18 +17,13 @@ You may encounter hiccups if you try to use this on a different environment. If 
 ## Prerequisites:
 
 * GNU make
+* git
+* git-ltf
 * python >=3.10, <3.13
 * poetry (`pip install poetry`)
 * zsh or bash
 * (optional) docker or podman
 * (optional) kubectl if you plan on testing kubernetes-based deployments
-
-## Known issues:
-
-* Use of pkill statements in Makefile may not work properly on Mac OS. This will
- be apparent if you have left over processs after running test related make 
- targets. Please help us put OS-specific checks into our Makefile to handle 
- these cases by filing a PR.
 
 ## Installation
 
