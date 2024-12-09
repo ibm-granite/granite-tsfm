@@ -1,6 +1,7 @@
 """Service handler for Chronos"""
 
 import copy
+import importlib
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
@@ -8,7 +9,6 @@ from typing import Dict, Optional, Union
 import numpy as np
 import pandas as pd
 import torch
-from chronos import ChronosPipeline
 
 from tsfm_public import TimeSeriesPreprocessor
 from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
@@ -66,11 +66,21 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             ChronosForecastingHandler: The updated service handler object.
         """
 
-        model = ChronosPipeline.from_pretrained(
-            self.model_path,
-        )
+        # load model class
+        try:
+            mod = importlib.import_module(self.handler_config.module_path)
+        except ModuleNotFoundError as exc:
+            raise AttributeError("Could not load module '{module_path}'.") from exc
+
+        model_class = getattr(mod, self.handler_config.model_class_name)
+        model = model_class.from_pretrained(self.model_path)
+
         self.model = model
-        self.config = model.model.model.config
+        if hasattr(self.model.model, "model"):  # chronos t5 family
+            self.config = model.model.model.config
+        else:  # chronos bolt family
+            self.config = model.model.config
+
         self.chronos_config = self.config.chronos_config
 
         preprocessor_params = copy.deepcopy(schema.model_dump())
@@ -134,21 +144,20 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         target_columns = self.preprocessor.target_columns
         prediction_length = self.preprocessor.prediction_length
 
-        num_samples = self.chronos_config["num_samples"]
-        temperature = self.chronos_config["temperature"]
-        top_k = self.chronos_config["top_k"]
-        top_p = self.chronos_config["top_p"]
+        additional_params = {}
+        if "num_samples" in self.chronos_config:  # chronos t5 family
+            additional_params["num_samples"] = self.chronos_config["num_samples"]
+            additional_params["temperature"] = self.chronos_config["temperature"]
+            additional_params["top_k"] = self.chronos_config["top_k"]
+            additional_params["top_p"] = self.chronos_config["top_p"]
 
         context = torch.tensor(data[target_columns].values).transpose(1, 0)
         LOGGER.info("computing chronos forecasts.")
         forecasts = self.model.predict(
             context,
             prediction_length=prediction_length,
-            num_samples=num_samples,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
             limit_prediction_length=False,
+            **additional_params,
         )
         median_forecast_arr = []
         for i in range(len(target_columns)):
