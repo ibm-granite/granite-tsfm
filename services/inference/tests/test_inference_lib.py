@@ -2,6 +2,9 @@
 #
 
 import copy
+import json
+import os
+import tempfile
 from datetime import timedelta
 
 import numpy as np
@@ -86,8 +89,17 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
 
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
+    model_id = input.model_id
     df = copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
+
+    # useful for generating sample payload files
+    if int(os.environ.get("TSFM_TESTS_DO_VERBOSE_DUMPS", "0")) == 1:
+        with open(f"{tempfile.gettempdir()}/{model_id}.payload.json", "w") as out:
+            foo = copy.deepcopy(df)
+            foo["date"] = foo["date"].apply(lambda x: x.isoformat())
+            json.dump(foo.to_dict(orient="list"), out)
+
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
