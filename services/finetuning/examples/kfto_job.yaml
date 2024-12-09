@@ -37,7 +37,7 @@ spec:
                 - "--payload"
                 - "/data/ftpayload.json"
                 - "--target_dir"
-                - "/data/finetuned-models"
+                - "/data"
                 - "--model_name"
                 - "finetuned_from_kfto"
                 - "--config_file"
