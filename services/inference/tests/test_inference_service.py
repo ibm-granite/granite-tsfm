@@ -22,6 +22,7 @@ model_param_map = {
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
     "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
     "chronos-t5-tiny": {"context_length": 512, "prediction_length": 96},
+    "chronos-bolt-tiny": {"context_length": 512, "prediction_length": 96},
 }
 
 
@@ -369,7 +370,7 @@ def test_zero_shot_forecast_inference(ts_data):
     assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"][1:])
 
 
-@pytest.mark.parametrize("ts_data", ["chronos-t5-tiny"], indirect=True)
+@pytest.mark.parametrize("ts_data", ["chronos-t5-tiny", "chronos-bolt-tiny"], indirect=True)
 def test_zero_shot_forecast_inference_chronos(ts_data):
     test_data, params = ts_data
 
