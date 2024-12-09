@@ -69,7 +69,6 @@ and monitor an ayschronous finetuning job.
 First:
 
 * [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
-* [Install kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 * [Install helm](https://helm.sh/docs/intro/install/)
 * If you are using podman, you will need to enable the use of an insecure (using http instead of https)
 local container registry by creating a file called `/etc/containers/registries.conf.d/localhost.conf` 
@@ -173,3 +172,5 @@ docker tag tsfmfinetuning:latest localhost:5001/tsfmfinetuning:latest
   docker push localhost:5001/tsfmfinetuning:latest
 ```
 
+
+mkdir -p /tmp/kind-local-storage
