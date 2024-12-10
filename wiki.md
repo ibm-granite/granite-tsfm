@@ -17,7 +17,7 @@ In this section, we highlight the papers, blogs, pre-trained models, and open-so
 ## Publications
 
 4 KDD, 1 ICLR, 2 AAAI, 1 ICML.  
-🚀 _**Total citations: 1700**_ (as of 26 Aug 2024). 🚀
+🚀 _**Total citations (Google Scholar): 1700**_ (as of 26 Aug 2024). 🚀
 
 1. **TST:** Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., & Eickhoff, C. [_A transformer-based framework for multivariate time series representation learning._](https://arxiv.org/abs/2010.02803) In KDD 2021. **(citations: 840)**
 

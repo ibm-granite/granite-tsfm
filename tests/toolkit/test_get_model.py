@@ -66,3 +66,24 @@ def test_get_model():
             model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
             assert model.config.prediction_length == fl
             assert model.config.context_length == cl
+
+    mp = "ibm/ttm-research-r2"
+    for cl in range(1, 2000, 500):
+        for fl in range(1, 900, 90):
+            model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
+            if model.config.prediction_filter_length is not None:
+                assert model.config.prediction_filter_length == fl
+
+    mp = "ibm-granite/granite-timeseries-ttm-r2"
+    for cl in range(1, 2000, 500):
+        for fl in range(1, 900, 90):
+            model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
+            if model.config.prediction_filter_length is not None:
+                assert model.config.prediction_filter_length == fl
+
+    mp = "ibm-granite/granite-timeseries-ttm-r1"
+    for cl in range(512, 2000, 500):
+        for fl in range(1, 720, 90):
+            model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
+            if model.config.prediction_filter_length is not None:
+                assert model.config.prediction_filter_length == fl
