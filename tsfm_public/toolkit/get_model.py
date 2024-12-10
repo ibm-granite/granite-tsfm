@@ -48,6 +48,7 @@ def get_model(
     context_length: int = None,
     prediction_length: int = None,
     freq_prefix_tuning: bool = None,
+    force_return: bool = True,
     **kwargs,
 ):
     """
@@ -93,27 +94,50 @@ def get_model(
             with open(os.path.join(config_dir, "ttm.yaml"), "r") as file:
                 model_revisions = yaml.safe_load(file)
 
-            if prediction_length <= 96:
-                selected_prediction_length = 96
-            elif prediction_length <= 192:
-                selected_prediction_length = 192
-            elif prediction_length <= 336:
-                selected_prediction_length = 336
-            elif prediction_length <= 720:
-                selected_prediction_length = 720
+            max_supported_horizon = SUPPORTED_LENGTHS[model_path_type]["FL"][-1]
+            if prediction_length > max_supported_horizon:
+                if force_return:
+                    selected_prediction_length = max_supported_horizon
+                    LOGGER.warning(
+                        f"The requested forecast horizon is greater than the maximum supported horizon ({max_supported_horizon}). Returning TTM model with horizon {max_supported_horizon} since `force_return=True`."
+                    )
+                else:
+                    raise ValueError(f"Currently supported maximum prediction_length = {max_supported_horizon}")
             else:
-                raise ValueError("Currently supported maximum prediction_length = 720")
+                for h in SUPPORTED_LENGTHS[model_path_type]["FL"]:
+                    if prediction_length <= h:
+                        selected_prediction_length = h
+                        break
 
-            LOGGER.info(f"Selected prediction_length = {selected_prediction_length}")
+            LOGGER.info(f"Selected TTM `prediction_length` = {selected_prediction_length}")
 
-            if selected_prediction_length != prediction_length:
+            if selected_prediction_length > prediction_length:
                 prediction_filter_length = prediction_length
                 LOGGER.warning(
-                    f"Requested `prediction_length` ({prediction_length}) is not exactly equal to any of the available TTM prediction lengths.\n\
-                    Hence, TTM will forecast using the `prediction_filter_length` argument to provide the requested prediction length.\n\
-                    Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are\n\
-                    {SUPPORTED_LENGTHS[model_path_type]}"
+                    f"Requested `prediction_length` ({prediction_length}) is not exactly equal to any of the available TTM prediction lengths. Hence, TTM will forecast using the `prediction_filter_length` argument to provide the requested prediction length. Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are {SUPPORTED_LENGTHS[model_path_type]}"
                 )
+
+            # Choose closest context length
+            available_context_lens = sorted(SUPPORTED_LENGTHS[model_path_type]["CL"], reverse=True)
+            selected_context_length = None
+            for cl in available_context_lens:
+                if cl <= context_length:
+                    selected_context_length = cl
+                    if cl < context_length:
+                        LOGGER.warning(
+                            f"Selecting TTM context length ({selected_context_length}) < Requested context length ({context_length} since exact match was not found.)"
+                        )
+                    break
+            if selected_context_length is None:
+                if force_return:
+                    selected_context_length = available_context_lens[-1]
+                    LOGGER.warning(
+                        f"Requested context length is too short. Requested = {context_length}. Available lengths for model_type = {model_path_type} are: {available_context_lens}. Returning the shortest context length model possible since `force_return=True`. Data needs to be handled properly, and it can affect the performance!"
+                    )
+                else:
+                    raise ValueError(
+                        f"Requested context length is too short. Requested = {context_length}. Available lengths for model_type = {model_path_type} are: {available_context_lens}. To return the shortest context length model possible, set `force_return=True`."
+                    )
 
             if freq_prefix_tuning is None:
                 # Default model preference (freq / nofreq)
@@ -124,8 +148,8 @@ def get_model(
                 else:
                     freq_prefix = None
             else:
-                raise Exception(
-                    "In current implementation, set freq_prefix_tuning to None for automatic model selection accordingly.."
+                raise ValueError(
+                    "In the current implementation, set `freq_prefix_tuning` to None for automatic model selection accordingly."
                 )
                 if freq_prefix_tuning:
                     freq_prefix = "freq"
@@ -135,11 +159,11 @@ def get_model(
             try:
                 if model_path_type == 1 or model_path_type == 2:
                     ttm_model_revision = model_revisions["ibm-granite-models"][
-                        f"r{model_path_type}-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                        f"r{model_path_type}-{selected_context_length}-{selected_prediction_length}-{freq_prefix}"
                     ]["revision"]
                 elif model_path_type == 3:
                     ttm_model_revision = model_revisions["research-use-models"][
-                        f"r2-{context_length}-{selected_prediction_length}-{freq_prefix}"
+                        f"r2-{selected_context_length}-{selected_prediction_length}-{freq_prefix}"
                     ]["revision"]
                 else:
                     raise Exception(
@@ -149,9 +173,10 @@ def get_model(
                 raise ValueError(
                     f"Model not found, possibly because of wrong context_length. Supported context lengths (CL) and forecast/prediction lengths (FL) for Model Card: {model_path} are {SUPPORTED_LENGTHS[model_path_type]}"
                 )
+        else:
+            prediction_filter_length = prediction_length
 
         # Load model
-
         model = TinyTimeMixerForPrediction.from_pretrained(
             model_path,
             revision=ttm_model_revision,
