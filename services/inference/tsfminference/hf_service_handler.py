@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import pandas as pd
+import torch
 import transformers
 from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedModel
 
@@ -353,12 +354,14 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                     total_periods=model_prediction_length,
                 )
 
+        device = "cpu" if not torch.cuda.is_available() else "cuda"
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
             explode_forecasts=True,
             feature_extractor=self.preprocessor,
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
+            device=device,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
