@@ -1,18 +1,9 @@
-# Standard
 import argparse
-import json
 import tempfile
 from pathlib import Path
 
-import yaml
 
-from tsfmfinetuning import TSFM_CONFIG_FILE
-from tsfmfinetuning.finetuning import FinetuningRuntime
-from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
-
-
-# remote container space
-def main():
+def argparser():
     parser = argparse.ArgumentParser()
 
     # ################Input data
@@ -64,26 +55,4 @@ def main():
         choices=task_choices,
         help=f"""The base model architecture. The following are currently supported: {",".join(task_choices)}""",
     )
-
-    # ###########################3
-    args, _ = parser.parse_known_args()
-
-    # reconstruct our input object
-    # these come from a mutually exclusive group
-    payload: dict = json.loads(args.json_payload)
-    # this will give us param validation
-
-    if args.model_arch_type == "ttm" and args.model_task_choices == "forecasting":
-        input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**payload)
-        config_file = args.config_file if args.config_file else TSFM_CONFIG_FILE
-        with open(config_file, "r") as file:
-            config = yaml.safe_load(file)
-        ftr: FinetuningRuntime = FinetuningRuntime(config=config)
-        ftr.finetuning(input=input, tuned_model_name=args.model_name, output_dir=args.target_dir)
-
-    else:
-        raise NotImplementedError(f"model arch/task type not implemented {args.model_arch_type} {args.task_type}")
-
-
-if __name__ == "__main__":
-    main()
+    return parser

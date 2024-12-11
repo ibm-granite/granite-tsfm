@@ -4,7 +4,8 @@
     "editor.formatOnSave": true,
   },
   "python.testing.pytestArgs": [
-    "tests"
+    "tests",
+    "services"
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
