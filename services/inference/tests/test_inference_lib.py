@@ -35,9 +35,7 @@ MODEL_IDS = ["ttm-1024-96-r1", "ttm-1024-96-r2", "ttm-1536-96-r2", "ttm-r1", "tt
 def min_context_length(model_id):
     model_path: Path = resolve_model_path(TSFM_MODEL_DIR, model_id)
     assert model_path.exists(), f"{model_path} does not exist!"
-    handler, e = ForecastingServiceHandler.load(
-        model_id=model_id, model_path=model_path
-    )
+    handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
     return handler.handler_config.minimum_context_length
 
 
