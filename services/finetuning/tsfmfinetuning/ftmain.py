@@ -5,6 +5,7 @@ import traceback
 import yaml
 
 from tsfmfinetuning import TSFM_CONFIG_FILE
+from tsfmfinetuning.error_logging import write_termination_log
 from tsfmfinetuning.finetuning import FinetuningRuntime
 from tsfmfinetuning.ftargs import argparser
 from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
@@ -38,4 +39,5 @@ if __name__ == "__main__":
         exit(main())
     except Exception as e:
         traceback.print_exception(e)
+        write_termination_log(f"Exception when running finetuning {e}")
         exit(1)
