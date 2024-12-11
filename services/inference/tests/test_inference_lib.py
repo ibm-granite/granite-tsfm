@@ -35,8 +35,10 @@ MODEL_IDS = ["ttm-1024-96-r1", "ttm-1024-96-r2", "ttm-1536-96-r2", "ttm-r1", "tt
 def min_context_length(model_id):
     model_path: Path = resolve_model_path(TSFM_MODEL_DIR, model_id)
     assert model_path.exists(), f"{model_path} does not exist!"
-    handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
-    return max(handler.handler_config.minimum_context_length, 2)
+    handler, e = ForecastingServiceHandler.load(
+        model_id=model_id, model_path=model_path
+    )
+    return handler.handler_config.minimum_context_length
 
 
 @pytest.fixture(scope="module")
@@ -280,7 +282,7 @@ def test_forecast_with_missing_row(ts_data_base: pd.DataFrame, forecasting_input
     if input.model_id != model_id:
         return
     df = copy.deepcopy(data)
-    df.drop(index=1, inplace=True)
+    df.drop(index=10, inplace=True)
     input.data = df.to_dict(orient="list")
 
     runtime: InferenceRuntime = InferenceRuntime(config=config)
