@@ -15,6 +15,7 @@ import yaml
 from fastapi import HTTPException
 from pytest import FixtureRequest
 from tsfminference import TSFM_CONFIG_FILE, TSFM_MODEL_DIR
+from tsfminference.dirutil import resolve_model_path
 from tsfminference.inference import InferenceRuntime
 from tsfminference.inference_payloads import (
     ForecastingInferenceInput,
@@ -40,12 +41,12 @@ MODEL_IDS = [
 
 
 def min_context_length(model_id):
-    model_path: Path = TSFM_MODEL_DIR / model_id
+    model_path: Path = resolve_model_path(TSFM_MODEL_DIR, model_id)
     assert model_path.exists(), f"{model_path} does not exist!"
     handler, e = ForecastingServiceHandler.load(
         model_id=model_id, model_path=model_path
     )
-    return max(handler.handler_config.minimum_context_length, 2)
+    return handler.handler_config.minimum_context_length
 
 
 @pytest.fixture(scope="module")
@@ -308,7 +309,7 @@ def test_forecast_with_missing_row(
     if input.model_id != model_id:
         return
     df = copy.deepcopy(data)
-    df.drop(index=1, inplace=True)
+    df.drop(index=10, inplace=True)
     input.data = df.to_dict(orient="list")
 
     runtime: InferenceRuntime = InferenceRuntime(config=config)
