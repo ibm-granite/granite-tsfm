@@ -3,6 +3,7 @@
 """Tsfmfinetuning Runtime"""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
@@ -17,6 +18,7 @@ from tsfm_public.toolkit.util import select_by_fixed_fraction
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
+from .filelogging_tracker import FileLoggingCallback
 from .ftpayloads import (
     AsyncCallReturn,
     BaseTuneInput,
@@ -218,7 +220,9 @@ class FinetuningRuntime:
             use_cpu=True,  # only needed for testing on Mac :(
         )
 
-        callbacks = []
+        callbacks = [
+            FileLoggingCallback(logs_filename=os.environ.get("TSFM_TRAINING_TRACKER_LOGFILE", "training_logs.jsonl"))
+        ]
         if parameters.trainer_args.early_stopping and validation_dataset:
             # Create the early stopping callback
             early_stopping_callback = EarlyStoppingCallback(

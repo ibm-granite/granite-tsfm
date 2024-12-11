@@ -49,3 +49,7 @@ def test_ftmain_good_input():
         assert cp.returncode == 0
         tdir = pathlib.Path(target_dir) / model_name
         assert (tdir / "config.json").exists() and (tdir / "config.json").stat().st_size > 0
+
+        # make sure our tracking log exists
+        logfile = pathlib.Path(target_dir) / "output" / "training_logs.jsonl"
+        assert logfile.exists() and logfile.stat().st_size > 0
