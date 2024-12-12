@@ -69,9 +69,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         loss (`string`, *optional*, defaults to `"mse"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
-            error "mse" or "mae". Distribution head (nll) is currently disabled and not allowed.
+            The loss function to finetune or pretrain the the model. Allowed values are "mse" or "mae" or "pinball" or "huber".
+            Use pinball loss for probabilistic forecasts of different quantiles.
+            Distribution head (nll) is currently disabled and not allowed.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         post_init (`bool`, *optional*, defaults to `False`):
@@ -278,26 +278,17 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
         if not hasattr(self, "num_patches"):
             context_length = self.context_length
-            self.num_patches = (
-                max(context_length, self.patch_length) - self.patch_length
-            ) // self.patch_stride + 1
+            self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
 
         if self.prediction_filter_length is not None:
-            if (
-                self.prediction_filter_length > self.prediction_length
-                or self.prediction_filter_length <= 0
-            ):
-                raise ValueError(
-                    "prediction_filter_length should be positive and less than prediction_length"
-                )
+            if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
+                raise ValueError("prediction_filter_length should be positive and less than prediction_length")
 
         if self.loss == "nll" and self.enable_forecast_channel_mixing:
-            raise ValueError(
-                "Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True"
-            )
+            raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
 
         if self.prediction_channel_indices is not None:
             self.prediction_channel_indices.sort()
@@ -305,12 +296,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         if self.exogenous_channel_indices is not None:
             self.exogenous_channel_indices.sort()
 
-        if (
-            self.exogenous_channel_indices is not None
-            and self.prediction_channel_indices is None
-        ):
+        if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
             self.prediction_channel_indices = list(
-                set(range(self.num_input_channels))
-                - set(self.exogenous_channel_indices)
+                set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
             )
             self.prediction_channel_indices.sort()
