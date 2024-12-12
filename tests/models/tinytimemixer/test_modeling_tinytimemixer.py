@@ -312,7 +312,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 [True, False, "mean", "std"],
                 [True, False],
                 [None, [0, 2]],
-                ["mse", "mae", None],
+                ["mse", "mae", "pinball", "huber", None],
                 [8, 16],
                 [True, False],
             )
