@@ -212,6 +212,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         # initialization parameters
         init_linear: str = "pytorch",
         init_embed: str = "pytorch",
+        quantile: float = 0.5,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -266,6 +267,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.prediction_filter_length = prediction_filter_length
         self.init_linear = init_linear
         self.init_embed = init_embed
+        self.quantile = quantile
 
         super().__init__(**kwargs)
 

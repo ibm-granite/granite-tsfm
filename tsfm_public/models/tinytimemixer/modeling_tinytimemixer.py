@@ -68,6 +68,35 @@ TINYTIMEMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
+class PinballLoss(nn.Module):
+    def __init__(self, quantile: float):
+        """
+        Initialize the Pinball Loss for multidimensional tensors.
+
+        Args:
+        quantile (float): The desired quantile (e.g., 0.5 for median, 0.9 for 90th percentile).
+        """
+        super(PinballLoss, self).__init__()
+        self.quantile = quantile
+
+    def forward(self, predictions, targets):
+        """
+        Compute the Pinball Loss for shape [b, seq_len, channels].
+
+        Args:
+        predictions (torch.Tensor): Predicted values, shape [b, seq_len, channels].
+        targets (torch.Tensor): Ground truth values, shape [b, seq_len, channels].
+
+        Returns:
+        torch.Tensor: The mean pinball loss over all dimensions.
+        """
+        errors = targets - predictions
+
+        loss = torch.max(self.quantile * errors, (self.quantile - 1) * errors)
+
+        return loss.mean()
+
+
 class TinyTimeMixerGatedAttention(nn.Module):
     """
     Module that applies gated attention to input data.
@@ -1723,7 +1752,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.prediction_filter_length = config.prediction_filter_length
 
-        if config.loss in ["mse", "mae"] or config.loss is None:
+        if config.loss in ["mse", "mae", "pinball"] or config.loss is None:
             self.distribution_output = None
         elif config.loss == "nll":
             if self.prediction_filter_length is None:
@@ -1815,6 +1844,8 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             loss = nn.MSELoss(reduction="mean")
         elif self.loss == "mae":
             loss = nn.L1Loss(reduction="mean")
+        elif self.loss == "pinball":
+            loss = PinballLoss(quantile=self.config.quantile)
         elif self.loss == "nll":
             raise Exception(
                 "NLL loss and Distribution heads are currently not allowed. Use mse or mae as loss functions."
