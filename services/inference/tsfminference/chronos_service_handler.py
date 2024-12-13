@@ -6,12 +6,13 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-import numpy as np
 import pandas as pd
 import torch
 
 from tsfm_public import TimeSeriesPreprocessor
-from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
+from tsfm_public.toolkit.time_series_preprocessor import (
+    create_timestamps,
+)
 
 from .inference_payloads import (
     ForecastingMetadataInput,
@@ -88,6 +89,12 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             parameters.prediction_length or self.chronos_config["prediction_length"]
         )
 
+        # model specific parameters
+        preprocessor_params["num_samples"] = getattr(parameters, "num_samples", None)
+        preprocessor_params["temperature"] = getattr(parameters, "temperature", None)
+        preprocessor_params["top_k"] = getattr(parameters, "top_k", None)
+        preprocessor_params["top_p"] = getattr(parameters, "top_p", None)
+
         LOGGER.info("initializing TSFM TimeSeriesPreprocessor")
         preprocessor = TimeSeriesPreprocessor(
             **preprocessor_params,
@@ -143,41 +150,47 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
 
         target_columns = self.preprocessor.target_columns
         prediction_length = self.preprocessor.prediction_length
+        timestamp_column = self.preprocessor.timestamp_column
+        id_columns = self.preprocessor.id_columns
 
         additional_params = {}
         if "num_samples" in self.chronos_config:  # chronos t5 family
-            additional_params["num_samples"] = self.chronos_config["num_samples"]
-            additional_params["temperature"] = self.chronos_config["temperature"]
-            additional_params["top_k"] = self.chronos_config["top_k"]
-            additional_params["top_p"] = self.chronos_config["top_p"]
+            additional_params["num_samples"] = self.preprocessor.num_samples or self.chronos_config["num_samples"]
+            additional_params["temperature"] = self.preprocessor.temperature or self.chronos_config["temperature"]
+            additional_params["top_k"] = self.preprocessor.top_k or self.chronos_config["top_k"]
+            additional_params["top_p"] = self.preprocessor.top_p or self.chronos_config["top_p"]
 
-        context = torch.tensor(data[target_columns].values).transpose(1, 0)
+        LOGGER.info("model specific params: {}".format(additional_params))
+
+        scoped_cols = [timestamp_column] + id_columns + target_columns
+
         LOGGER.info("computing chronos forecasts.")
-        forecasts = self.model.predict(
-            context,
-            prediction_length=prediction_length,
-            limit_prediction_length=False,
-            **additional_params,
-        )
-        median_forecast_arr = []
-        for i in range(len(target_columns)):
-            median_forecast_arr.append(np.quantile(forecasts[i].numpy(), [0.5], axis=0).flatten())
+        # create groups
+        accumulator = []
+        for grp, batch in data[scoped_cols].groupby(id_columns):
+            context = torch.tensor(batch[target_columns].values).transpose(1, 0)
+            forecasts = self.model.predict(
+                context,
+                prediction_length=prediction_length,
+                limit_prediction_length=False,
+                **additional_params,
+            )
+            median_forecasts = torch.quantile(forecasts, 0.5, dim=1).transpose(1, 0)
+            result = pd.DataFrame(median_forecasts, columns=target_columns)
+            if timestamp_column:
+                result[timestamp_column] = create_timestamps(
+                    batch[timestamp_column].iloc[-1],
+                    freq=self.preprocessor.freq,
+                    periods=result.shape[0],
+                )
+            if (id_columns is not None) and id_columns:
+                for k, id_col in enumerate(id_columns):
+                    result[id_col] = grp[k]
+            accumulator.append(result)
 
-        result = pd.DataFrame(np.array(median_forecast_arr).transpose(), columns=target_columns)
-        LOGGER.info("extend the time series.")
-        time_series = extend_time_series(
-            time_series=data,
-            freq=self.preprocessor.freq,
-            timestamp_column=schema.timestamp_column,
-            grouping_columns=schema.id_columns,
-            periods=prediction_length,
-        )
-        # append time stamp column to the result
-        result[schema.timestamp_column] = (
-            time_series[schema.timestamp_column].tail(result.shape[0]).reset_index(drop=True)
-        )
+        predictions = pd.concat(accumulator, ignore_index=True)
 
-        return result
+        return predictions[scoped_cols]
 
     def _train(
         self,

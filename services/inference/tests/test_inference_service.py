@@ -21,8 +21,8 @@ model_param_map = {
     "ttm-1536-96-r2": {"context_length": 1536, "prediction_length": 96},
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
     "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
-    "chronos-t5-tiny": {"context_length": 512, "prediction_length": 96},
-    "chronos-bolt-tiny": {"context_length": 512, "prediction_length": 96},
+    "chronos-t5-tiny": {"context_length": 512, "prediction_length": 16},
+    "chronos-bolt-tiny": {"context_length": 512, "prediction_length": 16},
 }
 
 
@@ -377,17 +377,21 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
     prediction_length = params["prediction_length"]
     model_id = params["model_id"]
     model_id_path: str = model_id
-
     id_columns = params["id_columns"]
+    num_samples = 10
 
     # test single
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
 
+    parameters = {
+        "prediction_length": params["prediction_length"],
+    }
+    if model_id == "chronos-t5-tiny":
+        parameters["num_samples"] = num_samples
+
     msg = {
         "model_id": model_id_path,
-        "parameters": {
-            "prediction_length": params["prediction_length"],
-        },
+        "parameters": parameters,
         "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
@@ -401,6 +405,7 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
 
+    # test with future data. should throw error.
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
     future_data = extend_time_series(
         select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
@@ -413,11 +418,15 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
 
     encoded_data = encode_data(test_data_, params["timestamp_column"])
 
+    parameters = {
+        "prediction_length": params["prediction_length"],
+    }
+    if model_id == "chronos-t5-tiny":
+        parameters["num_samples"] = num_samples
+
     msg = {
         "model_id": model_id,
-        "parameters": {
-            # "prediction_length": params["prediction_length"],
-        },
+        "parameters": parameters,
         "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
@@ -430,6 +439,66 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
 
     out, _ = get_inference_response(msg)
     assert "Chronos does not support or require future exogenous." in out.text
+
+    # test multi-time series
+    num_ids = test_data[id_columns[0]].nunique()
+    test_data_ = test_data.copy()
+
+    parameters = {
+        "prediction_length": params["prediction_length"],
+    }
+    if model_id == "chronos-t5-tiny":
+        parameters["num_samples"] = num_samples
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": parameters,
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, _ = get_inference_response(msg)
+
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length * num_ids
+
+    # test multi-time series multi-id
+    multi_df = []
+    for grp in ["A", "B"]:
+        td = test_data.copy()
+        td["id2"] = grp
+        multi_df.append(td)
+    test_data_ = pd.concat(multi_df, ignore_index=True)
+    new_id_columns = id_columns + ["id2"]
+
+    num_ids = test_data_[new_id_columns[0]].nunique() * test_data_[new_id_columns[1]].nunique()
+
+    parameters = {
+        "prediction_length": params["prediction_length"],
+    }
+    if model_id == "chronos-t5-tiny":
+        parameters["num_samples"] = num_samples
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": parameters,
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": new_id_columns,
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, _ = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length * num_ids
 
 
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
