@@ -145,6 +145,7 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             pd.DataFrame: The forecasts produced by the model.
         """
 
+        predictions = None
         if self.preprocessor.exogenous_channel_indices or future_data is not None:
             raise ValueError("Chronos does not support or require future exogenous.")
 
@@ -165,10 +166,9 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         scoped_cols = [timestamp_column] + id_columns + target_columns
 
         LOGGER.info("computing chronos forecasts.")
-        # create groups
-        accumulator = []
-        for grp, batch in data[scoped_cols].groupby(id_columns):
-            context = torch.tensor(batch[target_columns].values).transpose(1, 0)
+
+        if not id_columns:
+            context = torch.tensor(data[target_columns].values).transpose(1, 0)
             forecasts = self.model.predict(
                 context,
                 prediction_length=prediction_length,
@@ -179,16 +179,36 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
             result = pd.DataFrame(median_forecasts, columns=target_columns)
             if timestamp_column:
                 result[timestamp_column] = create_timestamps(
-                    batch[timestamp_column].iloc[-1],
+                    data[timestamp_column].iloc[-1],
                     freq=self.preprocessor.freq,
                     periods=result.shape[0],
                 )
-            if (id_columns is not None) and id_columns:
-                for k, id_col in enumerate(id_columns):
-                    result[id_col] = grp[k]
-            accumulator.append(result)
+            predictions = result
+        else:  # create groups
+            LOGGER.info("using id columns {} to create groups.".format(id_columns))
+            accumulator = []
+            for grp, batch in data[scoped_cols].groupby(id_columns):
+                context = torch.tensor(batch[target_columns].values).transpose(1, 0)
+                forecasts = self.model.predict(
+                    context,
+                    prediction_length=prediction_length,
+                    limit_prediction_length=False,
+                    **additional_params,
+                )
+                median_forecasts = torch.quantile(forecasts, 0.5, dim=1).transpose(1, 0)
+                result = pd.DataFrame(median_forecasts, columns=target_columns)
+                if timestamp_column:
+                    result[timestamp_column] = create_timestamps(
+                        batch[timestamp_column].iloc[-1],
+                        freq=self.preprocessor.freq,
+                        periods=result.shape[0],
+                    )
+                if (id_columns is not None) and id_columns:
+                    for k, id_col in enumerate(id_columns):
+                        result[id_col] = grp[k]
+                accumulator.append(result)
 
-        predictions = pd.concat(accumulator, ignore_index=True)
+            predictions = pd.concat(accumulator, ignore_index=True)
 
         return predictions[scoped_cols]
 

@@ -418,12 +418,6 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
 
     encoded_data = encode_data(test_data_, params["timestamp_column"])
 
-    parameters = {
-        "prediction_length": params["prediction_length"],
-    }
-    if model_id == "chronos-t5-tiny":
-        parameters["num_samples"] = num_samples
-
     msg = {
         "model_id": model_id,
         "parameters": parameters,
@@ -443,12 +437,6 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
     # test multi-time series
     num_ids = test_data[id_columns[0]].nunique()
     test_data_ = test_data.copy()
-
-    parameters = {
-        "prediction_length": params["prediction_length"],
-    }
-    if model_id == "chronos-t5-tiny":
-        parameters["num_samples"] = num_samples
 
     msg = {
         "model_id": model_id_path,
@@ -478,12 +466,6 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
 
     num_ids = test_data_[new_id_columns[0]].nunique() * test_data_[new_id_columns[1]].nunique()
 
-    parameters = {
-        "prediction_length": params["prediction_length"],
-    }
-    if model_id == "chronos-t5-tiny":
-        parameters["num_samples"] = num_samples
-
     msg = {
         "model_id": model_id_path,
         "parameters": parameters,
@@ -499,6 +481,26 @@ def test_zero_shot_forecast_inference_chronos(ts_data):
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length * num_ids
+
+    # single series, less columns, no id
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": parameters,
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": [],
+            "target_columns": ["HULL"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, counts = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    assert df_out[0].shape[1] == 2
 
 
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
