@@ -14,8 +14,16 @@ boilerplate:
 image:
 	$(CONTAINER_BUILDER) build -t tsfmfinetuning -f Dockerfile .
 
-test_local: boilerplate
-	pytest tests
+clone_models:
+	git lfs install || true
+	git clone https://huggingface.co/ibm/test-tsfm mytest-tsfm || true
+
+
+fetchdata:
+	python tests/fetchdata.py
+
+test_local: boilerplate fetchdata clone_models
+	pytest -s tests
 
 install_dev: boilerplate
 	pip install poetry && poetry install --with dev

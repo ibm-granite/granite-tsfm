@@ -3,6 +3,7 @@
 """Tsfmfinetuning Runtime"""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
@@ -18,6 +19,7 @@ from tsfm_public.toolkit.util import select_by_fixed_fraction
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .constants import API_VERSION
+from .filelogging_tracker import FileLoggingCallback
 from .ftpayloads import (
     AsyncCallReturn,
     BaseTuneInput,
@@ -204,7 +206,7 @@ class FinetuningRuntime:
             overwrite_output_dir=True,
             learning_rate=parameters.trainer_args.learning_rate,
             num_train_epochs=parameters.trainer_args.num_train_epochs,
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
             per_device_eval_batch_size=parameters.trainer_args.per_device_eval_batch_size,
             dataloader_num_workers=4,
@@ -219,7 +221,9 @@ class FinetuningRuntime:
             use_cpu=not torch.cuda.is_available(),
         )
 
-        callbacks = []
+        callbacks = [
+            FileLoggingCallback(logs_filename=os.environ.get("TSFM_TRAINING_TRACKER_LOGFILE", "training_logs.jsonl"))
+        ]
         if parameters.trainer_args.early_stopping and validation_dataset:
             # Create the early stopping callback
             early_stopping_callback = EarlyStoppingCallback(
