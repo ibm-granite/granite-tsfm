@@ -36,7 +36,7 @@ def check_ttm_model_path(model_path):
         return 1
     elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
         return 2
-    elif "ibm/ttm-research-r2" in model_path:
+    elif "ibm-research/ttm-research-r2" in model_path:
         return 3
     else:
         return 0
@@ -63,10 +63,10 @@ def get_model(
             model name to use. Allowed values: ttm
         context_length (int):
             Input Context length. For ibm-granite/granite-timeseries-ttm-r1, we allow 512 and 1024.
-            For ibm-granite/granite-timeseries-ttm-r2 and  ibm/ttm-research-r2, we allow 512, 1024 and 1536
+            For ibm-granite/granite-timeseries-ttm-r2 and  ibm-research/ttm-research-r2, we allow 512, 1024 and 1536
         prediction_length (int):
             Forecast length to predict. For ibm-granite/granite-timeseries-ttm-r1, we can forecast upto 96.
-            For ibm-granite/granite-timeseries-ttm-r2 and  ibm/ttm-research-r2, we can forecast upto 720.
+            For ibm-granite/granite-timeseries-ttm-r2 and  ibm-research/ttm-research-r2, we can forecast upto 720.
             Model is trained for fixed forecast lengths (96,192,336,720) and this model add required `prediction_filter_length` to the model instance for required pruning.
             For Ex. if we need to forecast 150 timepoints given last 512 timepoints using model_path = ibm-granite/granite-timeseries-ttm-r2, then get_model will select the
             model from 512_192_r2 branch and applies prediction_filter_length = 150 to prune the forecasts from 192 to 150. prediction_filter_length also applies loss

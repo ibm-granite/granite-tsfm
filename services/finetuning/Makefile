@@ -16,7 +16,7 @@ image:
 
 clone_models:
 	git lfs install || true
-	git clone https://huggingface.co/ibm/test-tsfm mytest-tsfm || true
+	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 
 fetchdata:
