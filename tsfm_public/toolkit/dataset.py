@@ -561,24 +561,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 zero_padding=enable_padding,
             )
 
-        def apply_masking_specification(self, past_values_tensor: np.ndarray) -> np.ndarray:
-            """Apply the desired mask defined by masking_specification.
-
-            Args:
-                past_values_tensor (np.ndarray): Tensor of past values, should have shape (context_length, num_channels)
-
-            Returns:
-                np.ndarry: Tensor with values masked
-            """
-
-            for col_name, spec in self.masking_specification:
-                col_idx = self.column_name_to_index_map[col_name]
-                if isinstance(spec, (tuple, list)) and len(spec) == 2:
-                    past_values_tensor[spec[0] : spec[1], col_idx] = np.nan
-                else:
-                    past_values_tensor[spec:, col_idx] = np.nan
-            return past_values_tensor
-
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
             index = self._check_index(index)
@@ -590,7 +572,11 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x[:, self.x_mask_targets] = 0
 
             if self.masking_specification is not None:
-                seq_x = self.apply_masking_specification(seq_x)
+                seq_x = apply_masking_specification(
+                    seq_x,
+                    masking_specification=self.masking_specification,
+                    column_name_to_index_map=self.column_name_to_index_map,
+                )
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
@@ -658,6 +644,17 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             frequency token mappings. Defaults to None.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        masking_specification (List[Tuple[str, Union[int, Tuple[int, int]]]], optional): Allow masking the history (past values) of
+            specific columns. The complete specification is a list of individual column masking specifications. A column masking
+            specification is a 2-tuple where the first index specifies a column name. The second index specifies and index/indices to
+            mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
+            will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
+            treated as python list indices; the values given by these indices will be masked.
+        artificial_missing_rate (Float, optional): Rate at which points are selected to be marked as artificially missing. Defaults
+            to 0.0 (no artificial missing).
+        artificial_missing_columns (List[str], optional): Column names on which to apply artificial missing. Defaults to None.
+        artificial_missing_at_time_t (bool, optional): If True the point at time t (last point in the context window) is marked as
+            missing. Defaults to False.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -689,6 +686,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
         frequency_token: Optional[int] = None,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         artificial_missing_rate: float = 0.0,
         artificial_missing_columns: Optional[List[str]] = None,
         artificial_missing_at_time_t: bool = False,
@@ -713,6 +711,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             conditional_columns=conditional_columns,
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
+            masking_specification=masking_specification,
             artificial_missing_rate=artificial_missing_rate,
             artificial_missing_columns=artificial_missing_columns,
             artificial_missing_at_time_t=artificial_missing_at_time_t,
@@ -744,6 +743,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             frequency_token: Optional[int] = None,
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
             artificial_missing_rate: float = 0.0,
             artificial_missing_columns: Optional[List[str]] = None,
             artificial_missing_at_time_t: bool = False,
@@ -755,6 +755,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
             self.static_categorical_columns = static_categorical_columns
+            self.masking_specification = masking_specification
             self.artificial_missing_rate = artificial_missing_rate
             self.artificial_missing_at_time_t = artificial_missing_at_time_t
             self.rng = rng
@@ -775,7 +776,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             # masking for conditional values which are not observed during future period
             self._y_mask_conditional = np.array([(c in conditional_columns) for c in y_cols])
 
-            # self.x_mask_targets = np.array([(c in target_columns) for c in x_cols])
+            self.column_name_to_index_map = {k: v for v, k in enumerate(x_cols)}
 
             super().__init__(
                 data_df=data_df,
@@ -831,7 +832,26 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
 
             seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_x_imputed = self._X_imputed[time_id : time_id + self.context_length].values
+            # seq_x_imputed = self._X_imputed[time_id : time_id + self.context_length].values
+
+            if self.masking_specification is not None:
+                seq_x = apply_masking_specification(
+                    seq_x,
+                    masking_specification=self.masking_specification,
+                    column_name_to_index_map=self.column_name_to_index_map,
+                )
+
+            # impute the numpy matrix, time is the first dimension
+            # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
+            mask = np.isnan(seq_x)
+            idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
+            np.maximum.accumulate(idx, axis=0, out=idx)
+            seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
+
+            # fill any remaining nan
+            seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+
+            # mask only on seq_x
 
             artificial_past_observed_seq = np.ones_like(seq_x, dtype=bool)
             artificial_past_observed_seq[:, self._artificial_missing_column_mask] = (
@@ -1245,6 +1265,36 @@ def is_cols_in_df(df: pd.DataFrame, cols: List[str]) -> bool:
         if col not in list(df.columns):
             return False, col
     return True, None
+
+
+def apply_masking_specification(
+    past_values_tensor: np.ndarray,
+    masking_specification: List[Tuple[str, Union[int, Tuple[int, int]]]],
+    column_name_to_index_map: Dict[str, int],
+) -> np.ndarray:
+    """Apply the desired mask defined by masking_specification.
+
+    Args:
+        past_values_tensor (np.ndarray): Tensor of past values, should have shape (context_length, num_channels)
+        masking_specification (List[Tuple[str, Union[int, Tuple[int, int]]]], optional): Allow masking the history (past values) of
+            specific columns. The complete specification is a list of individual column masking specifications. A column masking
+            specification is a 2-tuple where the first index specifies a column name. The second index specifies and index/indices to
+            mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
+            will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
+            treated as python list indices; the values given by these indices will be masked.
+        column_name_to_index_map (Dict[str, int]): A mapping of string (column names) to the indice of that column
+
+    Returns:
+        np.ndarry: Tensor with values masked
+    """
+
+    for col_name, spec in masking_specification:
+        col_idx = column_name_to_index_map[col_name]
+        if isinstance(spec, (tuple, list)) and len(spec) == 2:
+            past_values_tensor[spec[0] : spec[1], col_idx] = np.nan
+        else:
+            past_values_tensor[spec:, col_idx] = np.nan
+    return past_values_tensor
 
 
 if __name__ == "__main__":
