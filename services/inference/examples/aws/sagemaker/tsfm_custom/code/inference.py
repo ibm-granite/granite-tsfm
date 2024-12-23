@@ -1,9 +1,12 @@
-import os
-import sys
 import json
 import logging
-import yaml
+import os
+import sys
+
 import torch
+import yaml
+from fastapi import HTTPException
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -13,9 +16,7 @@ logger.setLevel(logging.DEBUG)
 
 # clue sagemaker runtime into some things
 os.environ["TSFM_ALLOW_LOAD_FROM_HF_HUB"] = "0"
-os.environ["TSFM_MODEL_DIR"] = os.path.join(
-    os.path.dirname(__file__), "granite-tsfm/services/inference/mytest-tsfm"
-)
+os.environ["TSFM_MODEL_DIR"] = os.path.join(os.path.dirname(__file__), "granite-tsfm/services/inference/mytest-tsfm")
 
 # service components are not git installable directly
 # so hack it a bit this way
@@ -51,8 +52,8 @@ def predict_fn(input_object, model):
     from tsfminference import TSFM_CONFIG_FILE
     from tsfminference.inference import InferenceRuntime
     from tsfminference.inference_payloads import (
-        PredictOutput,
         ForecastingInferenceInput,
+        PredictOutput,
     )
 
     if os.path.exists(TSFM_CONFIG_FILE):
@@ -74,11 +75,25 @@ def predict_fn(input_object, model):
     input: ForecastingInferenceInput = ForecastingInferenceInput(**input)
 
     runtime: InferenceRuntime = InferenceRuntime(config=config)
-    answer: PredictOutput = runtime.forecast(input=input)
-    return answer
+    try:
+        answer: PredictOutput = runtime.forecast(input=input)
+        return answer
+    except HTTPException as httpex:
+        error_response = {"error_code": "INVALID_INPUT", "error_message": str(httpex)}
+        return json.dumps(error_response), "application/json", 400
+    except Exception as ex:
+        error_response = {"error_code": "SERVER_ERROR", "error_message": str(ex)}
+        return json.dumps(error_response), "application/json", 500
 
 
 # postprocess
 def output_fn(predictions, content_type):
     assert content_type == "application/json"
-    return predictions.model_dump_json()
+    from tsfminference.inference_payloads import (
+        PredictOutput,
+    )
+
+    if isinstance(predictions, PredictOutput):
+        return predictions.model_dump_json()
+    else:
+        return predictions
