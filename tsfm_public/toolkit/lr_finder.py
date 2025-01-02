@@ -233,6 +233,9 @@ class LRFinder:
         # self.xb, self.yb = self.process_data(self.xb, self.yb)
         # forward
         if isinstance(batch, dict):
+            abatch = {}
+            for k, v in batch.items():
+                abatch[k] = v.to(self.device)
             # if self.enable_prefix_tuning:
             #     pred_outputs = self.model(
             #         past_values=self.xb, future_values=self.yb, freq_token=batch["freq_token"].to(self.device)
