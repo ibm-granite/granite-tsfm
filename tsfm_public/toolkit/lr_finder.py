@@ -243,7 +243,7 @@ class LRFinder:
             # else:
             #     pred_outputs = self.model(past_values=self.xb, future_values=self.yb)
 
-            pred_outputs = self.model(**batch)
+            pred_outputs = self.model(**abatch)
             pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
         else:
             pred = self.model(self.xb)
