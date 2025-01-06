@@ -124,7 +124,10 @@ class TinyTimeMixerCategoricalEmbeddingLayer(nn.Module):
         super().__init__()
         self.categorical_vocab_size_list = config.categorical_vocab_size_list
         self.embedding_layers = nn.ModuleList(
-            [nn.Embedding(vocab, config.d_model) for vocab in self.categorical_vocab_size_list]
+            [
+                nn.Embedding(vocab, config.d_model)
+                for vocab in self.categorical_vocab_size_list
+            ]
         )
         self.number_of_categorical_variables = len(self.categorical_vocab_size_list)
         self.num_patches = config.num_patches
@@ -142,10 +145,14 @@ class TinyTimeMixerCategoricalEmbeddingLayer(nn.Module):
         embedded_tensors = []
 
         for i in range(self.number_of_categorical_variables):
-            embedded_tensor = self.embedding_layers[i](static_categorical_values[:, i].long())
+            embedded_tensor = self.embedding_layers[i](
+                static_categorical_values[:, i].long()
+            )
             embedded_tensors.append(embedded_tensor)
 
-        output_tensor = torch.stack(embedded_tensors, dim=1)  # bs x number_of_categorical_variables x d_model
+        output_tensor = torch.stack(
+            embedded_tensors, dim=1
+        )  # bs x number_of_categorical_variables x d_model
 
         output_tensor = output_tensor.unsqueeze(2).repeat(
             1, 1, self.num_patches, 1
@@ -171,7 +178,9 @@ class TinyTimeMixerBatchNorm(nn.Module):
         Returns:
             `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
         """
-        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
+        output = inputs.transpose(
+            1, 2
+        )  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
         return output.transpose(1, 2)
 
@@ -187,17 +196,24 @@ class TinyTimeMixerPositionalEncoding(nn.Module):
         if config.use_positional_encoding:
             self.position_enc = self._init_pe(config)
         else:
-            self.position_enc = nn.Parameter(torch.zeros(config.num_patches, config.d_model))
+            self.position_enc = nn.Parameter(
+                torch.zeros(config.num_patches, config.d_model)
+            )
 
     @staticmethod
     def _init_pe(config: TinyTimeMixerConfig) -> nn.Parameter:
         # Positional encoding
         if config.positional_encoding_type == "random":
-            position_enc = nn.Parameter(torch.randn(config.num_patches, config.d_model), requires_grad=True)
+            position_enc = nn.Parameter(
+                torch.randn(config.num_patches, config.d_model), requires_grad=True
+            )
         elif config.positional_encoding_type == "sincos":
             position_enc = torch.zeros(config.num_patches, config.d_model)
             position = torch.arange(0, config.num_patches).unsqueeze(1)
-            div_term = torch.exp(torch.arange(0, config.d_model, 2) * -(math.log(10000.0) / config.d_model))
+            div_term = torch.exp(
+                torch.arange(0, config.d_model, 2)
+                * -(math.log(10000.0) / config.d_model)
+            )
             position_enc[:, 0::2] = torch.sin(position * div_term)
             position_enc[:, 1::2] = torch.cos(position * div_term)
             position_enc = position_enc - position_enc.mean()
@@ -370,7 +386,11 @@ class TinyTimeMixerAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -447,7 +467,10 @@ class TinyTimeMixerAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -458,7 +481,9 @@ class TinyTimeMixerAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -466,12 +491,18 @@ class TinyTimeMixerAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -516,7 +547,9 @@ class PatchMixerBlock(nn.Module):
         )
 
         if config.gated_attn:
-            self.gating_block = TinyTimeMixerGatedAttention(in_size=config.num_patches, out_size=config.num_patches)
+            self.gating_block = TinyTimeMixerGatedAttention(
+                in_size=config.num_patches, out_size=config.num_patches
+            )
 
         if config.self_attn:
             self.self_attn_layer = TinyTimeMixerAttention(
@@ -540,9 +573,13 @@ class PatchMixerBlock(nn.Module):
 
         if self.self_attn:
             batch_size, n_vars, num_patches, d_model = hidden_state.shape
-            hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, d_model)
+            hidden_state_reshaped = hidden_state.reshape(
+                batch_size * n_vars, num_patches, d_model
+            )
 
-            x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
+            x_attn, _, _ = self.self_attn_layer(
+                hidden_state_reshaped, output_attentions=False
+            )
             x_attn = x_attn.reshape(batch_size, n_vars, num_patches, d_model)
 
         # Transpose so that num_patches is the last dimension
@@ -585,7 +622,9 @@ class FeatureMixerBlock(nn.Module):
         )
 
         if config.gated_attn:
-            self.gating_block = TinyTimeMixerGatedAttention(in_size=config.d_model, out_size=config.d_model)
+            self.gating_block = TinyTimeMixerGatedAttention(
+                in_size=config.d_model, out_size=config.d_model
+            )
 
     def forward(self, hidden: torch.Tensor):
         """
@@ -632,7 +671,9 @@ class ForecastChannelHeadMixer(nn.Module):
         else:
             self.exogenous_channel_count = 0
 
-        self.total_channel_count = self.prediction_channel_count + self.exogenous_channel_count
+        self.total_channel_count = (
+            self.prediction_channel_count + self.exogenous_channel_count
+        )
 
         self.fcm_use_mixer = config.fcm_use_mixer
 
@@ -655,7 +696,9 @@ class ForecastChannelHeadMixer(nn.Module):
             temp_config.adaptive_patching_levels = 0
             self.exog_mixer = TinyTimeMixerBlock(temp_config)
             scl_features = self.scl * 2
-            self.fcm_embedding = nn.Linear(temp_config.patch_length, temp_config.d_model)
+            self.fcm_embedding = nn.Linear(
+                temp_config.patch_length, temp_config.d_model
+            )
 
         self.mlp = nn.Linear(
             self.total_channel_count * (scl_features),
@@ -668,7 +711,9 @@ class ForecastChannelHeadMixer(nn.Module):
             )
         if self.fcm_context_length > 0:
             patch_config = copy.deepcopy(config)
-            patch_config.context_length = config.prediction_length + (2 * config.fcm_context_length)
+            patch_config.context_length = config.prediction_length + (
+                2 * config.fcm_context_length
+            )
             patch_config.patch_length = self.scl
             patch_config.patch_stride = 1
             self.fcm_patch_block = TinyTimeMixerPatchify(patch_config)
@@ -724,10 +769,14 @@ class ForecastChannelHeadMixer(nn.Module):
             ]  # bs x fcm_context_len x forecast_channels
 
         if self.exogenous_channel_count > 0 and future_values is None:
-            raise ValueError("future_values cannot be none when we have exogenous channels.")
+            raise ValueError(
+                "future_values cannot be none when we have exogenous channels."
+            )
 
         if self.exogenous_channel_count > 0:
-            exog_values = future_values[..., self.exogenous_channel_indices]  # bs x prediction len x exog_channels
+            exog_values = future_values[
+                ..., self.exogenous_channel_indices
+            ]  # bs x prediction len x exog_channels
             past_exog_values = past_values[
                 :, self.fcm_prepend_slicing_indices, self.exogenous_channel_indices
             ]  # bs x context_len x exog_channels
@@ -773,9 +822,13 @@ class ForecastChannelHeadMixer(nn.Module):
                 )  # bs x forecast_len + 2*fcm_context_length x n_vars
 
             # create patch
-            extend_forecasts = self.fcm_patch_block(extend_forecasts)  # xb: [bs x n_vars x forecast_len  x scl]
+            extend_forecasts = self.fcm_patch_block(
+                extend_forecasts
+            )  # xb: [bs x n_vars x forecast_len  x scl]
 
-            extend_forecasts = extend_forecasts.transpose(1, 2)  # [bs x forecast_len  x n_vars  x scl]
+            extend_forecasts = extend_forecasts.transpose(
+                1, 2
+            )  # [bs x forecast_len  x n_vars  x scl]
 
             if extend_forecasts.shape[1] != self.prediction_length:
                 raise ValueError("out_patches should match to forecast length")
@@ -784,12 +837,18 @@ class ForecastChannelHeadMixer(nn.Module):
                 extend_forecasts = self.fcm_embedding(extend_forecasts)
                 extend_forecasts, _ = self.exog_mixer(extend_forecasts)
 
-            extend_forecasts = extend_forecasts.flatten(start_dim=2)  # xb: [bs x forecast_len x n_vars * scl]
+            extend_forecasts = extend_forecasts.flatten(
+                start_dim=2
+            )  # xb: [bs x forecast_len x n_vars * scl]
 
             if self.fcm_gated_attn:
-                extend_forecasts = self.fcm_gating_block(extend_forecasts)  # xb: [bs x forecast_len x n_vars * scl]
+                extend_forecasts = self.fcm_gating_block(
+                    extend_forecasts
+                )  # xb: [bs x forecast_len x n_vars * scl]
 
-            extend_forecasts = self.mlp(extend_forecasts)  # xb: [bs x forecast_len x n_vars]
+            extend_forecasts = self.mlp(
+                extend_forecasts
+            )  # xb: [bs x forecast_len x n_vars]
 
         else:
             if self.fcm_gated_attn:
@@ -823,7 +882,9 @@ class TinyTimeMixerLayer(nn.Module):
         self.mode = config.mode
         self.num_patches = config.num_patches
         if config.mode == "mix_channel":
-            self.channel_feature_mixer = TinyTimeMixerChannelFeatureMixerBlock(config=config)
+            self.channel_feature_mixer = TinyTimeMixerChannelFeatureMixerBlock(
+                config=config
+            )
 
     def forward(self, hidden: torch.Tensor):
         """
@@ -839,7 +900,9 @@ class TinyTimeMixerLayer(nn.Module):
 
         if self.num_patches > 1:
             hidden = self.patch_mixer(hidden)
-        hidden = self.feature_mixer(hidden)  # hidden: (batch_size x num_patches x d_model)
+        hidden = self.feature_mixer(
+            hidden
+        )  # hidden: (batch_size x num_patches x d_model)
         return hidden
 
 
@@ -869,11 +932,15 @@ class TinyTimeMixerAdaptivePatchingBlock(nn.Module):
             self.adaptive_patch_factor = 1
 
         if config.d_model % self.adaptive_patch_factor != 0:
-            raise ValueError("d_model should be divisible by 2^i, where i varies from 0 to adaptive_patching_levels.")
+            raise ValueError(
+                "d_model should be divisible by 2^i, where i varies from 0 to adaptive_patching_levels."
+            )
         temp_config.num_patches = temp_config.num_patches * self.adaptive_patch_factor
         temp_config.d_model = temp_config.d_model // self.adaptive_patch_factor
 
-        self.mixer_layers = nn.ModuleList([TinyTimeMixerLayer(temp_config) for i in range(temp_config.num_layers)])
+        self.mixer_layers = nn.ModuleList(
+            [TinyTimeMixerLayer(temp_config) for i in range(temp_config.num_layers)]
+        )
 
     def forward(self, hidden: torch.Tensor):
         """
@@ -933,13 +1000,17 @@ class TinyTimeMixerBlock(nn.Module):
         if self.adaptive_patching_levels > 0:
             self.mixers = nn.ModuleList(
                 [
-                    TinyTimeMixerAdaptivePatchingBlock(config=config, adapt_patch_level=i)
+                    TinyTimeMixerAdaptivePatchingBlock(
+                        config=config, adapt_patch_level=i
+                    )
                     for i in reversed(range(config.adaptive_patching_levels))
                 ]
             )
 
         else:
-            self.mixers = nn.ModuleList([TinyTimeMixerLayer(config=config) for _ in range(num_layers)])
+            self.mixers = nn.ModuleList(
+                [TinyTimeMixerLayer(config=config) for _ in range(num_layers)]
+            )
 
     def forward(self, hidden_state, output_hidden_states: bool = False):
         """
@@ -991,7 +1062,9 @@ class TinyTimeMixerDecoder(nn.Module):
         self.num_input_channels = config.num_input_channels
 
         if config.decoder_raw_residual:
-            self.decoder_raw_embedding = nn.Linear(config.patch_length, config.decoder_d_model)
+            self.decoder_raw_embedding = nn.Linear(
+                config.patch_length, config.decoder_d_model
+            )
             # nn.init.zeros_(self.decoder_raw_embedding.weight)
             # nn.init.zeros_(self.decoder_raw_embedding.bias)
 
@@ -999,17 +1072,23 @@ class TinyTimeMixerDecoder(nn.Module):
         decoder_config.num_layers = config.decoder_num_layers
         decoder_config.d_model = config.decoder_d_model
         decoder_config.dropout = config.head_dropout
-        decoder_config.adaptive_patching_levels = config.decoder_adaptive_patching_levels
+        decoder_config.adaptive_patching_levels = (
+            config.decoder_adaptive_patching_levels
+        )
         decoder_config.mode = config.decoder_mode
 
         if config.categorical_vocab_size_list is not None:
             if config.decoder_mode == "common_channel":
                 # logger.warning("Setting decoder_mode to mix_channel as static categorical variables is available")
                 # config.decoder_mode = "mix_channel"
-                raise ValueError("set decoder_mode to mix_channel when using static categorical variables")
+                raise ValueError(
+                    "set decoder_mode to mix_channel when using static categorical variables"
+                )
 
             decoder_config.num_input_channels += len(config.categorical_vocab_size_list)
-            self.decoder_cat_embedding_layer = TinyTimeMixerCategoricalEmbeddingLayer(decoder_config)
+            self.decoder_cat_embedding_layer = TinyTimeMixerCategoricalEmbeddingLayer(
+                decoder_config
+            )
         else:
             self.decoder_cat_embedding_layer = None
 
@@ -1068,7 +1147,9 @@ class TinyTimeMixerDecoder(nn.Module):
 
         if self.decoder_cat_embedding_layer is not None:
             if static_categorical_values is None:
-                raise ValueError("Missing static_categorical_values tensor in forward call")
+                raise ValueError(
+                    "Missing static_categorical_values tensor in forward call"
+                )
             cat_embeddings = self.decoder_cat_embedding_layer(
                 static_categorical_values
             )  # bs x n_cat x n_patches x d_model
@@ -1085,11 +1166,54 @@ class TinyTimeMixerDecoder(nn.Module):
             decoder_hidden_states.extend(hidden_states)
 
         if self.decoder_cat_embedding_layer is not None:
-            decoder_output = decoder_output[:, : self.num_input_channels, :, :]  # bs x nvars x n_patches x d_model
+            decoder_output = decoder_output[
+                :, : self.num_input_channels, :, :
+            ]  # bs x nvars x n_patches x d_model
             if output_hidden_states:
                 decoder_hidden_states.append(decoder_output)
 
         return decoder_output, decoder_hidden_states
+
+
+class TinyTimeMixerMultiQuantileHeads(nn.Module):
+    """Prediction Head for Forecasting
+
+    Args:
+        config (`TinyTimeMixerConfig`, *required*): Configuration.
+    """
+
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__()
+        self.prediction_length = config.prediction_length
+        if config.prediction_filter_length is not None:
+            self.prediction_length = config.prediction_filter_length
+
+        self.num_of_quantiles = len(config.multi_quantile_heads)
+
+        self.quantile_heads = nn.Linear(
+            self.prediction_length, self.prediction_length * self.num_of_quantiles
+        )
+
+    def forward(self, forecasts):
+        """
+        Args:
+            forecasts: `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
+
+        Returns
+            multi_quantile_forecasts: `torch.Tensor` of shape `(batch_size, no_quantiles, prediction_length, forecast_channels)`.
+        """
+        b, seq_len, no_channels = forecasts.shape
+        forecasts = forecasts.transpose(-1, -2)  # b, channels, length
+        multi_quantile_forecasts = self.quantile_heads(
+            forecasts
+        )  # b, channels, q*length
+        multi_quantile_forecasts = multi_quantile_forecasts.transpose(
+            -1, -2
+        )  # b, q*length, channels
+        multi_quantile_forecasts = multi_quantile_forecasts.reshape(
+            b, self.num_of_quantiles, seq_len, no_channels
+        )  # b, q, length, channel
+        return multi_quantile_forecasts
 
 
 class TinyTimeMixerForPredictionHead(nn.Module):
@@ -1117,9 +1241,13 @@ class TinyTimeMixerForPredictionHead(nn.Module):
             head_d_model = config.d_model
 
         if distribution_output is None:
-            self.base_forecast_block = nn.Linear((config.num_patches * head_d_model), config.prediction_length)
+            self.base_forecast_block = nn.Linear(
+                (config.num_patches * head_d_model), config.prediction_length
+            )
         else:
-            self.base_forecast_block = distribution_output.get_parameter_projection(config.num_patches * head_d_model)
+            self.base_forecast_block = distribution_output.get_parameter_projection(
+                config.num_patches * head_d_model
+            )
 
         self.flatten = nn.Flatten(start_dim=-2)
 
@@ -1129,6 +1257,10 @@ class TinyTimeMixerForPredictionHead(nn.Module):
                 temp_config.prediction_length = self.prediction_filter_length
 
             self.fcm_block = ForecastChannelHeadMixer(config=temp_config)
+
+        self.quantile_heads = None
+        if config.multi_quantile_heads is not None:
+            self.quantile_heads = TinyTimeMixerMultiQuantileHeads(config)
 
     def forward(self, hidden_features, past_values, future_values=None):
         """
@@ -1148,21 +1280,32 @@ class TinyTimeMixerForPredictionHead(nn.Module):
 
 
         Returns:
-            `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
+            `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)` or
+            `torch.Tensor` of shape `(batch_size, quantiles, prediction_length, forecast_channels)` if multi_quantile_head is on
 
         """
 
-        hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * d_model]
-        hidden_features = self.dropout_layer(hidden_features)  # [batch_size x n_vars x num_patch * d_model]
-        forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x prediction_length]
+        hidden_features = self.flatten(
+            hidden_features
+        )  # [batch_size x n_vars x num_patch * d_model]
+        hidden_features = self.dropout_layer(
+            hidden_features
+        )  # [batch_size x n_vars x num_patch * d_model]
+        forecast = self.base_forecast_block(
+            hidden_features
+        )  # [batch_size x n_vars x prediction_length]
         if isinstance(forecast, tuple):
             forecast = tuple(z.transpose(-1, -2) for z in forecast)
         else:
-            forecast = forecast.transpose(-1, -2)  # [batch_size x prediction_length x n_vars]
+            forecast = forecast.transpose(
+                -1, -2
+            )  # [batch_size x prediction_length x n_vars]
 
         if self.prediction_channel_indices is not None:
             if isinstance(forecast, tuple):
-                forecast = tuple(z[..., self.prediction_channel_indices] for z in forecast)
+                forecast = tuple(
+                    z[..., self.prediction_channel_indices] for z in forecast
+                )
             else:
                 forecast = forecast[
                     ..., self.prediction_channel_indices
@@ -1170,7 +1313,9 @@ class TinyTimeMixerForPredictionHead(nn.Module):
 
         if self.prediction_filter_length is not None:
             if isinstance(forecast, tuple):
-                forecast = tuple(z[:, : self.prediction_filter_length, :] for z in forecast)
+                forecast = tuple(
+                    z[:, : self.prediction_filter_length, :] for z in forecast
+                )
             else:
                 forecast = forecast[
                     :, : self.prediction_filter_length, :
@@ -1187,10 +1332,19 @@ class TinyTimeMixerForPredictionHead(nn.Module):
 
         if self.enable_forecast_channel_mixing:
             if isinstance(forecast, tuple):
-                raise ValueError("Forecast channel mixing is not enabled for distribution head")
+                raise ValueError(
+                    "Forecast channel mixing is not enabled for distribution head"
+                )
             else:
-                forecast = self.fcm_block(forecast, past_values=past_values, future_values=future_values)
+                forecast = self.fcm_block(
+                    forecast, past_values=past_values, future_values=future_values
+                )
                 # [batch_size x prediction_length x prediction_n_vars]
+
+        if self.quantile_heads is not None:
+            forecast = self.quantile_heads(
+                forecast
+            )  # # [batch_size x quantiles x prediction_length x prediction_n_vars]
 
         return forecast
 
@@ -1265,8 +1419,12 @@ class TinyTimeMixerPatchify(nn.Module):
             )
 
         # get the number of patches
-        self.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
-        new_sequence_length = self.patch_length + self.patch_stride * (self.num_patches - 1)
+        self.num_patches = (
+            max(self.sequence_length, self.patch_length) - self.patch_length
+        ) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (
+            self.num_patches - 1
+        )
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -1286,7 +1444,9 @@ class TinyTimeMixerPatchify(nn.Module):
         # output: [bs x new_sequence_length x num_channels]
         output = past_values[:, self.sequence_start :, :]
         # output: [bs x num_patches x num_input_channels x patch_length]
-        output = output.unfold(dimension=-2, size=self.patch_length, step=self.patch_stride)
+        output = output.unfold(
+            dimension=-2, size=self.patch_length, step=self.patch_stride
+        )
         # output: [bs x num_input_channels x num_patches x patch_length]
         output = output.transpose(-2, -3).contiguous()
         return output
@@ -1302,7 +1462,9 @@ class TinyTimeMixerStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1321,9 +1483,13 @@ class TinyTimeMixerStdScaler(nn.Module):
 
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(torch.tensor(1, device=denominator.device))
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
 
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
@@ -1338,8 +1504,12 @@ class TinyTimeMixerMeanScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        )
+        self.default_scale = (
+            config.default_scale if hasattr(config, "default_scale") else None
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1404,8 +1574,12 @@ class TinyTimeMixerNOPScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        scale = torch.ones_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
+        loc = torch.zeros_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
         return data, loc, scale
 
 
@@ -1465,7 +1639,9 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         # if config.post_init:
         #     self.post_init()
 
-    @replace_return_docstrings(output_type=TinyTimeMixerEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TinyTimeMixerEncoderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1499,7 +1675,9 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
             if freq_token is not None:
                 freq_embedding = self.freq_mod(freq_token.long())  # bs x d_model
 
-                freq_embedding = freq_embedding.view(patches.shape[0], 1, 1, self.d_model)
+                freq_embedding = freq_embedding.view(
+                    patches.shape[0], 1, 1, self.d_model
+                )
                 freq_embedding = freq_embedding.expand(
                     patches.shape[0],
                     patches.shape[1],
@@ -1507,7 +1685,9 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
                     self.d_model,
                 )  # bs x channels x 1 x num_features
 
-                patches = torch.cat((freq_embedding, patches), dim=-2)  # bs x channels x num_patch+1 x num_features
+                patches = torch.cat(
+                    (freq_embedding, patches), dim=-2
+                )  # bs x channels x num_patch+1 x num_features
 
             else:
                 raise Exception("Expecting freq_token in forward")
@@ -1516,7 +1696,9 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         if self.positional_encoder is not None:
             patches = self.positional_encoder(patches)
 
-        last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
+        last_hidden_state, hidden_states = self.mlp_mixer_encoder(
+            patches, output_hidden_states=output_hidden_states
+        )
 
         if not return_dict:
             return tuple(
@@ -1527,7 +1709,9 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
                 ]
             )
 
-        return TinyTimeMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
+        return TinyTimeMixerEncoderOutput(
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states
+        )
 
 
 @dataclass
@@ -1586,7 +1770,9 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         #     self.post_init()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TinyTimeMixerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TinyTimeMixerModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1611,7 +1797,9 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
             past_observed_mask = torch.ones_like(past_values)
         scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
 
-        patched_x = self.patching(scaled_past_values)  # [batch_size x num_input_channels x num_patch x patch_length
+        patched_x = self.patching(
+            scaled_past_values
+        )  # [batch_size x num_input_channels x num_patch x patch_length
 
         enc_input = patched_x
 
@@ -1699,7 +1887,9 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
     return -input.log_prob(target)
 
 
-def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(
+    input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None
+) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -1716,9 +1906,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
-        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
-        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
-        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+        weighted_tensor = torch.where(
+            weights != 0, input_tensor * weights, torch.zeros_like(input_tensor)
+        )
+        sum_weights = torch.clamp(
+            weights.sum(dim=dim) if dim else weights.sum(), min=1.0
+        )
+        return (
+            weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()
+        ) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
 
@@ -1752,6 +1948,20 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.prediction_filter_length = config.prediction_filter_length
 
+        self.multi_quantile_head_weights = config.multi_quantile_head_weights
+
+        if config.multi_quantile_heads is not None:
+            if config.multi_quantile_head_weights is None:
+                self.multi_quantile_head_weights = [1] * len(
+                    config.multi_quantile_heads
+                )
+            # Normalize the weights
+            total_weight = sum(self.multi_quantile_head_weights)
+            normalized_weights = [
+                w / total_weight for w in self.multi_quantile_head_weights
+            ]
+            self.multi_quantile_head_weights = normalized_weights
+
         if config.loss in ["mse", "mae", "pinball", "huber"] or config.loss is None:
             self.distribution_output = None
         elif config.loss == "nll":
@@ -1769,7 +1979,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             if output_class is not None:
                 self.distribution_output = output_class(dim=dim)
             else:
-                raise ValueError(f"Unknown distribution output {config.distribution_output}")
+                raise ValueError(
+                    f"Unknown distribution output {config.distribution_output}"
+                )
 
         self.backbone = TinyTimeMixerModel(config)
 
@@ -1788,7 +2000,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1838,7 +2052,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         if past_values.shape[1] > self.config.context_length:
             past_values = past_values[:, -self.config.context_length :, :]
         elif past_values.shape[1] < self.config.context_length:
-            raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
+            raise ValueError(
+                "Context length in `past_values` is shorter that TTM context_length."
+            )
 
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
@@ -1857,6 +2073,11 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             loss = None
         else:
             raise ValueError("Invalid loss function: Allowed values: mse, mae and nll")
+
+        self.multi_quantile_losses = []
+        if self.config.multi_quantile_heads is not None:
+            for i in self.config.multi_quantile_heads:
+                self.multi_quantile_losses.append(PinballLoss(quantile=i))
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
@@ -1892,7 +2113,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         # tensor [batch_size x prediction_length x num_input_channels]
 
         # head should take future mask
-        y_hat = self.head(decoder_output, past_values=past_values, future_values=future_values)
+        y_hat = self.head(
+            decoder_output, past_values=past_values, future_values=future_values
+        )
 
         if (
             self.prediction_filter_length is not None
@@ -1902,7 +2125,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             future_values = future_values[:, : self.prediction_filter_length, :]
 
             if future_observed_mask is not None:
-                future_observed_mask = future_observed_mask[:, : self.prediction_filter_length, :]
+                future_observed_mask = future_observed_mask[
+                    :, : self.prediction_filter_length, :
+                ]
 
         if (
             self.prediction_channel_indices is not None
@@ -1913,7 +2138,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             future_values = future_values[..., self.prediction_channel_indices]
 
             if future_observed_mask is not None:
-                future_observed_mask = future_observed_mask[..., self.prediction_channel_indices]
+                future_observed_mask = future_observed_mask[
+                    ..., self.prediction_channel_indices
+                ]
 
         if self.prediction_channel_indices is not None:
             loc = model_output.loc[..., self.prediction_channel_indices]
@@ -1929,19 +2156,55 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             fut_mask_bool = future_observed_mask.type(torch.bool)
 
         if self.distribution_output:
-            distribution = self.distribution_output.distribution(y_hat, loc=loc, scale=scale)
+            distribution = self.distribution_output.distribution(
+                y_hat, loc=loc, scale=scale
+            )
             if future_values is not None and return_loss is True and loss is not None:
                 if future_observed_mask is not None and (~fut_mask_bool).any():
                     if (~fut_mask_bool).all():
                         # no valid observed values
                         print(future_observed_mask)
-                        raise ValueError("Loss computation failed due to too many missing values")
+                        raise ValueError(
+                            "Loss computation failed due to too many missing values"
+                        )
                     loss_val = loss(distribution, future_values)
                     # select only values of loss where entire timepoint is observed
                     loss_val = loss_val[fut_mask_bool.all(dim=-1)]
                 else:
                     loss_val = loss(distribution, future_values)
                 loss_val = weighted_average(loss_val)
+
+        elif self.config.multi_quantile_heads is not None:
+
+            loc = loc.unsqueeze(1)  # batch_size x 1 x 1 x prediction_channel_indices
+            scale = scale.unsqueeze(
+                1
+            )  # batch_size x 1 x 1 x prediction_channel_indices
+            y_hat = y_hat * scale + loc  # b, q, seq_len, channels
+
+            if future_values is not None and return_loss is True:
+                multi_quantile_loss_values = []
+                for i in range(len(self.multi_quantile_losses)):
+                    selected_forecast = y_hat[:, i, :, :]
+
+                    if future_observed_mask is not None:
+                        loss_val = self.multi_quantile_head_weights[
+                            i
+                        ] * self.multi_quantile_losses[i](
+                            selected_forecast[fut_mask_bool],
+                            future_values[fut_mask_bool],
+                        )
+                    else:
+                        # avoiding mask operations for performance benefits on normal scenarios.
+                        loss_val = self.multi_quantile_head_weights[
+                            i
+                        ] * self.multi_quantile_losses[i](
+                            selected_forecast, future_values
+                        )
+                    multi_quantile_loss_values.append(loss_val)
+
+                loss_val = sum(multi_quantile_loss_values)
+
         else:
             y_hat = y_hat * scale + loc
             if future_values is not None and return_loss is True and loss is not None:
@@ -2018,5 +2281,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
 
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x prediction_length x num_channels]
+        samples = torch.stack(
+            samples, dim=1
+        )  # [batch_size x num_samples x prediction_length x num_channels]
         return SampleTinyTimeMixerPredictionOutput(sequences=samples)
