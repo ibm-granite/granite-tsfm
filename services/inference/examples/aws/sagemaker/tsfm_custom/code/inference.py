@@ -49,6 +49,7 @@ def input_fn(request_body, request_content_type):
 
 # inference
 def predict_fn(input_object, model):
+    from pydantic import ValidationError
     from tsfminference import TSFM_CONFIG_FILE
     from tsfminference.inference import InferenceRuntime
     from tsfminference.inference_payloads import (
@@ -72,14 +73,17 @@ def predict_fn(input_object, model):
     if not "forecasting" == inference_type:
         raise NotImplementedError(f"infernce_type {inference_type} not supported.")
 
-    input: ForecastingInferenceInput = ForecastingInferenceInput(**input)
-
-    runtime: InferenceRuntime = InferenceRuntime(config=config)
     try:
+        input: ForecastingInferenceInput = ForecastingInferenceInput(**input)
+
+        runtime: InferenceRuntime = InferenceRuntime(config=config)
         answer: PredictOutput = runtime.forecast(input=input)
         return answer
     except HTTPException as httpex:
-        error_response = {"error_code": "INVALID_INPUT", "error_message": str(httpex)}
+        error_response = {"error_code": "HTTPException", "error_message": str(httpex)}
+        return json.dumps(error_response), "application/json", 400
+    except ValidationError as vex:
+        error_response = {"error_code": "ValidationError", "error_message": str(vex)}
         return json.dumps(error_response), "application/json", 400
     except Exception as ex:
         error_response = {"error_code": "SERVER_ERROR", "error_message": str(ex)}
