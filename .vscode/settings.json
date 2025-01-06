@@ -5,7 +5,7 @@
   },
   "python.testing.pytestArgs": [
     "tests",
-    "services/inference"
+    "services"
   ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,

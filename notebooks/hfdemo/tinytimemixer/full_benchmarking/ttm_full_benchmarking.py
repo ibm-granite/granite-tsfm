@@ -4,7 +4,7 @@ Pre-trained TTM models will be fetched from the HuggingFace TTM Model Repositori
 
 1. TTM-Granite-R1 pre-trained models can be found here: [TTM-R1 Model Card](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r1)
 2. TTM-Granite-R2 pre-trained models can be found here: [TTM-R2 Model Card](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2)
-3. TTM-Research-Use pre-trained models can be found here: [TTM-Research-Use Model Card](https://huggingface.co/ibm/ttm-research-r2)
+3. TTM-Research-Use pre-trained models can be found here: [TTM-Research-Use Model Card](https://huggingface.co/ibm-research/ttm-research-r2)
 
 Every model card has a suite of TTM models. Please read the respective model cards for usage instructions.
 """
