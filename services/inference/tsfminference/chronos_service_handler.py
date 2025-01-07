@@ -168,6 +168,7 @@ class ChronosForecastingHandler(ForecastingServiceHandler):
         LOGGER.info("computing chronos forecasts.")
 
         if not id_columns:
+            LOGGER.info("id columns are not provided, proceeding without groups.")
             context = torch.tensor(data[target_columns].values).transpose(1, 0)
             forecasts = self.model.predict(
                 context,
