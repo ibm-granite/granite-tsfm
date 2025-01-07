@@ -31,6 +31,7 @@ FORECAST_LENGTH = 96
 
 MODEL_IDS = ["ttm-1024-96-r1", "ttm-1024-96-r2", "ttm-1536-96-r2", "ttm-r1", "ttm-r2"]
 
+
 def min_context_length(model_id):
     model_path: Path = resolve_model_path(TSFM_MODEL_DIR, model_id)
     assert model_path.exists(), f"{model_path} does not exist!"
