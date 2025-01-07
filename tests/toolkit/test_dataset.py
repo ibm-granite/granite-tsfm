@@ -604,3 +604,26 @@ def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
             for dsi in ds
         ]
     )
+
+    # check the mask specification
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0,
+        masking_specification=[("value2", -2)],
+        artificial_missing_columns=["value3"],
+        artificial_missing_at_time_t=True,
+        random_seed=41,
+    )
+
+    # check that the mask is honored
+    assert np.all(~ds[5]["past_observed_mask"][-2:, 0].numpy())
+    assert np.all(ds[5]["past_observed_mask"][:-2, 0].numpy())
+
+    # mask should not be altered in the second column
+    assert np.all(ds[5]["past_observed_mask"][:, 1].numpy())

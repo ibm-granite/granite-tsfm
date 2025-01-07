@@ -1288,6 +1288,7 @@ def apply_masking_specification(
         np.ndarry: Tensor with values masked
     """
 
+    past_values_tensor = past_values_tensor.copy()
     for col_name, spec in masking_specification:
         col_idx = column_name_to_index_map[col_name]
         if isinstance(spec, (tuple, list)) and len(spec) == 2:
