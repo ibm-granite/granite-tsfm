@@ -29,13 +29,7 @@ from tsfminference.service_handler import ForecastingServiceHandler
 # SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
 
-
-MODEL_IDS = [
-    os.path.basename(dirpath)
-    for dirpath, _, _ in os.walk("./mytest-tsfm")
-    if ".git" not in dirpath and "./mytest-tsfm" != dirpath and "finetuned" not in dirpath and "figures" not in dirpath
-]
-
+MODEL_IDS = ["ttm-1024-96-r1", "ttm-1024-96-r2", "ttm-1536-96-r2", "ttm-r1", "ttm-r2"]
 
 def min_context_length(model_id):
     model_path: Path = resolve_model_path(TSFM_MODEL_DIR, model_id)
