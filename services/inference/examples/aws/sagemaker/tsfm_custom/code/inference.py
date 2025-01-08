@@ -40,10 +40,11 @@ def model_fn(model_dir):
 # data preprocessing
 def input_fn(request_body, request_content_type):
     assert request_content_type == "application/json"
-    logger.debug("in input_fn")
-    logger.debug(f"request_content_type {request_content_type}")
-    logger.debug(f"type of request_body {type(request_body)}")
-    logger.debug(f"request_body {request_body[0:100]}...")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("in input_fn")
+        logger.debug(f"request_content_type {request_content_type}")
+        logger.debug(f"type of request_body {type(request_body)}")
+        logger.debug(f"request_body {request_body[0:100]}...")
     return request_body
 
 
