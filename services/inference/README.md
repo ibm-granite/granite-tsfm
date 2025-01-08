@@ -19,7 +19,7 @@ timeseries foundation models. At present it provide inference endpoints for the 
 - git
 - git-lfs
 - python >=3.10, <3.13
-- poetry (`pip install poetry`)
+- poetry (`pip install "poetry>=2.0.0"`)
 - zsh or bash
 - (optional) docker or podman
 - (optional) kubectl if you plan on testing kubernetes-based deployments
@@ -27,7 +27,7 @@ timeseries foundation models. At present it provide inference endpoints for the 
 ## Installation
 
 ```sh
-pip install poetry && poetry install --with dev
+pip install "poetry>=2.0.0" && poetry install --with dev
 ```
 
 ### Testing using a local server instance
