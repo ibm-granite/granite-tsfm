@@ -1175,6 +1175,41 @@ class TinyTimeMixerDecoder(nn.Module):
         return decoder_output, decoder_hidden_states
 
 
+# class TinyTimeMixerMultiQuantileHeads(nn.Module):
+#     """Prediction Head for Forecasting
+
+#     Args:
+#         config (`TinyTimeMixerConfig`, *required*): Configuration.
+#     """
+
+#     def __init__(self, config: TinyTimeMixerConfig):
+#         super().__init__()
+#         self.prediction_length = config.prediction_length
+#         if config.prediction_filter_length is not None:
+#             self.prediction_length = config.prediction_filter_length
+
+#         self.num_of_quantiles = len(config.multi_quantile_heads)
+
+#         self.quantile_heads = nn.Linear(self.prediction_length, self.prediction_length * self.num_of_quantiles)
+
+#     def forward(self, forecasts):
+#         """
+#         Args:
+#             forecasts: `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
+
+#         Returns
+#             multi_quantile_forecasts: `torch.Tensor` of shape `(batch_size, no_quantiles, prediction_length, forecast_channels)`.
+#         """
+#         b, seq_len, no_channels = forecasts.shape
+#         forecasts = forecasts.transpose(-1, -2)  # b, channels, length
+#         multi_quantile_forecasts = self.quantile_heads(forecasts)  # b, channels, q*length
+#         multi_quantile_forecasts = multi_quantile_forecasts.transpose(-1, -2)  # b, q*length, channels
+#         multi_quantile_forecasts = multi_quantile_forecasts.reshape(
+#             b, self.num_of_quantiles, seq_len, no_channels
+#         )  # b, q, length, channel
+#         return multi_quantile_forecasts
+
+
 class TinyTimeMixerMultiQuantileHeads(nn.Module):
     """Prediction Head for Forecasting
 
@@ -1190,11 +1225,11 @@ class TinyTimeMixerMultiQuantileHeads(nn.Module):
 
         self.num_of_quantiles = len(config.multi_quantile_heads)
 
-        self.quantile_heads = nn.Linear(
-            self.prediction_length, self.prediction_length * self.num_of_quantiles
+        self.quantile_embeddings = nn.Parameter(
+            torch.zeros(1, self.num_of_quantiles, self.prediction_length, 1)
         )
 
-    def forward(self, forecasts):
+    def forward(self, forecast):
         """
         Args:
             forecasts: `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
@@ -1202,18 +1237,16 @@ class TinyTimeMixerMultiQuantileHeads(nn.Module):
         Returns
             multi_quantile_forecasts: `torch.Tensor` of shape `(batch_size, no_quantiles, prediction_length, forecast_channels)`.
         """
-        b, seq_len, no_channels = forecasts.shape
-        forecasts = forecasts.transpose(-1, -2)  # b, channels, length
-        multi_quantile_forecasts = self.quantile_heads(
-            forecasts
-        )  # b, channels, q*length
-        multi_quantile_forecasts = multi_quantile_forecasts.transpose(
-            -1, -2
-        )  # b, q*length, channels
-        multi_quantile_forecasts = multi_quantile_forecasts.reshape(
-            b, self.num_of_quantiles, seq_len, no_channels
-        )  # b, q, length, channel
-        return multi_quantile_forecasts
+        B, seq_len, channels = forecast.shape
+        # Convert forecast to shape (B, num_quantiles, seq_len, channels)
+        forecast = forecast.unsqueeze(1).repeat(1, self.num_of_quantiles, 1, 1)
+
+        # Expand embedding to match forecast shape (1, num_quantiles, seq_len, 1)
+        # embedding = self.quantile_embeddings.view(1, self.num_of_quantiles, self.prediction_length, 1)
+        # Add the learnable embedding to the forecast
+        adjusted_forecast = forecast + self.quantile_embeddings
+
+        return adjusted_forecast  # (B, num_quantiles, seq_len, channels)
 
 
 class TinyTimeMixerForPredictionHead(nn.Module):
@@ -1864,6 +1897,7 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loc: torch.FloatTensor = None
     scale: torch.FloatTensor = None
+    ground_truth: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -2065,9 +2099,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         elif self.loss == "huber":
             loss = nn.HuberLoss(delta=self.config.huber_delta)
         elif self.loss == "nll":
-            raise Exception(
-                "NLL loss and Distribution heads are currently not allowed. Use mse or mae as loss functions."
-            )
+            # raise Exception(
+            #     "NLL loss and Distribution heads are currently not allowed. Use mse or mae as loss functions."
+            # )
             loss = nll
         elif self.loss is None:
             loss = None
@@ -2175,7 +2209,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                 loss_val = weighted_average(loss_val)
 
         elif self.config.multi_quantile_heads is not None:
-
             loc = loc.unsqueeze(1)  # batch_size x 1 x 1 x prediction_channel_indices
             scale = scale.unsqueeze(
                 1
@@ -2225,6 +2258,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     hidden_states,
                     loc,
                     scale,
+                    future_values,
                 ]
             )
 
@@ -2236,6 +2270,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             hidden_states=hidden_states,
             loc=loc,
             scale=scale,
+            ground_truth=future_values,
         )
 
     def generate(
