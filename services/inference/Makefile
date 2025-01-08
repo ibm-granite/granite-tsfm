@@ -71,7 +71,7 @@ test_image: clone_models start_service_image
 	$(MAKE) delete_models
 
 install_dev: boilerplate
-	pip install poetry && poetry install --with dev
+	pip install "poetry>=2.0.0" && poetry install --with dev
 
 clone_models:
 	git lfs install || true

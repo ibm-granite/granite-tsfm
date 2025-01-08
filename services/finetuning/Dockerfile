@@ -21,7 +21,7 @@ COPY tsfmfinetuning/* /finetuning/tsfmfinetuning/
 COPY pyproject.toml /finetuning/
 COPY poetry.lock /finetuning/
 WORKDIR /finetuning
-RUN pip${PYTHON_VERSION} install poetry && poetry install
+RUN pip${PYTHON_VERSION} install "poetry>=2.0.0" && poetry install
 
 
 ENV VIRTUAL_ENV=/finetuning/.venv
