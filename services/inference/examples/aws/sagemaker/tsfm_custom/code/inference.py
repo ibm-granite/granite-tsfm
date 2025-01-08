@@ -33,7 +33,7 @@ device = "cpu"
 # defining model and loading weights to it.
 def model_fn(model_dir):
     logger.debug(f"in model_fn with {model_dir}")
-    logger.debug("doing nothing, returning None")
+    logger.debug("doing nothing, returning {}")
     return {}
 
 
