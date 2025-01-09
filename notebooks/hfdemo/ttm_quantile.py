@@ -48,9 +48,10 @@ def plot_preds(
     random_samples = torch.stack([dset[i]["past_values"] for i in random_indices])
     trainer.model = trainer.model.to(device)
     output = trainer.model(random_samples.to(device=device))
-    y_hat = output.prediction_outputs[:, :, :, channel].detach().cpu().numpy()
-    pred_len = y_hat.shape[2]
-    num_quantiles = y_hat.shape[1]
+    y_hat = output.prediction_outputs[..., channel].detach().cpu().numpy()
+    mq_y_hat = output.quantile_outputs[..., channel].detach().cpu().numpy()
+    pred_len = y_hat.shape[1]
+    num_quantiles = mq_y_hat.shape[1]
 
     # Set a more beautiful style
     plt.style.use("seaborn-v0_8-whitegrid")
@@ -69,10 +70,13 @@ def plot_preds(
 
         # Plot predicted values with a dashed line
 
+        y_hat_plot = np.concatenate((x, y_hat[i, ...]), axis=0)
+        axs[i].plot(y_hat_plot, label="Point", linestyle="--", linewidth=2)
+
         for q in range(num_quantiles):
-            y_hat_plot = np.concatenate((x, y_hat[i, q, ...]), axis=0)
+            mq_y_hat_plot = np.concatenate((x, mq_y_hat[i, q, ...]), axis=0)
             axs[i].plot(
-                y_hat_plot, label="Predicted_" + str(q), linestyle="--", linewidth=2
+                mq_y_hat_plot, label="Predicted_" + str(q), linestyle="--", linewidth=2
             )
 
         # Plot true values with a solid line
@@ -163,7 +167,8 @@ def fewshot_finetune_eval(
     quantile=0.5,
     loss="mse",
     multi_quantile_heads=None,
-    multi_quantile_head_weights=None,
+    multi_quantile_loss_weights=None,
+    multi_quantile_and_point_relative_weights=None,
 ):
     out_dir = os.path.join(save_dir, dataset_name)
 
@@ -198,7 +203,8 @@ def fewshot_finetune_eval(
             quantile=quantile,
             loss=loss,
             multi_quantile_heads=multi_quantile_heads,
-            multi_quantile_head_weights=multi_quantile_head_weights,
+            multi_quantile_loss_weights=multi_quantile_loss_weights,
+            multi_quantile_and_point_relative_weights=multi_quantile_and_point_relative_weights,
         )
     else:
         finetune_forecast_model = get_model(
@@ -208,7 +214,8 @@ def fewshot_finetune_eval(
             quantile=quantile,
             loss=loss,
             multi_quantile_heads=multi_quantile_heads,
-            multi_quantile_head_weights=multi_quantile_head_weights,
+            multi_quantile_loss_weights=multi_quantile_loss_weights,
+            multi_quantile_and_point_relative_weights=multi_quantile_and_point_relative_weights,
         )
 
     if freeze_backbone:
@@ -333,15 +340,38 @@ predictions_dict = fewshot_finetune_eval(
     batch_size=64,
     fewshot_percent=5,
     learning_rate=None,
-    loss="pinball",
+    loss="mae",
     quantile=0.5,
-    multi_quantile_heads=[0.1, 0.5, 0.9],
-    multi_quantile_head_weights=None,
-    num_epochs=10,
+    multi_quantile_heads=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    # multi_quantile_heads=[0.1, 0.9],
+    multi_quantile_loss_weights=None,
+    multi_quantile_and_point_relative_weights=None,
+    num_epochs=2,
 )
 
+# return TinyTimeMixerForPredictionOutput(
+#     loss=loss_val,
+#     prediction_outputs=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
+#     backbone_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
+#     decoder_hidden_state=decoder_output,  # x: [batch_size x nvars x num_patch x decoder_d_model]
+#     loc=loc,  # [B x 1 X C]
+#     scale=scale,  # [B x 1 X C]
+#     hidden_states=hidden_states,
+#     ground_truth=future_values,  # tensor [batch_size x prediction_length x num_input_channels]
+#     quantile_outputs=mq_y_hats,  # tensor [batch_size x quantiles x prediction_length x num_input_channels]
+#     point_loss=point_loss_val,
+#     multi_quantile_loss=mq_loss_val,
+# )
 preds = predictions_dict.predictions[0]
-ground_truth = predictions_dict.predictions[-1]
-print(np.mean((ground_truth - preds[:, 0, :, :]) ** 2))
+print(preds.shape)
 
+ground_truth = predictions_dict.predictions[-4]
+print(ground_truth.shape)
+
+print(np.mean((ground_truth - preds) ** 2))
+# print("MQ_loss:", predictions_dict.predictions[-1])
+# print("Point_loss:", predictions_dict.predictions[-2])
+
+print("LEN: ", len(predictions_dict.predictions))
+breakpoint()
 print(OUT_DIR)
