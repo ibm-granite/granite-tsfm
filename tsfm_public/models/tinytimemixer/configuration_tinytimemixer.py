@@ -188,7 +188,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         frequency_token_vocab_size: int = 5,
         # General head configuration
         head_dropout: float = 0.2,
-        distribution_output: str = "student_t",
+        distribution_output: str = "normal",
         num_parallel_samples: int = 100,
         # decoder parameters
         decoder_num_layers: int = 8,
@@ -278,17 +278,26 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
         if not hasattr(self, "num_patches"):
             context_length = self.context_length
-            self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+            self.num_patches = (
+                max(context_length, self.patch_length) - self.patch_length
+            ) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
 
         if self.prediction_filter_length is not None:
-            if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
-                raise ValueError("prediction_filter_length should be positive and less than prediction_length")
+            if (
+                self.prediction_filter_length > self.prediction_length
+                or self.prediction_filter_length <= 0
+            ):
+                raise ValueError(
+                    "prediction_filter_length should be positive and less than prediction_length"
+                )
 
         if self.loss == "nll" and self.enable_forecast_channel_mixing:
-            raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
+            raise ValueError(
+                "Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True"
+            )
 
         if self.prediction_channel_indices is not None:
             self.prediction_channel_indices.sort()
@@ -296,8 +305,12 @@ class TinyTimeMixerConfig(PretrainedConfig):
         if self.exogenous_channel_indices is not None:
             self.exogenous_channel_indices.sort()
 
-        if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
+        if (
+            self.exogenous_channel_indices is not None
+            and self.prediction_channel_indices is None
+        ):
             self.prediction_channel_indices = list(
-                set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
+                set(range(self.num_input_channels))
+                - set(self.exogenous_channel_indices)
             )
             self.prediction_channel_indices.sort()
