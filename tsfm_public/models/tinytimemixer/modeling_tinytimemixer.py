@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.distributions as dist
 import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.time_series_utils import (
@@ -1243,6 +1244,46 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 module.reset_parameters()
 
 
+class TinyTimeMixerNormalQuantileHeads(nn.Module):
+    """Prediction Head for Forecasting
+
+    Args:
+        config (`TinyTimeMixerConfig`, *required*): Configuration.
+    """
+
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__()
+        self.quantiles = torch.tensor(config.context_based_quantiles)
+
+    def forward(self, forecasts, scale):
+        """
+        Args:
+            forecasts: `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
+            scale   `torch.Tensor` of shape `(batch_size, 1, forecast_channels)`.
+
+        Returns
+            multi_quantile_forecasts: `torch.Tensor` of shape `(batch_size, no_quantiles, prediction_length, forecast_channels)`.
+        """
+
+        # scale b,1,no_channels
+
+        b, seq_len, no_channels = forecasts.shape
+        scale = scale.repeat(1, seq_len, 1)
+
+        scale = scale.unsqueeze(1).expand(b, len(self.quantiles), seq_len, no_channels)
+
+        quantiles_expanded = self.quantiles.reshape(1, -1, 1, 1).expand(b, -1, seq_len, no_channels)
+
+        normal_dist = dist.Normal(
+            forecasts.unsqueeze(1).expand(b, len(self.quantiles), seq_len, no_channels),
+            scale,
+        )
+
+        quantile_forecasts = normal_dist.icdf(quantiles_expanded)  # (B, num_quantiles, seq_len, input_dim)
+
+        return quantile_forecasts
+
+
 class TinyTimeMixerPatchify(nn.Module):
     """
     A class to patchify the time series sequence into different patches
@@ -1658,6 +1699,8 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
             Backbone embeddings before passing through the decoder
         decoder_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Decoder embeddings before passing through the head.
+        quantile_outputs (`torch.FloatTensor` of shape `(batch_size, num_quantiles, prediction_length, num_input_channels)`):
+            Prediction output from the forecast head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
@@ -1673,6 +1716,7 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
     prediction_outputs: torch.FloatTensor = None
     backbone_hidden_state: torch.FloatTensor = None
     decoder_hidden_state: torch.FloatTensor = None
+    quantile_outputs: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loc: torch.FloatTensor = None
     scale: torch.FloatTensor = None
@@ -1782,6 +1826,10 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             config=config,
             distribution_output=self.distribution_output,
         )
+
+        self.context_based_quantile_head = None
+        if config.context_based_quantiles is not None:
+            self.context_based_quantile_head = TinyTimeMixerNormalQuantileHeads(config)
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1928,6 +1976,8 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         if future_observed_mask is not None:
             fut_mask_bool = future_observed_mask.type(torch.bool)
 
+        quantile_y_hats = None
+
         if self.distribution_output:
             distribution = self.distribution_output.distribution(y_hat, loc=loc, scale=scale)
             if future_values is not None and return_loss is True and loss is not None:
@@ -1944,6 +1994,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                 loss_val = weighted_average(loss_val)
         else:
             y_hat = y_hat * scale + loc
+            if self.context_based_quantile_head is not None:
+                quantile_y_hats = self.context_based_quantile_head(y_hat, scale)
+
             if future_values is not None and return_loss is True and loss is not None:
                 if future_observed_mask is not None:
                     loss_val = loss(y_hat[fut_mask_bool], future_values[fut_mask_bool])
@@ -1959,6 +2012,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     y_hat,
                     model_output.last_hidden_state,
                     decoder_output,
+                    quantile_y_hats,
                     hidden_states,
                     loc,
                     scale,
@@ -1970,6 +2024,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             prediction_outputs=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
             backbone_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             decoder_hidden_state=decoder_output,  # x: [batch_size x nvars x num_patch x decoder_d_model]
+            quantile_outputs=quantile_y_hats,  # tensor [batch_size x num_quantiles x prediction_length x num_input_channels]
             hidden_states=hidden_states,
             loc=loc,
             scale=scale,

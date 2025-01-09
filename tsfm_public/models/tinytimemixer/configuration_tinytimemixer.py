@@ -214,6 +214,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         init_embed: str = "pytorch",
         quantile: float = 0.5,
         huber_delta: float = 1,
+        context_based_quantiles: Optional[list] = None,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -270,6 +271,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.init_embed = init_embed
         self.quantile = quantile
         self.huber_delta = huber_delta
+        self.context_based_quantiles = context_based_quantiles
 
         super().__init__(**kwargs)
 
