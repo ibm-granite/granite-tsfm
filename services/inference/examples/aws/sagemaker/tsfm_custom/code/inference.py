@@ -50,6 +50,8 @@ def input_fn(request_body, request_content_type):
 
 # inference
 def predict_fn(input_object, model):
+    from json import JSONDecodeError
+
     from pydantic import ValidationError
     from tsfminference import TSFM_CONFIG_FILE
     from tsfminference.inference import InferenceRuntime
@@ -67,14 +69,22 @@ def predict_fn(input_object, model):
     logger.debug(f"input_object type {type(input_object)}")
     logger.debug(f"model {model}")
 
-    input: dict = json.loads(input_object)
-    logger.debug(f"input is now of type f{type(input)}")
-    inference_type = input.pop("inference_type")
-
-    if not "forecasting" == inference_type:
-        raise NotImplementedError(f"infernce_type {inference_type} not supported.")
-
     try:
+        input: dict = json.loads(input_object)
+        logger.debug(f"input is now of type f{type(input)}")
+        inference_type = input.pop("inference_type")
+        if not "forecasting" == inference_type:
+            return (
+                json.dumps(
+                    {
+                        "error_code": "ValidationError",
+                        "error_message": f"inference_type {inference_type} is not supported.",
+                    }
+                ),
+                "application/json",
+                400,
+            )
+
         input: ForecastingInferenceInput = ForecastingInferenceInput(**input)
 
         runtime: InferenceRuntime = InferenceRuntime(config=config)
@@ -85,6 +95,9 @@ def predict_fn(input_object, model):
         return json.dumps(error_response), "application/json", 400
     except ValidationError as vex:
         error_response = {"error_code": "ValidationError", "error_message": str(vex)}
+        return json.dumps(error_response), "application/json", 400
+    except JSONDecodeError as jde:
+        error_response = {"error_code": "JSONDecodeError", "error_message": str(jde)}
         return json.dumps(error_response), "application/json", 400
     except Exception as ex:
         error_response = {"error_code": "SERVER_ERROR", "error_message": str(ex)}
