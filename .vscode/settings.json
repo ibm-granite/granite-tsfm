@@ -17,5 +17,23 @@
   ],
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "always"
-  }
+  },
+  "cSpell.words": [
+    "dtypes",
+    "fastapi",
+    "iloc",
+    "microdnf",
+    "nofile",
+    "numpy",
+    "pytest",
+    "rootdir",
+    "safetensors",
+    "setuptools",
+    "starlette",
+    "TSFM",
+    "tsfminference",
+    "Uvicorn",
+    "Werkzeug",
+    "xgboostjobs"
+  ]
 }
