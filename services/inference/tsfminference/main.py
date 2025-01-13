@@ -57,6 +57,11 @@ ir = InferenceRuntime(config=config)
 ir.add_routes(app)
 
 
+@app.get("/healthcheck")
+def healthcheck():
+    return {"message": "Server is healthy!"}
+
+
 @app.get("/")
 def root():
     return RedirectResponse(url="/docs", status_code=status.HTTP_302_FOUND)
