@@ -59,7 +59,7 @@ def fetch_model(model_data):
         checkpoint files
     """
 
-    # no user servicable parts here!
+    # no user serviceable parts here!
     # this just emulates what sagemaker would do
     # on the cloud
 

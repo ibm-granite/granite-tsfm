@@ -26,7 +26,7 @@ if custom_path not in sys.path:
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # currently we're targeting only cpu devices for inference as
-# the tsfm models are compact and performent for CPU-only inference
+# the tsfm models are compact and performant for CPU-only inference
 device = "cpu"
 
 
