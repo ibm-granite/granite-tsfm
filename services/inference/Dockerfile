@@ -35,4 +35,5 @@ RUN groupadd --system tsfminference --gid 1001 && \
 
 USER tsfminference
 
+HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
 CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfminference.main:app"]
