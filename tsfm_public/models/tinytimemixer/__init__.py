@@ -28,6 +28,7 @@ else:
         "TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TinyTimeMixerModel",
         "TinyTimeMixerForPrediction",
+        "TinyTimeMixerForMaskedPrediction",
     ]
 
     _import_structure["utils_tinytimemixer"] = [
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_tinytimemixer import (
             TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyTimeMixerForMaskedPrediction,
             TinyTimeMixerForPrediction,
             TinyTimeMixerModel,
         )
