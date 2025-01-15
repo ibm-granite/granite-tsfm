@@ -372,7 +372,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 # future data needs some values for targets, but they are unused
                 future_time_series[target_columns] = 0
                 future_time_series = self.feature_extractor.preprocess(future_time_series)
-                future_time_series.drop(columns=target_columns)
+                future_time_series = future_time_series.drop(columns=target_columns)
 
             time_series = pd.concat((time_series, future_time_series), axis=0)
         else:
@@ -424,13 +424,16 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # name the predictions of target columns
         # outputs should only have size equal to target columns
 
+        # only allow adding ground truth when not exploding
+        add_known_ground_truth = kwargs["add_known_ground_truth"] if not kwargs["explode_forecasts"] else False
+
         prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
-            prediction_columns.append(f"{c}_prediction" if kwargs["add_known_ground_truth"] else c)
+            prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
             out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
-        if kwargs["add_known_ground_truth"]:
+        if add_known_ground_truth:
             for i, c in enumerate(kwargs["target_columns"]):
                 ground_truth = input["future_values"][:, :, i].numpy()
                 missing = ~input["future_observed_mask"][:, :, i].numpy()
@@ -478,7 +481,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
             out = self.feature_extractor.inverse_scale_targets(out)
-            if kwargs["add_known_ground_truth"]:
+            if add_known_ground_truth:
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out
