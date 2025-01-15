@@ -65,12 +65,12 @@ class BaseDFDataset(torch.utils.data.Dataset):
             assert there, f"{missing} given in {y_cols} is not a valid column identifier in the data."
 
         if timestamp_column:
-            assert timestamp_column in list(
-                data_df.columns
-            ), f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
-            assert (
-                timestamp_column not in x_cols
-            ), f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            assert timestamp_column in list(data_df.columns), (
+                f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
+            )
+            assert timestamp_column not in x_cols, (
+                f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            )
 
         self.data_df = data_df
         self.datetime_col = timestamp_column
