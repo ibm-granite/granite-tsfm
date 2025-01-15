@@ -1840,7 +1840,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             )
 
         sequence_length = (
-            self.config.masked_context_length if self.config.masked_context_length is not None else self.context_length
+            self.config.masked_context_length
+            if self.config.masked_context_length is not None
+            else self.config.context_length
         )
 
         if past_values.shape[1] > sequence_length:
