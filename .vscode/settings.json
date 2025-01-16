@@ -17,5 +17,30 @@
   ],
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "always"
-  }
+  },
+  "cSpell.words": [
+    "czvf",
+    "dtypes",
+    "fastapi",
+    "httpex",
+    "iloc",
+    "jstr",
+    "microdnf",
+    "mytest",
+    "nofile",
+    "numpy",
+    "pytest",
+    "rootdir",
+    "safetensors",
+    "sess",
+    "setuptools",
+    "starlette",
+    "TSFM",
+    "tsfminference",
+    "tslength",
+    "untar",
+    "Uvicorn",
+    "Werkzeug",
+    "xgboostjobs"
+  ]
 }

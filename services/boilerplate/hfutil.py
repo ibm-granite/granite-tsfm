@@ -115,7 +115,7 @@ def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None
             return model_class
         except AttributeError as exc:
             # catch specific error import error or attribute error
-            raise AttributeError("Could not load model class for architecture '{arch}'.") from exc
+            raise AttributeError(f"Could not load model class for architecture '{arch}'.") from exc
 
 
 def load_model(

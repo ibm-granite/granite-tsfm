@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
-EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S+$")]
+EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$")]
 
 
 class BaseMetadataInput(BaseModel):
@@ -25,7 +25,7 @@ class BaseMetadataInput(BaseModel):
         " due to daylight savings change overs. There are many date formats"
         " in existence and inferring the correct one can be a challenge"
         " so please do consider adhering to ISO 8601.",
-        pattern=r"^\S+$",
+        pattern=r"^\S.*\S$",
         min_length=1,
         max_length=100,
         example="date",
@@ -43,7 +43,7 @@ class BaseMetadataInput(BaseModel):
         " See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases"
         " for a description of the allowed values. If not provided, we will attempt to infer it from the data.",
         default=None,
-        pattern=r"^\d+(B|D|W|M|Q|Y|h|min|s|ms|us|ns)$|^\s*$",
+        pattern=r"^\d+(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
         min_length=0,
         max_length=100,
         example="1h",
@@ -132,7 +132,7 @@ class BaseInferenceInput(BaseModel):
 
     model_id: str = Field(
         description="A model identifier.",
-        pattern=r"^\S+$",
+        pattern=r"^\S.*\S$",
         min_length=1,
         max_length=256,
         example="ibm/tinytimemixer-monash-fl_96",
@@ -141,7 +141,7 @@ class BaseInferenceInput(BaseModel):
 
 class ForecastingInferenceInput(BaseInferenceInput):
     schema: ForecastingMetadataInput = Field(
-        description="An object of ForecastingMetadataInput that contains the schema" " metadata of the data input.",
+        description="An object of ForecastingMetadataInput that contains the schema metadata of the data input.",
     )
 
     parameters: ForecastingParameters = Field(
