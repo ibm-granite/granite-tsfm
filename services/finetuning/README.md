@@ -1,10 +1,11 @@
-# TSFM Inference Services
+# TSFM Finetuning Image
 
-The TSFM Finetuning Services component provides a runtime for finetuning existing models.
+The TSFM Finetuning image provides a runtime for finetuning existing models.
 At present we do not support direct service endpoints, the assumption is that
 the main `ftmain.py` will serve as the entry point for orchestrated finetuning
-workflows initiated from 3rd-party frameworks. The current implementation includes
-an example of using the kubeflow training operator and its API for performing
+workflows initiated from 3rd-party frameworks.
+The current implementation includes an example of using the [kubeflow 
+training operator (KFTO)](https://github.com/kubeflow/training-operator) and its API for performing
 a finetuneing job on a kubernetes-based system.
 
 ## Prerequisites:
