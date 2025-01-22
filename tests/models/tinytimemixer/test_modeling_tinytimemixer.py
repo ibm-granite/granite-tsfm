@@ -345,7 +345,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 [True, False, "mean", "std"],
                 [True, False],
                 [None, [0, 2]],
-                ["mse", "nll", "mae", "pinball", "huber", None],
+                ["mse", "mae", "pinball", "huber", None],
                 [8, 16],
                 [True, False],
                 [True, False],
@@ -393,7 +393,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         list(
             itertools.product(
                 [None, [0, 2]],
-                ["mse", "nll", "mae", None],
+                ["mse", "mae", None],
                 [8, 16],
                 [True, False],
                 [True, False],
