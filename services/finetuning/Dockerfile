@@ -1,113 +1,130 @@
-FROM registry.access.redhat.com/ubi9/ubi:latest AS base
+# Copyright The TSFM Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+# Portions of this Dockerfile are taken from
+# https://gitlab.com/nvidia/container-images
+# Copyright (c) 2019,2020,2021 NVIDIA CORPORATION. All rights reserved.
+
+FROM registry.access.redhat.com/ubi9/ubi:latest as base
+
+ENV NVARCH x86_64
+ENV NVIDIA_REQUIRE_CUDA "cuda>=12.4 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526 brand=tesla,driver>=535,driver<536 brand=unknown,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=geforce,driver>=535,driver<536 brand=geforcertx,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=titan,driver>=535,driver<536 brand=titanrtx,driver>=535,driver<536"
+ENV NV_CUDA_CUDART_VERSION 12.4.127-1
+COPY cuda.repo-x86_64 /etc/yum.repos.d/cuda.repo
+RUN NVIDIA_GPGKEY_SUM=d0664fbbdb8c32356d45de36c5984617217b2d0bef41b93ccecd326ba3b80c87 && \
+    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel9/${NVARCH}/D42D0685.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA && \
+    echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
+ENV CUDA_VERSION 12.4.1
+
+# For libraries in the cuda-compat-* package: https://docs.nvidia.com/cuda/eula/index.html#attachment-a
+RUN yum upgrade -y && yum install -y \
+    cuda-cudart-12-4-${NV_CUDA_CUDART_VERSION} \
+    cuda-compat-12-4 \
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
+
+# nvidia-docker 1.0
+RUN echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
+    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+ENV PATH /usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+
+FROM base AS runtime-base
+
+ENV NV_CUDA_LIB_VERSION 12.4.1-1
+ENV NV_NVTX_VERSION 12.4.127-1
+ENV NV_LIBNPP_VERSION 12.2.5.30-1
+ENV NV_LIBNPP_PACKAGE libnpp-12-4-${NV_LIBNPP_VERSION}
+ENV NV_LIBCUBLAS_VERSION 12.4.5.8-1
+ENV NV_LIBNCCL_PACKAGE_NAME libnccl
+ENV NV_LIBNCCL_PACKAGE_VERSION 2.21.5-1
+ENV NV_LIBNCCL_VERSION 2.21.5
+ENV NCCL_VERSION 2.21.5
+ENV NV_LIBNCCL_PACKAGE ${NV_LIBNCCL_PACKAGE_NAME}-${NV_LIBNCCL_PACKAGE_VERSION}+cuda12.4
+
+RUN yum install -y \
+    cuda-libraries-12-4-${NV_CUDA_LIB_VERSION} \
+    cuda-nvtx-12-4-${NV_NVTX_VERSION} \
+    ${NV_LIBNPP_PACKAGE} \
+    libcublas-12-4-${NV_LIBCUBLAS_VERSION} \
+    ${NV_LIBNCCL_PACKAGE} \
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
+
+ENV NV_CUDNN_VERSION 9.1.0.70-1
+ENV NV_CUDNN_PACKAGE libcudnn9-cuda-12-${NV_CUDNN_VERSION}
+LABEL com.nvidia.cudnn.version="${NV_CUDNN_VERSION}"
+
+RUN yum install -y \
+    ${NV_CUDNN_PACKAGE} \
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
+    
+FROM runtime-base as python-install
 ARG PYTHON_VERSION=3.12
-RUN dnf remove -y --disableplugin=subscription-manager \
-    subscription-manager \
-    &&\
-    dnf install -y \
-    python${PYTHON_VERSION} \
-    procps \
-    g++ \
-    python${PYTHON_VERSION}-devel \
-    python$(PYTHON_VERSION)-wheel \
-    python${PYTHON_VERSION}-pip \
-    && python${PYTHON_VERSION} -m ensurepip --upgrade \
-    && python${PYTHON_VERSION} -m pip install --upgrade pip wheel \
-    && python${PYTHON_VERSION} -m pip install --upgrade setuptools \
-    && dnf update -y \
-    && dnf clean all
 
-ENV LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+RUN dnf install -y python${PYTHON_VERSION} \
+python${PYTHON_VERSION}-pip \
+python${PYTHON_VERSION}-wheel \
+ && dnf clean all \
+ && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
+ && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip
+
+FROM python-install as tsfm-install
+ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:\
+${LD_LIBRARY_PATH}
 
 
-RUN useradd -u 1001 tsfmfinetuning -m -g 0 --system && \
-    chmod g+rx /home/tsfmfinetuning
-
-FROM base AS release-base
-
-# Removes the python3.9 code to eliminate possible CVEs.  Also removes dnf
-RUN rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
-
-## CUDA Base ###################################################################
-FROM base AS cuda-base
-
-# Ref: https://docs.nvidia.com/cuda/archive/12.1.0/cuda-toolkit-release-notes/
-ENV CUDA_VERSION=12.1.0 \
-    NV_CUDA_LIB_VERSION=12.1.0-1 \
-    NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    NV_CUDA_CUDART_VERSION=12.1.55-1 \
-    NV_CUDA_COMPAT_VERSION=530.30.02-1
-
-RUN dnf config-manager \
-    --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo \
-    && dnf install -y \
-    cuda-cudart-12-1-${NV_CUDA_CUDART_VERSION} \
-    cuda-compat-12-1-${NV_CUDA_COMPAT_VERSION} \
-    && echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf \
-    && echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf \
-    && dnf clean all
-
-ENV CUDA_HOME="/usr/local/cuda" \
-    PATH="/usr/local/nvidia/bin:${CUDA_HOME}/bin:${PATH}" \
-    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:$CUDA_HOME/lib64:$CUDA_HOME/extras/CUPTI/lib64:${LD_LIBRARY_PATH}"
 
 
-## CUDA Development ############################################################
-FROM cuda-base AS cuda-devel
+# FROM cuda-devel AS python-installations
 
-# Ref: https://developer.nvidia.com/nccl/nccl-legacy-downloads
-ENV NV_CUDA_CUDART_DEV_VERSION=12.1.55-1 \
-    NV_NVML_DEV_VERSION=12.1.55-1 \
-    NV_LIBCUBLAS_DEV_VERSION=12.1.0.26-1 \
-    NV_LIBNPP_DEV_VERSION=12.0.2.50-1 \
-    NV_LIBNCCL_DEV_PACKAGE_VERSION=2.18.3-1+cuda12.1
-
-RUN dnf config-manager \
-    --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo \
-    && dnf install -y \
-    cuda-command-line-tools-12-1-${NV_CUDA_LIB_VERSION} \
-    cuda-libraries-devel-12-1-${NV_CUDA_LIB_VERSION} \
-    cuda-minimal-build-12-1-${NV_CUDA_LIB_VERSION} \
-    cuda-cudart-devel-12-1-${NV_CUDA_CUDART_DEV_VERSION} \
-    cuda-nvml-devel-12-1-${NV_NVML_DEV_VERSION} \
-    libcublas-devel-12-1-${NV_LIBCUBLAS_DEV_VERSION} \
-    libnpp-devel-12-1-${NV_LIBNPP_DEV_VERSION} \
-    libnccl-devel-${NV_LIBNCCL_DEV_PACKAGE_VERSION} \
-    && dnf clean all
-
-ENV LIBRARY_PATH="$CUDA_HOME/lib64/stubs"
-
-FROM cuda-devel AS python-installations
-
-RUN dnf install -y git && \
-    # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
-    # Twistlock detects it as H severity: Private keys stored in image
-    rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem && \
-    dnf clean all
-
-USER tsfmfinetuning
-# ##############TSFM INSTALL
-ENV POETRY_VIRTUALENVS_IN_PROJECT=1
-ENV PATH=${PATH}:/home/tsfmfinetuning/.local/bin
-ENV VIRTUAL_ENV=/home/tsfmfinetuning/.venv
-ENV PATH=${VIRTUAL_ENV}/bin:$PATH
-ENV HF_HOME=/tmp
-
-COPY tsfmfinetuning/* /home/tsfmfinetuning/tsfmfinetuning/
-COPY pyproject.toml /home/tsfmfinetuning/
-COPY poetry.lock /home/tsfmfinetuning/
-WORKDIR /home/tsfmfinetuning
-RUN pip${PYTHON_VERSION} install poetry && poetry install
-
-
-#RUN groupadd --system tsfmfinetuning --gid 1001 && \
-#    adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
-#    --create-home --home-dir /finetuning --shell /sbin/nologin \
-#    --comment "tsfmfinetuning User" tsfmfinetuning
+# RUN dnf install -y git && \
+#     # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
+#     # Twistlock detects it as H severity: Private keys stored in image
+#     rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem && \
+#     dnf clean all
 
 # USER tsfmfinetuning
+# # ##############TSFM INSTALL
+# ENV POETRY_VIRTUALENVS_IN_PROJECT=1
+# ENV PATH=${PATH}:/home/tsfmfinetuning/.local/bin
+# ENV VIRTUAL_ENV=/home/tsfmfinetuning/.venv
+# ENV PATH=${VIRTUAL_ENV}/bin:$PATH
+# ENV HF_HOME=/tmp
+# ENV PYTHONPATH="/home/tsfmfinetuning/.local/lib/python${PYTHON_VERSION}/site-packages\
+# :/home/tsfmfinetuning/.venv/lib/python${PYTHON_VERSION}/site-packages"
 
-# currently finetuning is not a service hosting platform
-# CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]
+# COPY tsfmfinetuning/* /home/tsfmfinetuning/tsfmfinetuning/
+# COPY pyproject.toml /home/tsfmfinetuning/
+# COPY poetry.lock /home/tsfmfinetuning/
+# WORKDIR /home/tsfmfinetuning
+# RUN pip${PYTHON_VERSION} install --no-cache-dir poetry && poetry install --no-cache
+# RUN rm -rf /home/tsfmfinetuning/.cache
+
+
+# #RUN groupadd --system tsfmfinetuning --gid 1001 && \
+# #    adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
+# #    --create-home --home-dir /finetuning --shell /sbin/nologin \
+# #    --comment "tsfmfinetuning User" tsfmfinetuning
+
+# # USER tsfmfinetuning
+
+# # currently finetuning is not a service hosting platform
+# # CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]
