@@ -31,7 +31,10 @@ ENV CUDA_VERSION 12.4.1
 RUN yum upgrade -y && yum install -y \
     cuda-cudart-12-4-${NV_CUDA_CUDART_VERSION} \
     cuda-compat-12-4 \
+    && dnf remove -y --disableplugin=subscription-manager \
+    subscription-manager \
     && yum clean all \
+    && dnf clean all \
     && rm -rf /var/cache/yum/*
 
 # nvidia-docker 1.0
@@ -79,52 +82,46 @@ RUN yum install -y \
 FROM runtime-base as python-install
 ARG PYTHON_VERSION=3.12
 
-RUN dnf install -y python${PYTHON_VERSION} \
+RUN yum install -y python${PYTHON_VERSION} \
 python${PYTHON_VERSION}-pip \
 python${PYTHON_VERSION}-wheel \
- && dnf clean all \
+ && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
+ && yum clean all \
  && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
- && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip
+ && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
+ && groupadd --system tsfmfinetuning --gid 1001 \
+ && adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
+ --create-home --home-dir /tsfmfinetuning --shell /sbin/nologin \
+ --comment "tsfmfinetuning User" tsfmfinetuning
+
+# ^^
+# perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
+# Twistlock detects it as H severity: Private keys stored in image
 
 FROM python-install as tsfm-install
-ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:\
-${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=\
+/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib\
+:/finetuning/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib\
+:${LD_LIBRARY_PATH}
 
+RUN yum install -y git shadow-utils \
+&& yum clean all
 
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 
+RUN mkdir /finetuning
+COPY tsfmfinetuning/* /finetuning/tsfmfinetuning/
+COPY pyproject.toml /finetuning/
+COPY poetry.lock /finetuning/
+WORKDIR /finetuning
+RUN pip install --no-cache-dir poetry && poetry install --no-cache \
+&& rm -rf /root/.cache || true \
+&& rm -rf /tsfmfinetuning/.cache || true \
+&& yum remove -y git shadow-utils && yum clean all \
+&& rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
 
-# FROM cuda-devel AS python-installations
+ENV VIRTUAL_ENV=/finetuning/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV HF_HOME=/tmp
 
-# RUN dnf install -y git && \
-#     # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
-#     # Twistlock detects it as H severity: Private keys stored in image
-#     rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem && \
-#     dnf clean all
-
-# USER tsfmfinetuning
-# # ##############TSFM INSTALL
-# ENV POETRY_VIRTUALENVS_IN_PROJECT=1
-# ENV PATH=${PATH}:/home/tsfmfinetuning/.local/bin
-# ENV VIRTUAL_ENV=/home/tsfmfinetuning/.venv
-# ENV PATH=${VIRTUAL_ENV}/bin:$PATH
-# ENV HF_HOME=/tmp
-# ENV PYTHONPATH="/home/tsfmfinetuning/.local/lib/python${PYTHON_VERSION}/site-packages\
-# :/home/tsfmfinetuning/.venv/lib/python${PYTHON_VERSION}/site-packages"
-
-# COPY tsfmfinetuning/* /home/tsfmfinetuning/tsfmfinetuning/
-# COPY pyproject.toml /home/tsfmfinetuning/
-# COPY poetry.lock /home/tsfmfinetuning/
-# WORKDIR /home/tsfmfinetuning
-# RUN pip${PYTHON_VERSION} install --no-cache-dir poetry && poetry install --no-cache
-# RUN rm -rf /home/tsfmfinetuning/.cache
-
-
-# #RUN groupadd --system tsfmfinetuning --gid 1001 && \
-# #    adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
-# #    --create-home --home-dir /finetuning --shell /sbin/nologin \
-# #    --comment "tsfmfinetuning User" tsfmfinetuning
-
-# # USER tsfmfinetuning
-
-# # currently finetuning is not a service hosting platform
-# # CMD ["python","-m","gunicorn","-w","4","-k","uvicorn.workers.UvicornWorker","--bind","0.0.0.0:8000","tsfmfinetuning.main:app"]
+USER tsfmfinetuning
