@@ -1,22 +1,10 @@
-# Copyright The TSFM Authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Copyright contributors to the TSFM project
 
 # Portions of this Dockerfile are taken from
 # https://gitlab.com/nvidia/container-images
 # Copyright (c) 2019,2020,2021 NVIDIA CORPORATION. All rights reserved.
 
-FROM registry.access.redhat.com/ubi9/ubi:latest as base
+FROM registry.access.redhat.com/ubi9/ubi:latest AS base
 
 ENV NVARCH x86_64
 ENV NVIDIA_REQUIRE_CUDA "cuda>=12.4 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526 brand=tesla,driver>=535,driver<536 brand=unknown,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=geforce,driver>=535,driver<536 brand=geforcertx,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=titan,driver>=535,driver<536 brand=titanrtx,driver>=535,driver<536"
@@ -78,34 +66,31 @@ RUN yum install -y \
     ${NV_CUDNN_PACKAGE} \
     && yum clean all \
     && rm -rf /var/cache/yum/*
-    
-FROM runtime-base as python-install
+
+FROM runtime-base AS python-install
 ARG PYTHON_VERSION=3.12
 
 RUN yum install -y python${PYTHON_VERSION} \
-python${PYTHON_VERSION}-pip \
-python${PYTHON_VERSION}-wheel \
- && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
- && yum clean all \
- && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
- && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
- && groupadd --system tsfmfinetuning --gid 1001 \
- && adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
- --create-home --home-dir /tsfmfinetuning --shell /sbin/nologin \
- --comment "tsfmfinetuning User" tsfmfinetuning
+    python${PYTHON_VERSION}-pip \
+    python${PYTHON_VERSION}-wheel \
+    && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
+    && yum clean all \
+    && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
+    && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
+    && groupadd --system tsfmfinetuning --gid 1001 \
+    && adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
+    --create-home --home-dir /tsfmfinetuning --shell /sbin/nologin \
+    --comment "tsfmfinetuning User" tsfmfinetuning
 
 # ^^
 # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
 # Twistlock detects it as H severity: Private keys stored in image
 
-FROM python-install as tsfm-install
-ENV LD_LIBRARY_PATH=\
-/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib\
-:/finetuning/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib\
-:${LD_LIBRARY_PATH}
+FROM python-install AS tsfm-install
+ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/finetuning/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${LD_LIBRARY_PATH}
 
 RUN yum install -y git shadow-utils \
-&& yum clean all
+    && yum clean all
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 
@@ -115,10 +100,10 @@ COPY pyproject.toml /finetuning/
 COPY poetry.lock /finetuning/
 WORKDIR /finetuning
 RUN pip install --no-cache-dir poetry && poetry install --no-cache \
-&& rm -rf /root/.cache || true \
-&& rm -rf /tsfmfinetuning/.cache || true \
-&& yum remove -y git shadow-utils && yum clean all \
-&& rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
+    && rm -rf /root/.cache || true \
+    && rm -rf /tsfmfinetuning/.cache || true \
+    && yum remove -y git shadow-utils && yum clean all \
+    && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
 
 ENV VIRTUAL_ENV=/finetuning/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
