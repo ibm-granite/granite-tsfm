@@ -21,7 +21,7 @@ COPY tsfminference/* /inference/tsfminference/
 COPY pyproject.toml /inference/
 COPY poetry.lock /inference/
 WORKDIR /inference
-RUN pip${PYTHON_VERSION} install poetry && poetry install
+RUN pip${PYTHON_VERSION} install --no-cache-dir poetry && poetry install --no-cache
 
 
 ENV VIRTUAL_ENV=/inference/.venv
