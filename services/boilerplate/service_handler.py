@@ -18,6 +18,7 @@ from .inference_payloads import (
 )
 from .tsfm_config import TSFMConfig
 
+from .ftpayloads import TuneOutput
 
 LOGGER = logging.getLogger(__file__)
 
@@ -150,7 +151,7 @@ class ServiceHandler(ABC):
         """
 
         if not self.prepared:
-            return None, RuntimeError("Service wrapper has not yet been prepared; run `model.prepare()` first.")
+            return None, RuntimeError("Service wrapper has not yet been prepared; run `handler.prepare()` first.")
 
         try:
             result = self._run(data, schema=schema, parameters=parameters, **kwargs)
@@ -181,14 +182,38 @@ class ServiceHandler(ABC):
 
     def train(
         self,
-    ) -> "ServiceHandler":
+        data: pd.DataFrame,
+        schema: BaseMetadataInput,
+        parameters: BaseParameters,
+        tuned_model_name: str, 
+        tmp_dir: Path
+    ) -> "TuneOutput":
         """Perform a fine-tuning request"""
-        ...
+        if not self.prepared:
+            return None, RuntimeError("Service wrapper has not yet been prepared; run `handler.prepare()` first.")
+
+        try:
+            result = self._train(data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir)
+            
+            # counts = self._calculate_data_point_counts(
+            #     data, output_data=result, schema=schema, parameters=parameters, **kwargs
+            # ) 
+            # Does TuneOuput need some info about the request -- for billing purposes
+            return TuneOutput(training_ref=result), None
+
+        except Exception as e:
+            return None, e
+
 
     @abstractmethod
     def _train(
         self,
-    ) -> "ServiceHandler":
+        data: pd.DataFrame,
+        schema: BaseMetadataInput,
+        parameters: BaseParameters,
+        tuned_model_name: str, 
+        tmp_dir: Path
+    ) -> str:
         """Abstract method for train to be implemented by model owner in derived class"""
         ...
 
@@ -310,14 +335,24 @@ class ForecastingServiceHandler(ServiceHandler):
 
     def train(
         self,
-    ) -> "ForecastingServiceHandler":
+        data: pd.DataFrame,
+        schema: ForecastingMetadataInput,
+        parameters: ForecastingParameters,
+        tuned_model_name: str, 
+        tmp_dir: Path
+    ) -> "TuneOutput":
         """Perform a fine-tuning request"""
-        ...
+        super().train(data, schema=schema, parameters=parameters)
 
     @abstractmethod
     def _train(
         self,
-    ) -> "ForecastingServiceHandler":
+        data: pd.DataFrame,
+        schema: ForecastingMetadataInput,
+        parameters: ForecastingParameters,
+        tuned_model_name: str, 
+        tmp_dir: Path
+    ) -> str:
         """Abstract method for train to be implemented by model owner in derived class"""
         ...
 
