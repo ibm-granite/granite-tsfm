@@ -70,43 +70,43 @@ RUN yum install -y \
 FROM runtime-base AS python-install
 ARG PYTHON_VERSION=3.12
 
+ARG CODEDIR
 RUN yum install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
-    && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && yum clean all \
     && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
     && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
-    && groupadd --system tsfmfinetuning --gid 1001 \
-    && adduser --system --uid 1001 --gid 0 --groups tsfmfinetuning \
-    --create-home --home-dir /tsfmfinetuning --shell /sbin/nologin \
-    --comment "tsfmfinetuning User" tsfmfinetuning
+    && groupadd --system ${CODEDIR} --gid 1001 \
+    && adduser --system --uid 1001 --gid 0 --groups ${CODEDIR} \
+    --create-home --home-dir /${CODEDIR} --shell /sbin/nologin \
+    --comment "${CODEDIR} User" ${CODEDIR}
 
 # ^^
 # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
 # Twistlock detects it as H severity: Private keys stored in image
 
 FROM python-install AS tsfm-install
-ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/finetuning/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${LD_LIBRARY_PATH}
 
 RUN yum install -y git shadow-utils \
     && yum clean all
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 
-RUN mkdir /finetuning
-COPY tsfmfinetuning/* /finetuning/tsfmfinetuning/
-COPY pyproject.toml /finetuning/
-COPY poetry.lock /finetuning/
-WORKDIR /finetuning
+RUN mkdir /tsfm
+COPY ${CODEDIR}/* /tsfm/${CODEDIR}/
+COPY pyproject.toml /tsfm/
+COPY poetry.lock /tsfm/
+WORKDIR /tsfm
 RUN pip install --no-cache-dir poetry && poetry install --no-cache \
     && rm -rf /root/.cache || true \
-    && rm -rf /tsfmfinetuning/.cache || true \
+    && rm -rf /${CODEDIR}/.cache || true \
     && yum remove -y git shadow-utils && yum clean all \
     && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
 
-ENV VIRTUAL_ENV=/finetuning/.venv
+ENV VIRTUAL_ENV=/tsfm/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV HF_HOME=/tmp
 
-USER tsfmfinetuning
+USER ${CODEDIR}
