@@ -37,6 +37,7 @@ class TSFMConfig(PushToHubMixin):
             no maximum. Defaults to None.
         maximum_prediction_length (int, optional): Maximum prediction length produced by the model. Use None to indicate
             no maximum. Defaults to None.
+        is_finetuned (bool, optional): Indicates that the model has been finetuned. Defaults to False.
 
     Notes:
         If module_path, model_type, model_config_name, model_class_name are absent, and the HFServiceHandler is used, the
