@@ -103,6 +103,7 @@ RUN pip install --no-cache-dir poetry && poetry install --no-cache \
     && rm -rf /root/.cache || true \
     && rm -rf /${CODEDIR}/.cache || true \
     && yum remove -y git shadow-utils && yum clean all \
+    && chown -R ${CODEDIR} /tsfm \
     && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
 
 ENV VIRTUAL_ENV=/tsfm/.venv
