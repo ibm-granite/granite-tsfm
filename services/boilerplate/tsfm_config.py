@@ -20,9 +20,12 @@ class TSFMConfig(PushToHubMixin):
     """A configuration class used by the time series serving framework.
 
     Args:
-        service_handler_module_path (str, optional): module path where the service handler class is located.
-        service_handler_class_name (str, optional): class name for the service handler. If ommitted, the default
-            HFServiceHandler will be used.
+        inference_handler_module_path (str, optional): module path where the inference handler class is located.
+        inference_handler_class_name (str, optional): class name for the inference handler. If ommitted, the default
+            ForecastingHuggingFaceInferenceHandler will be used.
+        tuning_handler_module_path (str, optional): module path where the tuning handler class is located.
+        tuning_handler_class_name (str, optional): class name for the tuning handler. If ommitted, the default
+            ForecastingHuggingFaceTuningHandler will be used.
         module_path (str, optional): module path where the model class is located.
         model_type (str, optional): An identifier for the model type, serialized into the model config JSON file, and used
             to recreate the correct object in AutoConfig. For this config, it should match the model_type of the model that
@@ -46,8 +49,10 @@ class TSFMConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.service_handler_module_path = kwargs.pop("service_handler_module_path", None)
-        self.service_handler_class_name = kwargs.pop("service_handler_class_name", None)
+        self.inference_handler_module_path = kwargs.pop("inference_handler_module_path", None)
+        self.inference_handler_class_name = kwargs.pop("inference_handler_class_name", None)
+        self.tuning_handler_module_path = kwargs.pop("tuning_handler_module_path", None)
+        self.tuning_handler_class_name = kwargs.pop("tuning_handler_class_name", None)
         self.module_path = kwargs.pop("module_path", None)
         self.model_type = kwargs.pop("model_type", None)
         self.model_config_name = kwargs.pop("model_config_name", None)
