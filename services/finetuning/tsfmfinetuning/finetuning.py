@@ -3,33 +3,27 @@
 """Tsfmfinetuning Runtime"""
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
 import pandas as pd
-import torch
 from fastapi import APIRouter, HTTPException
 from starlette import status
-from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
+from transformers import set_seed
 
 from tsfm_public import TimeSeriesPreprocessor
-from tsfm_public.toolkit.dataset import ForecastDFDataset
-from tsfm_public.toolkit.util import select_by_fixed_fraction
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
 from .dirutil import resolve_model_path
-from .filelogging_tracker import FileLoggingCallback
-from .service_handler import ForecastingServiceHandler
 from .ftpayloads import (
     AsyncCallReturn,
     BaseTuneInput,
     TinyTimeMixerForecastingTuneInput,
-    TuneTypeEnum,
 )
 from .hfutil import load_config, load_model, register_config
 from .ioutils import to_pandas
+from .tuning_handler import ForecastingTuningHandler
 
 
 LOGGER = logging.getLogger(__file__)
@@ -91,6 +85,9 @@ class FinetuningRuntime:
         answer, ex = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
 
         if ex is not None:
+            import traceback
+
+            traceback.print_exception(ex)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=repr(ex))
 
         return answer
@@ -101,8 +98,8 @@ class FinetuningRuntime:
         LOGGER.info("in _forecasting_tuning_workflow")
 
         # set seed, must be done before model load
-        if input.parameters.random_seed:
-            set_seed(input.parameters.random_seed)
+        if input_payload.parameters.random_seed:
+            set_seed(input_payload.parameters.random_seed)
 
         model_path = resolve_model_path(TSFM_MODEL_DIR, input_payload.model_id)
 
@@ -116,7 +113,7 @@ class FinetuningRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        handler, e = ForecastingServiceHandler.load(model_id=input_payload.model_id, model_path=model_path)
+        handler, e = ForecastingTuningHandler.load(model_id=input_payload.model_id, model_path=model_path)
         if e is not None:
             return None, e
 
@@ -131,7 +128,9 @@ class FinetuningRuntime:
         if e is not None:
             return None, e
 
-        output, e = handler.train(data=data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir)
+        output, e = handler.train(
+            data=data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
+        )
         if e is not None:
             return None, e
 
