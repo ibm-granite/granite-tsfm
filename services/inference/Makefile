@@ -30,7 +30,7 @@ stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
 image: boilerplate
-	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
+	$(CONTAINER_BUILDER) build -t tsfminference --build-arg CODEDIR="tsfminference" -f Dockerfile .
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
