@@ -3,36 +3,25 @@
 import copy
 import importlib
 import logging
-import os
 import pathlib
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import pandas as pd
-import torch
 import transformers
 from transformers import (
     AutoConfig,
     AutoModel,
-    EarlyStoppingCallback,
     PretrainedConfig,
     PreTrainedModel,
-    Trainer,
-    TrainingArguments,
 )
 
-from tsfm_public import ForecastDFDataset, TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
-from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
-from tsfm_public.toolkit.util import select_by_fixed_fraction, select_by_index
+from tsfm_public import TimeSeriesPreprocessor
 
-from .filelogging_tracker import FileLoggingCallback
-from .ftpayloads import TuneTypeEnum
 from .inference_payloads import BaseParameters, ForecastingMetadataInput, ForecastingParameters
 from .service_handler import (
-    ForecastingInferenceHandler,
     ForecastingServiceHandler,
-    ForecastingTuningHandler,
     ServiceHandlerBase,
 )
 from .tsfm_config import TSFMConfig
@@ -288,262 +277,6 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
         self.preprocessor = preprocessor
 
         return self
-
-
-class ForecastingHuggingFaceInferenceHandler(ForecastingHuggingFaceHandler, ForecastingInferenceHandler):
-    def _run(
-        self,
-        data: pd.DataFrame,
-        future_data: Optional[pd.DataFrame] = None,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """_summary_
-
-        Args:
-            data (pd.DataFrame): Input historical time series data.
-            future_data (Optional[pd.DataFrame], optional): Input future time series data, useful for
-                passing future exogenous if known. Defaults to None.
-            schema (Optional[ForecastingMetadataInput], optional): Schema information from the original inference
-                request. Includes information about columns and their role. Defaults to None.
-            parameters (Optional[ForecastingParameters], optional): Parameters from the original inference
-                request. Defaults to None.
-
-        Returns:
-            pd.DataFrame: The forecasts produced by the model.
-        """
-
-        # warn if future data is not provided, but is needed by the model
-        # Remember preprocessor.exogenous_channel_indices are the exogenous for which future data is available
-        if self.preprocessor.exogenous_channel_indices and future_data is None:
-            raise ValueError(
-                "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
-            )
-
-        if not self.preprocessor.exogenous_channel_indices and future_data is not None:
-            raise ValueError("Future data was provided, but the model does not support or require future exogenous.")
-
-        # future_data checks
-        if future_data is not None:
-            if schema.id_columns:
-                data_lengths = future_data.groupby(schema.id_columns)[schema.id_columns].apply(len)
-                fd_min_len_index = data_lengths.argmin()
-                fd_min_data_length = data_lengths.iloc[fd_min_len_index]
-                fd_max_data_length = data_lengths.max()
-            else:
-                fd_min_data_length = fd_max_data_length = len(future_data)
-            LOGGER.info(
-                f"Future Data length recieved {len(future_data)}, minimum series length: {fd_min_data_length}, maximum series length: {fd_max_data_length}"
-            )
-
-            # if data is too short, raise error
-            prediction_length = getattr(self.config, "prediction_filter_length", None)
-            has_prediction_filter = prediction_length is not None
-
-            model_prediction_length = self.config.prediction_length
-
-            prediction_length = prediction_length if prediction_length is not None else model_prediction_length
-            if fd_min_data_length < prediction_length:
-                err_str = (
-                    "Future data should have time series of length that is at least the specified prediction length. "
-                )
-                if schema.id_columns:
-                    err_str += f"Received {fd_min_data_length} time points for id {data_lengths.index[fd_min_len_index]}, but expected {prediction_length} time points."
-                else:
-                    err_str += (
-                        f"Received {fd_min_data_length} time points, but expected {prediction_length} time points."
-                    )
-                raise ValueError(err_str)
-
-            # if data exceeds prediction filter length, truncate
-            if fd_max_data_length > model_prediction_length:
-                LOGGER.info(f"Truncating future series lengths to {model_prediction_length}")
-                future_data = select_by_index(
-                    future_data, id_columns=schema.id_columns, end_index=model_prediction_length
-                )
-
-            # if provided data is greater than prediction_filter_length, but less than model_prediction_length we extend
-            if has_prediction_filter and fd_min_data_length < model_prediction_length:
-                LOGGER.info(f"Extending time series to match model prediction length: {model_prediction_length}")
-                future_data = extend_time_series(
-                    time_series=future_data,
-                    freq=self.preprocessor.freq,
-                    timestamp_column=schema.timestamp_column,
-                    grouping_columns=schema.id_columns,
-                    total_periods=model_prediction_length,
-                )
-
-        batch_size = (
-            parameters.inference_batch_size
-            if parameters.inference_batch_size
-            else self.handler_config.inference_batch_size
-        )
-        LOGGER.info(f"Using inference batch size: {batch_size}")
-        device = "cpu" if not torch.cuda.is_available() else "cuda"
-        forecast_pipeline = TimeSeriesForecastingPipeline(
-            model=self.model,
-            explode_forecasts=True,
-            feature_extractor=self.preprocessor,
-            add_known_ground_truth=False,
-            freq=self.preprocessor.freq,
-            device=device,
-            batch_size=batch_size,
-        )
-        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
-
-        return forecasts
-
-    def _calculate_data_point_counts(
-        self,
-        data: pd.DataFrame,
-        future_data: Optional[pd.DataFrame] = None,
-        output_data: Optional[pd.DataFrame] = None,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-    ) -> Dict[str, int]:
-        """Implementation for counting datapoints in input and output
-
-        Assumes data has been truncated
-        Future data may not be truncated
-        """
-
-        input_ts_columns = sum(
-            [
-                len(c)
-                for c in [
-                    schema.target_columns,
-                    schema.conditional_columns,
-                    schema.control_columns,
-                    schema.observable_columns,
-                ]
-            ]
-        )
-        input_ts_columns = input_ts_columns if input_ts_columns != 0 else data.shape[1] - len(schema.id_columns) - 1
-        input_static_columns = len(schema.static_categorical_columns)
-        num_target_columns = (
-            len(schema.target_columns) if schema.target_columns != [] else data.shape[1] - len(schema.id_columns) - 1
-        )
-        unique_ts = len(data.drop_duplicates(subset=schema.id_columns)) if schema.id_columns else 1
-        has_future_data = future_data is not None
-
-        # we don't count the static columns in the future data
-        # we only count future data which falls within forecast horizon "causal assumption"
-        # note that output_data.shape[0] = unique_ts * prediction_length
-        future_data_points = (input_ts_columns - num_target_columns) * output_data.shape[0] if has_future_data else 0
-
-        counts = {
-            "input_data_points": input_ts_columns * data.shape[0]
-            + input_static_columns * unique_ts
-            + future_data_points,
-            "output_data_points": output_data.shape[0] * num_target_columns,
-        }
-        LOGGER.info(f"Data point counts: {counts}")
-        return counts
-
-
-class ForecastingHuggingFaceTuningHandler(ForecastingHuggingFaceHandler, ForecastingTuningHandler):
-    def _train(
-        self,
-        data: pd.DataFrame,
-        schema: ForecastingMetadataInput,
-        parameters: ForecastingParameters,
-        tuned_model_name: str,
-        tmp_dir: Path,
-    ) -> str:
-        # to do: data selection here
-        train_data = data
-        validation_data = None
-
-        # optional freezing
-        if parameters.tune_type == TuneTypeEnum.linear_probe.value:
-            # Freeze the backbone of the model
-            for param in self.model.backbone.parameters():
-                param.requires_grad = False
-
-        # create datasets
-        dataset_spec = {
-            "id_columns": self.preprocessor.id_columns,
-            "timestamp_column": self.preprocessor.timestamp_column,
-            "target_columns": self.preprocessor.target_columns,
-            "observable_columns": self.preprocessor.observable_columns,
-            "control_columns": self.preprocessor.control_columns,
-            "conditional_columns": self.preprocessor.conditional_columns,
-            "static_categorical_columns": self.preprocessor.static_categorical_columns,
-            "prediction_length": self.model.config.prediction_length,
-            "context_length": self.model.config.context_length,
-        }
-        # to do: check prediction length. Three options (1) prediction length is passed, (2) prediction length is in preprocessor, (3) prediction length is in model config
-        # we should properly set the prediction/context lengths in the preprocessor
-        # we also need to make sure prediction_filter length is set in the model config
-
-        if parameters.fewshot_fraction < 1:
-            train_data = select_by_fixed_fraction(
-                train_data,
-                id_columns=self.preprocessor.id_columns,
-                fraction=parameters.fewshot_fraction,
-                location="last",  # to do: expose this parameter
-                minimum_size=self.preprocessor.context_length,
-            )
-
-        train_dataset = ForecastDFDataset(train_data, **dataset_spec)
-        validation_dataset = ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
-
-        # Configure trainer
-        parameters = parameters
-        training_tmp_dir = Path(tmp_dir)
-        training_args = TrainingArguments(
-            output_dir=training_tmp_dir / "output",
-            overwrite_output_dir=True,
-            learning_rate=parameters.trainer_args.learning_rate,
-            num_train_epochs=parameters.trainer_args.num_train_epochs,
-            eval_strategy="epoch",
-            per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
-            per_device_eval_batch_size=parameters.trainer_args.per_device_eval_batch_size,
-            dataloader_num_workers=4,  # to do: auto config this parameter
-            save_strategy="epoch",
-            logging_strategy="epoch",
-            save_total_limit=3,
-            logging_dir=training_tmp_dir / "logs",  # Make sure to specify a logging directory
-            load_best_model_at_end=True,  # Load the best model when training ends
-            metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
-            greater_is_better=False,  # For loss
-            label_names=self.training_label_names,
-            use_cpu=not torch.cuda.is_available(),  # is MPS possible now?
-        )
-
-        callbacks = [
-            FileLoggingCallback(logs_filename=os.environ.get("TSFM_TRAINING_TRACKER_LOGFILE", "training_logs.jsonl"))
-        ]
-        if parameters.trainer_args.early_stopping and validation_dataset:
-            # Create the early stopping callback
-            early_stopping_callback = EarlyStoppingCallback(
-                early_stopping_patience=parameters.trainer_args.early_stopping_patience,  # Number of epochs with no improvement after which to stop
-                early_stopping_threshold=parameters.trainer_args.early_stopping_threshold,  # Minimum improvement required to consider as improvement
-            )
-            callbacks.append(early_stopping_callback)
-        trainer_extra_args = {}
-        if validation_dataset:
-            trainer_extra_args = {"eval_dataset": validation_dataset}
-
-        # define trainer
-        trainer = Trainer(
-            model=self.model,
-            args=training_args,
-            train_dataset=train_dataset,
-            callbacks=callbacks,
-            **trainer_extra_args,
-        )
-
-        # To do: do we provide feedback to the user?
-        LOGGER.info("calling trainer.train")
-        trainer.train()
-        LOGGER.info("done with training")
-
-        save_path = training_tmp_dir / tuned_model_name
-        trainer.save_model(save_path)
-        self.preprocessor.save_pretrained(save_path)
-        return save_path
 
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
