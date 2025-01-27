@@ -442,6 +442,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         if "timestamp_column" in kwargs:
             out[kwargs["timestamp_column"]] = input["timestamp"]
+        # copy ids
         for i, c in enumerate(kwargs["id_columns"]):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)

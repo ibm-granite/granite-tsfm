@@ -159,7 +159,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             scaler_type (ScalerType, optional): The type of scaling to perform. See ScalerType for available scalers. Defaults to ScalerType.STANDARD.value.
             scaling_id_columns (Optional[List[str]], optional): In some cases we need to separate data by a different set of id_columns
                 when determining scaling factors. For the purposes of determining scaling, data will be grouped by the provided columns.
-                If None, the `id_columns` will be used. Defaults to None.
+                If None, the `id_columns` will be used. Defaults to None. This should be a subset of the id_columns.
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
             frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
@@ -195,7 +195,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
-        self.scaling_id_columns = scaling_id_columns if scaling_id_columns is not None else copy.copy(id_columns)
+
+        # check subset
+        if scaling_id_columns:
+            if not set(scaling_id_columns).issubset(self.id_columns):
+                raise ValueError("`scaling_id_columns` must be a subset of `id_columns`")
+            self.scaling_id_columns = scaling_id_columns
+        else:
+            self.scaling_id_columns = copy.copy(id_columns)
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = {}
