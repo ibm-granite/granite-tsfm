@@ -141,7 +141,7 @@ class BaseInferenceInput(BaseModel):
 
 class ForecastingInferenceInput(BaseInferenceInput):
     schema: ForecastingMetadataInput = Field(
-        description="An object of ForecastingMetadataInput that contains the schema" " metadata of the data input.",
+        description="An object of ForecastingMetadataInput that contains the schema metadata of the data input.",
     )
 
     parameters: ForecastingParameters = Field(
