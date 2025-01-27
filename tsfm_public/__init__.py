@@ -65,6 +65,7 @@ _import_structure["models.tinytimemixer"].extend(
         "TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TinyTimeMixerPreTrainedModel",
         "TinyTimeMixerModel",
+        "TinyTimeMixerForMaskedPrediction",
         "TinyTimeMixerForPrediction",
     ]
 )
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
         TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TinyTimeMixerConfig,
+        TinyTimeMixerForMaskedPrediction,
         TinyTimeMixerForPrediction,
         TinyTimeMixerModel,
         TinyTimeMixerPreTrainedModel,
