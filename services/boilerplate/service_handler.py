@@ -1,6 +1,7 @@
 """Base serivce handler"""
 
 import datetime
+import enum
 import importlib
 import logging
 from abc import ABC, abstractmethod
@@ -9,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
+from .ftpayloads import TuneOutput
 from .inference_payloads import (
     BaseMetadataInput,
     BaseParameters,
@@ -18,12 +20,18 @@ from .inference_payloads import (
 )
 from .tsfm_config import TSFMConfig
 
-from .ftpayloads import TuneOutput
 
 LOGGER = logging.getLogger(__file__)
 
 
-class ServiceHandler(ABC):
+class HandlerFunction(enum.Enum):
+    """`Enum` for the different functions for which we use handlers."""
+
+    INFERENCE = "inference"
+    TUNING = "tuning"
+
+
+class ServiceHandlerBase(ABC):
     """Abstraction to enable serving of various models.
 
     Args:
@@ -45,8 +53,8 @@ class ServiceHandler(ABC):
 
     @classmethod
     def load(
-        cls, model_id: str, model_path: Union[str, Path]
-    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
+        cls, model_id: str, model_path: Union[str, Path], handler_function: str
+    ) -> Tuple["ServiceHandlerBase", None] | Tuple[None, Exception]:
         """Load the handler_config -- the tsfm service config for this model, returning the proper
         handler to use the model.
 
@@ -56,6 +64,8 @@ class ServiceHandler(ABC):
         Args:
             model_id (str): A string identifier for the model.
             model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
+            handler_function (str): The type of handler, currently supported handlers are defined in the HandlerFunction
+                enum.
 
         """
 
@@ -74,7 +84,7 @@ class ServiceHandler(ABC):
             LOGGER.info("TSFM Config file not found.")
             config = TSFMConfig()
         try:
-            handler_class = get_service_handler_class(config)
+            handler_class = get_service_handler_class(config, handler_function)
             return handler_class(model_id=model_id, model_path=model_path, handler_config=config), None
         except Exception as e:
             return None, e
@@ -85,7 +95,7 @@ class ServiceHandler(ABC):
         schema: Optional[BaseMetadataInput] = None,
         parameters: Optional[BaseParameters] = None,
         **kwargs,
-    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
+    ) -> Tuple["ServiceHandlerBase", None] | Tuple[None, Exception]:
         """Prepare the wrapper by loading all the components needed to use the model.
 
         The actual preparation is done in the `_prepare()` method -- which should be overridden for a
@@ -118,7 +128,7 @@ class ServiceHandler(ABC):
         schema: Optional[BaseMetadataInput] = None,
         parameters: Optional[BaseParameters] = None,
         **kwargs,
-    ) -> "ServiceHandler":
+    ) -> "ServiceHandlerBase":
         """Prepare implementation to be implemented by model owner in derived class
 
         Args:
@@ -130,6 +140,28 @@ class ServiceHandler(ABC):
             ServiceHandler: The prepared service handler.
         """
         ...
+
+
+class InferenceHandler(ServiceHandlerBase):
+    @classmethod
+    def load(
+        cls, model_id: str, model_path: Union[str, Path]
+    ) -> Tuple["InferenceHandler", None] | Tuple[None, Exception]:
+        """Load the handler_config -- the tsfm service config for this model, returning the proper
+        handler to use the model.
+
+        model_path is expected to point to a folder containing the tsfm_config.json file. This can be a local folder
+        or with a model on the HuggingFace Hub.
+
+        Args:
+            model_id (str): A string identifier for the model.
+            model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
+            handler_function (str): The type of handler, currently supported handlers are defined in the HandlerFunction
+                enum.
+
+        """
+
+        return super().load(model_id, model_path, handler_function=HandlerFunction.INFERENCE.value)
 
     def run(
         self,
@@ -180,43 +212,6 @@ class ServiceHandler(ABC):
         """Abstract method for run to be implemented by model owner in derived class"""
         ...
 
-    def train(
-        self,
-        data: pd.DataFrame,
-        schema: BaseMetadataInput,
-        parameters: BaseParameters,
-        tuned_model_name: str, 
-        tmp_dir: Path
-    ) -> "TuneOutput":
-        """Perform a fine-tuning request"""
-        if not self.prepared:
-            return None, RuntimeError("Service wrapper has not yet been prepared; run `handler.prepare()` first.")
-
-        try:
-            result = self._train(data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir)
-            
-            # counts = self._calculate_data_point_counts(
-            #     data, output_data=result, schema=schema, parameters=parameters, **kwargs
-            # ) 
-            # Does TuneOuput need some info about the request -- for billing purposes
-            return TuneOutput(training_ref=result), None
-
-        except Exception as e:
-            return None, e
-
-
-    @abstractmethod
-    def _train(
-        self,
-        data: pd.DataFrame,
-        schema: BaseMetadataInput,
-        parameters: BaseParameters,
-        tuned_model_name: str, 
-        tmp_dir: Path
-    ) -> str:
-        """Abstract method for train to be implemented by model owner in derived class"""
-        ...
-
     @abstractmethod
     def _calculate_data_point_counts(
         self,
@@ -229,7 +224,56 @@ class ServiceHandler(ABC):
         ...
 
 
-class ForecastingServiceHandler(ServiceHandler):
+class TuningHandler(ServiceHandlerBase):
+    @classmethod
+    def load(
+        cls, model_id: str, model_path: Union[str, Path]
+    ) -> Tuple["TuningHandler", None] | Tuple[None, Exception]:
+        """Load the handler_config -- the tsfm service config for this model, returning the proper
+        handler to use the model.
+
+        model_path is expected to point to a folder containing the tsfm_config.json file. This can be a local folder
+        or with a model on the HuggingFace Hub.
+
+        Args:
+            model_id (str): A string identifier for the model.
+            model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
+            handler_function (str): The type of handler, currently supported handlers are defined in the HandlerFunction
+                enum.
+
+        """
+
+        return super().load(model_id, model_path, handler_function=HandlerFunction.TUNING.value)
+
+    def train(
+        self,
+        data: pd.DataFrame,
+        schema: BaseMetadataInput,
+        parameters: BaseParameters,
+        tuned_model_name: str,
+        tmp_dir: Path,
+    ) -> Tuple[str, None] | Tuple[None, Exception]:
+        """Perform a fine-tuning request"""
+        if not self.prepared:
+            return None, RuntimeError("Service wrapper has not yet been prepared; run `handler.prepare()` first.")
+
+        try:
+            result = self._train(
+                data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
+            )
+
+            # counts = self._calculate_data_point_counts(
+            #     data, output_data=result, schema=schema, parameters=parameters, **kwargs
+            # )
+            # Does TuneOuput need some info about the request -- for billing purposes
+            # return TuneOutput(training_ref=result), None
+            return result, None
+
+        except Exception as e:
+            return None, e
+
+
+class ForecastingServiceHandler(ServiceHandlerBase):
     """Abstraction to enable serving of various models.
 
     Args:
@@ -253,7 +297,7 @@ class ForecastingServiceHandler(ServiceHandler):
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
-    ) -> Tuple["ServiceHandler", None] | Tuple[None, Exception]:
+    ) -> Tuple["ServiceHandlerBase", None] | Tuple[None, Exception]:
         """Prepare the wrapper by loading all the components needed to use the model.
 
         The actual preparation is done in the `_prepare()` method -- which should be overridden for a
@@ -298,6 +342,8 @@ class ForecastingServiceHandler(ServiceHandler):
         """
         ...
 
+
+class ForecastingInferenceHandler(ForecastingServiceHandler, InferenceHandler):
     def run(
         self,
         data: pd.DataFrame,
@@ -333,29 +379,6 @@ class ForecastingServiceHandler(ServiceHandler):
         """Abstract method for run to be implemented by model owner in derived class"""
         ...
 
-    def train(
-        self,
-        data: pd.DataFrame,
-        schema: ForecastingMetadataInput,
-        parameters: ForecastingParameters,
-        tuned_model_name: str, 
-        tmp_dir: Path
-    ) -> "TuneOutput":
-        """Perform a fine-tuning request"""
-        super().train(data, schema=schema, parameters=parameters)
-
-    @abstractmethod
-    def _train(
-        self,
-        data: pd.DataFrame,
-        schema: ForecastingMetadataInput,
-        parameters: ForecastingParameters,
-        tuned_model_name: str, 
-        tmp_dir: Path
-    ) -> str:
-        """Abstract method for train to be implemented by model owner in derived class"""
-        ...
-
     @abstractmethod
     def _calculate_data_point_counts(
         self,
@@ -369,16 +392,59 @@ class ForecastingServiceHandler(ServiceHandler):
         ...
 
 
-def get_service_handler_class(config: TSFMConfig) -> "ServiceHandler":
-    if config.service_handler_module_path and config.service_handler_class_name:
-        module = importlib.import_module(config.service_handler_module_path)
-        my_class = getattr(module, config.service_handler_class_name)
+class ForecastingTuningHandler(ForecastingServiceHandler, TuningHandler):
+    def train(
+        self,
+        data: pd.DataFrame,
+        schema: ForecastingMetadataInput,
+        parameters: ForecastingParameters,
+        tuned_model_name: str,
+        tmp_dir: Path,
+    ) -> "TuneOutput":
+        """Perform a fine-tuning request"""
+        return super().train(
+            data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
+        )
 
+    @abstractmethod
+    def _train(
+        self,
+        data: pd.DataFrame,
+        schema: ForecastingMetadataInput,
+        parameters: ForecastingParameters,
+        tuned_model_name: str,
+        tmp_dir: Path,
+    ) -> str:
+        """Abstract method for train to be implemented by model owner in derived class"""
+        ...
+
+
+def get_service_handler_class(
+    config: TSFMConfig, handler_function: str = HandlerFunction.INFERENCE.value
+) -> "ServiceHandlerBase":
+    if handler_function == HandlerFunction.INFERENCE.value:
+        handler_module_path_identifier = "inference_handler_path"
+        handler_class_name_identifier = "inference_handler_class_name"
+    elif handler_function == HandlerFunction.TUNING.value:
+        handler_module_path_identifier = "tuning_handler_path"
+        handler_class_name_identifier = "tuning_handler_class_name"
     else:
-        # Default to forecasting task
-        from .hf_service_handler import ForecastingHuggingFaceHandler
+        raise ValueError(f"Unknown handler_function `{handler_function}`")
 
-        my_class = ForecastingHuggingFaceHandler
+    if getattr(config, handler_module_path_identifier, None) and getattr(config, handler_class_name_identifier, None):
+        module = importlib.import_module(getattr(config, handler_module_path_identifier))
+        my_class = getattr(module, getattr(config, handler_class_name_identifier))
+
+    elif handler_function == HandlerFunction.INFERENCE.value:
+        # Default to forecasting task, inference
+        from .hf_service_handler import ForecastingHuggingFaceInferenceHandler
+
+        my_class = ForecastingHuggingFaceInferenceHandler
+    elif handler_function == HandlerFunction.TUNING.value:
+        # Default to forecasting task, tuning
+        from .hf_service_handler import ForecastingHuggingFaceTuningHandler
+
+        my_class = ForecastingHuggingFaceTuningHandler
 
     return my_class
 

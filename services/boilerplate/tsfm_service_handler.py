@@ -5,7 +5,11 @@ from typing import Any, Dict, Optional
 
 from tsfm_public import TimeSeriesPreprocessor
 
-from .hf_service_handler import ForecastingHuggingFaceHandler
+from .hf_service_handler import (
+    ForecastingHuggingFaceHandler,
+    ForecastingHuggingFaceInferenceHandler,
+    ForecastingHuggingFaceTuningHandler,
+)
 from .inference_payloads import (
     ForecastingParameters,
 )
@@ -29,3 +33,11 @@ class TinyTimeMixerForecastingHandler(ForecastingHuggingFaceHandler):
             "prediction_channel_indices": preprocessor.prediction_channel_indices,
         }
         return config_kwargs
+
+
+class TinyTimeMixerForecastingInferenceHandler(
+    TinyTimeMixerForecastingHandler, ForecastingHuggingFaceInferenceHandler
+): ...
+
+
+class TinyTimeMixerForecastingTuningeHandler(TinyTimeMixerForecastingHandler, ForecastingHuggingFaceTuningHandler): ...
