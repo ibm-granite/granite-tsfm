@@ -17,12 +17,11 @@ from tsfm_public.toolkit.util import select_by_fixed_fraction
 
 from .filelogging_tracker import FileLoggingCallback
 from .ftpayloads import TuneTypeEnum
-from .hf_service_handler import ForecastingHuggingFaceHandler
+from .hf_service_handler import ForecastingHuggingFaceHandler, TinyTimeMixerForecastingHandler
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .tuning_handler import (
     ForecastingTuningHandler,
 )
-
 
 LOGGER = logging.getLogger(__file__)
 
@@ -129,3 +128,6 @@ class ForecastingHuggingFaceTuningHandler(ForecastingHuggingFaceHandler, Forecas
         trainer.save_model(save_path)
         self.preprocessor.save_pretrained(save_path)
         return save_path
+
+
+class TinyTimeMixerForecastingTuningeHandler(TinyTimeMixerForecastingHandler, ForecastingHuggingFaceTuningHandler): ...
