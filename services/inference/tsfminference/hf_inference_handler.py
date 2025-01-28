@@ -12,7 +12,7 @@ from tsfm_public.toolkit.util import select_by_index
 
 from .hf_service_handler import ForecastingHuggingFaceHandler, TinyTimeMixerForecastingHandler
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
-from .service_handler import (
+from .inference_handler import (
     ForecastingInferenceHandler,
 )
 
