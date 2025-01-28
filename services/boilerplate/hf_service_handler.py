@@ -296,8 +296,6 @@ class TinyTimeMixerForecastingHandler(ForecastingHuggingFaceHandler):
         return config_kwargs
 
 
-
-
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
     """Register a configuration for a particular model architecture
 
