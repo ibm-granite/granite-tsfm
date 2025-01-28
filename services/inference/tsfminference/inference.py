@@ -124,7 +124,7 @@ class InferenceRuntime:
             else:
                 min_data_length = max_data_length = len(data)
             LOGGER.info(
-                f"Data length recieved {len(data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
+                f"Data length received {len(data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
             )
 
         if getattr(handler.handler_config, "minimum_context_length", None):

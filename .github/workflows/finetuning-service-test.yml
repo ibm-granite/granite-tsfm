@@ -5,9 +5,9 @@ name: tsfmfinetuning Service Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "new_model_integrations" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "new_model_integrations" ]
 
 jobs:
   build:
@@ -29,7 +29,7 @@ jobs:
         python -m venv .venv
         source .venv/bin/activate
         python -m pip install --upgrade pip
-        pip install poetry
+        pip install "poetry>=2.0.0"
         cd services/finetuning
         poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev

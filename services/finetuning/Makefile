@@ -26,4 +26,4 @@ test_local: boilerplate fetchdata clone_models
 	pytest -s tests
 
 install_dev: boilerplate
-	pip install poetry && poetry install --with dev
+	pip install "poetry>=2.0.0" && poetry install --with dev

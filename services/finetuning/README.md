@@ -14,7 +14,7 @@ a finetuneing job on a kubernetes-based system.
 - git
 - git-lfs (available in many system package managers such as apt, dnf, and brew)
 - python >=3.10, <3.13
-- poetry (`pip install poetry`)
+- poetry (`pip install "poetry>=2.0.0"`)
 - zsh or bash
 - docker or podman (to run examples, we have not tested well with podman)
 - kubectl for deploying a local test cluster
@@ -22,7 +22,7 @@ a finetuneing job on a kubernetes-based system.
 ## Installation
 
 ```sh
-pip install poetry && poetry install --with dev
+pip install "poetry>=2.0.0" && poetry install --with dev
 ```
 
 ### Testing locally
