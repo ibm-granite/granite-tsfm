@@ -67,13 +67,6 @@ class ServiceHandlerBase(ABC):
         """
 
         handler_config_path = Path(model_path) if isinstance(model_path, str) else model_path
-        # try:
-        #     with open((handler_config_path / "tsfm_config.json").as_posix(), "r", encoding="utf-8") as reader:
-        #         text = reader.read()
-        #     config = json.loads(text)
-        # except FileNotFoundError:
-        #     LOGGER.info("TSFM Config file not found.")
-        #     config = {}
 
         try:
             config = TSFMConfig.from_pretrained(handler_config_path)
