@@ -10,7 +10,7 @@ from tsfm_public import TimeSeriesForecastingPipeline
 from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 from tsfm_public.toolkit.util import select_by_index
 
-from .hf_service_handler import ForecastingHuggingFaceHandler
+from .hf_service_handler import ForecastingHuggingFaceHandler, TinyTimeMixerForecastingHandler
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .service_handler import (
     ForecastingInferenceHandler,
@@ -163,3 +163,8 @@ class ForecastingHuggingFaceInferenceHandler(ForecastingHuggingFaceHandler, Fore
         }
         LOGGER.info(f"Data point counts: {counts}")
         return counts
+
+
+class TinyTimeMixerForecastingInferenceHandler(
+    TinyTimeMixerForecastingHandler, ForecastingHuggingFaceInferenceHandler
+): ...
