@@ -206,10 +206,10 @@ def get_service_handler_class(
     config: TSFMConfig, handler_function: str = HandlerFunction.INFERENCE.value
 ) -> "ServiceHandlerBase":
     if handler_function == HandlerFunction.INFERENCE.value:
-        handler_module_path_identifier = "inference_handler_path"
+        handler_module_path_identifier = "inference_handler_module_path"
         handler_class_name_identifier = "inference_handler_class_name"
     elif handler_function == HandlerFunction.TUNING.value:
-        handler_module_path_identifier = "tuning_handler_path"
+        handler_module_path_identifier = "tuning_handler_module_path"
         handler_class_name_identifier = "tuning_handler_class_name"
     else:
         raise ValueError(f"Unknown handler_function `{handler_function}`")
