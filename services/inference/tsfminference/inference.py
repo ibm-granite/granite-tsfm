@@ -19,8 +19,8 @@ from .constants import API_VERSION
 from .dataframe_checks import check
 from .dirutil import resolve_model_path
 from .errors import error_message
-from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 from .inference_handler import ForecastingInferenceHandler
+from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 
 
 LOGGER = logging.getLogger(__file__)
@@ -51,7 +51,7 @@ class InferenceRuntime:
         model_path = resolve_model_path(TSFM_MODEL_DIR, model_id)
         if not model_path:
             raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
-        handler, e = ForecastingServiceHandler.load(model_id=model_id, model_path=model_path)
+        handler, e = ForecastingInferenceHandler.load(model_id=model_id, model_path=model_path)
         if handler.handler_config:
             answer = {}
             atts = [
