@@ -96,8 +96,8 @@ class InferenceHandler(ServiceHandlerBase):
         self,
         data: pd.DataFrame,
         output_data: Optional[pd.DataFrame] = None,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
+        schema: Optional[BaseMetadataInput] = None,
+        parameters: Optional[BaseParameters] = None,
     ) -> Dict[str, int]:
         """Abstract method for counting datapoints in input and output implemented by model owner in derived class"""
         ...

@@ -11,10 +11,10 @@ from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 from tsfm_public.toolkit.util import select_by_index
 
 from .hf_service_handler import ForecastingHuggingFaceHandler, TinyTimeMixerForecastingHandler
-from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .inference_handler import (
     ForecastingInferenceHandler,
 )
+from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 
 
 LOGGER = logging.getLogger(__file__)
@@ -166,5 +166,6 @@ class ForecastingHuggingFaceInferenceHandler(ForecastingHuggingFaceHandler, Fore
 
 
 class TinyTimeMixerForecastingInferenceHandler(
-    TinyTimeMixerForecastingHandler, ForecastingHuggingFaceInferenceHandler
+    TinyTimeMixerForecastingHandler,
+    ForecastingHuggingFaceInferenceHandler,
 ): ...
