@@ -63,7 +63,7 @@ install_dev: boilerplate
 	pip install poetry && poetry install --with dev
 
 clone_models:
-	git lfs install || true
+	git lfs >> /dev/null 2>&1
 	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 delete_models:
