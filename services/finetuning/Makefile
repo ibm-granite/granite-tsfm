@@ -10,14 +10,13 @@ boilerplate:
 		cat $$f>>tsfmfinetuning/$$(basename $$f); \
 		echo $$(basename $$f) >> tsfmfinetuning/.gitignore; \
 		done 
-
+	
 image:
 	$(CONTAINER_BUILDER) build -t tsfmfinetuning -f Dockerfile .
 
 clone_models:
 	git lfs install || true
 	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
-	cd mytest-tsfm && git checkout fc98672d6d1f58305ce50038b63a6936c646f581 && cd .. || true
 
 
 fetchdata:
