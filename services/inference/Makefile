@@ -65,6 +65,7 @@ install_dev: boilerplate
 clone_models:
 	git lfs install || true
 	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
+	cd mytest-tsfm && git checkout fc98672d6d1f58305ce50038b63a6936c646f581 && cd .. || true
 
 delete_models:
 	rm -rf mytest-tsfm || true
