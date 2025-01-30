@@ -69,5 +69,11 @@ clone_models:
 delete_models:
 	rm -rf mytest-tsfm || true
 
+# update any auto-generated files
+# used in example code
+update_examples:
+	# our sagemaker stuff
+	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 
