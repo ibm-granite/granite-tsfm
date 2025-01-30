@@ -22,9 +22,10 @@ from tsfminference.inference_payloads import (
 )
 
 
-SERIES_LENGTH = 512
+SERIES_LENGTH = os.getenv("TSFM_PROFILE_SERIES_LENGTH", 512)
 FORECAST_LENGTH = 96
 MODEL_ID = "mytest-tsfm/ttm-r1"
+NUM_TIMESERIES = os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2)
 
 
 @pytest.fixture(scope="module")
@@ -33,16 +34,19 @@ def ts_data_base() -> pd.DataFrame:
     length = SERIES_LENGTH
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
-    # Create a DataFrame
-    df = pd.DataFrame(
-        {
-            "date": date_range,
-            "ID": "1",
-            "VAL": np.random.rand(length),
-        }
-    )
+    timeseries = []
+    for idx in range(NUM_TIMESERIES):
+        timeseries.append(
+            pd.DataFrame(
+                {
+                    "date": date_range,
+                    "ID": str(idx),
+                    "VAL": np.random.rand(length),
+                }
+            )
+        )
 
-    return df
+    return pd.concat(timeseries, ignore_index=True)
 
 
 if TSFM_CONFIG_FILE:
@@ -80,7 +84,7 @@ def forecasting_input_base() -> ForecastingInferenceInput:
 
 def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
     # expected length
-    assert len(results) == FORECAST_LENGTH
+    assert len(results) == FORECAST_LENGTH * NUM_TIMESERIES
     # expected start time
     assert results["date"].iloc[0] - df["date"].iloc[-1] == timedelta(hours=1)
     # expected end time
@@ -90,7 +94,8 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
     model_id = input.model_id
-    df = copy.deepcopy(ts_data_base)
+    # df = copy.deepcopy(ts_data_base)
+    df = ts_data_base
     input.data = df.to_dict(orient="list")
 
     # useful for generating sample payload files
@@ -127,7 +132,7 @@ def test_forecast_with_integer_timestamps(
 
     timestamp_column = input.schema.timestamp_column
     df[timestamp_column] = df[timestamp_column].astype(int)
-    df[timestamp_column] = range(1, SERIES_LENGTH + 1)
+    df[timestamp_column] = range(1, SERIES_LENGTH * NUM_TIMESERIES + 1)
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     po: PredictOutput = runtime.forecast(input=input)
@@ -143,7 +148,7 @@ def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_
 
     timestamp_column = input.schema.timestamp_column
     df[timestamp_column] = df[timestamp_column].astype(str)
-    df[timestamp_column] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    df[timestamp_column] = [str(x) for x in range(1, SERIES_LENGTH * NUM_TIMESERIES + 1)]
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     with pytest.raises(ValueError) as _:
@@ -154,7 +159,7 @@ def test_forecast_with_bogus_values(ts_data_base: pd.DataFrame, forecasting_inpu
     input: ForecastingInferenceInput = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base)
     df["VAL"] = df["VAL"].astype(str)
-    df["VAL"] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
+    df["VAL"] = [str(x) for x in range(1, SERIES_LENGTH * NUM_TIMESERIES + 1)]
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
     with pytest.raises(HTTPException) as _:
