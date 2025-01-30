@@ -22,10 +22,10 @@ from tsfminference.inference_payloads import (
 )
 
 
-SERIES_LENGTH = os.getenv("TSFM_PROFILE_SERIES_LENGTH", 512)
+SERIES_LENGTH = int(os.getenv("TSFM_PROFILE_SERIES_LENGTH", 512))
 FORECAST_LENGTH = 96
 MODEL_ID = "mytest-tsfm/ttm-r1"
-NUM_TIMESERIES = os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2)
+NUM_TIMESERIES = int(os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2))
 
 
 @pytest.fixture(scope="module")
