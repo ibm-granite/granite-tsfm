@@ -53,6 +53,7 @@ optional = true
 pytest = "*"
 locust = "*"
 pytest-coverage = "*"
+gprof2dot = "*"
 
 [tool.poetry.group.sagemaker]
 optional = true
