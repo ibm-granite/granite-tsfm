@@ -126,7 +126,7 @@ class FinetuningRuntime:
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
                 raise RuntimeError(
-                    f"""Could not load model {input.model_id} from {self.config['model_dir']}.
+                    f"""Could not load model {input.model_id} from {self.config["model_dir"]}.
                     If trying to load directly from the HuggingFace Hub please ensure that
                     `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"""
                 )

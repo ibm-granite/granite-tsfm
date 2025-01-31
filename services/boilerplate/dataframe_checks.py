@@ -51,7 +51,7 @@ def id_cols_are_int_or_string_types(data: pd.DataFrame, schema: Dict[str, Any]) 
         dtypes = data.dtypes
         for id in id_cols:
             if not (pd.api.types.is_string_dtype(dtypes[id]) or pd.api.types.is_integer_dtype(dtypes[id])):
-                return 1, f"data for identifier column {id} must not be a string or integer type."
+                return 1, f"data for identifier column {id} must be a string or integer type."
     return 0, None
 
 
