@@ -3,8 +3,9 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import inspect
-from typing import Any, Dict, List, Union
 import time
+from collections import defaultdict
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -87,13 +88,16 @@ class TimeSeriesPipeline(Pipeline):
             accumulator.append(item[model_output_key])
 
         # collect all ouputs needed for post processing
-        first = dataset[0]
-        model_outputs = {}
-        for k, v in first.items():
+        model_outputs = defaultdict(list)
+        items = list(dataset[0].items())
+        # list_dict = defaultdict(list)
+        for r in dataset:
+            for k, v in items:
+                model_outputs[k].append(r[k])
+
+        for k, v in items:
             if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(tuple(r[k] for r in dataset))
-            else:
-                model_outputs[k] = [r[k] for r in dataset]
+                model_outputs[k] = torch.stack(model_outputs[k])
 
         # without shuffling in the dataloader above, we assume that order is preserved
         # otherwise we need to incorporate sequence id somewhere and do a proper join
@@ -407,7 +411,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-        
+
         model_outputs = self.model(**model_inputs)
 
         return model_outputs
