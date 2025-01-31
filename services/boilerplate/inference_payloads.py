@@ -103,6 +103,14 @@ class ForecastingMetadataInput(BaseMetadataInput):
 class BaseParameters(BaseModel):
     model_config = ConfigDict(extra="allow", protected_namespaces=())
 
+    inference_batch_size = Optional[int] = Field(
+        description="The batch size used during inference."
+        " When multiple time series are present, the inference will be"
+        " conducted in batches. If not specified, the model default batch"
+        " size will be used.",
+        default=None,
+    )
+
 
 class ForecastingParameters(BaseParameters):
     prediction_length: Optional[int] = Field(
