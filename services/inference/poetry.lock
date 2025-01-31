@@ -1287,6 +1287,18 @@ files = [
 six = "*"
 
 [[package]]
+name = "gprof2dot"
+version = "2024.6.6"
+description = "Generate a dot graph from the output of several profilers."
+optional = false
+python-versions = ">=3.8"
+groups = ["dev"]
+files = [
+    {file = "gprof2dot-2024.6.6-py2.py3-none-any.whl", hash = "sha256:45b14ad7ce64e299c8f526881007b9eb2c6b75505d5613e96e66ee4d5ab33696"},
+    {file = "gprof2dot-2024.6.6.tar.gz", hash = "sha256:fa1420c60025a9eb7734f65225b4da02a10fc6dd741b37fa129bc6b41951e5ab"},
+]
+
+[[package]]
 name = "greenlet"
 version = "3.1.1"
 description = "Lightweight in-process concurrent programming"
@@ -4043,8 +4055,8 @@ testing = ["parameterized", "pytest", "tsfm_public[notebooks]"]
 [package.source]
 type = "git"
 url = "https://github.com/IBM-granite/granite-tsfm.git"
-reference = "v0.2.16"
-resolved_reference = "f46398ef88df036dd92f8667c749dfbb58bcbccc"
+reference = "v0.2.18"
+resolved_reference = "4db1cfd157767c8de39bedb5c1f90a8d7d6e5850"
 
 [[package]]
 name = "typing-extensions"
@@ -4545,4 +4557,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "cf881ec0e52f2aab27768ef1e83c35d8c389d3b8e4cb05c838d8a0d354edd6fc"
+content-hash = "a7a2dadbd5dfc8f714bc168152ec64189a0abe0d39c3853e3a1f3c1c381511b6"
