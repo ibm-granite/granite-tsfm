@@ -5,7 +5,6 @@
 import copy
 import logging
 import os
-import time
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -86,7 +85,6 @@ class InferenceRuntime:
         return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
-        LOGGER.info(f"(profile-0001) forecast_common start: {time.time()}")
         model_path = resolve_model_path(TSFM_MODEL_DIR, input_payload.model_id)
 
         if not model_path:
@@ -156,7 +154,6 @@ class InferenceRuntime:
         if e is not None:
             return None, e
 
-        LOGGER.info(f"(profile-0001) forecast_common end: {time.time()}")
         return output, None
 
 

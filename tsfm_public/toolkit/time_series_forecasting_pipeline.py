@@ -3,7 +3,6 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import inspect
-import time
 from collections import defaultdict
 from typing import Any, Dict, List, Union
 
@@ -64,7 +63,6 @@ class TimeSeriesPipeline(Pipeline):
         # build a dataloader
         # collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
 
-        logger.info(f"(profile-0001) Init dataloader start: {time.time()}")
         remove_columns_collator = RemoveColumnsCollator(
             data_collator=default_data_collator,
             signature_columns=signature_columns,
@@ -75,9 +73,8 @@ class TimeSeriesPipeline(Pipeline):
         dataloader = DataLoader(
             dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=remove_columns_collator, shuffle=False
         )
-        logger.info(f"(profile-0001) Init dataloader end: {time.time()}")
+
         # iterate over dataloader
-        logger.info(f"(profile-0001) model call iteration start: {time.time()}")
         it = iter(dataloader)
         accumulator = []
         model_output_key = None
@@ -101,7 +98,7 @@ class TimeSeriesPipeline(Pipeline):
         # without shuffling in the dataloader above, we assume that order is preserved
         # otherwise we need to incorporate sequence id somewhere and do a proper join
         model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
-        logger.info(f"(profile-0001) model call iteration end: {time.time()}")
+
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
 
@@ -327,7 +324,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         """Preprocess step
         Load the data, if not already loaded, and then generate a pytorch dataset.
         """
-        logger.info(f"(profile-0001) pipeline preprocess start: {time.time()}")
+
         prediction_length = kwargs.get("prediction_length")
         timestamp_column = kwargs.get("timestamp_column")
         id_columns = kwargs.get("id_columns")
@@ -398,7 +395,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        logger.info(f"(profile-0001) pipeline preprocess end: {time.time()}")
         return dataset
 
     def _forward(self, model_inputs, **kwargs):
@@ -427,7 +423,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         """
         out = {}
 
-        logger.info(f"(profile-0001) pipeline postprocess start: {time.time()}")
         model_output_key = "prediction_outputs"  #  if "prediction_outputs" in input.keys() else "prediction_logits"
 
         # name the predictions of target columns
@@ -494,5 +489,4 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             if add_known_ground_truth:
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
-        logger.info(f"(profile-0001) pipeline postprocess end: {time.time()}")
         return out

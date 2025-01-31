@@ -355,7 +355,6 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                     total_periods=model_prediction_length,
                 )
 
-        LOGGER.info(f"(profile-0001) Prediction start: {time.time()}")
         batch_size = (
             parameters.inference_batch_size
             if parameters.inference_batch_size
@@ -373,7 +372,6 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             batch_size=batch_size,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
-        LOGGER.info(f"(profile-0001) Prediction end: {time.time()}")
 
         return forecasts
 
