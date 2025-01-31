@@ -90,7 +90,6 @@ class TimeSeriesPipeline(Pipeline):
         # collect all ouputs needed for post processing
         model_outputs = defaultdict(list)
         items = list(dataset[0].items())
-        # list_dict = defaultdict(list)
         for r in dataset:
             for k, v in items:
                 model_outputs[k].append(r[k])
@@ -379,9 +378,10 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 # future data needs some values for targets, but they are unused
                 future_time_series[target_columns] = 0
                 future_time_series = self.feature_extractor.preprocess(future_time_series)
-                future_time_series = future_time_series.drop(columns=target_columns)
+                # future_time_series = future_time_series.drop(columns=target_columns)
+                future_time_series = future_time_series[target_columns] = np.nan
 
-            time_series = pd.concat((time_series, future_time_series), axis=0)
+            time_series = pd.concat((time_series, future_time_series), axis=0, ignore_index=True)
         else:
             # no additional exogenous data provided, extend with empty periods
             time_series = extend_time_series(
