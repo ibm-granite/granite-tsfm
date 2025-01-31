@@ -63,11 +63,17 @@ install_dev: boilerplate
 	pip install poetry && poetry install --with dev
 
 clone_models:
-	git lfs install || true
+	git lfs >> /dev/null 2>&1
 	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 delete_models:
 	rm -rf mytest-tsfm || true
 
+# update any auto-generated files
+# used in example code
+update_examples:
+	# our sagemaker stuff
+	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 
