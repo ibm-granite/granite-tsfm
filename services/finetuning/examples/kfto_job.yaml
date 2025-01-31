@@ -1,3 +1,5 @@
+# see https://www.substratus.ai/blog/kind-with-gpus
+# for info on using gpus with kind
 apiVersion: "kubeflow.org/v1"
 kind: PyTorchJob
 metadata:
@@ -23,9 +25,11 @@ spec:
                 requests:
                   memory: 8Gi
                   cpu: 1000m
+                  # nvidia.com/gpu: 1
                 limits:
                   memory: 12Gi
                   cpu: 1500m
+                  # nvidia.com/gpu: 1
               env:
               - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
                 value: "0"
