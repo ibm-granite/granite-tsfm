@@ -355,6 +355,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                 )
 
         import time
+
         LOGGER.info(f"(profile-0001) Prediction start: {time.time()}")
         device = "cpu" if not torch.cuda.is_available() else "cuda"
         forecast_pipeline = TimeSeriesForecastingPipeline(
@@ -364,7 +365,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
             device=device,
-            batch_size= 5000
+            batch_size=5000,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
         LOGGER.info(f"(profile-0001) Prediction end: {time.time()}")
