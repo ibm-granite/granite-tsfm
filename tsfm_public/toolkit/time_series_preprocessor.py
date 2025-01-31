@@ -1089,11 +1089,8 @@ def extend_time_series(
             }
         )
 
-        df = pd.concat(
-            (group, new_data),
-            axis=0,
-        )
-        return df.reset_index(drop=True)
+        df = pd.concat((group, new_data), axis=0, ignore_index=True)
+        return df  # df.reset_index(drop=True)
 
     if (periods is None and total_periods is None) or (periods is not None and total_periods is not None):
         raise ValueError("Exactly one of `periods` or `total_periods` must be specified")
