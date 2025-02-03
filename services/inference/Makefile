@@ -77,7 +77,9 @@ update_examples:
 	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 profile_inference:
-	TSFM_PROFILE_NUM_TIMESERIES=10000 python -m cProfile -o profile.out -s cumtime \
+	TSFM_TESTS_AS_PROFILER=1 \
+	TSFM_PROFILE_NUM_TIMESERIES=10000 \
+	python -m cProfile -o profile.out -s cumtime \
 	 -m pytest tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"

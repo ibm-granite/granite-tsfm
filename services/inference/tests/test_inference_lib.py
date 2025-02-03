@@ -94,8 +94,7 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
 def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
     input = forecasting_input_base
     model_id = input.model_id
-    # df = copy.deepcopy(ts_data_base)
-    df = ts_data_base
+    df = ts_data_base if int(os.environ.get("TSFM_TESTS_AS_PROFILER", "0")) == 0 else copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
 
     # useful for generating sample payload files
