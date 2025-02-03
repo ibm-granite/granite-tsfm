@@ -121,6 +121,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 64,
         prediction_length: Optional[int] = None,
@@ -186,6 +187,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.observable_columns = list(observable_columns)
         self.control_columns = list(control_columns)
         self.conditional_columns = list(conditional_columns)
+        self.categorical_columns = list(categorical_columns)
         self.static_categorical_columns = list(static_categorical_columns)
 
         self.context_length = context_length
@@ -231,13 +233,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             + self.observable_columns
             + self.control_columns
             + self.conditional_columns
+            + self.categorical_columns
             + self.static_categorical_columns
         ):
             counter[c] += 1
 
         if max(counter.values()) > 1:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -431,7 +434,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns:
             List[str]: List of column names
         """
-        cols_to_encode = self.static_categorical_columns
+        cols_to_encode = self.static_categorical_columns + self.categorical_columns
         return cols_to_encode
 
     def _train_scaler(self, df: pd.DataFrame):
