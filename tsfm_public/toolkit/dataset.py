@@ -371,7 +371,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             ret = {
                 "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
@@ -585,7 +585,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             time_id = index * self.stride
 
-            seq_x = self.X[time_id : time_id + self.context_length].values.astype(np.float32)
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values.astype(np.float32)
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
 
@@ -593,7 +593,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x = self.apply_masking_specification(seq_x)
 
             # seq_y: batch_size x pred_len x num_x_cols
-            seq_y = self.y[
+            seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
             seq_y[:, self.y_mask_conditional] = 0
@@ -740,8 +740,8 @@ class RegressionDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
+            seq_y = self.y.iloc[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             # return _torch(seq_x, seq_y)
 
             ret = {
@@ -866,7 +866,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
 
