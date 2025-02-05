@@ -152,6 +152,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 percentage of a particular product is known and controllable in the future. Defaults to [].
             conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+                Defaults to [].
             static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the input
                 which are fixed over time. Defaults to [].
             context_length (int, optional): The length of the input context window. Defaults to 64.
@@ -163,7 +165,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 If None, the `id_columns` will be used. Defaults to None. This should be a subset of the id_columns.
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
-            frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
+            frequency_mapping (Dict[str, int], optional): A mapping which maps frequency strings to numerical values (integers). Defaults to DEFAULT_FREQUENCY_MAPPING.
             freq (Optional[Union[int, str]], optional): A frequency indicator for the given `timestamp_column`. See
                 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
                 allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be

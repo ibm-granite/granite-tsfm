@@ -403,6 +403,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             percentage of a particular product is known and controllable in the future. Defaults to [].
         conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
             Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+        categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+            Defaults to [].
         static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the
             input which are fixed over time. Defaults to [].
         context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
