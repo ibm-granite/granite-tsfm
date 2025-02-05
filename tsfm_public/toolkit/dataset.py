@@ -447,6 +447,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 1,
         prediction_length: int = 1,
@@ -477,6 +478,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns=observable_columns,
             control_columns=control_columns,
             conditional_columns=conditional_columns,
+            categorical_columns=categorical_columns,
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
@@ -505,6 +507,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns: List[str] = [],
             control_columns: List[str] = [],
             conditional_columns: List[str] = [],
+            categorical_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
@@ -519,6 +522,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.observable_columns = observable_columns
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
+            self.categorical_columns = categorical_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
@@ -529,6 +533,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 observable_columns,
                 control_columns,
                 conditional_columns,
+                categorical_columns,
             )
             y_cols = copy.copy(x_cols)
 
