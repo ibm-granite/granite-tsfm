@@ -2,7 +2,6 @@
 dataframe_checks.py
 dirutil.py
 errors.py
-hf_service_handler_delete.py
 hfutil.py
 inference_payloads.py
 service_handler.py
