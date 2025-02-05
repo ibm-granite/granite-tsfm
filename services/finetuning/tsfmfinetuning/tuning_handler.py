@@ -1,26 +1,22 @@
 """Base serivce handler"""
 
 import logging
-from abc import abstractmethod
 from pathlib import Path
 from typing import Tuple, Union
 
 import pandas as pd
 
-from .ftpayloads import TuneOutput
 from .inference_payloads import (
     BaseMetadataInput,
     BaseParameters,
-    ForecastingMetadataInput,
-    ForecastingParameters,
 )
-from .service_handler import ForecastingServiceHandler, HandlerFunction, ServiceHandlerBase
+from .service_handler import HandlerFunction, ServiceHandler
 
 
 LOGGER = logging.getLogger(__file__)
 
 
-class TuningHandler(ServiceHandlerBase):
+class TuningHandler(ServiceHandler):
     @classmethod
     def load(
         cls, model_id: str, model_path: Union[str, Path]
@@ -54,43 +50,12 @@ class TuningHandler(ServiceHandlerBase):
             return None, RuntimeError("Service wrapper has not yet been prepared; run `handler.prepare()` first.")
 
         try:
-            result = self._train(
+            result = self.implementation.train(
                 data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
             )
 
-            # counts = self._calculate_data_point_counts(
-            #     data, output_data=result, schema=schema, parameters=parameters, **kwargs
-            # )
-            # Does TuneOuput need some info about the request -- for billing purposes
-            # return TuneOutput(training_ref=result), None
+            # Does TuneOuput need some info about the request -- for billing purposes?
             return result, None
 
         except Exception as e:
             return None, e
-
-
-class ForecastingTuningHandler(ForecastingServiceHandler, TuningHandler):
-    def train(
-        self,
-        data: pd.DataFrame,
-        schema: ForecastingMetadataInput,
-        parameters: ForecastingParameters,
-        tuned_model_name: str,
-        tmp_dir: Path,
-    ) -> "TuneOutput":
-        """Perform a fine-tuning request"""
-        return super().train(
-            data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
-        )
-
-    @abstractmethod
-    def _train(
-        self,
-        data: pd.DataFrame,
-        schema: ForecastingMetadataInput,
-        parameters: ForecastingParameters,
-        tuned_model_name: str,
-        tmp_dir: Path,
-    ) -> str:
-        """Abstract method for train to be implemented by model owner in derived class"""
-        ...
