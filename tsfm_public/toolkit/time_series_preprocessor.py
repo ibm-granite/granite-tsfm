@@ -876,6 +876,7 @@ def get_datasets(
         "observable_columns": ts_preprocessor.observable_columns,
         "control_columns": ts_preprocessor.control_columns,
         "conditional_columns": ts_preprocessor.conditional_columns,
+        "categorical_columns": ts_preprocessor.categorical_columns,
         "static_categorical_columns": ts_preprocessor.static_categorical_columns,
     }
 
