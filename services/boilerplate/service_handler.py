@@ -3,7 +3,6 @@
 import enum
 import importlib
 import logging
-from abc import ABC
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -26,13 +25,12 @@ class HandlerFunction(enum.Enum):
     TUNING = "tuning"
 
 
-class ServiceHandler(ABC):
+class ServiceHandler:
     """Abstraction to enable serving of various models.
 
     Args:
-        model_id (str): A string identifier for the model.
-        model_path (Union[str, Path]): The full path to the model, can be a local path or a HuggingFace Hub path.
-        handler_config (TSFMConfig): A handler configuration object.
+        implementation (object): An instantiated class that implements methods needed to perform the required handler
+            functions.
     """
 
     def __init__(self, implementation: object):
