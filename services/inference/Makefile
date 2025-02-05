@@ -18,7 +18,7 @@ create_prometheus_metrics_dir:
 # starts the tsfminference service (used mainly for test cases)
 start_service_local: create_prometheus_metrics_dir boilerplate
 	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
-	TSFM_PYTHON_LOGGING_LEVEL="INFO" \
+	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./foobaz:./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 	python -m gunicorn \
@@ -64,7 +64,7 @@ install_dev: boilerplate
 
 clone_models:
 	git lfs install || true
-	git clone -b refactor https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
+	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 delete_models:
 	rm -rf mytest-tsfm || true
