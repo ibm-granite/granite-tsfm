@@ -1,6 +1,5 @@
 """Service handler for HuggingFace models"""
 
-import copy
 import importlib
 import logging
 import pathlib
@@ -8,7 +7,6 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-import pandas as pd
 import transformers
 from transformers import (
     AutoConfig,
@@ -19,7 +17,7 @@ from transformers import (
 
 from tsfm_public import TimeSeriesPreprocessor
 
-from .inference_payloads import BaseParameters, ForecastingMetadataInput, ForecastingParameters
+from .inference_payloads import BaseParameters, ForecastingParameters
 from .service_handler import (
     ForecastingServiceHandler,
     ServiceHandlerBase,
@@ -187,96 +185,6 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             Dict[str, Any]: Dictionary of additional arguments that are used later as keyword arguments to the config.
         """
         return {"num_input_channels": preprocessor.num_input_channels}
-
-    def _prepare(
-        self,
-        data: pd.DataFrame,
-        future_data: Optional[pd.DataFrame] = None,
-        schema: Optional[ForecastingMetadataInput] = None,
-        parameters: Optional[ForecastingParameters] = None,
-        **kwargs,
-    ) -> "ForecastingHuggingFaceHandler":
-        """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
-        preprocessor and forecasting pipeline. This method:
-        1) loades the preprocessor, creating a new one if the model does not already have a preprocessor
-        2) updates model configuration arguments by calling _get_config_kwargs
-        3) loads the HuggingFace model, passing the updated config object
-
-        Args:
-            data (pd.DataFrame): A pandas dataframe containing historical data.
-            future_data (Optional[pd.DataFrame], optional): A pandas dataframe containing future data. Defaults to None.
-            schema (Optional[ForecastingMetadataInput], optional): Schema information from the original inference
-                request. Includes information about columns and their role. Defaults to None.
-            parameters (Optional[ForecastingParameters], optional): Parameters from the original inference
-                request. Defaults to None.
-
-        Returns:
-            ForecastingHuggingFaceHandler: The updated service handler object.
-        """
-
-        preprocessor_params = copy.deepcopy(schema.model_dump())
-        preprocessor_params["prediction_length"] = parameters.prediction_length
-
-        LOGGER.info(f"Preprocessor params: {preprocessor_params}")
-
-        preprocessor = self.load_preprocessor(self.model_path)
-
-        if self.handler_config.is_finetuned and preprocessor is None:
-            raise ValueError("Model indicates that it is finetuned but no preprocessor was found.")
-
-        if not self.handler_config.is_finetuned and preprocessor is not None:
-            raise ValueError("Unexpected: model indicates that it is not finetuned but a preprocessor was found.")
-
-        if preprocessor is None:
-            to_check = ["conditional_columns", "control_columns", "observable_columns", "static_categorical_columns"]
-
-            for param in to_check:
-                if param in preprocessor_params and preprocessor_params[param]:
-                    raise ValueError(
-                        f"Unexpected parameter {param} for a zero-shot model, please confirm you have the correct model_id and schema."
-                    )
-
-            preprocessor = TimeSeriesPreprocessor(
-                **preprocessor_params,
-                scaling=False,
-                encode_categorical=False,
-            )
-            # train to estimate freq
-            preprocessor.train(data)
-            LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
-        else:
-            # check payload, but only certain parameters
-            to_check = [
-                "freq",
-                "timestamp_column",
-                "target_columns",
-                "conditional_columns",
-                "control_columns",
-                "observable_columns",
-            ]
-
-            for param in to_check:
-                param_val = preprocessor_params[param]
-                param_val_saved = getattr(preprocessor, param)
-                if param_val != param_val_saved:
-                    raise ValueError(
-                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
-                    )
-
-        model_config_kwargs = self._get_config_kwargs(
-            parameters=parameters,
-            preprocessor=preprocessor,
-        )
-        LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
-        model_config = self.load_hf_config(self.model_path, **model_config_kwargs)
-
-        model = self.load_hf_model(self.model_path, config=model_config)
-
-        self.config = model_config
-        self.model = model
-        self.preprocessor = preprocessor
-
-        return self
 
 
 class TinyTimeMixerForecastingHandler(ForecastingHuggingFaceHandler):
