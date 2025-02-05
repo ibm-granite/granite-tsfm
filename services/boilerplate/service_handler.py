@@ -76,7 +76,7 @@ class ServiceHandler(ABC):
 
             # could validate handler_class here
 
-            return ServiceHandler(
+            return cls(
                 implementation=handler_class(
                     model_id=model_id,
                     model_path=model_path,

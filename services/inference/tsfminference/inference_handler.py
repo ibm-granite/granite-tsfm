@@ -68,7 +68,7 @@ class InferenceHandler(ServiceHandler):
                 data, output_data=result, schema=schema, parameters=parameters, **kwargs
             )
             return PredictOutput(
-                model_id=str(self.model_id),
+                model_id=str(self.implementation.model_id),
                 created_at=datetime.datetime.now().isoformat(),
                 results=[encoded_result],
                 **counts,
