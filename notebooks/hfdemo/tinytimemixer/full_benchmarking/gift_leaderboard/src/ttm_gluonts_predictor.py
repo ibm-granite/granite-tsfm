@@ -687,7 +687,7 @@ class TTMGluonTSPredictor:
 
         # Create a pands dataframe
         # Flatten (H, C) into 2D arrays
-        L = y_pred_unscaled.shape[0]
+        # L = y_pred_unscaled.shape[0]
         flattened_predictions = list(y_pred_unscaled)
         flattened_ground_truth = list(y_true_unscaled)
 
