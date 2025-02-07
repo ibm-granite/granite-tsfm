@@ -12,7 +12,9 @@ from tqdm import tqdm
 from tsfm_public.toolkit.dataset import _torch
 
 
+# TTM Constants:
 TTM_MAX_FORECAST_HORIZON = 720
+TTM_MIN_FORECAST_HORIZON = 16
 
 
 def get_freq_mapping():
@@ -115,6 +117,8 @@ class StandardScalingGluonTSDataset:
 
         Args:
             data (np.ndarray): Forecast output of shape [batch, seq_len, num_channels]
+            series_ids (list): List of item ids.
+            prediction_channel_indices (list, optional): List of target channel indices. Defaults to [].
 
         Raises:
             Exception: If NaN is found in the forecast.
@@ -123,9 +127,6 @@ class StandardScalingGluonTSDataset:
             np.ndarray: Of shape [batch, seq_len, num_channels].
         """
         out = np.zeros(data.shape)
-        # if len(self.mean) == 1 and data.shape[0] > 1:
-        #     self.mean = self.mean * data.shape[0]
-        #     self.std = self.std * data.shape[0]
 
         for i in tqdm(range((data.shape[0]))):
             if len(prediction_channel_indices) > 0:
@@ -151,7 +152,7 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
         force_short_context: bool = False,
         min_context_mult: int = 4,
         fewshot_fraction: float = 1.0,
-        fewshot_location: str = "end",  # end/start
+        fewshot_location: str = "rand",  # end/start
         use_mask: bool = False,
         send_freq: bool = True,
         freq: str = None,
@@ -159,11 +160,23 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
         """Wrapper to create pytorch `Dataset` from GluonTS dataset.
 
         Args:
-            gluon_dataset (TrainingDataset): GluonTS dataset.
+            gluon_dataset (TrainingDataset): Training dataset.
             seq_len (int): Context length.
-            forecast_len (int): Forecast horizon.
-            last_window_only (bool, optional): If True, only last window will be processed. Defaults to False.
+            forecast_len (int): Prediction length.
+            last_window_only (bool, optional): If True, only last window will be take from each series.
+                Defaults to False.
+            gen_more_samples_for_short_series (bool, optional): If True, it will pad zeros and try to
+                generate more samples for short series. Defaults to True.
+            force_short_context (bool, optional): If True, it will force to mine short context.
+                Defaults to False (recommended).
+            min_context_mult (int, optional): Minimum context length multiplier (of prediction length)
+                to encourage more sample generation for short series. Defaults to 4.
+            fewshot_fraction (float, optional): Fewshot fraction. Defaults to 1.0.
+            fewshot_location (str, optional): Fewshot location. Defaults to "rand" (recommended).
+            send_freq (bool, optional): Send frequency in getitem. Defaults to True.
+            freq (str, optional): Frequency of the dataset. Defaults to None.
         """
+
         # assert seq_len > forecast_len, f'sequence lenght {seq_len} has to be strictly greater than forecast length {forecast_len}'
         self.seq_len = seq_len
         self.forecast_len = min(forecast_len, TTM_MAX_FORECAST_HORIZON)
@@ -324,10 +337,14 @@ class TorchDatasetFromGluonTSTestDataset(Dataset):
         """Wrapper to create pytorch `Dataset` from GluonTS dataset.
 
         Args:
-            gluon_dataset (TrainingDataset): GluonTS dataset.
+            gluon_test_input (InputDataset): GluonTS input dataset.
+            gluon_test_label (LabelDataset): GluonTS label dataset.
             seq_len (int): Context length.
             forecast_len (int): Forecast horizon.
-            last_window_only (bool, optional): If True, only last window will be processed. Defaults to False.
+            force_short_context (bool, optional): If True, it will force to mine short context.
+                Defaults to False (recommended).
+            min_context_mult (int, optional): Minimum context length multiplier (of prediction length)
+                to encourage more sample generation for short series. Defaults to 4.
         """
         # assert seq_len > forecast_len, f'sequence lenght {seq_len} has to be strictly greater than forecast length {forecast_len}'
         self.seq_len = seq_len

@@ -35,6 +35,8 @@ from tsfm_public.toolkit.get_model import get_model
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 
 from .gluonts_data_wrapper import (
+    TTM_MAX_FORECAST_HORIZON,
+    TTM_MIN_FORECAST_HORIZON,
     ForecastDataset,
     StandardScalingGluonTSDataset,
     TorchDatasetFromGluonTSTrainingDataset,
@@ -46,10 +48,7 @@ from .utils import CustomMASETrainer, plot_forecast
 
 logger = logging.get_logger(__name__)
 
-# TTM Constants
-TTM_MAX_FORECAST_HORIZON = 720
-TTM_MIN_FORECAST_HORIZON = 16
-
+# TTM Constants:
 # Fewshot max allowed number of samples
 # This is only used when `upper_bound_fewshot_samples=True`.
 # For example, if 5% few-shot for a dataset exceeds this number,
