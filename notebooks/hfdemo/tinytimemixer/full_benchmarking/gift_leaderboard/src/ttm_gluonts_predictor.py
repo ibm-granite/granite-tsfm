@@ -81,6 +81,7 @@ class TTMGluonTSPredictor:
         use_valid_from_train: bool = True,
         insample_forecast: bool = True,
         insample_use_train: bool = False,
+        plot_predictions: bool = False,
         **kwargs,
     ):
         """Initialize a TTMGluonTSPredictor object.
@@ -108,6 +109,7 @@ class TTMGluonTSPredictor:
             insample_forecast (bool, optional): Calculate insample statistics for quantile forecasts. Defaults to True.
             insample_use_train (bool, optional): Use training error statistics along with validation error statistics
                 for insample statistics calculation. Defaults to False.
+            plot_predictions (bool, optional): Plot predictions or not. Defaults to False.
         """
         self.prediction_length = prediction_length
         self.test_data_label = test_data_label
@@ -127,6 +129,7 @@ class TTMGluonTSPredictor:
         self.use_valid_from_train = use_valid_from_train
         self.insample_forecast = insample_forecast
         self.insample_use_train = insample_use_train
+        self.plot_predictions = plot_predictions
         self.quantile_keys = [
             "0.1",
             "0.2",
@@ -986,17 +989,18 @@ class TTMGluonTSPredictor:
                 )
             )
 
-        # plot random samples
-        plot_forecast(
-            test_data_input,
-            self.test_data_label,
-            forecast_samples,
-            self.prediction_length,
-            self.ds_name,
-            self.term,
-            self.out_dir,
-            probabilistic=self.insample_forecast,
-            quantile_keys=self.quantile_keys,
-        )
+        if self.plot_predictions:
+            # plot random samples
+            plot_forecast(
+                test_data_input,
+                self.test_data_label,
+                forecast_samples,
+                self.prediction_length,
+                self.ds_name,
+                self.term,
+                self.out_dir,
+                probabilistic=self.insample_forecast,
+                quantile_keys=self.quantile_keys,
+            )
 
         return sample_forecasts

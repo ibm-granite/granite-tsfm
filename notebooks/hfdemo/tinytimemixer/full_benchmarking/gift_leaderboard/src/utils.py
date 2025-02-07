@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -373,7 +374,12 @@ def get_args():
         default=200,
     )
 
-    args = parser.parse_args()
+    if "ipykernel" in sys.modules:  # Check if running in a Jupyter environment
+        # For Jupyter, provide default arguments
+        args = parser.parse_args("")
+    else:
+        args = parser.parse_args()  # Normal command-line parsing
+
     args.upper_bound_fewshot_samples = bool(args.upper_bound_fewshot_samples)
     args.freeze_backbone = bool(args.freeze_backbone)
     args.force_short_context = bool(args.force_short_context)
