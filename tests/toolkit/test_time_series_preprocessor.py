@@ -608,9 +608,25 @@ def test_get_datasets_with_categoricical(ts_data):
         prediction_length=2,
         context_length=5,
         categorical_columns=["varying_cat"],
+        scaling=False,
     )
 
     # for baseline
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
     expected = np.array([2.0, 3.0, 4.0, 0.0, 1.0])
     np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        prediction_length=2,
+        context_length=5,
+        categorical_columns=["varying_cat"],
+        scaling=True,
+    )
+
+    # for baseline
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
+    expected = np.array([0.0000, 0.7071, 1.4142, -1.4142, -0.7071])
+    np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected, rtol=1e-4)
