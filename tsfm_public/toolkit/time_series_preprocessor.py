@@ -133,6 +133,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
         freq: Optional[Union[int, str]] = None,
+        scale_categorical_columns: bool = True,
         **kwargs,
     ):
         """Multi-time series aware data preprocessor. Provides functions for scaling data and facitilitates downstream
@@ -170,6 +171,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
                 allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
                 inferred from `timestamp_column`. Defaults to None.
+            scale_categorical_columns (bool, optional): If True, the oridinal representations of categorical columns are scaled during preprocessing.
+                Defaults to True.
 
         Raises:
             ValueError: Raised if `id_columns` is not a list.
@@ -214,6 +217,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
         self.freq = freq
+        self.scale_categorical_columns = scale_categorical_columns
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -419,11 +423,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             List[str]: List of column names
         """
 
-        cols_to_scale = join_list_without_repeat(
+        column_lists = [
             self.observable_columns,
             self.control_columns,
             self.conditional_columns,
-        )
+        ]
+        if self.scale_categorical_columns:
+            column_lists.append(self.categorical_columns)
+        cols_to_scale = join_list_without_repeat(*column_lists)
 
         return cols_to_scale
 
@@ -579,11 +586,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if self.freq is None:
             self._estimate_frequency(df)
 
-        if self.scaling:
-            self._train_scaler(df)
-
         if self.encode_categorical:
             self._train_categorical_encoder(df)
+            if self.scale_categorical_columns:
+                # process now so we can learn the scaling factors
+                df = self._process_encoding(df.copy())
+
+        if self.scaling:
+            self._train_scaler(df)
 
         self._clean_up_dataframe(df)
         return self
@@ -643,6 +653,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self._clean_up_dataframe(df_inv)
         return df_inv
 
+    def _process_encoding(self, df: pd.DataFrame):
+        cols_to_encode = self._get_columns_to_encode()
+        if self.encode_categorical and cols_to_encode:
+            if not self.categorical_encoder:
+                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
+            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
+        return df
+
     def preprocess(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -655,6 +673,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
+
+        df = self._process_encoding(df)
 
         if self.scaling:
             other_cols_to_scale = self._get_other_columns_to_scale()
@@ -690,12 +710,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 id_columns=id_columns,
             )
             df = df_out
-
-        cols_to_encode = self._get_columns_to_encode()
-        if self.encode_categorical and cols_to_encode:
-            if not self.categorical_encoder:
-                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
-            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         self._clean_up_dataframe(df)
         return df
