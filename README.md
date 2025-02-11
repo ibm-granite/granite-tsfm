@@ -2,7 +2,7 @@
 Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
-[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](https://github.com/ibm-granite/granite-tsfm/services/inference/README.md).
+[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](https://github.com/ibm-granite/granite-tsfm/blob/main/services/inference/README.md).
 
 ## Python Version
 The current Python versions supported are 3.9, 3.10, 3.11, 3.12.
