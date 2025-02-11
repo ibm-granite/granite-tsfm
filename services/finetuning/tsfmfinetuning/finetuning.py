@@ -23,7 +23,7 @@ from .ftpayloads import (
 )
 from .hfutil import load_config, load_model, register_config
 from .ioutils import to_pandas
-from .tuning_handler import ForecastingTuningHandler
+from .tuning_handler import TuningHandler
 
 
 LOGGER = logging.getLogger(__file__)
@@ -113,7 +113,7 @@ class FinetuningRuntime:
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        handler, e = ForecastingTuningHandler.load(model_id=input_payload.model_id, model_path=model_path)
+        handler, e = TuningHandler.load(model_id=input_payload.model_id, model_path=model_path)
         if e is not None:
             return None, e
 

@@ -14,11 +14,11 @@ from .service_handler import HandlerFunction, ServiceHandler
 LOGGER = logging.getLogger(__file__)
 
 
-class InferenceHandler(ServiceHandler):
+class TuningHandler(ServiceHandler):
     @classmethod
     def load(
         cls, model_id: str, model_path: Union[str, Path]
-    ) -> Tuple["InferenceHandler", None] | Tuple[None, Exception]:
+    ) -> Tuple["TuningHandler", None] | Tuple[None, Exception]:
         """Load the handler_config -- the tsfm service config for this model, returning the proper
         handler to use the model.
 

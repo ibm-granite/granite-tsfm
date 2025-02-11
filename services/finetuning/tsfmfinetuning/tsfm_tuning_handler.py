@@ -35,6 +35,8 @@ class TSFMForecastingTuningHandler:
         model_path: Union[str, Path],
         handler_config: TSFMConfig,
     ):
+        self.training_label_names = ["future_values"]
+
         if (
             getattr(handler_config, "model_type", None)
             and getattr(handler_config, "model_config_name", None)
