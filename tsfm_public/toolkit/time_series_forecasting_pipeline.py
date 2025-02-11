@@ -376,7 +376,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 future_time_series[target_columns] = 0
                 future_time_series = self.feature_extractor.preprocess(future_time_series)
                 # future_time_series = future_time_series.drop(columns=target_columns)
-                future_time_series = future_time_series[target_columns] = np.nan
+                future_time_series[target_columns] = np.nan
 
             time_series = pd.concat((time_series, future_time_series), axis=0, ignore_index=True)
         else:
