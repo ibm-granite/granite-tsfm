@@ -3,7 +3,8 @@
 The TSFM Inference Services component provides a runtime for inference related tasks for the tsfm-granite class of
 timeseries foundation models. At present it provide inference endpoints for the following models:
 
-- https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1
+- https://huggingface.co/ibm-granite/granite-timeseries-ttm-r1
+- https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2
 - https://huggingface.co/ibm-granite/granite-timeseries-patchtst
 - https://huggingface.co/ibm-granite/granite-timeseries-patchtsmixer
 
