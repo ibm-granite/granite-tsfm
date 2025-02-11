@@ -1,4 +1,4 @@
-"""Service handler for HuggingFace models"""
+"""Inference handler for TSFM models"""
 
 import copy
 import logging
