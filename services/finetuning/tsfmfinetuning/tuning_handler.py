@@ -1,5 +1,3 @@
-"""Base serivce handler"""
-
 import logging
 from pathlib import Path
 from typing import Tuple, Union
