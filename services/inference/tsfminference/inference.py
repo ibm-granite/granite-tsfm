@@ -52,7 +52,7 @@ class InferenceRuntime:
         if not model_path:
             raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
         handler, e = InferenceHandler.load(model_id=model_id, model_path=model_path)
-        if handler.implementation.handler_config:
+        if handler.handler_config:
             answer = {}
             atts = [
                 "multivariate_support",
@@ -62,7 +62,7 @@ class InferenceRuntime:
                 "maximum_prediction_length",
             ]
             for at in atts:
-                if hasattr(handler.implementation.handler_config, at):
+                if hasattr(handler.handler_config, at):
                     answer[at] = getattr(handler.handler_config, at)
             return answer
         else:
@@ -115,8 +115,7 @@ class InferenceRuntime:
         if ex:
             return None, ValueError("future_data:" + str(ex))
 
-        # temporary hack
-        handler_config = handler.implementation.handler_config
+        handler_config = handler.handler_config
         # collect and check underlying time series lengths
         if getattr(handler_config, "minimum_context_length", None) or getattr(
             handler_config, "maximum_context_length", None
