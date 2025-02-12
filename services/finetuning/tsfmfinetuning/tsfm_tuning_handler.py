@@ -213,7 +213,7 @@ class TSFMForecastingTuningHandler:
         # we should properly set the prediction/context lengths in the preprocessor
         # we also need to make sure prediction_filter length is set in the model config
 
-        if parameters.fewshot_fraction_location not in FractionLocation:
+        if parameters.fewshot_fraction_location not in [e.value for e in FractionLocation]:
             raise ValueError(
                 f"Received unknown location for fewshot_fraction_location {parameters.fewshot_fraction_location}"
             )
