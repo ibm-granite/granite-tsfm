@@ -11,8 +11,6 @@ from fastapi import APIRouter, HTTPException
 from starlette import status
 from transformers import set_seed
 
-from tsfm_public import TimeSeriesPreprocessor
-
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
 from .dirutil import resolve_model_path
@@ -21,7 +19,6 @@ from .ftpayloads import (
     BaseTuneInput,
     TinyTimeMixerForecastingTuneInput,
 )
-from .hfutil import load_config, load_model, register_config
 from .ioutils import to_pandas
 from .tuning_handler import TuningHandler
 
@@ -32,20 +29,6 @@ LOGGER = logging.getLogger(__file__)
 class FinetuningRuntime:
     def __init__(self, config: Dict[str, Any] = {}):
         self.config = config
-        model_map = {}
-
-        if "custom_modules" in config:
-            for custom_module in config["custom_modules"]:
-                register_config(
-                    custom_module["model_type"],
-                    custom_module["model_config_name"],
-                    custom_module["module_path"],
-                )
-                LOGGER.info(f"registered {custom_module['model_type']}")
-
-                model_map[custom_module["model_config_name"]] = custom_module["module_path"]
-
-        self.model_to_module_map = model_map
 
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/finetuning", tags=["finetuning"])
@@ -56,30 +39,6 @@ class FinetuningRuntime:
             response_model=AsyncCallReturn,
         )
         app.include_router(self.router)
-
-    def load(self, model_path: str):
-        try:
-            preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
-            LOGGER.info("Successfully loaded preprocessor")
-        except OSError:
-            preprocessor = None
-            LOGGER.info("No preprocessor found")
-
-        # load config and model
-        conf = load_config(
-            model_path,
-        )
-
-        model, ex = load_model(
-            model_path,
-            config=conf,
-            module_path=self.model_to_module_map.get(conf.__class__.__name__, None),
-        )
-        if ex is None:
-            LOGGER.info("Successfully loaded model")
-        else:
-            LOGGER.exception(ex)
-        return model, preprocessor, ex
 
     def finetuning(self, input: TinyTimeMixerForecastingTuneInput, tuned_model_name: str, output_dir: Path):
         answer, ex = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
@@ -107,7 +66,7 @@ class FinetuningRuntime:
             LOGGER.info(f"Could not find model at path: {model_path}")
             if TSFM_ALLOW_LOAD_FROM_HF_HUB:
                 model_path = input_payload.model_id
-                LOGGER.info(f"Using HuggingFace Hub: {model_path}")
+                LOGGER.info(f"Attempting to use HuggingFace Hub: {model_path}")
             else:
                 return None, RuntimeError(
                     f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
