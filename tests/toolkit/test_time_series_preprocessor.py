@@ -563,6 +563,8 @@ def test_get_frequency_token():
     assert tsp.get_frequency_token("1h") == DEFAULT_FREQUENCY_MAPPING["h"]
     assert tsp.get_frequency_token("h") == DEFAULT_FREQUENCY_MAPPING["h"]
     assert tsp.get_frequency_token("0 days 01:00:00") == DEFAULT_FREQUENCY_MAPPING["h"]
+    assert tsp.get_frequency_token("H") == DEFAULT_FREQUENCY_MAPPING["h"]
+    assert tsp.get_frequency_token("1H") == DEFAULT_FREQUENCY_MAPPING["h"]
 
 
 def test_id_columns_and_scaling_id_columns(ts_data_runs):

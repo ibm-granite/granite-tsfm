@@ -49,6 +49,7 @@ DEFAULT_FREQUENCY_MAPPING = {
     "15min": 5,
     "30min": 6,
     "h": 7,  # hourly
+    "H": 7,  # hourly, for compatibility
     "d": 8,  # daily
     "W": 9,  # weekly
 }
