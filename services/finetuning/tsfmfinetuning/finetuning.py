@@ -4,7 +4,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Tuple, Union
+from typing import Tuple, Union
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
@@ -27,9 +27,6 @@ LOGGER = logging.getLogger(__file__)
 
 
 class FinetuningRuntime:
-    def __init__(self, config: Dict[str, Any] = {}):
-        self.config = config
-
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/finetuning", tags=["finetuning"])
         self.router.add_api_route(

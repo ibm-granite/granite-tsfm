@@ -30,10 +30,6 @@ FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time his
 
 
 class InferenceRuntime:
-    def __init__(self, config: Dict[str, Any] = {}):
-        # to do: assess the need for config
-        self.config = config
-
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
         # /forecasting
