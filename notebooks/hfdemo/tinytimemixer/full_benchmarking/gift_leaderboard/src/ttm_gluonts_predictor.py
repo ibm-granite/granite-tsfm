@@ -27,16 +27,11 @@ from tsfm_public import (
     TrackingCallback,
     count_parameters,
 )
-from tsfm_public.models.tinytimemixer import (
-    TinyTimeMixerConfig,
-    TinyTimeMixerForPrediction,
-)
 from tsfm_public.toolkit.get_model import get_model
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 
 from .gluonts_data_wrapper import (
     TTM_MAX_FORECAST_HORIZON,
-    TTM_MIN_FORECAST_HORIZON,
     ForecastDataset,
     StandardScalingGluonTSDataset,
     TorchDatasetFromGluonTSTrainingDataset,
@@ -161,9 +156,9 @@ class TTMGluonTSPredictor:
             self.prediction_channel_indices = kwargs["prediction_channel_indices"]
 
         # Get model
-        self._get_gift_model(model_path, context_length, **kwargs)
+        self._get_gift_model(model_path, context_length, prediction_length, freq, **kwargs)
 
-    def _get_gift_model(self, model_path: str, context_length: int, **kwargs):
+    def _get_gift_model(self, model_path: str, context_length: int, prediction_length: int, freq: str, **kwargs):
         """Get suitable TTM model based on context and forecast lengths.
 
         Args:
@@ -172,89 +167,34 @@ class TTMGluonTSPredictor:
         """
         self.ttm = None
 
-        # For short-term datasets and seasonality >= D, we use TTM R2.1 models.
-        # For all other cases, we utilize TTM R2.0 models.
+        prefer_l1_loss = False
+        prefer_longer_context = True
+        freq_prefix_tuning = False
         if self.term == "short" and (
-            str(self.freq).startswith("W") or str(self.freq).startswith("M") or str(self.freq).startswith("Q")
+            str(self.freq).startswith("D")
+            or str(self.freq).startswith("W")
+            or str(self.freq).startswith("M")
+            or str(self.freq).startswith("Q")
         ):
-            suitable_model_revisions = ["52-16-ft-l1-r2.1", "90-30-ft-l1-r2.1"]
-            suitable_models_horizons = [16, 30]
+            prefer_l1_loss = True
+            prefer_longer_context = False
+            freq_prefix_tuning = True
 
-            if self.prediction_length > TTM_MIN_FORECAST_HORIZON:
-                revision = suitable_model_revisions[1]
-            else:
-                revision = suitable_model_revisions[0]
-            model_prediction_len_ = int(revision.split("-")[1])
-            if model_prediction_len_ >= self.prediction_length:
-                self.ttm = TinyTimeMixerForPrediction.from_pretrained(
-                    model_path,
-                    revision=revision,
-                    prediction_filter_length=self.prediction_length,
-                    **kwargs,
-                ).to(self.device)
-                logger.info(f"Loaded TTM model from {model_path} with revision {revision}")
+        self.ttm = get_model(
+            model_path=model_path,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            prefer_l1_loss=prefer_l1_loss,
+            prefer_longer_context=prefer_longer_context,
+            resolution=freq,
+            freq_prefix_tuning=freq_prefix_tuning,
+            **kwargs,
+        ).to(self.device)
 
-        elif self.term == "short" and str(self.freq).startswith("D"):
-            context_threshold = 1000
-            suitable_model_revisions = ["90-30-ft-l1-r2.1", "512-48-ft-l1-r2.1", "512-96-ft-l1-r2.1"]
-            suitable_models_horizons = [30, 48, 96]
-
-            if context_length < context_threshold and self.prediction_length <= suitable_models_horizons[0]:
-                revision = suitable_model_revisions[0]
-            elif context_length < context_threshold and self.prediction_length <= suitable_models_horizons[1]:
-                revision = suitable_model_revisions[1]
-            else:
-                revision = suitable_model_revisions[2]
-
-            model_prediction_len_ = int(revision.split("-")[1])
-            if model_prediction_len_ >= self.prediction_length:
-                self.ttm = TinyTimeMixerForPrediction.from_pretrained(
-                    model_path,
-                    revision=revision,
-                    prediction_filter_length=self.prediction_length,
-                    **kwargs,
-                ).to(self.device)
-                logger.info(f"Loaded TTM model from {model_path} with revision {revision}")
-
-        elif self.term == "short" and str(self.freq).startswith("A"):
-            # For yearly, always initialize a small TTM from scratch
-            # since currently no yearly pre-trained TTM has been released
-            pl = 2
-            cl = self.prediction_length * 2  # 16
-            d_model = pl * 2
-            ttm_config = TinyTimeMixerConfig(
-                context_length=cl,
-                prediction_length=self.prediction_length,
-                patch_length=pl,
-                patch_stride=pl,
-                d_model=d_model,
-                num_layers=3,
-                decoder_num_layers=2,
-                decoder_d_model=d_model,
-                adaptive_patching_levels=0,
-                dropout=0.2,
-                # head_dropout=0.2,
-                **kwargs,
-            )
-            self.ttm = TinyTimeMixerForPrediction(config=ttm_config).to(self.device)
-            # Yearly data has high trend
+        if self.term == "short" and str(self.freq).startswith("A"):
             self.insample_use_train = False
             self.use_valid_from_train = False
-            logger.info(
-                f"Randomly initialized a TTM model with context_length = {self.ttm.config.context_length}, prediction_length={self.ttm.config.prediction_length}"
-            )
 
-        if self.ttm is None:
-            self.ttm = get_model(
-                model_path,
-                context_length=context_length,
-                prediction_length=self.prediction_length,
-                **kwargs,
-            ).to(self.device)
-
-            logger.info(
-                f"Loaded default TTM model TTM-{self.ttm.config.context_length}-{self.prediction_length} from {model_path}"
-            )
         self.context_length = self.ttm.config.context_length
 
         self.enable_prefix_tuning = False
