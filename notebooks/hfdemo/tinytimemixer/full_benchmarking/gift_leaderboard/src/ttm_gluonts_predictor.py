@@ -27,10 +27,11 @@ from tsfm_public import (
     TrackingCallback,
     count_parameters,
 )
-from tsfm_public.toolkit.get_model import get_model
+from tsfm_public.toolkit.get_model import TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT, get_model
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 
 from .gluonts_data_wrapper import (
+    RESOLUTION_MAP,
     TTM_MAX_FORECAST_HORIZON,
     ForecastDataset,
     StandardScalingGluonTSDataset,
@@ -171,14 +172,22 @@ class TTMGluonTSPredictor:
         prefer_longer_context = True
         freq_prefix_tuning = False
         if self.term == "short" and (
-            str(self.freq).startswith("D")
-            or str(self.freq).startswith("W")
+            str(self.freq).startswith("W")
             or str(self.freq).startswith("M")
             or str(self.freq).startswith("Q")
+            or str(self.freq).startswith("A")
         ):
             prefer_l1_loss = True
             prefer_longer_context = False
             freq_prefix_tuning = True
+
+        if self.term == "short" and str(self.freq).startswith("D"):
+            prefer_l1_loss = True
+            freq_prefix_tuning = True
+            if context_length < 2 * TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT:
+                prefer_longer_context = False
+            else:
+                prefer_longer_context = True
 
         self.ttm = get_model(
             model_path=model_path,
@@ -186,7 +195,7 @@ class TTMGluonTSPredictor:
             prediction_length=prediction_length,
             prefer_l1_loss=prefer_l1_loss,
             prefer_longer_context=prefer_longer_context,
-            resolution=freq,
+            resolution=RESOLUTION_MAP.get(freq, "oov"),
             freq_prefix_tuning=freq_prefix_tuning,
             **kwargs,
         ).to(self.device)

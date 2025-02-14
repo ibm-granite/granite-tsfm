@@ -10,6 +10,7 @@ import numpy as np
 import yaml
 
 from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING
 
 
 LOGGER = logging.getLogger(__file__)
@@ -26,6 +27,8 @@ SUPPORTED_LENGTHS = {
     },
 }
 
+TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT = 512
+
 
 def check_ttm_model_path(model_path):
     if (
@@ -41,37 +44,6 @@ def check_ttm_model_path(model_path):
         return 3
     else:
         return 0
-
-
-ALLOWED_RESOLUTIONS = {
-    "oov": 0,
-    "min": 1,
-    "T": 1,
-    "2min": 2,
-    "2T": 2,
-    "5min": 3,
-    "5T": 3,
-    "10min": 4,
-    "10T": 4,
-    "15min": 5,
-    "15T": 5,
-    "30min": 6,
-    "30T": 6,
-    "h": 7,
-    "H": 7,
-    "d": 8,
-    "D": 8,
-    "w": 9,
-    "W": 9,
-    "W-FRI": 9,
-    "W-TUE": 9,
-    "W-MON": 9,
-    "W-WED": 9,
-    "W-THU": 9,
-    "W-SAT": 9,
-    "W-SUN": 9,
-    "M": 9,
-}
 
 
 def get_random_ttm(context_length: int, prediction_length: int, size: str = "small", **kwargs):
@@ -176,7 +148,7 @@ def get_model(
                 )
 
             # Get resolution
-            R = ALLOWED_RESOLUTIONS.get(resolution, 0)
+            R = DEFAULT_FREQUENCY_MAPPING.get(resolution, 0)
 
             # Get list of all TTM models
             config_dir = resources.files("tsfm_public.resources.model_paths_config")
@@ -252,7 +224,7 @@ def get_model(
                     )
                 else:
                     reference_context = min([available_models[m]["context_length"] for m in models])
-                if reference_context <= 512:
+                if reference_context <= TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT:
                     # Step 3a: Filter based on L1 preference
                     if prefer_l1_loss:
                         l1_models = [m for m in models if "-l1-" in m]
@@ -300,7 +272,11 @@ def get_model(
                 models = selected_models_
 
             # Step 7: Do not allow unknow frequency
-            if freq_prefix_tuning and (resolution is not None) and (resolution not in ALLOWED_RESOLUTIONS.keys()):
+            if (
+                freq_prefix_tuning
+                and (resolution is not None)
+                and (resolution not in DEFAULT_FREQUENCY_MAPPING.keys())
+            ):
                 models = []
 
             # Step 8: Return the first available model or a dummy model if none found

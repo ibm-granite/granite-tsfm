@@ -16,6 +16,48 @@ from tsfm_public.toolkit.dataset import _torch
 TTM_MAX_FORECAST_HORIZON = 720
 TTM_MIN_FORECAST_HORIZON = 16
 
+RESOLUTION_MAP = {
+    "oov": "oov",
+    "OOV": "oov",
+    "min": "min",
+    "1min": "min",
+    "T": "min",
+    "1T": "min",
+    "2min": "2min",
+    "2T": "2min",
+    "5min": "5min",
+    "5T": "5min",
+    "10min": "10min",
+    "10T": "10min",
+    "15min": "15min",
+    "15T": "15min",
+    "30min": "30min",
+    "30T": "30min",
+    "h": "h",
+    "1h": "h",
+    "H": "h",
+    "1H": "h",
+    "d": "d",
+    "1d": "d",
+    "D": "d",
+    "1D": "d",
+    "w": "W",
+    "1w": "W",
+    "W": "W",
+    "1W": "W",
+    "W-FRI": "W",
+    "W-TUE": "W",
+    "W-MON": "W",
+    "W-WED": "W",
+    "W-THU": "W",
+    "W-SAT": "W",
+    "W-SUN": "W",
+    "M": "W",
+    "1M": "W",
+    "Q-DEC": "W",
+    "A-DEC": "A",
+}
+
 
 def get_freq_mapping():
     freq_token_mapping = {}

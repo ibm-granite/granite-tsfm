@@ -373,6 +373,22 @@ def get_args():
         required=False,
         default=200,
     )
+    parser.add_argument(
+        "--short_datasets",
+        "-sd",
+        type=str,
+        help="String of short dataset names separated by spaces",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--med_long_datasets",
+        "-mld",
+        type=str,
+        help="String of medium/long dataset names separated by spaces",
+        required=False,
+        default=None,
+    )
 
     if "ipykernel" in sys.modules:  # Check if running in a Jupyter environment
         # For Jupyter, provide default arguments
