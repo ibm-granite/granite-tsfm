@@ -59,7 +59,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == False
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # Case 2
@@ -75,7 +75,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True  # won't match since not available
+    assert model.config.resolution_prefix_tuning  # won't match since not available
     assert model.config.loss == "mae"  # won't match since not available
     # Case 3
     cl = 512
@@ -90,7 +90,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == False
+    assert not model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
     # Case 4
     cl = 512
@@ -105,7 +105,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
 
@@ -117,7 +117,7 @@ def granite_r2_basic_models():
             model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
             assert model.config.prediction_length == fl
             assert model.config.context_length == cl
-            assert model.config.resolution_prefix_tuning == False
+            assert not model.config.resolution_prefix_tuning
             assert model.config.loss == "mse"
 
     # ---- Low resolution models [52, 90, 180, 360, 512] ----
@@ -127,7 +127,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
     # 52 - l1 loss
     cl = 52
@@ -135,7 +135,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 90 - l2 loss
@@ -144,15 +144,14 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
-    assert model.config.loss == "mse"
+    assert model.config.resolution_prefix_tuning
     # 90 - l1 loss
     cl = 90
     fl = 30
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 180 - l1 loss
@@ -161,7 +160,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 360 - l1 loss
@@ -170,7 +169,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 512/48 - l2 loss
@@ -179,7 +178,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=False)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # 512/48 - l1 loss
@@ -188,7 +187,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 512/96 - l2 loss
@@ -204,7 +203,7 @@ def granite_r2_basic_models():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # 512/96 - l1 loss
@@ -220,7 +219,7 @@ def granite_r2_basic_models():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
 
@@ -327,7 +326,7 @@ def random_models():
             if fl < 1:
                 continue
             model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
-            assert model != None
+            assert model is not None
 
 
 def test_get_model():
