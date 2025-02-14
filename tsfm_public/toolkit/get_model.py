@@ -3,7 +3,6 @@
 """Utilities to support model loading"""
 
 import logging
-import os
 from importlib import resources
 
 import yaml
@@ -91,7 +90,7 @@ def get_model(
             # Get right TTM model
             config_dir = resources.files("tsfm_public.resources.model_paths_config")
 
-            with open(os.path.join(config_dir, "ttm.yaml"), "r") as file:
+            with config_dir.joinpath("ttm.yaml").open("r") as file:
                 model_revisions = yaml.safe_load(file)
 
             max_supported_horizon = SUPPORTED_LENGTHS[model_path_type]["FL"][-1]
