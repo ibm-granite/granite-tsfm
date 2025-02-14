@@ -87,6 +87,18 @@ def test_time_series_preprocessor_encodes(sample_data):
     for c in static_categorical_columns:
         assert sample_prep[c].dtype == float
 
+    categorical_columns = ["cat", "cat2"]
+    tsp = TimeSeriesPreprocessor(
+        target_columns=["val", "val2"],
+        categorical_columns=categorical_columns,
+    )
+    tsp.train(sample_data)
+
+    sample_prep = tsp.preprocess(sample_data)
+
+    for c in categorical_columns:
+        assert sample_prep[c].dtype == float
+
 
 def test_time_series_preprocessor_scales(ts_data):
     df = ts_data
@@ -584,3 +596,39 @@ def test_id_columns_and_scaling_id_columns(ts_data_runs):
 
     assert len(tsp.target_scaler_dict) == 2
     assert len(ds_train.datasets) == 4
+
+
+def test_get_datasets_with_categoricical(ts_data):
+    ts_data = ts_data.copy()
+
+    ts_data["varying_cat"] = ts_data.apply(lambda x: x["id"] + str(int(x["value1"] % 5)), axis=1)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        prediction_length=2,
+        context_length=5,
+        categorical_columns=["varying_cat"],
+        scaling=False,
+    )
+
+    # for baseline
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
+    expected = np.array([2.0, 3.0, 4.0, 0.0, 1.0])
+    np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        prediction_length=2,
+        context_length=5,
+        categorical_columns=["varying_cat"],
+        scaling=True,
+    )
+
+    # for baseline
+    train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
+    expected = np.array([0.0000, 0.7071, 1.4142, -1.4142, -0.7071])
+    np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected, rtol=1e-4)

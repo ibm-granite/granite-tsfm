@@ -122,6 +122,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 64,
         prediction_length: Optional[int] = None,
@@ -133,6 +134,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
         freq: Optional[Union[int, str]] = None,
+        scale_categorical_columns: bool = True,
         **kwargs,
     ):
         """Multi-time series aware data preprocessor. Provides functions for scaling data and facitilitates downstream
@@ -152,6 +154,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 percentage of a particular product is known and controllable in the future. Defaults to [].
             conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+                Defaults to [].
             static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the input
                 which are fixed over time. Defaults to [].
             context_length (int, optional): The length of the input context window. Defaults to 64.
@@ -163,11 +167,13 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 If None, the `id_columns` will be used. Defaults to None. This should be a subset of the id_columns.
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
-            frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
+            frequency_mapping (Dict[str, int], optional): A mapping which maps frequency strings to numerical values (integers). Defaults to DEFAULT_FREQUENCY_MAPPING.
             freq (Optional[Union[int, str]], optional): A frequency indicator for the given `timestamp_column`. See
                 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
                 allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
                 inferred from `timestamp_column`. Defaults to None.
+            scale_categorical_columns (bool, optional): If True, the oridinal representations of categorical columns are scaled during preprocessing.
+                Defaults to True.
 
         Raises:
             ValueError: Raised if `id_columns` is not a list.
@@ -187,6 +193,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.observable_columns = list(observable_columns)
         self.control_columns = list(control_columns)
         self.conditional_columns = list(conditional_columns)
+        self.categorical_columns = list(categorical_columns)
         self.static_categorical_columns = list(static_categorical_columns)
 
         self.context_length = context_length
@@ -211,6 +218,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
         self.freq = freq
+        self.scale_categorical_columns = scale_categorical_columns
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -232,13 +240,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             + self.observable_columns
             + self.control_columns
             + self.conditional_columns
+            + self.categorical_columns
             + self.static_categorical_columns
         ):
             counter[c] += 1
 
         if max(counter.values()) > 1:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -415,11 +424,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             List[str]: List of column names
         """
 
-        cols_to_scale = join_list_without_repeat(
+        column_lists = [
             self.observable_columns,
             self.control_columns,
             self.conditional_columns,
-        )
+        ]
+        if self.scale_categorical_columns:
+            column_lists.append(self.categorical_columns)
+        cols_to_scale = join_list_without_repeat(*column_lists)
 
         return cols_to_scale
 
@@ -432,7 +444,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns:
             List[str]: List of column names
         """
-        cols_to_encode = self.static_categorical_columns
+        cols_to_encode = self.static_categorical_columns + self.categorical_columns
         return cols_to_encode
 
     def _train_scaler(self, df: pd.DataFrame):
@@ -575,11 +587,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if self.freq is None:
             self._estimate_frequency(df)
 
-        if self.scaling:
-            self._train_scaler(df)
-
         if self.encode_categorical:
             self._train_categorical_encoder(df)
+            if self.scale_categorical_columns:
+                # process now so we can learn the scaling factors
+                df = self._process_encoding(df.copy())
+
+        if self.scaling:
+            self._train_scaler(df)
 
         self._clean_up_dataframe(df)
         return self
@@ -639,6 +654,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self._clean_up_dataframe(df_inv)
         return df_inv
 
+    def _process_encoding(self, df: pd.DataFrame):
+        cols_to_encode = self._get_columns_to_encode()
+        if self.encode_categorical and cols_to_encode:
+            if not self.categorical_encoder:
+                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
+            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
+        return df
+
     def preprocess(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -651,6 +674,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
+
+        df = self._process_encoding(df)
 
         if self.scaling:
             other_cols_to_scale = self._get_other_columns_to_scale()
@@ -686,12 +711,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 id_columns=id_columns,
             )
             df = df_out
-
-        cols_to_encode = self._get_columns_to_encode()
-        if self.encode_categorical and cols_to_encode:
-            if not self.categorical_encoder:
-                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
-            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         self._clean_up_dataframe(df)
         return df
@@ -874,6 +893,7 @@ def get_datasets(
         "observable_columns": ts_preprocessor.observable_columns,
         "control_columns": ts_preprocessor.control_columns,
         "conditional_columns": ts_preprocessor.conditional_columns,
+        "categorical_columns": ts_preprocessor.categorical_columns,
         "static_categorical_columns": ts_preprocessor.static_categorical_columns,
     }
 

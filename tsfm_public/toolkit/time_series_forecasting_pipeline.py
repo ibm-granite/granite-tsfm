@@ -137,6 +137,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 "observable_columns",
                 "control_columns",
                 "conditional_columns",
+                "categorical_columns",
                 "static_categorical_columns",
                 "freq",
             ]:
@@ -187,6 +188,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "future_time_series",
         ]
@@ -199,6 +201,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "freq",
             "explode_forecasts",
@@ -287,6 +290,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
             conditional_columns (List[str]): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future.
+
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
 
             static_categorical_columns (List[str]): List of column names which identify categorical-valued channels in the input
                 which are fixed over time.
