@@ -3,6 +3,7 @@
 """Utilities to support model loading"""
 
 import logging
+import os
 from importlib import resources
 
 import numpy as np
@@ -276,6 +277,10 @@ def get_model(
                 and (resolution is not None)
                 and (resolution not in DEFAULT_FREQUENCY_MAPPING.keys())
             ):
+                LOGGER.warning(
+                    f"The specified resolution ({resolution}) is not in the set of "
+                    f"allowed resolutions: {list(DEFAULT_FREQUENCY_MAPPING.keys())}."
+                )
                 models = []
 
             # Step 8: Return the first available model or a dummy model if none found

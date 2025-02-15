@@ -55,11 +55,11 @@ def freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=False,
-        resolution="H",
+        resolution="h",
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == False
+    assert not model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # Case 2
@@ -75,7 +75,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True  # won't match since not available
+    assert model.config.resolution_prefix_tuning  # won't match since not available
     assert model.config.loss == "mae"  # won't match since not available
     # Case 3
     cl = 512
@@ -86,11 +86,11 @@ def freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=True,
-        resolution="3T",
+        resolution="3min",
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == False
+    assert not model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
     # Case 4
     cl = 512
@@ -105,7 +105,7 @@ def freq_tuning():
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
 
@@ -117,7 +117,7 @@ def granite_r2_basic_models():
             model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
             assert model.config.prediction_length == fl
             assert model.config.context_length == cl
-            assert model.config.resolution_prefix_tuning == False
+            assert not model.config.resolution_prefix_tuning
             assert model.config.loss == "mse"
 
     # ---- Low resolution models [52, 90, 180, 360, 512] ----
@@ -127,7 +127,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
     # 52 - l1 loss
     cl = 52
@@ -135,7 +135,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 90 - l2 loss
@@ -144,7 +144,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
     # 90 - l1 loss
     cl = 90
@@ -152,7 +152,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 180 - l1 loss
@@ -161,7 +161,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 360 - l1 loss
@@ -170,7 +170,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 512/48 - l2 loss
@@ -179,7 +179,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=False)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # 512/48 - l1 loss
@@ -188,7 +188,7 @@ def granite_r2_basic_models():
     model = get_model(model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True)
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
     # 512/96 - l2 loss
@@ -200,11 +200,11 @@ def granite_r2_basic_models():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=True,
-        resolution="D",
+        resolution="d",
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mse"
 
     # 512/96 - l1 loss
@@ -216,11 +216,11 @@ def granite_r2_basic_models():
         prediction_length=fl,
         prefer_l1_loss=True,
         freq_prefix_tuning=True,
-        resolution="10T",
+        resolution="10min",
     )
     assert model.config.prediction_length == fl
     assert model.config.context_length == cl
-    assert model.config.resolution_prefix_tuning == True
+    assert model.config.resolution_prefix_tuning
     assert model.config.loss == "mae"
 
 
@@ -254,14 +254,14 @@ def granite_r2_other_models():
     assert model.config.d_model == 384
 
 
-def granite_r2_models():
+def test_granite_r2_models():
     granite_r2_basic_models()
     granite_r2_other_models()
     freq_tuning()
     prefer_longer_context()
 
 
-def granite_r1_models():
+def test_granite_r1_models():
     # Check basic cases
     mp = "ibm-granite/granite-timeseries-ttm-r1"
     for cl in [512, 1024]:
@@ -302,7 +302,7 @@ def granite_r1_models():
     assert model.config.d_model == 192
 
 
-def research_r2_models():
+def test_research_r2_models():
     mp = "ibm-research/ttm-research-r2"
     for cl in [512, 1024, 1536]:
         for fl in [96, 192, 336, 720]:
@@ -317,7 +317,7 @@ def research_r2_models():
                 assert model.config.prediction_filter_length == fl
 
 
-def random_models():
+def test_random_models():
     mp = "ibm-granite/granite-timeseries-ttm-r2"
 
     for cl in np.linspace(2, 20_000, 10):
@@ -327,14 +327,7 @@ def random_models():
             if fl < 1:
                 continue
             model = get_model(model_path=mp, context_length=cl, prediction_length=fl)
-            assert model != None
-
-
-def test_get_model():
-    granite_r2_models()
-    granite_r1_models()
-    research_r2_models()
-    random_models()
+            assert model is not None
 
 
 # Define test cases with multiple combinations
@@ -358,13 +351,13 @@ test_cases_granite_r2 = [
     # Context length ordering (Prefer Longer Context)
     (1200, 96, None, False, False, True, True, "1024-96-r2"),
     (1200, 96, None, False, False, False, True, "512-96-r2"),
-    (80, 20, "10T", False, False, True, True, "52-16-ft-r2.1"),
-    (80, 20, "10T", False, False, True, False, "TTM(small)"),
-    (80, 40, "10T", False, False, True, True, "52-16-ft-r2.1"),
-    (200, 80, "10T", False, False, False, True, "180-60-ft-l1-r2.1"),
-    (200, 80, "10T", False, False, True, True, "180-60-ft-l1-r2.1"),
-    (400, 80, "10T", False, False, False, True, "180-60-ft-l1-r2.1"),
-    (400, 80, "10T", False, False, True, True, "360-60-ft-l1-r2.1"),
+    (80, 20, "10min", False, False, True, True, "52-16-ft-r2.1"),
+    (80, 20, "10min", False, False, True, False, "TTM(small)"),
+    (80, 40, "10min", False, False, True, True, "52-16-ft-r2.1"),
+    (200, 80, "10min", False, False, False, True, "180-60-ft-l1-r2.1"),
+    (200, 80, "10min", False, False, True, True, "180-60-ft-l1-r2.1"),
+    (400, 80, "10min", False, False, False, True, "180-60-ft-l1-r2.1"),
+    (400, 80, "10min", False, False, True, True, "360-60-ft-l1-r2.1"),
     # FT and L1 Preferences (Only Apply for CL ≤ 512)
     (512, 96, None, False, True, True, True, "512-96-ft-l1-r2.1"),
     (1024, 96, None, False, True, True, True, "1024-96-r2"),  # L1 ignored
@@ -375,16 +368,16 @@ test_cases_granite_r2 = [
     (512, 96, "d", False, False, True, True, "512-96-ft-r2.1"),
     (512, 96, "d", False, True, True, True, "512-96-ft-l1-r2.1"),
     (300, 20, "W", True, True, True, True, "180-60-ft-l1-r2.1"),
-    (60, 12, "M", True, True, True, True, "52-16-ft-l1-r2.1"),
-    (60, 12, "M", True, False, True, True, "52-16-ft-r2.1"),
-    (36, 12, "M", True, True, False, True, "52-16-ft-l1-r2.1"),
-    (36, 12, "M", False, False, False, True, "52-16-ft-r2.1"),  # since force_return=True
+    (60, 12, "W", True, True, True, True, "52-16-ft-l1-r2.1"),
+    (60, 12, "W", True, False, True, True, "52-16-ft-r2.1"),
+    (36, 12, "W", True, True, False, True, "52-16-ft-l1-r2.1"),
+    (36, 12, "W", False, False, False, True, "52-16-ft-r2.1"),  # since force_return=True
     (36, 12, "M", False, False, True, False, "TTM(small)"),  # since force_return=False
     (512, 96, "oov", False, False, True, True, "512-96-r2"),
     (512, 96, "5min", False, False, True, True, "512-96-r2"),
     (512, 96, "random", False, False, True, True, "512-96-r2"),  # Invalid resolution, but ft=False
     (512, 96, "random", True, False, True, True, "TTM(small)"),  # Invalid resolution, but ft=True
-    (20, 6, "M", True, True, False, True, "52-16-ft-l1-r2.1"),
+    (20, 6, "W", True, True, False, True, "52-16-ft-l1-r2.1"),
     (200, 24, "W", True, False, True, True, "180-60-ft-l1-r2.1"),
     (200, 24, "W", True, False, False, True, "90-30-ft-r2.1"),
     (200, 24, "H", True, False, False, True, "90-30-ft-r2.1"),
