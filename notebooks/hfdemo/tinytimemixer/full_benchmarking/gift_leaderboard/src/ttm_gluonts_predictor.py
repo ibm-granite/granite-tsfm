@@ -171,6 +171,7 @@ class TTMGluonTSPredictor:
         prefer_l1_loss = False
         prefer_longer_context = True
         freq_prefix_tuning = False
+        force_return = "zeropad"
         if self.term == "short" and (
             str(self.freq).startswith("W")
             or str(self.freq).startswith("M")
@@ -189,6 +190,14 @@ class TTMGluonTSPredictor:
             else:
                 prefer_longer_context = True
 
+        if self.term == "short" and str(self.freq).startswith("A"):
+            self.insample_use_train = False
+            self.use_valid_from_train = False
+            force_return = "random_init_small"
+
+        if prediction_length > TTM_MAX_FORECAST_HORIZON:
+            force_return = "rolling"
+
         self.ttm = get_model(
             model_path=model_path,
             context_length=context_length,
@@ -197,12 +206,9 @@ class TTMGluonTSPredictor:
             prefer_longer_context=prefer_longer_context,
             resolution=RESOLUTION_MAP.get(freq, "oov"),
             freq_prefix_tuning=freq_prefix_tuning,
+            force_return=force_return,
             **kwargs,
         ).to(self.device)
-
-        if self.term == "short" and str(self.freq).startswith("A"):
-            self.insample_use_train = False
-            self.use_valid_from_train = False
 
         self.context_length = self.ttm.config.context_length
 
