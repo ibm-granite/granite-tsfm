@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from tsfm_public.toolkit.dataset import _torch
+from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING
 
 
 # TTM Constants:
@@ -62,29 +63,29 @@ RESOLUTION_MAP = {
 def get_freq_mapping():
     freq_token_mapping = {}
 
-    freq_token_mapping["oov"] = torch.Tensor([0])
-    freq_token_mapping["T"] = torch.Tensor([1])
-    freq_token_mapping["2T"] = torch.Tensor([2])
-    freq_token_mapping["5T"] = torch.Tensor([3])
-    freq_token_mapping["10T"] = torch.Tensor([4])
-    freq_token_mapping["15T"] = torch.Tensor([5])
-    freq_token_mapping["30T"] = torch.Tensor([6])
-    freq_token_mapping["H"] = torch.Tensor([7])
-    freq_token_mapping["D"] = torch.Tensor([8])
-    freq_token_mapping["W"] = torch.Tensor([9])
-    freq_token_mapping["W-FRI"] = torch.Tensor([9])
-    freq_token_mapping["W-TUE"] = torch.Tensor([9])
-    freq_token_mapping["W-MON"] = torch.Tensor([9])
-    freq_token_mapping["W-WED"] = torch.Tensor([9])
-    freq_token_mapping["W-THU"] = torch.Tensor([9])
-    freq_token_mapping["W-SAT"] = torch.Tensor([9])
-    freq_token_mapping["W-SUN"] = torch.Tensor([9])
-    freq_token_mapping["M"] = torch.Tensor([9])
-    freq_token_mapping["A-DEC"] = torch.Tensor([9])
-    freq_token_mapping["Q-DEC"] = torch.Tensor([9])
+    freq_token_mapping["oov"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["oov"]])
+    freq_token_mapping["T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["min"]])
+    freq_token_mapping["2T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["2min"]])
+    freq_token_mapping["5T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["5min"]])
+    freq_token_mapping["10T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["10min"]])
+    freq_token_mapping["15T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["15min"]])
+    freq_token_mapping["30T"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["30min"]])
+    freq_token_mapping["H"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["h"]])
+    freq_token_mapping["D"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["d"]])
+    freq_token_mapping["W"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-FRI"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-TUE"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-MON"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-WED"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-THU"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-SAT"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["W-SUN"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["M"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["A-DEC"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
+    freq_token_mapping["Q-DEC"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["W"]])
 
     # Seconds are currently mapped to OOV
-    freq_token_mapping["10S"] = torch.Tensor([0])
+    freq_token_mapping["10S"] = torch.Tensor([DEFAULT_FREQUENCY_MAPPING["oov"]])
 
     return freq_token_mapping
 
