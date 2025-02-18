@@ -107,10 +107,7 @@ def get_model(
     resolution: Optional[str] = None,
     prefer_l1_loss: bool = False,
     prefer_longer_context: bool = True,
-    force_return: Optional[
-        str
-    ] = None,  # Todo: merge  force_return and return_random_model_if_not_available None/zeropad/random_init_small/...
-    # return_random_model_if_not_available: str = "small",
+    force_return: Optional[str] = None,
     return_model_key: bool = False,
     **kwargs,
 ) -> Union[str, PreTrainedModel]:
