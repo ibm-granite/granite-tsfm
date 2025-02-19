@@ -118,3 +118,4 @@ TTM r2 models have been used in this evaluation. See the [model card](https://hu
 
 
 In the above table, a finetune time of 0s indicate that zero-shot evaluation was used instead of few-shot evaluation.
+Note that the scores in the GIFT-Eval leaderboard are normalized with respect to seasonal naive scores, and the scores reported in the above table are the raw scores on each dataset.
