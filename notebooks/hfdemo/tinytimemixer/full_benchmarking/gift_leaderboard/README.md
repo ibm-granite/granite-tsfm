@@ -2,14 +2,14 @@
 
 The [**GIFT-Eval Leaderboard**](https://huggingface.co/spaces/Salesforce/GIFT-Eval) is a comprehensive benchmark for time series forecasting.  
 
-[**Tiny Time Mixers (TTMs)**](https://arxiv.org/abs/2401.03955) or **TTMs** are lightweight compact pre-trained models (ranging from 1-5 Million parameters). Here, we present the evaluation of  on the GIFT benchmark. TTMs achieve **state-of-the-art performance** in point forecasting, with a **normalized MASE of 0.679**, while maintaining an **average fine-tuning time of just 2.5 minutes** on a single **A100 GPU**.  
+[**Tiny Time Mixers (TTMs)**](https://arxiv.org/abs/2401.03955) or **TTMs** are lightweight compact pre-trained models (ranging from 1-5 Million parameters). Here, we present the evaluation of TTMs on the GIFT benchmark. TTMs achieve **state-of-the-art performance** in point forecasting, with a **normalized MASE of 0.679**, while maintaining an **average fine-tuning time of just 2.5 minutes** on a single **A100 GPU**.  
 
 Details of the evaluation framework are provided below.
 
 ## Methodology
 TTMs are **lightweight** and **extremely fast**, making them ideal for fine-tuning on target domain data.  
 
-In the **GIFT-Eval** benchmark, we fine-tune TTMs separately for each dataset, using **only 20%** of the training data for most datasets. However, for extremely short datasets (fewer than 200 fine-tuning samples), we adopt a 90% few-shot setting. Since GIFT follows GlounsTS framework which allows the entire training data to be used as in-context, this approach can also be referred to as in-context 20% learning.
+In the **GIFT-Eval** benchmark, we fine-tune TTMs separately for each dataset, using **only 20%** of the training data for most datasets. However, for extremely short datasets (fewer than 200 fine-tuning samples), we adopt a 90% few-shot setting. Since GIFT follows GlounsTS framework which allows the entire training data to be used as in-context, this approach can also be referred to as **in-context 20% learning**.
 
 Each dataset is chronologically split into **train, validation, and test sets**. TTMs are fine-tuned on **random windows covering 20% of the training split**, validated on the validation set, and finally evaluated on the test set, with the reported performance reflecting this final evaluation.
 
@@ -17,6 +17,8 @@ Each dataset is chronologically split into **train, validation, and test sets**.
 TTM r2 models have been used in this evaluation. See the [model card](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2) here.
 
 ## Results
+We show the normalized forecasting metrics below (normalized by seasonal naive scores as done in the GIFT-Eval leaderboard).
+
 | dataset                          |   MASE |   sMAPE |   NRMSE |    ND |   CRPS |   Finetune time (s) |
 |:---------------------------------|-------:|--------:|--------:|------:|-------:|--------------------:|
 | bitbrains_fast_storage/5T/long   |  0.824 |   1.668 |   0.837 | 0.941 |  0.726 |            2202.97  |
@@ -118,4 +120,4 @@ TTM r2 models have been used in this evaluation. See the [model card](https://hu
 | us_births/W/short                |  0.73  |   0.731 |   0.723 | 0.727 |  0.66  |             211.301 |
 | **Geometric Mean**                   |  **0.679** |   **0.91**  |   **0.728** | **0.719** |  **0.492** |             **148.521** |
 
-In the table above, a fine-tune time of 0 seconds indicates that zero-shot evaluation was performed instead of few-shot evaluation. This is because the number of time series segments available for fine-tuning the TTM model was very small (fewer than 10).
+In the table above, a fine-tune time of 0 seconds indicates that zero-shot evaluation was performed instead of few-shot evaluation. This is because the number of time series segments available for fine-tuning the TTM model was very low (fewer than 10).
