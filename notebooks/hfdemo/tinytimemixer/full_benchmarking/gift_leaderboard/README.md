@@ -2,14 +2,14 @@
 
 The [**GIFT-Eval Leaderboard**](https://huggingface.co/spaces/Salesforce/GIFT-Eval) is a comprehensive benchmark for time series forecasting.  
 
-Here, we present the evaluation of [**Tiny Time Mixers (TTMs)**](https://arxiv.org/abs/2401.03955) on the GIFT benchmark. TTMs achieve **state-of-the-art performance** in point forecasting, with a **normalized MASE of 0.679**, while maintaining an **average fine-tuning time of just 2.5 minutes** on a single **A100 GPU**.  
+[**Tiny Time Mixers (TTMs)**](https://arxiv.org/abs/2401.03955) or **TTMs** are lightweight compact pre-trained models (ranging from 1-5 Million parameters). Here, we present the evaluation of  on the GIFT benchmark. TTMs achieve **state-of-the-art performance** in point forecasting, with a **normalized MASE of 0.679**, while maintaining an **average fine-tuning time of just 2.5 minutes** on a single **A100 GPU**.  
 
 Details of the evaluation framework are provided below.
 
-## Few-shot finetune
-TTMs are **lightweight** and **highly efficient**, making them ideal for fine-tuning on target domain data.  
+## Methodology
+TTMs are **lightweight** and **extremely fast**, making them ideal for fine-tuning on target domain data.  
 
-In the **GIFT-Eval** benchmark, we fine-tune TTMs separately for each dataset, using **only 20%** of the training data for most datasets. However, for extremely short datasets (**fewer than 200 fine-tuning samples**), we adopt a **90% few-shot setting**.  
+In the **GIFT-Eval** benchmark, we fine-tune TTMs separately for each dataset, using **only 20%** of the training data for most datasets. However, for extremely short datasets (fewer than 200 fine-tuning samples), we adopt a 90% few-shot setting. Since GIFT follows GlounsTS framework which allows the entire training data to be used as in-context, this approach can also be referred to as in-context 20% learning.
 
 Each dataset is chronologically split into **train, validation, and test sets**. TTMs are fine-tuned on **random windows covering 20% of the training split**, validated on the validation set, and finally evaluated on the test set, with the reported performance reflecting this final evaluation.
 
