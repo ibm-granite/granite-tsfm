@@ -9,7 +9,7 @@ Details of the evaluation framework are provided below.
 
 ## Methodology
 TTMs are lightweight and extremely fast, making them suitable for few-shot fine-tuning on the target domain data.
-In the GIFT-Eval benchmark, we finetune TTMs independently on each dataset, with only 20% of the training data. For extremely short datasets with <200 finetune samples, we use 90% few-shot setting). TTM finetuning is pretty fast with an average finetune time of only 2.5 minutes in one A100 GPU. Since GIFT follows GlounsTS which allows the entire training data to be used as context, this approach can also be referred to as in-context 20% learning. 
+In the GIFT-Eval benchmark, we finetune TTMs independently on each dataset using either 20% of the training data or 200 samples, whichever is greater. TTM finetuning is pretty fast with an average finetune time of only 2.5 minutes in one A100 GPU. Since GIFT follows GlounsTS which allows the entire training data to be used as in-context, this approach can also be referred to as in-context 20% learning.
 
 Each dataset is chronologically split into train, validation, and test datasets. TTMs are finetuned on 20% random windows taken from the training split, validated on the validation split, and then finally the performance on the test split has been reported.
 
