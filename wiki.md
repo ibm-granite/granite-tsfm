@@ -120,4 +120,4 @@ We sincerely thank all the tutors for dedicating their valuable time to analyzin
 | PatchTST | [Nixtla](https://nixtla.github.io/neuralforecast/models.patchtst.html) | -- | -- | -- |
 | PatchTST | [yuqinie98/PatchTST](https://github.com/yuqinie98/PatchTST) | 1.5k | 256 | From the authors |
 | TST | [tsai](https://timeseriesai.github.io/tsai/models.tst.html) | -- | -- | -- |
-| TST | [mvts_transformer]() | 734 | 171 | From the authors |
+| TST | [mvts_transformer](https://github.com/gzerveas/mvts_transformer) | 734 | 171 | From the authors |
