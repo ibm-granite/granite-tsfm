@@ -1,0 +1,6 @@
+{
+    "model": "TTM-r2",
+    "model_type": "pretrained",
+    "model_dtype": "float32",
+    "model_link": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2"
+}
