@@ -3,11 +3,13 @@
 The [GIFT-Eval Leaderboard](https://huggingface.co/spaces/Salesforce/GIFT-Eval) is a comprehensive benchmark for time series forecasting.
 Here, we provide the details of evaluating [Tiny Time Mixers (TTMs)](https://arxiv.org/abs/2401.03955) on the GIFT benchmark.
 
-TTMs achive the current state-of-art performance in point forecasting (normalized MASE of 0.679), with average finetune time of only 2.5 minutes in one A100 GPU. Details of the evaluation framework is provided below.
+TTMs are lightweight compact pre-trained models (ranging from 1-5 Million parameters) that achieve the current state-of-art performance in point forecasting (normalized MASE of 0.679).
 
-## Few-shot finetune
-TTMs are lightweight and extremely fast, making them suitable for fine-tuning on the target domain data.
-In the GIFT-Eval benchmark, we finetune TTMs independently on each dataset, with only 20% of the training data for most of the datasets (for extremely short datasets with <200 finetune samples, we use 90% few-shot setting).
+Details of the evaluation framework are provided below.
+
+## Methodology
+TTMs are lightweight and extremely fast, making them suitable for few-shot fine-tuning on the target domain data.
+In the GIFT-Eval benchmark, we finetune TTMs independently on each dataset, with only 20% of the training data. For extremely short datasets with <200 finetune samples, we use 90% few-shot setting). TTM finetuning is pretty fast with an average finetune time of only 2.5 minutes in one A100 GPU. Since GIFT follows GlounsTS which allows the entire training data to be used as context, this approach can also be referred to as in-context 20% learning. 
 
 Each dataset is chronologically split into train, validation, and test datasets. TTMs are finetuned on 20% random windows taken from the training split, validated on the validation split, and then finally the performance on the test split has been reported.
 
