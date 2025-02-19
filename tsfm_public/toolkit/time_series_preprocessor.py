@@ -249,6 +249,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 "A column name should appear only once in `target_columns`, `observable_colums`, `control_columns`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
             )
 
+        for c in self.categorical_columns:
+            if all(
+                c not in aset for aset in [self.conditional_columns, self.control_columns, self.observable_columns]
+            ):
+                raise ValueError(
+                    "Each specified categorical column must also be included in one of 'conditional_columns', 'control_columns', or 'observable_columns'."
+                )
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
