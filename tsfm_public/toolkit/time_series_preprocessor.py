@@ -50,7 +50,8 @@ DEFAULT_FREQUENCY_MAPPING = {
     "30min": 6,
     "h": 7,  # hourly
     "H": 7,  # hourly, for compatibility
-    "d": 8,  # daily
+    "d": 8,  # daily, for compatibility
+    "D": 8,  # daily
     "W": 9,  # weekly
 }
 
@@ -127,7 +128,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
-        # scale_outputs: bool = False,
         scaler_type: ScalerType = ScalerType.STANDARD.value,
         scaling_id_columns: Optional[List[str]] = None,
         encode_categorical: bool = True,
@@ -240,15 +240,22 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             + self.observable_columns
             + self.control_columns
             + self.conditional_columns
-            + self.categorical_columns
             + self.static_categorical_columns
         ):
             counter[c] += 1
 
         if max(counter.values()) > 1:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
+                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columns`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
             )
+
+        for c in self.categorical_columns:
+            if all(
+                c not in aset for aset in [self.conditional_columns, self.control_columns, self.observable_columns]
+            ):
+                raise ValueError(
+                    "Each specified categorical column must also be included in one of 'conditional_columns', 'control_columns', or 'observable_columns'."
+                )
 
     def to_dict(self) -> Dict[str, Any]:
         """

@@ -91,6 +91,7 @@ def test_time_series_preprocessor_encodes(sample_data):
     tsp = TimeSeriesPreprocessor(
         target_columns=["val", "val2"],
         categorical_columns=categorical_columns,
+        control_columns=categorical_columns,
     )
     tsp.train(sample_data)
 
@@ -610,6 +611,7 @@ def test_get_datasets_with_categoricical(ts_data):
         prediction_length=2,
         context_length=5,
         categorical_columns=["varying_cat"],
+        conditional_columns=["varying_cat"],
         scaling=False,
     )
 
@@ -625,6 +627,7 @@ def test_get_datasets_with_categoricical(ts_data):
         prediction_length=2,
         context_length=5,
         categorical_columns=["varying_cat"],
+        conditional_columns=["varying_cat"],
         scaling=True,
     )
 
