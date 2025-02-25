@@ -342,14 +342,14 @@ test_cases_granite_r2 = [
     # Forecast length filtering
     (512, 720, None, False, False, True, "rolling", "512-720-r2"),
     (1024, 1000, None, False, False, True, "rolling", "1024-720-r2"),
-    (1024, 1000, None, False, False, True, "roll", "1024-720-r2"),
+    (1024, 1000, None, False, False, True, "rolling", "1024-720-r2"),
     (512, 192, None, False, False, True, "rolling", "512-192-r2"),
     (180, 60, None, False, False, True, "rolling", "180-60-ft-l1-r2.1"),
-    (200, 50, None, False, False, True, "roll", "180-60-ft-l1-r2.1"),
+    (200, 50, None, False, False, True, "rolling", "180-60-ft-l1-r2.1"),
     # Context length filtering
     (2000, 336, None, False, False, True, "zeropad", "1536-336-r2"),
-    (1200, 96, None, False, False, True, "zero", "1024-96-r2"),
-    (600, 336, None, False, False, True, "zero", "512-336-r2"),
+    (1200, 96, None, False, False, True, "zeropad", "1024-96-r2"),
+    (600, 336, None, False, False, True, "zeropad", "512-336-r2"),
     # Context length ordering (Prefer Longer Context)
     (1200, 96, None, False, False, True, None, "1024-96-r2"),
     (1200, 96, None, False, False, False, None, "512-96-r2"),
@@ -369,20 +369,20 @@ test_cases_granite_r2 = [
     # Resolution-based filtering
     (512, 96, "d", False, False, True, None, "512-96-ft-r2.1"),
     (512, 96, "d", False, True, True, None, "512-96-ft-l1-r2.1"),
-    (300, 20, "W", True, True, True, "zero", "180-60-ft-l1-r2.1"),
+    (300, 20, "W", True, True, True, "zeropad", "180-60-ft-l1-r2.1"),
     (60, 12, "W", True, True, True, "zeropad", "52-16-ft-l1-r2.1"),
     (60, 12, "W", True, False, True, "zerop", "52-16-ft-r2.1"),
-    (36, 12, "W", True, True, False, "zero", "52-16-ft-l1-r2.1"),
+    (36, 12, "W", True, True, False, "zeropad", "52-16-ft-l1-r2.1"),
     (36, 12, "W", False, False, False, "zeropad", "52-16-ft-r2.1"),
     (36, 12, "M", False, False, True, "random_init_small", "TTM(small)"),
     (512, 96, "oov", False, False, True, None, "512-96-r2"),
     (512, 96, "5min", False, False, True, None, "512-96-r2"),
     (512, 96, "random", False, False, True, None, "512-96-r2"),  # Invalid freq, but ft=False
     (512, 96, "random", True, False, True, "random_init_medium", "TTM(medium)"),  # Invalid freq, but ft=True
-    (20, 6, "W", True, True, False, "zero", "52-16-ft-l1-r2.1"),
+    (20, 6, "W", True, True, False, "zeropad", "52-16-ft-l1-r2.1"),
     (200, 24, "W", True, False, True, "zeropad", "180-60-ft-l1-r2.1"),
-    (200, 24, "W", True, False, False, "zero", "90-30-ft-r2.1"),
-    (200, 24, "H", True, False, False, "zero", "90-30-ft-r2.1"),
+    (200, 24, "W", True, False, False, "zeropad", "90-30-ft-r2.1"),
+    (200, 24, "H", True, False, False, "zeropad", "90-30-ft-r2.1"),
     (20, 6, "A", True, True, True, "random_init_small", "TTM(small)"),
     # Edge Cases (No Match Scenarios + some match scenarios)
     (10, 5, None, False, False, True, "random_init_small", "TTM(small)"),
@@ -390,13 +390,13 @@ test_cases_granite_r2 = [
     (10, 5, None, False, False, True, "zeropad", "1536-96-r2"),
     (10, 5, None, False, False, False, "zeropad", "52-16-ft-r2.1"),
     (10, 5, None, True, False, False, "zeropad", "52-16-ft-r2.1"),
-    (100, 50, None, True, False, True, "small", "TTM(small)"),
+    (100, 50, None, True, False, True, "random_init_small", "TTM(small)"),
     (100, 50, None, True, False, True, "random_init_medium", "TTM(medium)"),
-    (100, 50, None, True, True, True, "roll", "90-30-ft-l1-r2.1"),
+    (100, 50, None, True, True, True, "rolling", "90-30-ft-l1-r2.1"),
     (600, 50, None, False, False, True, None, "512-96-r2"),
     (600, 40, None, False, False, True, None, "512-48-ft-r2.1"),
     (1536, 1000, None, False, False, True, "random_init_large", "TTM(large)"),
-    (1536, 336, "W", False, False, True, "small", "TTM(small)"),
+    (1536, 336, "W", False, False, True, "random_init_small", "TTM(small)"),
     (1536, 96, "d", True, True, True, None, "512-96-ft-l1-r2.1"),
     (13, 3, "d", True, True, True, "random_init_small", "TTM(small)"),
     # Complex Cases with Multiple Constraints
@@ -404,7 +404,7 @@ test_cases_granite_r2 = [
     (512, 192, "d", True, False, False, "rolling", "512-96-ft-r2.1"),
     (512, 192, "d", True, False, False, "random_init_small", "TTM(small)"),
     (1024, 96, None, True, True, False, None, "512-96-ft-l1-r2.1"),
-    (1536, 336, "d", False, False, True, "roll", "512-96-ft-r2.1"),
+    (1536, 336, "d", False, False, True, "rolling", "512-96-ft-r2.1"),
     (1536, 336, "d", False, True, True, "rolling", "512-96-ft-l1-r2.1"),
     # Sorting correctness
     (1200, 500, None, False, False, True, None, "1024-720-r2"),
@@ -470,7 +470,7 @@ test_cases_research_r2 = [
     (512, 50, None, False, False, False, None, "512-96-ft-r2"),
     # invalid context length
     (50, 50, None, False, False, False, "zeropad", "512-96-ft-r2"),
-    (50, 50, None, False, False, False, "rand_init_small", "TTM(small)"),
+    (50, 50, None, False, False, False, "random_init_small", "TTM(small)"),
     # prefer longer context
     (1200, 50, None, False, False, True, None, "1024-96-ft-r2"),
     (1200, 50, None, False, False, False, None, "512-96-ft-r2"),
