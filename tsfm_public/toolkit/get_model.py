@@ -109,7 +109,7 @@ def get_model(
     context_length: Optional[int] = None,
     prediction_length: Optional[int] = None,
     freq_prefix_tuning: bool = False,
-    resolution: Optional[str] = None,
+    freq: Optional[str] = None,
     prefer_l1_loss: bool = False,
     prefer_longer_context: bool = True,
     force_return: Optional[str] = None,
@@ -127,7 +127,7 @@ def get_model(
         prediction_length (int, optional): Length of the forecast horizon. Defaults to None.
         freq_prefix_tuning (bool, optional): If true, it will prefer TTM models that are trained with frequency prefix
             tuning configuration. Defaults to None.
-        resolution (str, optional): Resolution or frequency of the data. Defaults to None. Allowed values are as
+        freq (str, optional): Resolution or frequency of the data. Defaults to None. Allowed values are as
             per the `DEFAULT_FREQUENCY_MAPPING`.
         prefer_l1_loss (bool, optional): If True, it will prefer choosing models that were trained with L1 loss or
             mean absolute error loss. Defaults to False.
@@ -164,8 +164,8 @@ def get_model(
                     "Provide `context_length` and `prediction_length` when `model_path` is a hugginface model path."
                 )
 
-            # Get resolution
-            R = DEFAULT_FREQUENCY_MAPPING.get(resolution, 0)
+            # Get freq
+            R = DEFAULT_FREQUENCY_MAPPING.get(freq, 0)
 
             # Get list of all TTM models
             config_dir = resources.files("tsfm_public.resources.model_paths_config")
@@ -192,9 +192,9 @@ def get_model(
             available_ttm_context_lengths = [available_models[m]["context_length"] for m in available_model_keys]
             shortest_ttm_context_length = min(available_ttm_context_lengths)
 
-            # Step 1: Filter models based on resolution (R)
+            # Step 1: Filter models based on freq (R)
             if model_path_type == 1 or model_path_type == 2:
-                # Only, r2.1 models are suitable for Daily or longer resolution
+                # Only, r2.1 models are suitable for Daily or longer freq
                 if R >= 8:
                     models = [m for m in available_models.keys() if "r2.1" in available_models[m]["release"]]
                 else:
@@ -311,13 +311,9 @@ def get_model(
                 models = selected_models_
 
             # Step 7: Do not allow unknow frequency
-            if (
-                freq_prefix_tuning
-                and (resolution is not None)
-                and (resolution not in DEFAULT_FREQUENCY_MAPPING.keys())
-            ):
+            if freq_prefix_tuning and (freq is not None) and (freq not in DEFAULT_FREQUENCY_MAPPING.keys()):
                 LOGGER.warning(
-                    f"The specified resolution ({resolution}) is not in the set of "
+                    f"The specified frequency ({freq}) is not in the set of "
                     f"allowed resolutions: {list(DEFAULT_FREQUENCY_MAPPING.keys())}."
                 )
                 models = []

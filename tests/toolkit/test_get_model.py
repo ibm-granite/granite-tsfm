@@ -62,14 +62,14 @@ def test_research_r2_models():
 
 def test_granite_r2_basic_models():
     mp = "ibm-granite/granite-timeseries-ttm-r2"
-    # 12 high resolution models
+    # 12 high freq models
     for cl in [512, 1024, 1536]:
         for fl in [96, 192, 336, 720]:
             model_key = get_model(model_path=mp, context_length=cl, prediction_length=fl, return_model_key=True)
             assert int(model_key.split("-")[1]) == fl
             assert int(model_key.split("-")[0]) == cl
 
-    # ---- Low resolution models [52, 90, 180, 360, 512] ----
+    # ---- Low freq models [52, 90, 180, 360, 512] ----
     # 52 - l2 loss
     cl = 52
     fl = 16
@@ -152,7 +152,7 @@ def test_granite_r2_basic_models():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=True,
-        resolution="d",
+        freq="d",
         return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
@@ -167,7 +167,7 @@ def test_granite_r2_basic_models():
         prediction_length=fl,
         prefer_l1_loss=True,
         freq_prefix_tuning=True,
-        resolution="10min",
+        freq="10min",
         return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
@@ -255,7 +255,7 @@ def test_freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=False,
-        resolution="h",
+        freq="h",
         return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
@@ -270,7 +270,7 @@ def test_freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=True,
         freq_prefix_tuning=False,
-        resolution="H",
+        freq="H",
         return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
@@ -286,7 +286,7 @@ def test_freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=False,
         freq_prefix_tuning=True,
-        resolution="3min",
+        freq="3min",
         return_model_key=True,
         force_return="random_init_large",
     )
@@ -301,7 +301,7 @@ def test_freq_tuning():
         prediction_length=fl,
         prefer_l1_loss=True,
         freq_prefix_tuning=True,
-        resolution="H",
+        freq="H",
         return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
@@ -377,8 +377,8 @@ test_cases_granite_r2 = [
     (36, 12, "M", False, False, True, "random_init_small", "TTM(small)"),
     (512, 96, "oov", False, False, True, None, "512-96-r2"),
     (512, 96, "5min", False, False, True, None, "512-96-r2"),
-    (512, 96, "random", False, False, True, None, "512-96-r2"),  # Invalid resolution, but ft=False
-    (512, 96, "random", True, False, True, "random_init_medium", "TTM(medium)"),  # Invalid resolution, but ft=True
+    (512, 96, "random", False, False, True, None, "512-96-r2"),  # Invalid freq, but ft=False
+    (512, 96, "random", True, False, True, "random_init_medium", "TTM(medium)"),  # Invalid freq, but ft=True
     (20, 6, "W", True, True, False, "zero", "52-16-ft-l1-r2.1"),
     (200, 24, "W", True, False, True, "zeropad", "180-60-ft-l1-r2.1"),
     (200, 24, "W", True, False, False, "zero", "90-30-ft-r2.1"),
@@ -420,7 +420,7 @@ def test_all_cases_granite_r2(cl, fl, res, ft, l1, longer, force_return, expecte
         "ibm-granite/granite-timeseries-ttm-r2",
         context_length=cl,
         prediction_length=fl,
-        resolution=res,
+        freq=res,
         freq_prefix_tuning=ft,
         prefer_l1_loss=l1,
         prefer_longer_context=longer,
@@ -452,7 +452,7 @@ def test_all_cases_granite_r1(cl, fl, res, ft, l1, longer, force_return, expecte
         "ibm-granite/granite-timeseries-ttm-r1",
         context_length=cl,
         prediction_length=fl,
-        resolution=res,
+        freq=res,
         freq_prefix_tuning=ft,
         prefer_l1_loss=l1,
         prefer_longer_context=longer,
@@ -483,7 +483,7 @@ def test_all_cases_research_r2(cl, fl, res, ft, l1, longer, force_return, expect
         "ibm-research/ttm-research-r2",
         context_length=cl,
         prediction_length=fl,
-        resolution=res,
+        freq=res,
         freq_prefix_tuning=ft,
         prefer_l1_loss=l1,
         prefer_longer_context=longer,
