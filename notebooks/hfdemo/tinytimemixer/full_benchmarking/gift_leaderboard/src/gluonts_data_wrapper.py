@@ -123,12 +123,12 @@ class StandardScalingGluonTSDataset:
 
         Args:
             train_data (Union[TrainingDataset, InputDataset]): Iterator with
-                each series of shape [num_channels, seq_len] for multivariate
-                and [seq_len] for univariate.
+                each series of shape [num_channels, context_length] for multivariate
+                and [context_length] for univariate.
         """
         for batch in tqdm(batcher(train_data, batch_size=1)):
             if batch[0]["target"].ndim == 1:
-                batch[0]["target"] = batch[0]["target"].reshape(1, -1)  # [1, seq_len]
+                batch[0]["target"] = batch[0]["target"].reshape(1, -1)  # [1, context_length]
             self.mean[batch[0]["item_id"]] = np.mean(impute_series(batch[0]["target"]), axis=1).reshape(-1, 1)
             std = np.std(impute_series(batch[0]["target"]), axis=1).reshape(-1, 1)
             for i in range(std.shape[0]):
@@ -141,8 +141,8 @@ class StandardScalingGluonTSDataset:
 
         Args:
             data (Union[TrainingDataset, InputDataset]): Iterator with
-                each series of shape [num_channels, seq_len] for multivariate
-                and [seq_len] for univariate.
+                each series of shape [num_channels, context_length] for multivariate
+                and [context_length] for univariate.
 
         Returns:
             Iternator: With each series transformed.
@@ -161,7 +161,7 @@ class StandardScalingGluonTSDataset:
         """Inverse transform, and bring data to original scale.
 
         Args:
-            data (np.ndarray): Forecast output of shape [batch, seq_len, num_channels]
+            data (np.ndarray): Forecast output of shape [batch, context_length, num_channels]
             series_ids (list): List of item ids.
             prediction_channel_indices (list, optional): List of target channel indices. Defaults to [].
 
@@ -169,7 +169,7 @@ class StandardScalingGluonTSDataset:
             Exception: If NaN is found in the forecast.
 
         Returns:
-            np.ndarray: Of shape [batch, seq_len, num_channels].
+            np.ndarray: Of shape [batch, context_length, num_channels].
         """
         out = np.zeros(data.shape)
 
@@ -190,8 +190,8 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
     def __init__(
         self,
         gluon_dataset: TrainingDataset,
-        seq_len: int,
-        forecast_len: int,
+        context_length: int,
+        prediction_length: int,
         last_window_only=False,
         gen_more_samples_for_short_series: bool = True,
         force_short_context: bool = False,
@@ -206,8 +206,8 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
 
         Args:
             gluon_dataset (TrainingDataset): Training dataset.
-            seq_len (int): Context length.
-            forecast_len (int): Prediction length.
+            context_length (int): Context length.
+            prediction_length (int): Prediction length.
             last_window_only (bool, optional): If True, only last window will be take from each series.
                 Defaults to False.
             gen_more_samples_for_short_series (bool, optional): If True, it will pad zeros and try to
@@ -222,9 +222,9 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
             freq (str, optional): Frequency of the dataset. Defaults to None.
         """
 
-        # assert seq_len > forecast_len, f'sequence lenght {seq_len} has to be strictly greater than forecast length {forecast_len}'
-        self.seq_len = seq_len
-        self.forecast_len = min(forecast_len, TTM_MAX_FORECAST_HORIZON)
+        # assert context_length > prediction_length, f'sequence lenght {context_length} has to be strictly greater than forecast length {prediction_length}'
+        self.context_length = context_length
+        self.prediction_length = min(prediction_length, TTM_MAX_FORECAST_HORIZON)
         self.X = list(gluon_dataset)
         self.last_window_only = last_window_only
         self.stride = 1  # TODO: support other strides
@@ -237,8 +237,8 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
 
         # force short context
         if self.force_short_context:
-            self.actual_seq_len = seq_len
-            self.seq_len = min_context_needed_mult * self.forecast_len
+            self.actual_seq_len = context_length
+            self.context_length = min_context_needed_mult * self.prediction_length
             gen_more_samples_for_short_series = False
 
         # handle univariate series, and nans
@@ -253,26 +253,26 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
             if fewshot_fraction < 1.0 and fewshot_location in ["start", "end"]:
                 len_ = self.X[i]["target"].shape[1]
                 fewshot_len_ = int(np.floor(len_ * fewshot_fraction))
-                if fewshot_len_ >= self.forecast_len * min_context_needed_mult:
+                if fewshot_len_ >= self.prediction_length * min_context_needed_mult:
                     if fewshot_location == "end":
                         self.X[i]["target"] = self.X[i]["target"][:, -fewshot_len_:]
                     elif fewshot_location == "start":
                         self.X[i]["target"] = self.X[i]["target"][:, :fewshot_len_]
 
-            if self.X[i]["target"].shape[1] < self.seq_len + self.forecast_len:
+            if self.X[i]["target"].shape[1] < self.context_length + self.prediction_length:
                 # This means only 1 sample can be created from this series
                 # even after zero-padding. We try to create more when
                 # `gen_more_samples_for_short_series=True`
                 if (
                     gen_more_samples_for_short_series
-                    and self.X[i]["target"].shape[1] >= (min_context_needed_mult + 1) * self.forecast_len
+                    and self.X[i]["target"].shape[1] >= (min_context_needed_mult + 1) * self.prediction_length
                 ):
                     # make sure at least a context of min_context_needed_mult*H is possible
                     # pad more zeros to create more training samples
                     pad = np.zeros(
                         (
                             self.X[i]["target"].shape[0],
-                            self.seq_len - min_context_needed_mult * self.forecast_len,
+                            self.context_length - min_context_needed_mult * self.prediction_length,
                         )
                     )
                 else:
@@ -280,7 +280,7 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
                     pad = np.zeros(
                         (
                             self.X[i]["target"].shape[0],
-                            self.seq_len + self.forecast_len - self.X[i]["target"].shape[1],
+                            self.context_length + self.prediction_length - self.X[i]["target"].shape[1],
                         )
                     )
 
@@ -302,7 +302,7 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
         list_len, sum_ = [], 0
         for i, elm in enumerate(list_data):
             data = elm["target"]
-            len_ = data.shape[1] - self.seq_len - self.forecast_len + 1
+            len_ = data.shape[1] - self.context_length - self.prediction_length + 1
             list_len.append(len_ + sum_)
             sum_ += len_
         return list_len
@@ -315,8 +315,8 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
 
     def __getitem__(self, idx):
         if self.last_window_only:
-            seq_x = self.X[idx]["target"][:, -(self.seq_len + self.forecast_len) : -self.forecast_len]
-            seq_y = self.X[idx]["target"][:, -(self.forecast_len) :]
+            seq_x = self.X[idx]["target"][:, -(self.context_length + self.prediction_length) : -self.prediction_length]
+            seq_y = self.X[idx]["target"][:, -(self.prediction_length) :]
             item_id = self.series_ids[idx]
         else:
             idx = idx * self.stride
@@ -329,9 +329,9 @@ class TorchDatasetFromGluonTSTrainingDataset(Dataset):
                 time_id = idx
             else:
                 time_id = idx - self.cumulative_sizes[series_idx - 1]
-            seq_x = self.X[series_idx]["target"][:, time_id : time_id + self.seq_len]
+            seq_x = self.X[series_idx]["target"][:, time_id : time_id + self.context_length]
             seq_y = self.X[series_idx]["target"][
-                :, time_id + self.seq_len : time_id + self.seq_len + self.forecast_len
+                :, time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ]
             item_id = self.series_ids[series_idx]
 
@@ -374,8 +374,8 @@ class TorchDatasetFromGluonTSTestDataset(Dataset):
         self,
         gluon_test_input: InputDataset,
         gluon_test_label: LabelDataset,
-        seq_len: int,
-        forecast_len: int,
+        context_length: int,
+        prediction_length: int,
         force_short_context: bool = False,
         min_context_mult: int = 4,
     ):
@@ -384,23 +384,23 @@ class TorchDatasetFromGluonTSTestDataset(Dataset):
         Args:
             gluon_test_input (InputDataset): GluonTS input dataset.
             gluon_test_label (LabelDataset): GluonTS label dataset.
-            seq_len (int): Context length.
-            forecast_len (int): Forecast horizon.
+            context_length (int): Context length.
+            prediction_length (int): Forecast horizon.
             force_short_context (bool, optional): If True, it will force to mine short context.
                 Defaults to False (recommended).
             min_context_mult (int, optional): Minimum context length multiplier (of prediction length)
                 to encourage more sample generation for short series. Defaults to 4.
         """
-        # assert seq_len > forecast_len, f'sequence lenght {seq_len} has to be strictly greater than forecast length {forecast_len}'
-        self.seq_len = seq_len
-        self.forecast_len = forecast_len
+        # assert context_length > prediction_length, f'sequence lenght {context_length} has to be strictly greater than forecast length {prediction_length}'
+        self.context_length = context_length
+        self.prediction_length = prediction_length
         self.X = list(gluon_test_input)
         self.Y = list(gluon_test_label)
         self.min_context_needed_mult = min_context_mult
         self.force_short_context = force_short_context
         if self.force_short_context:
-            self.actual_seq_len = seq_len
-            self.seq_len = self.min_context_needed_mult * self.forecast_len
+            self.actual_seq_len = context_length
+            self.context_length = self.min_context_needed_mult * self.prediction_length
 
     def __len__(self):
         return len(self.Y)
@@ -413,11 +413,11 @@ class TorchDatasetFromGluonTSTestDataset(Dataset):
             seq_x = seq_x.reshape(1, -1)
             seq_y = seq_y.reshape(1, -1)
 
-        if seq_x.shape[1] < self.seq_len:
-            pad = np.zeros((seq_x.shape[0], self.seq_len - seq_x.shape[1]))
+        if seq_x.shape[1] < self.context_length:
+            pad = np.zeros((seq_x.shape[0], self.context_length - seq_x.shape[1]))
             seq_x = np.concatenate((pad, seq_x), axis=1)
 
-        seq_x, seq_y = _torch(seq_x[:, -self.seq_len :], seq_y[:, : self.forecast_len])
+        seq_x, seq_y = _torch(seq_x[:, -self.context_length :], seq_y[:, : self.prediction_length])
 
         if self.force_short_context and seq_x.shape[1] < self.actual_seq_len:
             pad = np.zeros((seq_x.shape[0], self.actual_seq_len - seq_x.shape[1]))
