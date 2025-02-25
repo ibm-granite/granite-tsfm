@@ -112,12 +112,12 @@ We sincerely thank all the tutors for dedicating their valuable time to analyzin
 
 | Model   | Repository   | Stars | Forks | Comment |
 |------------|------------|------------|------------|------------|
-| TTM   | [granite-tsfm](https://github.com/ibm-granite/granite-tsfm)   | 319 | 160 | From the Authors   | 
+| TTM   | [granite-tsfm](https://github.com/ibm-granite/granite-tsfm)   | 319 | 160 | From the authors   | 
 | TTM   | [sktime](https://www.sktime.net/en/latest/api_reference/auto_generated/sktime.forecasting.ttm.TinyTimeMixerForecaster.html) | -- | -- | -- |
-| PatchTSMixer | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer) | -- | -- | From the Authors |
-| PatchTST | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtst) | -- | -- | From the Authors |
+| PatchTSMixer | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtsmixer) | -- | -- | From the authors |
+| PatchTST | [HuggingFace](https://huggingface.co/docs/transformers/en/model_doc/patchtst) | -- | -- | From the authors |
 | PatchTST | [GluonTS](https://ts.gluon.ai/stable/api/gluonts/gluonts.torch.model.patch_tst.html) | -- | -- | -- |
 | PatchTST | [Nixtla](https://nixtla.github.io/neuralforecast/models.patchtst.html) | -- | -- | -- |
 | PatchTST | [yuqinie98/PatchTST](https://github.com/yuqinie98/PatchTST) | 1.5k | 256 | From the authors |
 | TST | [tsai](https://timeseriesai.github.io/tsai/models.tst.html) | -- | -- | -- |
-| TST | [mvts_transformer]() | 734 | 171 | From the authors |
+| TST | [mvts_transformer](https://github.com/gzerveas/mvts_transformer) | 734 | 171 | From the authors |
