@@ -87,7 +87,7 @@ RUN yum install -y python${PYTHON_VERSION} \
 # Twistlock detects it as H severity: Private keys stored in image
 
 FROM python-install AS tsfm-install
-ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/cusparselt/lib/:${LD_LIBRARY_PATH}
 
 RUN yum install -y git shadow-utils \
     && yum clean all
