@@ -2,6 +2,7 @@
 #
 """Utilities to support model loading"""
 
+import enum
 import logging
 import os
 from importlib import resources
@@ -21,6 +22,35 @@ LOGGER.setLevel(logging.INFO)
 TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT = 512
 
 
+class ForceReturn(enum.Enum):
+    """`Enum` for the `force_return` parameter in the `get_model` function.
+
+    "zeropad" = Returns a pre-trained TTM that has a context length higher than the input context length, hence,
+        the user must apply zero-padding to use the returned model.
+    "rolling" = Returns a pre-trained TTM that has a prediction length lower than the requested prediction length,
+        hence, the user must apply rolling technique to use the returned model to forecast to the desired length.
+        The `RecursivePredictor` class can be utilized in this scenario.
+    "random_init_small" = Returns a randomly initialized small TTM which must be trained before performing inference.
+    "random_init_medium" = Returns a randomly initialized medium TTM which must be trained before performing inference.
+    "random_init_large" = Returns a randomly initialized large TTM which must be trained before performing inference.
+
+    """
+
+    ZEROPAD = "zeropad"
+    ROLLING = "rolling"
+    RANDOM_INIT_SMALL = "random_init_small"
+    RANDOM_INIT_MEDIUM = "random_init_medium"
+    RANDOM_INIT_LARGE = "random_init_large"
+
+
+class ModelSize(enum.Enum):
+    """`Enum` for the `size` parameter in the `get_random_ttm` function."""
+
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+
+
 def check_ttm_model_path(model_path):
     if (
         "ibm/TTM" in model_path
@@ -37,7 +67,9 @@ def check_ttm_model_path(model_path):
         return 0
 
 
-def get_random_ttm(context_length: int, prediction_length: int, size: str = "small", **kwargs) -> PreTrainedModel:
+def get_random_ttm(
+    context_length: int, prediction_length: int, size: str = ModelSize.SMALL.value, **kwargs
+) -> PreTrainedModel:
     """Get a TTM with random weights.
 
     Args:
@@ -47,26 +79,26 @@ def get_random_ttm(context_length: int, prediction_length: int, size: str = "sma
 
     Raises:
         ValueError: If wrong size is provided.
-        ValueError: Context length should be at least 4 if `force_return=small`,
-            or at least 16 if `force_return=medium`,
-            or at least 32 if `force_return=large`.
+        ValueError: Context length should be at least 4 if `size=small`,
+            or at least 16 if `size=medium`,
+            or at least 32 if `size=large`.
 
     Returns:
         PreTrainedModel: TTM model with randomly initialized weights.
     """
-    if "sma" in size.lower():
+    if ModelSize.SMALL.value in size.lower():
         cl_lower_bound = 4
         apl = 0
-    elif "med" in size.lower():
+    elif ModelSize.MEDIUM.value in size.lower():
         cl_lower_bound = 16
         apl = 3
-    elif "lar" in size.lower():
+    elif ModelSize.LARGE.value in size.lower():
         cl_lower_bound = 32
         apl = 5
     else:
         raise ValueError("Wrong size. Should be either of these [small/medium/large].")
     if context_length < cl_lower_bound:
-        raise ValueError(f"Context length should be at least {cl_lower_bound} if `force_return={size}`.")
+        raise ValueError(f"Context length should be at least {cl_lower_bound} if `size={size}`.")
 
     cl = context_length if context_length % 2 == 0 else context_length - 1
 
@@ -74,17 +106,18 @@ def get_random_ttm(context_length: int, prediction_length: int, size: str = "sma
     while cl % pl == 0 and cl / pl >= 8:
         pl = pl * 2
 
-    if "sma" in size.lower():
+    if ModelSize.SMALL.value in size.lower():
         d_model = 2 * pl
         num_layers = 3
-    elif "med" in size.lower():
+    elif ModelSize.MEDIUM.value in size.lower():
         d_model = 16 * 2**apl
         num_layers = 3
-    elif "lar" in size.lower():
+    elif ModelSize.LARGE.value in size.lower():
         d_model = 16 * 2**apl
         num_layers = 5
     else:
         raise ValueError("Wrong size. Should be either of these [small/medium/large].")
+
     ttm_config = TinyTimeMixerConfig(
         context_length=cl,
         prediction_length=prediction_length,
@@ -144,7 +177,7 @@ def get_model(
             "random_init_small" = Returns a randomly initialized small TTM which must be trained before performing inference.
             "random_init_medium" = Returns a randomly initialized medium TTM which must be trained before performing inference.
             "random_init_large" = Returns a randomly initialized large TTM which must be trained before performing inference.
-            `None` = `forece_return` is disable. Raises an error if no suitable model is found.
+            `None` = `force_return` is disable. Raises an error if no suitable model is found.
             Defaults to None.
         return_model_key (bool, optional): If True, only the TTM model name will be returned, instead of the actual model.
             This does not downlaod the model, and only returns the name of the suitable model. Defaults to False.
@@ -213,7 +246,7 @@ def get_model(
                         f"shortest context length for TTMs: {shortest_ttm_context_length}. "
                         "Set `force_return=zeropad` to get a TTM with longer context."
                     )
-                elif force_return.startswith("zero"):
+                elif force_return == ForceReturn.ZEROPAD.value:  # force_return.startswith("zero"):
                     # Keep all models. Zero-padding must be done outside.
                     selected_models_ = models
                     LOGGER.warning(
@@ -238,7 +271,7 @@ def get_model(
                         f"than the requested context length = {context_length}. "
                         "Set `force_return=zeropad` to get a TTM with longer context."
                     )
-                elif force_return.startswith("zero"):
+                elif force_return == ForceReturn.ZEROPAD.value:  # force_return.startswith("zero"):
                     selected_models_ = shortest_context_models
                     LOGGER.warning(
                         "Could not find a TTM with `context_length` shorter "
@@ -300,7 +333,7 @@ def get_model(
                             "Set `force_return=rolling` to get a TTM with shorted prediction "
                             "length. Rolling must be done outside."
                         )
-                    elif force_return.startswith("roll"):
+                    elif force_return == ForceReturn.ROLLING.value:  # force_return.startswith("roll"):
                         selected_models_.append(highest_prediction_model)
                         LOGGER.warning(
                             "Could not find a TTM with `prediction_length` higher "
@@ -327,7 +360,11 @@ def get_model(
                         "to get a randomly initialized TTM of size small/medium/large "
                         "respectively."
                     )
-                elif "sma" in force_return.lower() or "med" in force_return.lower() or "lar" in force_return.lower():
+                elif force_return in [
+                    ForceReturn.RANDOM_INIT_SMALL.value,
+                    ForceReturn.RANDOM_INIT_MEDIUM.value,
+                    ForceReturn.RANDOM_INIT_LARGE.value,
+                ]:  # "sma" in force_return.lower() or "med" in force_return.lower() or "lar" in force_return.lower():
                     LOGGER.info(
                         "Trying to build a TTM with random weights since no "
                         "suitable pre-trained TTM could be found. You must "
