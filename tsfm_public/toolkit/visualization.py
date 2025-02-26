@@ -279,11 +279,7 @@ def plot_predictions(
         indices = [-1]  # indices not used in exploded case
     elif input_df is not None and predictions_df is not None:
         # 2) input_df and predictions plus column information is provided
-        pchannel = f"{channel}_prediction"
-        if pchannel not in exploded_predictions_df.columns:
-            raise ValueError(f"Predictions dataframe does not contain target column '{pchannel}'.")
-        if channel not in input_df.columns:
-            raise ValueError(f"Context dataframe does not contain target column '{channel}'.")
+        pchannel = f"{channel}_prediction" if f"{channel}_prediction" in predictions_df else channel
 
         if indices is None:
             l = len(predictions_df)
