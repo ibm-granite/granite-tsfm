@@ -669,6 +669,7 @@ class ForecastChannelHeadMixer(nn.Module):
         if self.fcm_context_length > 0:
             patch_config = copy.deepcopy(config)
             patch_config.context_length = config.prediction_length + (2 * config.fcm_context_length)
+            patch_config.masked_context_length = None
             patch_config.patch_length = self.scl
             patch_config.patch_stride = 1
             self.fcm_patch_block = TinyTimeMixerPatchify(patch_config)
@@ -1254,7 +1255,9 @@ class TinyTimeMixerPatchify(nn.Module):
     def __init__(self, config: TinyTimeMixerConfig):
         super().__init__()
 
-        self.sequence_length = config.context_length
+        self.sequence_length = (
+            config.masked_context_length if config.masked_context_length is not None else config.context_length
+        )
 
         self.patch_length = config.patch_length
         self.patch_stride = config.patch_stride
@@ -1835,9 +1838,16 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             raise ValueError(
                 "`past_values` must have 3 dimensions of shape `(batch_size, sequence_length, num_input_channels)`."
             )
-        if past_values.shape[1] > self.config.context_length:
-            past_values = past_values[:, -self.config.context_length :, :]
-        elif past_values.shape[1] < self.config.context_length:
+
+        sequence_length = (
+            self.config.masked_context_length
+            if self.config.masked_context_length is not None
+            else self.config.context_length
+        )
+
+        if past_values.shape[1] > sequence_length:
+            past_values = past_values[:, -sequence_length:, :]
+        elif past_values.shape[1] < sequence_length:
             raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
 
         if self.loss == "mse":
@@ -2020,3 +2030,113 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x prediction_length x num_channels]
         return SampleTinyTimeMixerPredictionOutput(sequences=samples)
+
+
+class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
+    def __init__(self, config: TinyTimeMixerConfig):
+        if config.prediction_filter_length is not None:
+            append_length = config.prediction_filter_length
+        else:
+            append_length = config.prediction_length
+
+        self.append_length = append_length
+        config.masked_context_length = config.context_length + append_length
+        config.fcm_prepend_past_offset = append_length
+
+        if config.exogenous_channel_indices is not None:
+            self.non_exog_channels = list(
+                set(range(config.num_input_channels)) - set(config.exogenous_channel_indices)
+            )
+        else:
+            self.non_exog_channels = list(range(config.num_input_channels))
+
+        super().__init__(config)
+
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+        # metadata: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForPredictionOutput:
+        r"""
+        past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
+
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
+        future_observed_mask (`torch.Tensor` of shape `(batch_size, prediction_length, num_targets)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
+        static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
+            Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
+            TinyTimeMixerConfig param `categorical_vocab_size_list`
+
+        Returns:
+
+        """
+        if future_values is not None:
+            future_values_masked = future_values.clone()
+        else:
+            future_values_masked = torch.zeros(past_values.shape[0], self.append_length, past_values.shape[2])
+
+        if (
+            self.config.prediction_filter_length is not None
+            and future_values_masked is not None
+            and future_values_masked.shape[1] != self.config.prediction_filter_length
+        ):
+            future_values_masked = future_values_masked[:, : self.config.prediction_filter_length, :]
+
+        if self.config.exogenous_channel_indices is not None:
+            future_values_masked[:, :, self.non_exog_channels] = self.config.mask_value
+        else:
+            future_values_masked.fill_(self.config.mask_value)
+        past_values = torch.cat((past_values, future_values_masked), dim=-2)  # xb: [bs x seq_len+ fl x n_vars]
+
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        # if there is already a past mask - update with it
+        # index 1 refers to the seq len
+
+        if past_observed_mask.shape[1] < past_values.shape[1]:
+            temp_mask = torch.ones_like(past_values)
+            temp_mask[:, : past_observed_mask.shape[1], :] = past_observed_mask
+            past_observed_mask = temp_mask
+
+        # past_observed_mask[:, -self.config.prediction_length :, :] = 0
+        past_observed_mask[:, -self.config.prediction_length :, self.non_exog_channels] = 0
+        # [bs x seq_len+ fl x n_vars]
+
+        return super().forward(
+            past_values=past_values,
+            future_values=future_values,
+            past_observed_mask=past_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=return_loss,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            # metadata = metadata
+        )

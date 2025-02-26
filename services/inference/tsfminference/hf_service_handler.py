@@ -354,6 +354,12 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
                     total_periods=model_prediction_length,
                 )
 
+        batch_size = (
+            parameters.inference_batch_size
+            if parameters.inference_batch_size
+            else self.handler_config.inference_batch_size
+        )
+        LOGGER.info(f"Using inference batch size: {batch_size}")
         device = "cpu" if not torch.cuda.is_available() else "cuda"
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -362,6 +368,7 @@ class ForecastingHuggingFaceHandler(ForecastingServiceHandler, HuggingFaceHandle
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
             device=device,
+            batch_size=batch_size,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 

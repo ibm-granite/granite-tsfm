@@ -2,9 +2,7 @@
 #
 """Utilities for handling datasets"""
 
-import glob
 import logging
-import os
 from importlib import resources
 from pathlib import Path
 from typing import Optional
@@ -34,9 +32,8 @@ def load_dataset(
     LOGGER.info(f"Dataset name: {dataset_name}, context length: {context_length}, prediction length {forecast_length}")
 
     config_path = resources.files("tsfm_public.resources.data_config")
-    configs = glob.glob(os.path.join(config_path, "*.yaml"))
+    names_to_config = {p.stem: p for p in config_path.iterdir() if p.suffix == ".yaml"}
 
-    names_to_config = {Path(p).stem: p for p in configs}
     config_path = names_to_config.get(dataset_name, None)
 
     if config_path is None:

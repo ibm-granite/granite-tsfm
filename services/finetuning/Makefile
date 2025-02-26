@@ -12,7 +12,7 @@ boilerplate:
 		done 
 	
 image:
-	$(CONTAINER_BUILDER) build -t tsfmfinetuning -f Dockerfile .
+	$(CONTAINER_BUILDER) build -t tsfmfinetuning --build-arg CODEDIR="tsfmfinetuning" -f Dockerfile .
 
 clone_models:
 	git lfs install || true

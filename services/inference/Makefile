@@ -30,7 +30,7 @@ stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
 image: boilerplate
-	$(CONTAINER_BUILDER) build -t tsfminference -f Dockerfile .
+	$(CONTAINER_BUILDER) build -t tsfminference --build-arg CODEDIR="tsfminference" -f Dockerfile .
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
@@ -63,11 +63,23 @@ install_dev: boilerplate
 	pip install poetry && poetry install --with dev
 
 clone_models:
-	git lfs install || true
+	git lfs >> /dev/null 2>&1
 	git clone https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 delete_models:
 	rm -rf mytest-tsfm || true
 
+# update any auto-generated files
+# used in example code
+update_examples:
+	# our sagemaker stuff
+	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
-
+profile_inference:
+	TSFM_TESTS_AS_PROFILER=1 \
+	TSFM_PROFILE_NUM_TIMESERIES=10000 \
+	python -m cProfile -o profile.out -s cumtime \
+	 -m pytest tests/test_inference_lib.py::test_forecast_with_good_data
+	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
+	echo "generated profile_tree.png"

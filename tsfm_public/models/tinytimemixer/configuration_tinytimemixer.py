@@ -214,6 +214,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         init_embed: str = "pytorch",
         quantile: float = 0.5,
         huber_delta: float = 1,
+        # masked prediction,
+        mask_value: int = 0,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -270,6 +272,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.init_embed = init_embed
         self.quantile = quantile
         self.huber_delta = huber_delta
+        self.mask_value = mask_value
+        self.masked_context_length = None
 
         super().__init__(**kwargs)
 
@@ -277,7 +281,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.init_processing = True
 
         if not hasattr(self, "num_patches"):
-            context_length = self.context_length
+            context_length = (
+                self.masked_context_length if self.masked_context_length is not None else self.context_length
+            )
             self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:

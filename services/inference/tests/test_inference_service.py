@@ -221,7 +221,7 @@ def test_zero_shot_forecast_inference(ts_data):
     }
 
     out = get_inference_response(msg)
-    assert f"Received {context_length-3} time points for id a" in out.text
+    assert f"Received {context_length - 3} time points for id a" in out.text
 
     # test multi-time series, multi-id
     # error due to insufficient context
@@ -244,7 +244,7 @@ def test_zero_shot_forecast_inference(ts_data):
     }
 
     out = get_inference_response(msg)
-    assert f"Received {context_length-3} time points for id ('a', 'a')" in out.text
+    assert f"Received {context_length - 3} time points for id ('a', 'a')" in out.text
 
     # single series, less columns
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()

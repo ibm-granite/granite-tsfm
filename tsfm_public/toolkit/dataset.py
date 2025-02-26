@@ -371,7 +371,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             ret = {
                 "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
@@ -403,6 +403,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             percentage of a particular product is known and controllable in the future. Defaults to [].
         conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
             Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+        categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+            Defaults to [].
         static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the
             input which are fixed over time. Defaults to [].
         context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
@@ -447,6 +449,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 1,
         prediction_length: int = 1,
@@ -477,6 +480,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns=observable_columns,
             control_columns=control_columns,
             conditional_columns=conditional_columns,
+            categorical_columns=categorical_columns,
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
@@ -505,6 +509,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns: List[str] = [],
             control_columns: List[str] = [],
             conditional_columns: List[str] = [],
+            categorical_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
@@ -519,6 +524,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.observable_columns = observable_columns
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
+            self.categorical_columns = categorical_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
@@ -529,6 +535,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 observable_columns,
                 control_columns,
                 conditional_columns,
+                categorical_columns,
             )
             y_cols = copy.copy(x_cols)
 
@@ -585,7 +592,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             time_id = index * self.stride
 
-            seq_x = self.X[time_id : time_id + self.context_length].values.astype(np.float32)
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values.astype(np.float32)
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
 
@@ -593,7 +600,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x = self.apply_masking_specification(seq_x)
 
             # seq_y: batch_size x pred_len x num_x_cols
-            seq_y = self.y[
+            seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
             seq_y[:, self.y_mask_conditional] = 0
@@ -740,8 +747,8 @@ class RegressionDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
+            seq_y = self.y.iloc[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             # return _torch(seq_x, seq_y)
 
             ret = {
@@ -866,7 +873,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
 

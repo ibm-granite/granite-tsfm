@@ -280,10 +280,10 @@ def tsforecasting_with_fmdls():
                 st.header(model_name)
                 model_card_name = MODELS[model_name]["card"]
                 st.subheader("Abstract")
-                st.write(f"""{MODEL_DOCS[model_card_name]['Abstract']}""")
+                st.write(f"""{MODEL_DOCS[model_card_name]["Abstract"]}""")
                 st.subheader("Model Architecture")
                 st.image(**MODEL_DOCS[model_card_name]["figure"])
-                st.write(f"""{MODEL_DOCS[model_card_name]['Model Architecture']}""")
+                st.write(f"""{MODEL_DOCS[model_card_name]["Model Architecture"]}""")
                 # st.subheader("Secondary use")
                 # st.write(f"""{MODEL_DOCS[model_card_name]['Secondary use']}""")
                 # st.subheader("Limitations")
@@ -291,7 +291,7 @@ def tsforecasting_with_fmdls():
                 # st.subheader("Training data")
                 # st.write(f"""{MODEL_DOCS[model_card_name]['Training data']}""")
                 st.subheader("BibTex/Citation Info")
-                st.code(f"""{MODEL_DOCS[model_card_name]['Citation Info']}""")
+                st.code(f"""{MODEL_DOCS[model_card_name]["Citation Info"]}""")
 
 
 if __name__ == "__main__":
