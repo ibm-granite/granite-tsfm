@@ -279,6 +279,11 @@ def plot_predictions(
         indices = [-1]  # indices not used in exploded case
     elif input_df is not None and predictions_df is not None:
         # 2) input_df and predictions plus column information is provided
+        pchannel = f"{channel}_prediction"
+        if pchannel not in exploded_predictions_df.columns:
+            raise ValueError(f"Predictions dataframe does not contain target column '{pchannel}'.")
+        if channel not in input_df.columns:
+            raise ValueError(f"Context dataframe does not contain target column '{channel}'.")
 
         if indices is None:
             l = len(predictions_df)
@@ -289,7 +294,7 @@ def plot_predictions(
         gt_df = input_df.copy()
         gt_df = gt_df.set_index(timestamp_column)  # add id column logic here
 
-        prediction_length = len(predictions_subset[0][channel])
+        prediction_length = len(predictions_subset[0][pchannel])
         using_pipeline = True
         plot_test_data = True
     elif model is not None and dset is not None:
