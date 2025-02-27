@@ -595,6 +595,79 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
 
 
+class ReconstructionDFDataset(ForecastDFDataset):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        target_columns: List[str] = [],
+        observable_columns: List[str] = [],
+        control_columns: List[str] = [],
+        conditional_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
+        context_length: int = 1,
+        prediction_length: int = 0,
+        num_workers: int = 1,
+        frequency_token: Optional[int] = None,
+        autoregressive_modeling: bool = True,
+        stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
+        masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+        metadata_columns: List[str] = [],
+        impute_dataset: np.array = None,
+        masking_ratio: float = 0.5,
+        time_indexes: Tuple[int, int] = None,
+    ):
+        # output_columns_tmp = input_columns if output_columns == [] else output_columns
+
+        super().__init__(
+            data,
+            id_columns=id_columns,
+            timestamp_column=timestamp_column,
+            num_workers=num_workers,
+            context_length=context_length,
+            prediction_length=0, #prediction_length,
+            fill_value=fill_value,
+            stride=stride,
+            # extra_args
+            target_columns=target_columns,
+            observable_columns=observable_columns,
+            control_columns=control_columns,
+            conditional_columns=conditional_columns,
+            static_categorical_columns=static_categorical_columns,
+            frequency_token=frequency_token,
+            autoregressive_modeling=autoregressive_modeling,
+            masking_specification=masking_specification,
+            metadata_columns=metadata_columns,
+        )
+        self.n_inp = 2
+        # for forecasting, the number of targets is the same as number of X variables
+        self.n_targets = self.n_vars
+        self.impute_dataset =  torch.tensor(impute_dataset) if impute_dataset is not None else None
+        self.masking_ratio = masking_ratio
+        self.time_indexes = time_indexes #time indexes which need to be preserved
+    def __getitem__(self, idx):
+        ret_item = super().__getitem__(idx)
+        #print(idx, ret_item.keys())
+        orig_values = ret_item["past_values"]
+        cl, n_vars = orig_values.shape # (cl,n_vars); vars include time index
+        new_values = torch.cat((orig_values[1:], orig_values[1:]), 1)
+        new_values[:, :n_vars] = orig_values[0]
+        ret_item["past_values"] = new_values #(cl-1, 2*n_vars)
+        
+        if self.masking_ratio == -1:
+            ret_item["past_observed_mask"] = torch.ones_like(new_values).type(torch.bool)
+            ret_item["past_observed_mask"][...,-n_vars:] = False
+        else:
+            rarray = np.random.random(ret_item["past_values"].shape)
+            ret_item["past_observed_mask"] = (rarray < 1-self.masking_ratio)
+        ret_item["past_observed_mask"][:, self.time_indexes] = True #keep the time indexes as observed
+        # ret_item['label_ids'] = []
+        # ret_item['label'] = []
+        
+        return ret_item
+    
 class RegressionDFDataset(BaseConcatDFDataset):
     """A dataset used for forecasting pretraing and inference
 
