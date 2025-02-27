@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: alpine
-      image: amd64/alpine:3.7
+      image: amd64/alpine:latest
       imagePullPolicy: Always
       command:
         - sleep
