@@ -160,8 +160,9 @@ def get_model(
         prediction_length (int, optional): Length of the forecast horizon. Defaults to None.
         freq_prefix_tuning (bool, optional): If true, it will prefer TTM models that are trained with frequency prefix
             tuning configuration. Defaults to None.
-        freq (str, optional): Resolution or frequency of the data. Defaults to None. Allowed values are as
-            per the `DEFAULT_FREQUENCY_MAPPING`.
+        freq (str, optional): Resolution or frequency of the data. Defaults to None. Allowed values are as per the
+            `tsfm_public.toolkit.time_series_preprocessor.DEFAULT_FREQUENCY_MAPPING`.
+            See this for details: https://github.com/ibm-granite/granite-tsfm/blob/main/tsfm_public/toolkit/time_series_preprocessor.py.
         prefer_l1_loss (bool, optional): If True, it will prefer choosing models that were trained with L1 loss or
             mean absolute error loss. Defaults to False.
         prefer_longer_context (bool, optional): If True, it will prefer selecting model with longer context/history
