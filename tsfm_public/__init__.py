@@ -53,8 +53,11 @@ _import_structure = {
         "RegressionDFDataset",
         "get_datasets",
         "load_dataset",
+        "get_model",
+        "count_parameters",
         "TrackingCallback",
         "count_parameters",
+        "optimal_lr_finder",
     ],
 }
 
@@ -90,10 +93,11 @@ if TYPE_CHECKING:
         TrackingCallback,
         count_parameters,
         get_datasets,
+        get_model,
         load_dataset,
+        optimal_lr_finder,
     )
 else:
-    # Standard
     import sys
 
     sys.modules[__name__] = _LazyModule(
