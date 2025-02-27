@@ -224,23 +224,21 @@ class LRFinder:
         x, y = x.to(self.device), y.to(self.device)
         return x, y
 
-    def train_step(self, batch: torch.Tensor) -> Tuple[torch.Tensor, float]:
+    def train_step(self, batch: Union[dict, torch.Tensor]) -> Tuple[torch.Tensor, float]:
         # get the inputs
+
         if isinstance(batch, dict):
             self.xb, self.yb = batch["past_values"], batch["future_values"]
+            signature = inspect.signature(self.model.forward)
+            signature_args = list(signature.parameters.keys())
+
+            args = {k: batch[k].to(self.device) for k in signature_args if k in batch}
+            pred_outputs = self.model(**args)
+            pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
+
         else:
             self.xb, self.yb = batch[0], batch[1]
-        self.xb, self.yb = self.process_data(self.xb, self.yb)
-        # forward
-        if isinstance(batch, dict):
-            if self.enable_prefix_tuning:
-                pred_outputs = self.model(
-                    past_values=self.xb, future_values=self.yb, freq_token=batch["freq_token"].to(self.device)
-                )
-            else:
-                pred_outputs = self.model(past_values=self.xb, future_values=self.yb)
-            pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
-        else:
+            self.xb, self.yb = self.process_data(self.xb, self.yb)
             pred = self.model(self.xb)
             loss = self.loss_func(self.yb, pred)
 
