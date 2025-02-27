@@ -7,7 +7,7 @@ import os
 import uuid
 from cmath import inf
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -224,7 +224,7 @@ class LRFinder:
         x, y = x.to(self.device), y.to(self.device)
         return x, y
 
-    def train_step(self, batch: Union[dict, torch.Tensor]) -> Tuple[torch.Tensor, float]:
+    def train_step(self, batch: Union[Dict[str, Any], torch.Tensor]) -> Tuple[torch.Tensor, float]:
         # get the inputs
 
         if isinstance(batch, dict):
