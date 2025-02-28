@@ -30,7 +30,7 @@ class AsyncCallReturn(BaseModel):
 class TrainerArguments(BaseModel):
     """Class representing HF trainer arguments"""
 
-    learning_rate: float = 0.0
+    learning_rate: float = 0.001
     num_train_epochs: int = 100
     per_device_train_batch_size: int = 32
     per_device_eval_batch_size: int = per_device_train_batch_size

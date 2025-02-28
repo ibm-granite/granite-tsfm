@@ -35,7 +35,7 @@ def sample_data():
             "val": range(10),
             "val2": [x + 100 for x in range(10)],
             "cat": ["A", "B"] * 5,
-            "cat2": ["CC", "DD"] * 5,
+            "cat2": ["CC", "DD", "EE", "FF", "GG"] * 2,
         }
     )
     return df

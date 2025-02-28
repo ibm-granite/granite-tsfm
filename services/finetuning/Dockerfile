@@ -78,6 +78,7 @@ RUN yum install -y python${PYTHON_VERSION} \
     && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
     && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
     && groupadd --system ${CODEDIR} --gid 1001 \
+    && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && adduser --system --uid 1001 --gid 0 --groups ${CODEDIR} \
     --create-home --home-dir /${CODEDIR} --shell /sbin/nologin \
     --comment "${CODEDIR} User" ${CODEDIR}
@@ -87,7 +88,7 @@ RUN yum install -y python${PYTHON_VERSION} \
 # Twistlock detects it as H severity: Private keys stored in image
 
 FROM python-install AS tsfm-install
-ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:/tsfm/.venv/lib/python${PYTHON_VERSION}/site-packages/cusparselt/lib/:${LD_LIBRARY_PATH}
 
 RUN yum install -y git shadow-utils \
     && yum clean all

@@ -55,14 +55,14 @@ def test_ordinal_encoder(sample_data):
         [
             [0.0, 0.0],
             [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
+            [0.0, 2.0],
+            [1.0, 3.0],
+            [0.0, 4.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 2.0],
+            [0.0, 3.0],
+            [1.0, 4.0],
         ]
     )
     np.testing.assert_allclose(result, expected)
@@ -87,6 +87,9 @@ def test_time_series_preprocessor_encodes(sample_data):
     for c in static_categorical_columns:
         assert sample_prep[c].dtype == float
 
+    # two static categoricals were defined
+    assert tsp.categorical_vocab_size_list == [2, 5]
+
     categorical_columns = ["cat", "cat2"]
     tsp = TimeSeriesPreprocessor(
         target_columns=["val", "val2"],
@@ -99,6 +102,9 @@ def test_time_series_preprocessor_encodes(sample_data):
 
     for c in categorical_columns:
         assert sample_prep[c].dtype == float
+
+    # no static categorical columns defined
+    assert tsp.categorical_vocab_size_list is None
 
 
 def test_time_series_preprocessor_scales(ts_data):
