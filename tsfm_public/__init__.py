@@ -53,8 +53,11 @@ _import_structure = {
         "RegressionDFDataset",
         "get_datasets",
         "load_dataset",
+        "get_model",
+        "count_parameters",
         "TrackingCallback",
         "count_parameters",
+        "optimal_lr_finder",
     ],
 }
 
@@ -65,6 +68,7 @@ _import_structure["models.tinytimemixer"].extend(
         "TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TinyTimeMixerPreTrainedModel",
         "TinyTimeMixerModel",
+        "TinyTimeMixerForMaskedPrediction",
         "TinyTimeMixerForPrediction",
     ]
 )
@@ -75,6 +79,7 @@ if TYPE_CHECKING:
         TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TinyTimeMixerConfig,
+        TinyTimeMixerForMaskedPrediction,
         TinyTimeMixerForPrediction,
         TinyTimeMixerModel,
         TinyTimeMixerPreTrainedModel,
@@ -88,10 +93,11 @@ if TYPE_CHECKING:
         TrackingCallback,
         count_parameters,
         get_datasets,
+        get_model,
         load_dataset,
+        optimal_lr_finder,
     )
 else:
-    # Standard
     import sys
 
     sys.modules[__name__] = _LazyModule(

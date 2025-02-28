@@ -37,6 +37,7 @@ class TSFMConfig(PushToHubMixin):
             no maximum. Defaults to None.
         maximum_prediction_length (int, optional): Maximum prediction length produced by the model. Use None to indicate
             no maximum. Defaults to None.
+        inference_batch_size (int, optional): Size of batch to construct when performing inference. Defaults to 16.
 
     Notes:
         If module_path, model_type, model_config_name, model_class_name are absent, and the HFServiceHandler is used, the
@@ -58,6 +59,7 @@ class TSFMConfig(PushToHubMixin):
         self.maximum_context_length = kwargs.pop("maximum_context_length", None)
         self.maximum_prediction_length = kwargs.pop("maximum_prediction_length", None)
         self.is_finetuned = kwargs.pop("is_finetuned", False)
+        self.inference_batch_size = kwargs.pop("inference_batch_size", 16)
 
         # "maximum_prediction_length": 96,
         # "minimum_context_length": 512,

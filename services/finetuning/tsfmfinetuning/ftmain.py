@@ -1,7 +1,9 @@
 # Standard
 import json
+import sys
 import traceback
 
+import torch
 import yaml
 
 from tsfmfinetuning import TSFM_CONFIG_FILE
@@ -28,16 +30,19 @@ def main() -> int:
             config = yaml.safe_load(file)
         ftr: FinetuningRuntime = FinetuningRuntime(config=config)
         ftr.finetuning(input=input, tuned_model_name=args.model_name, output_dir=args.target_dir)
-        return 0
-
     else:
         raise NotImplementedError(f"model arch/task type not implemented {args.model_arch_type} {args.task_type}")
 
 
 if __name__ == "__main__":
     try:
-        exit(main())
+        if torch.cuda.is_available() and torch.cuda.device_count() >= 1:
+            print(f"{torch.cuda.device_count()} gpu device(s) are available for use.")
+        else:
+            print("no gpu or torch.cuda is not available, using CPU")
+        main()
+        sys.exit(0)
     except Exception as e:
         traceback.print_exception(e)
         write_termination_log(f"Exception when running finetuning {e}")
-        exit(1)
+        sys.exit(1)

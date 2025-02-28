@@ -3,6 +3,7 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import inspect
+from collections import defaultdict
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -84,13 +85,15 @@ class TimeSeriesPipeline(Pipeline):
             accumulator.append(item[model_output_key])
 
         # collect all ouputs needed for post processing
-        first = dataset[0]
-        model_outputs = {}
-        for k, v in first.items():
+        model_outputs = defaultdict(list)
+        items = list(dataset[0].items())
+        for r in dataset:
+            for k, v in items:
+                model_outputs[k].append(r[k])
+
+        for k, v in items:
             if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(tuple(r[k] for r in dataset))
-            else:
-                model_outputs[k] = [r[k] for r in dataset]
+                model_outputs[k] = torch.stack(model_outputs[k])
 
         # without shuffling in the dataloader above, we assume that order is preserved
         # otherwise we need to incorporate sequence id somewhere and do a proper join
@@ -134,6 +137,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 "observable_columns",
                 "control_columns",
                 "conditional_columns",
+                "categorical_columns",
                 "static_categorical_columns",
                 "freq",
             ]:
@@ -184,6 +188,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "future_time_series",
         ]
@@ -196,6 +201,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "freq",
             "explode_forecasts",
@@ -285,6 +291,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             conditional_columns (List[str]): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future.
 
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+
             static_categorical_columns (List[str]): List of column names which identify categorical-valued channels in the input
                 which are fixed over time.
 
@@ -372,9 +380,10 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 # future data needs some values for targets, but they are unused
                 future_time_series[target_columns] = 0
                 future_time_series = self.feature_extractor.preprocess(future_time_series)
-                future_time_series = future_time_series.drop(columns=target_columns)
+                # future_time_series = future_time_series.drop(columns=target_columns)
+                future_time_series[target_columns] = np.nan
 
-            time_series = pd.concat((time_series, future_time_series), axis=0)
+            time_series = pd.concat((time_series, future_time_series), axis=0, ignore_index=True)
         else:
             # no additional exogenous data provided, extend with empty periods
             time_series = extend_time_series(
@@ -442,6 +451,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         if "timestamp_column" in kwargs:
             out[kwargs["timestamp_column"]] = input["timestamp"]
+        # copy ids
         for i, c in enumerate(kwargs["id_columns"]):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)

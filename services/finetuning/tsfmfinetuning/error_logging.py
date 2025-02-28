@@ -14,4 +14,4 @@ def write_termination_log(text, log_file="error.log"):
         with open(log_file, "a", encoding="utf-8") as handle:
             handle.write(text)
     except Exception as e:  # pylint: disable=broad-except
-        logging.warning("Unable to write termination log due to error {}".format(e))
+        logging.warning(f"Unable to write termination log due to {e}")
