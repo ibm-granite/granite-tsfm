@@ -116,6 +116,13 @@ class ServiceHandler:
         except Exception as e:
             return self, e
 
+    @property
+    def handler_config(self):
+        if self.implementation is not None:
+            return self.implementation.handler_config
+        else:
+            return None
+
 
 def get_service_handler_class(
     config: TSFMConfig, handler_function: str = HandlerFunction.INFERENCE.value

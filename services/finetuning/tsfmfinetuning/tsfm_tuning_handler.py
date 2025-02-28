@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import Subset
 from transformers import (
     EarlyStoppingCallback,
     Trainer,
@@ -15,8 +17,9 @@ from transformers import (
 )
 
 from tsfm_public import ForecastDFDataset
+from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
-from tsfm_public.toolkit.util import select_by_fixed_fraction
+from tsfm_public.toolkit.util import FractionLocation, select_by_fixed_fraction
 
 from .filelogging_tracker import FileLoggingCallback
 from .ftpayloads import TuneTypeEnum
@@ -186,6 +189,7 @@ class TSFMForecastingTuningHandler:
         # to do: data selection here
         train_data = data
         validation_data = None
+        rng = np.random.default_rng(seed=parameters.random_seed)
 
         # optional freezing
         if parameters.tune_type == TuneTypeEnum.linear_probe.value:
@@ -209,17 +213,41 @@ class TSFMForecastingTuningHandler:
         # we should properly set the prediction/context lengths in the preprocessor
         # we also need to make sure prediction_filter length is set in the model config
 
-        if parameters.fewshot_fraction < 1:
-            train_data = select_by_fixed_fraction(
-                train_data,
-                id_columns=self.preprocessor.id_columns,
-                fraction=parameters.fewshot_fraction,
-                location="last",  # to do: expose this parameter
-                minimum_size=self.preprocessor.context_length,
+        if parameters.fewshot_fraction_location not in [e.value for e in FractionLocation]:
+            raise ValueError(
+                f"Received unknown location for fewshot_fraction_location {parameters.fewshot_fraction_location}"
             )
 
-        train_dataset = ForecastDFDataset(train_data, **dataset_spec)
-        validation_dataset = ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
+        if parameters.fewshot_fraction < 1:
+            if parameters.fewshot_fraction_location != FractionLocation.UNIFORM.value:
+                train_data = select_by_fixed_fraction(
+                    train_data,
+                    id_columns=self.preprocessor.id_columns,
+                    fraction=parameters.fewshot_fraction,
+                    location=parameters.fewshot_fraction_location,  # to do: expose this parameter
+                    minimum_size=self.preprocessor.context_length,
+                )
+            train_dataset = ForecastDFDataset(train_data, **dataset_spec)
+            validation_dataset = (
+                ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
+            )
+
+            # uniform case
+            if parameters.fewshot_fraction_location == FractionLocation.UNIFORM.value:
+                lst = rng.integers(
+                    low=0, high=len(train_dataset), size=int(parameters.fewshot_fraction * len(train_dataset))
+                )
+                train_dataset = Subset(train_dataset, lst.tolist())
+
+        if not parameters.trainer_args.learning_rate:
+            learning_rate, self.model = optimal_lr_finder(
+                self.model,
+                train_dataset,
+                batch_size=parameters.trainer_args.per_device_train_batch_size,
+                # enable_prefix_tuning=True,
+            )
+        else:
+            learning_rate = parameters.trainer_args.learning_rate
 
         # Configure trainer
         parameters = parameters
@@ -227,7 +255,7 @@ class TSFMForecastingTuningHandler:
         training_args = TrainingArguments(
             output_dir=training_tmp_dir / "output",
             overwrite_output_dir=True,
-            learning_rate=parameters.trainer_args.learning_rate,
+            learning_rate=learning_rate,
             num_train_epochs=parameters.trainer_args.num_train_epochs,
             eval_strategy="epoch",
             per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
