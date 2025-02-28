@@ -3,31 +3,27 @@
 """Tsfmfinetuning Runtime"""
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
 import pandas as pd
-import torch
 from fastapi import APIRouter, HTTPException
 from starlette import status
-from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
+from transformers import set_seed
 
 from tsfm_public import TimeSeriesPreprocessor
-from tsfm_public.toolkit.dataset import ForecastDFDataset
-from tsfm_public.toolkit.util import select_by_fixed_fraction
 
-from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
-from .filelogging_tracker import FileLoggingCallback
+from .dirutil import resolve_model_path
 from .ftpayloads import (
     AsyncCallReturn,
     BaseTuneInput,
     TinyTimeMixerForecastingTuneInput,
-    TuneTypeEnum,
 )
 from .hfutil import load_config, load_model, register_config
 from .ioutils import to_pandas
+from .tuning_handler import TuningHandler
 
 
 LOGGER = logging.getLogger(__file__)
@@ -89,167 +85,53 @@ class FinetuningRuntime:
         answer, ex = self._finetuning_common(input, tuned_model_name=tuned_model_name, tmp_dir=output_dir)
 
         if ex is not None:
+            import traceback
+
+            traceback.print_exception(ex)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=repr(ex))
 
         return answer
 
-    @classmethod
-    def _validation_data(cls, input: BaseTuneInput) -> pd.DataFrame:
-        """Returns validation data. At present we're not sure
-        how this is going to work so for now punt and always return
-        None"""
-
-        # @TODO fixme
-
-        return None
-
     def _finetuning_common(
-        self, input: BaseTuneInput, tuned_model_name: str, tmp_dir: Path
+        self, input_payload: BaseTuneInput, tuned_model_name: str, tmp_dir: Path
     ) -> Tuple[Path, Union[Exception, None]]:
         LOGGER.info("in _forecasting_tuning_workflow")
 
-        # set seed
-        if input.parameters.random_seed:
-            set_seed(input.parameters.random_seed)
+        # set seed, must be done before model load
+        if input_payload.parameters.random_seed:
+            set_seed(input_payload.parameters.random_seed)
 
-        data_schema = input.schema
-        train_data: pd.DataFrame = to_pandas(uri=input.data, **data_schema.model_dump())
+        model_path = resolve_model_path(TSFM_MODEL_DIR, input_payload.model_id)
 
-        validation_data = FinetuningRuntime._validation_data(input)
-
-        model_path = Path(self.config["model_dir"]) / input.model_id
-
-        if not model_path.is_dir():
+        if not model_path:
             LOGGER.info(f"Could not find model at path: {model_path}")
             if TSFM_ALLOW_LOAD_FROM_HF_HUB:
-                model_path = input.model_id
+                model_path = input_payload.model_id
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
-                raise RuntimeError(
-                    f"""Could not load model {input.model_id} from {self.config["model_dir"]}.
-                    If trying to load directly from the HuggingFace Hub please ensure that
-                    `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"""
+                return None, RuntimeError(
+                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, preprocessor, ex = self.load(model_path)
+        handler, e = TuningHandler.load(model_id=input_payload.model_id, model_path=model_path)
+        if e is not None:
+            return None, e
 
-        if ex is not None:
-            return Path(), ex
+        parameters = input_payload.parameters
+        schema = input_payload.schema
 
-        # @TODO (correct?)
-        base_config = model.config
+        data: pd.DataFrame = to_pandas(uri=input_payload.data, **schema.model_dump())
 
-        # Load existing preprocessor for asset-class specific case
-        # tsp = load_preprocessor(model_id_load_path, bucket_name=model_bucket, s3creds=input.s3credentials)
-        # model_class, base_config = load_model_config(Path(model_id_load_path))
+        # validation_data = FinetuningRuntime._validation_data(input)
 
-        # If no preprocessor, then we are finetuning on a new dataset -- no existing preprocessor
-        if preprocessor is None:
-            preprocessor = TimeSeriesPreprocessor(
-                timestamp_column=data_schema.timestamp_column,
-                id_columns=data_schema.id_columns,
-                target_columns=data_schema.target_columns,
-                control_columns=data_schema.control_columns,
-                conditional_columns=data_schema.conditional_columns,
-                observable_columns=data_schema.observable_columns,
-                static_categorical_columns=data_schema.static_categorical_columns,
-                context_length=base_config.context_length,
-                prediction_length=base_config.prediction_length,
-                scaling=False,
-                encode_categorical=False,
-                freq=data_schema.freq if data_schema.freq else None,
-            )
-            # Should we set prediction length and context length above?
+        _, e = handler.prepare(data=data, schema=schema, parameters=parameters)
+        if e is not None:
+            return None, e
 
-            # train to estimate freq if not available
-            preprocessor.train(train_data)
-
-        # @TODO: if we support different context length
-        # we need to dynamically load an appropriate model
-
-        # optional freezing
-        if input.parameters.tune_type == TuneTypeEnum.linear_probe.value:
-            # Freeze the backbone of the model
-            for param in model.backbone.parameters():
-                param.requires_grad = False
-
-        # create datasets
-        dataset_spec = {
-            "id_columns": preprocessor.id_columns,
-            "timestamp_column": preprocessor.timestamp_column,
-            "target_columns": preprocessor.target_columns,
-            "observable_columns": preprocessor.observable_columns,
-            "control_columns": preprocessor.control_columns,
-            "conditional_columns": preprocessor.conditional_columns,
-            "static_categorical_columns": preprocessor.static_categorical_columns,
-            "prediction_length": preprocessor.prediction_length,
-            "context_length": preprocessor.context_length,
-        }
-
-        if input.parameters.fewshot_fraction < 1:
-            train_data = select_by_fixed_fraction(
-                train_data,
-                id_columns=preprocessor.id_columns,
-                fraction=input.parameters.fewshot_fraction,
-                location="last",
-                minimum_size=preprocessor.context_length,
-            )
-        train_dataset = ForecastDFDataset(train_data, **dataset_spec)
-
-        validation_dataset = ForecastDFDataset(validation_data, **dataset_spec) if validation_data else train_dataset
-
-        # Configure trainer
-        parameters = input.parameters
-        training_tmp_dir = Path(tmp_dir)
-        training_args = TrainingArguments(
-            output_dir=training_tmp_dir / "output",
-            overwrite_output_dir=True,
-            learning_rate=parameters.trainer_args.learning_rate,
-            num_train_epochs=parameters.trainer_args.num_train_epochs,
-            eval_strategy="epoch",
-            per_device_train_batch_size=parameters.trainer_args.per_device_train_batch_size,
-            per_device_eval_batch_size=parameters.trainer_args.per_device_eval_batch_size,
-            dataloader_num_workers=4,
-            save_strategy="epoch",
-            logging_strategy="epoch",
-            save_total_limit=3,
-            logging_dir=training_tmp_dir / "logs",  # Make sure to specify a logging directory
-            load_best_model_at_end=True,  # Load the best model when training ends
-            metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
-            greater_is_better=False,  # For loss
-            label_names=["future_values"],
-            use_cpu=not torch.cuda.is_available(),
+        output, e = handler.train(
+            data=data, schema=schema, parameters=parameters, tuned_model_name=tuned_model_name, tmp_dir=tmp_dir
         )
+        if e is not None:
+            return None, e
 
-        callbacks = [
-            FileLoggingCallback(logs_filename=os.environ.get("TSFM_TRAINING_TRACKER_LOGFILE", "training_logs.jsonl"))
-        ]
-        if parameters.trainer_args.early_stopping and validation_dataset:
-            # Create the early stopping callback
-            early_stopping_callback = EarlyStoppingCallback(
-                early_stopping_patience=parameters.trainer_args.early_stopping_patience,  # Number of epochs with no improvement after which to stop
-                early_stopping_threshold=parameters.trainer_args.early_stopping_threshold,  # Minimum improvement required to consider as improvement
-            )
-            callbacks.append(early_stopping_callback)
-        trainer_extra_args = {}
-        if validation_dataset:
-            trainer_extra_args = {"eval_dataset": validation_dataset}
-
-        # define trainer
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            callbacks=callbacks,
-            **trainer_extra_args,
-        )
-
-        # To do: do we provide feedback to the user?
-        LOGGER.info("calling trainer.train")
-        trainer.train()
-        LOGGER.info("done with training")
-
-        save_path = training_tmp_dir / tuned_model_name
-        trainer.save_model(save_path)
-        preprocessor.save_pretrained(save_path)
-        return save_path, None
+        return output, None

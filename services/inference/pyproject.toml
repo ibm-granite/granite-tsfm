@@ -30,7 +30,7 @@ __version_tuple__ = (0, 0, 0)
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.18", markers = "sys_platform != 'win32'" }
+granite-tsfm = "==0.2.22"
 
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }
@@ -43,7 +43,7 @@ prometheus_client = { version = "*" }
 # ***********CVEs*************
 starlette = { version = ">=0.40.0" }
 Werkzeug = { version = ">=3.0.6" }
-urllib3 = { version = ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+urllib3 = { version = ">=1.26.19,<2" }  # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 aiohttp = { version = ">=3.10.11" }
 transformers = { version = ">=4.48.0" }
 
