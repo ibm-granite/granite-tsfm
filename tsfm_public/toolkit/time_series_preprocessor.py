@@ -515,10 +515,25 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def num_input_channels(
         self,
     ) -> int:
+        """Return the number of input channels
+
+        Input channels are defined as those channels in:
+            target_columns
+            observable_columns
+            control_columns
+            conditional_columns
+
+        Note that categorical columns should be specified as catetgorical_columns, and included in one of the above lists.
+        """
         return len(self._get_real_valued_dynamic_channels())
 
     @property
     def exogenous_channel_indices(self) -> List[int]:
+        """Return the indices of the exogenous columns
+
+        In this case, exogenous are defined as control columns and observable columns. I.e., columns
+        where we know the future values.
+        """
         return [
             i
             for i, c in enumerate(self._get_real_valued_dynamic_channels())
@@ -527,7 +542,26 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     @property
     def prediction_channel_indices(self) -> List[int]:
+        """Return the indices of the prediction columns, i.e. targets"""
         return [i for i, c in enumerate(self._get_real_valued_dynamic_channels()) if c in self.target_columns]
+
+    @property
+    def categorical_vocab_size_list(self) -> List[int]:
+        """Return the static_categorical_column vocabulary sizes."""
+        if not self.static_categorical_columns or not self.encode_categorical:
+            return None
+
+        if not self.categorical_encoder:
+            raise RuntimeError(
+                "Vocabulary sizes are only available after training the preprocessor. Please run the `train` method first."
+            )
+
+        sizes = []
+        for feat, cats in zip(self.categorical_encoder.feature_names_in_, self.categorical_encoder.categories_):
+            if feat in self.static_categorical_columns:
+                sizes.append(len(cats))
+
+        return sizes
 
     def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
         """Basic checks for input dataset.
