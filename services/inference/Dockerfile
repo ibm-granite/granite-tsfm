@@ -10,6 +10,7 @@ RUN microdnf -y update && \
         python${PYTHON_VERSION} \
         python${PYTHON_VERSION}-pip \
         python$(PYTHON_VERSION)-wheel && \
+	rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem && \ 
     pip${PYTHON_VERSION} install --no-cache-dir --upgrade pip wheel && \
     microdnf remove python3.9 python-unversioned-command python3-setuptools python3-wheel -y && \
     microdnf clean all
