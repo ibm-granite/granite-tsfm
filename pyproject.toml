@@ -43,7 +43,7 @@ notebooks = [
     "tensorboard",
 ]
 testing = ["pytest", "granite-tsfm[notebooks]", "parameterized"]
-dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.4.4"]
+dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
