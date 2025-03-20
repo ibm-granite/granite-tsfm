@@ -615,6 +615,17 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
 
+def interpolate_by_var(miss_seq):
+    nans = np.isnan(miss_seq)
+    if nans.sum() == 0:
+        return miss_seq
+
+    imputed = np.interp(np.where(nans)[0], np.where(~nans)[0], miss_seq[~nans])
+    miss_seq_copy = copy.copy(miss_seq)
+    miss_seq_copy[nans] = imputed
+    return miss_seq_copy
+
+
 class ImputeForecastDFDataset(BaseConcatDFDataset):
     """A dataset used for forecasting pretraing and inference
 
@@ -691,6 +702,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
         artificial_missing_columns: Optional[List[str]] = None,
         artificial_missing_at_time_t: bool = False,
         random_seed: int = 0,
+        impute_method: str = "forward_fill",
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -716,6 +728,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             artificial_missing_columns=artificial_missing_columns,
             artificial_missing_at_time_t=artificial_missing_at_time_t,
             rng=np.random.default_rng(seed=random_seed),
+            impute_method=impute_method,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -748,6 +761,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             artificial_missing_columns: Optional[List[str]] = None,
             artificial_missing_at_time_t: bool = False,
             rng=np.random.default_rng(),
+            impute_method: str = "forward_fill",
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -759,6 +773,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             self.artificial_missing_rate = artificial_missing_rate
             self.artificial_missing_at_time_t = artificial_missing_at_time_t
             self.rng = rng
+            self.impute_method = impute_method
 
             if artificial_missing_columns is None:
                 self.artificial_missing_columns = copy.copy(target_columns)
@@ -841,15 +856,21 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                     column_name_to_index_map=self.column_name_to_index_map,
                 )
 
-            # impute the numpy matrix, time is the first dimension
-            # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
-            mask = np.isnan(seq_x)
-            idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
-            np.maximum.accumulate(idx, axis=0, out=idx)
-            seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
+            if self.impute_method == "forward_fill":
+                # impute the numpy matrix, time is the first dimension
+                # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
+                mask = np.isnan(seq_x)
+                idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
+                np.maximum.accumulate(idx, axis=0, out=idx)
+                seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
 
-            # fill any remaining nan
-            seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+                # print(seq_x.shape, seq_x_imputed.shape)
+                # fill any remaining nan
+                seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+            else:
+                # interpolate for each channel
+                seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
+                # print(seq_x[0], seq_x_imputed[0])
 
             # mask only on seq_x
 
