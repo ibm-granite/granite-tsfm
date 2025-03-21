@@ -160,6 +160,8 @@ class InferenceRuntime:
         if e is not None:
             return None, e
 
+        del handler.model
+        handler.model = None
         return output, None
 
 
