@@ -248,6 +248,13 @@ class TSFMForecastingInferenceHandler:
                     total_periods=model_prediction_length,
                 )
 
+        batch_size = (
+            parameters.inference_batch_size
+            if parameters.inference_batch_size
+            else self.handler_config.inference_batch_size
+        )
+        LOGGER.info(f"Using inference batch size: {batch_size}")
+
         device = "cpu" if not torch.cuda.is_available() else "cuda"
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
