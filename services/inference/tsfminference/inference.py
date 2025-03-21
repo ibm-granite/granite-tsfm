@@ -165,22 +165,23 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
 
     try:
         df = pd.DataFrame.from_dict(data)
+
+        rc, msg = check(df, schema.model_dump())
+
+        if rc != 0:
+            return None, ValueError(msg)
+
+        if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
+            df[ts_col] = pd.to_datetime(df[ts_col], format="ISO8601")
+
+        sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
+
+        if ts_col:
+            sort_columns.append(ts_col)
+        if sort_columns:
+            return df.sort_values(sort_columns), None
+
     except Exception as ex:
         return None, ValueError(str(ex))
-
-    rc, msg = check(df, schema.model_dump())
-
-    if rc != 0:
-        return None, ValueError(msg)
-
-    if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
-        df[ts_col] = pd.to_datetime(df[ts_col])
-
-    sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
-
-    if ts_col:
-        sort_columns.append(ts_col)
-    if sort_columns:
-        return df.sort_values(sort_columns), None
 
     return df, None
