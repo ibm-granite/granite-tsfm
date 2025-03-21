@@ -715,30 +715,30 @@ requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
 [[package]]
 name = "granite-tsfm"
-version = "0.2.22"
+version = "0.2.23"
 description = "Public notebooks and utilities for TSFM"
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "granite_tsfm-0.2.22-py3-none-any.whl", hash = "sha256:8eee124758b404b6960860c4218d63be77f9aab20c18285858cec935f45ccd37"},
-    {file = "granite_tsfm-0.2.22.tar.gz", hash = "sha256:aea70561e8095f03e211800d05d5f90250148fb85ca06510bca7a00548dda650"},
+    {file = "granite_tsfm-0.2.23-py3-none-any.whl", hash = "sha256:c9caf707efdb716be494c3147acf58dcde05eb1c3bdac8c4f1df74490a5096e5"},
+    {file = "granite_tsfm-0.2.23.tar.gz", hash = "sha256:43bbf5b7c55b7dc7191bd4768c2b8347f4b98898689af4b0f36bbb1d7721b9e9"},
 ]
 
 [package.dependencies]
 datasets = "*"
 deprecated = "*"
-numpy = "<2"
+numpy = "<3"
 pandas = ">=2.2.0"
 scikit-learn = "*"
 transformers = {version = ">=4.38.0", extras = ["torch"]}
-urllib3 = ">=1.26.19,<2"
+urllib3 = ">=1.26.19,<3"
 
 [package.extras]
 all = ["granite-tsfm[dev,notebooks,testing]"]
 demos = ["altair (<5)", "granite-tsfm[notebooks]", "kaleido", "plotly", "streamlit", "streamlit-aggrid", "toml"]
-dev = ["granite-tsfm[testing]", "pre-commit", "ruff (==0.4.4)"]
+dev = ["granite-tsfm[testing]", "pre-commit", "ruff (==0.5.7)"]
 notebooks = ["datasets", "ipywidgets", "jupyter", "kaleido", "matplotlib", "plotly", "tensorboard"]
 ogv = ["datasets", "kaleido", "plotly"]
 testing = ["granite-tsfm[notebooks]", "parameterized", "pytest"]
@@ -3137,4 +3137,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "81d12c34ada4920ea97061aed0026bd05daea16710a8bbbc70e956d6b9a0254d"
+content-hash = "387d3b4db6c2e3763c91e317f07346098cdd5dab4b5d0efad1d65b5d4d11670b"
