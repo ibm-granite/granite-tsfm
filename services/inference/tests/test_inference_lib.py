@@ -204,7 +204,7 @@ def test_forecast_with_bogus_timestamps(ts_data_base: pd.DataFrame, forecasting_
     df[timestamp_column] = [str(x) for x in range(1, SERIES_LENGTH + 1)]
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime(config=config)
-    with pytest.raises(ValueError) as _:
+    with pytest.raises(HTTPException) as _:
         runtime.forecast(input=input)
 
 
