@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import tempfile
 
 import torch
 
@@ -119,7 +120,7 @@ def get_ttm_args():
         "-sd",
         type=str,
         required=False,
-        default="tmp/",
+        default=tempfile.gettempdir(),
         help="Data path",
     )
     parser.add_argument(
