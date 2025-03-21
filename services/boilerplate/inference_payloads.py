@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
-EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$")]
+EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$|^\S$")]
 
 
 class BaseMetadataInput(BaseModel):
