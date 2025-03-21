@@ -25,6 +25,7 @@ from tsfminference.inference_payloads import (
 SERIES_LENGTH = 512
 FORECAST_LENGTH = 96
 MODEL_ID = "mytest-tsfm/ttm-r1"
+NUM_TIMESERIES = 1
 
 
 @pytest.fixture(scope="module")
