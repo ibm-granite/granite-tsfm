@@ -43,7 +43,7 @@ class BaseMetadataInput(BaseModel):
         " See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases"
         " for a description of the allowed values. If not provided, we will attempt to infer it from the data.",
         default=None,
-        pattern=r"^\d+(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
+        pattern=r"^\d*\.?\d*(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
         min_length=0,
         max_length=100,
         example="1h",
