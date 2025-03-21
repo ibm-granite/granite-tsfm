@@ -256,6 +256,7 @@ class TSFMForecastingInferenceHandler:
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
             device=device,
+            batch_size=1000,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 

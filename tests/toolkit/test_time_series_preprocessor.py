@@ -599,9 +599,39 @@ def test_id_columns_and_scaling_id_columns(ts_data_runs):
         scaling=True,
     )
 
-    ds_train, ds_valid, ds_test = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
 
     assert len(tsp.target_scaler_dict) == 2
+    assert len(ds_train.datasets) == 4
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        scaling_id_columns=[],
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+
+    assert len(tsp.target_scaler_dict) == 1
+    assert len(ds_train.datasets) == 4
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        scaling_id_columns=None,
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+
+    assert len(tsp.target_scaler_dict) == 4
     assert len(ds_train.datasets) == 4
 
 
