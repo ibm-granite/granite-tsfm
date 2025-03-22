@@ -88,7 +88,7 @@ def test_forecast_with_decimal_freq(ts_data_base: pd.DataFrame, forecasting_inpu
     input.schema.freq = "3600.0s"  # 1-hr
     df = copy.deepcopy(ts_data_base)
     input.data = df.to_dict(orient="list")
-    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df)
@@ -108,7 +108,7 @@ def test_forecast_with_single_character_column_name(
     df = df.rename(columns={"ID": "I"})
 
     input.data = df.to_dict(orient="list")
-    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
 
@@ -181,7 +181,7 @@ def test_forecast_with_float_timestamps(ts_data_base: pd.DataFrame, forecasting_
     timestamp_column = input.schema.timestamp_column
     df[timestamp_column] = [float(0.0) + x for x in range(1, SERIES_LENGTH * NUM_TIMESERIES + 1)]
     input.data = df.to_dict(orient="list")
-    runtime: InferenceRuntime = InferenceRuntime(config=config)
+    runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
     assert results[timestamp_column].iloc[0] == SERIES_LENGTH + 1
