@@ -4,7 +4,6 @@ import os
 import sys
 
 import torch
-import yaml
 from fastapi import HTTPException
 
 
@@ -53,18 +52,12 @@ def predict_fn(input_object, model):
     from json import JSONDecodeError
 
     from pydantic import ValidationError
-    from tsfminference import TSFM_CONFIG_FILE
     from tsfminference.inference import InferenceRuntime
     from tsfminference.inference_payloads import (
         ForecastingInferenceInput,
         PredictOutput,
     )
 
-    if os.path.exists(TSFM_CONFIG_FILE):
-        with open(TSFM_CONFIG_FILE, "r") as file:
-            config = yaml.safe_load(file)
-    else:
-        config = {}
     logger.debug("in predict_fn")
     logger.debug(f"input_object type {type(input_object)}")
     logger.debug(f"model {model}")
@@ -87,7 +80,7 @@ def predict_fn(input_object, model):
 
         input: ForecastingInferenceInput = ForecastingInferenceInput(**input)
 
-        runtime: InferenceRuntime = InferenceRuntime(config=config)
+        runtime: InferenceRuntime = InferenceRuntime()
         answer: PredictOutput = runtime.forecast(input=input)
         return answer
     except HTTPException as httpex:

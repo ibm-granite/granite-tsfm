@@ -28,12 +28,6 @@ def argparser():
         help="The name that should be used for the finetuned model.",
         required=True,
     )
-    parser.add_argument(
-        "--config_file",
-        "-c",
-        type=str,
-        help="The tsfm configuration file (yaml).",
-    )
     # #################Model archicture
     arch_choices = ["ttm"]
     model_arch_type = parser.add_mutually_exclusive_group(

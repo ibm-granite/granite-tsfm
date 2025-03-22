@@ -30,7 +30,12 @@ class AsyncCallReturn(BaseModel):
 class TrainerArguments(BaseModel):
     """Class representing HF trainer arguments"""
 
-    learning_rate: float = 0.001
+    learning_rate: Optional[float] = Field(
+        description="The learning rate using during fine tuning."
+        "If not provided, a learning rate will be determined using the learning rate finder"
+        "(https://github.com/ibm-granite/granite-tsfm/blob/main/tsfm_public/toolkit/lr_finder.py)",
+        default=None,
+    )
     num_train_epochs: int = 100
     per_device_train_batch_size: int = 32
     per_device_eval_batch_size: int = per_device_train_batch_size
@@ -79,6 +84,11 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
         fewshot_fraction: float = Field(
             default=1.0,
             description="Fraction of data to use for fine tuning.",
+        )
+        fewshot_fraction_location: str = Field(
+            default="last",
+            description="""Location where to chose the fine tuning data. Possible values are first, last, uniform.
+            Uniform means that data is chosen uniformly over the entire fine tuning dataset.""",
         )
         trainer_args: TrainerArguments = Field(default=TrainerArguments())
         model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
