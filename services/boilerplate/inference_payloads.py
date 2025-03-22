@@ -38,6 +38,16 @@ class BaseMetadataInput(BaseModel):
         example=["ID1", "ID2"],
         min_length=0,
     )
+    scaling_id_columns: Optional[List[EverythingPatternedString]] = Field(
+        description="Columns that define unique subsets of the time series data"
+        " over which separate scaling factors should be applied. These columns"
+        " must be a subset of the id_columns.",
+        default_factory=list,
+        default=None,
+        max_length=10,
+        example=["ID2"],
+        min_length=0,
+    )
     freq: Optional[str] = Field(
         description="A frequency indicator for the given timestamp_column."
         " See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases"
@@ -97,6 +107,15 @@ class ForecastingMetadataInput(BaseMetadataInput):
         example=["SCV1", "SCV2"],
         description="An optional array of column headings which identify"
         " categorical-valued channels in the input which are fixed over time.",
+    )
+
+    categorical_columns: List[EverythingPatternedString] = Field(
+        default_factory=list,
+        max_length=500,
+        min_length=0,
+        example=["SCV1", "SCV2"],
+        description="An optional array of column headings which identify"
+        " categorical-valued channels in the input which can vary over time.",
     )
 
 
