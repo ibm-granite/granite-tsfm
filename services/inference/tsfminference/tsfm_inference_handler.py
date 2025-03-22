@@ -73,7 +73,7 @@ class TSFMForecastingInferenceHandler:
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
     ) -> "TSFMForecastingInferenceHandler":
-        """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
+        """Implementation of prepare for HF-like models. We assume the model will make use of the TSFM
         preprocessor and forecasting pipeline. This method:
         1) loades the preprocessor, creating a new one if the model does not already have a preprocessor
         2) updates model configuration arguments by calling _get_config_kwargs
@@ -113,7 +113,13 @@ class TSFMForecastingInferenceHandler:
             raise ValueError("Unexpected: model indicates that it is not finetuned but a preprocessor was found.")
 
         if preprocessor is None:
-            to_check = ["conditional_columns", "control_columns", "observable_columns", "static_categorical_columns"]
+            to_check = [
+                "conditional_columns",
+                "control_columns",
+                "observable_columns",
+                "static_categorical_columns",
+                "categorical_columns",
+            ]
 
             for param in to_check:
                 if param in preprocessor_params and preprocessor_params[param]:
@@ -138,6 +144,8 @@ class TSFMForecastingInferenceHandler:
                 "conditional_columns",
                 "control_columns",
                 "observable_columns",
+                "categorical_columns",
+                "static_categorical_columns",
             ]
 
             for param in to_check:
@@ -173,7 +181,9 @@ class TSFMForecastingInferenceHandler:
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
     ) -> pd.DataFrame:
-        """_summary_
+        """Implementation of run for TSFM models.
+        Checks prediction length, data length (both past and future exogenous), configures batch size, determines
+        device and uses the forecasting pipeline to generate forecasts.
 
         Args:
             data (pd.DataFrame): Input historical time series data.
@@ -325,6 +335,15 @@ class TinyTimeMixerForecastingHandler(TSFMForecastingInferenceHandler):
         parameters: Optional[ForecastingParameters] = None,
         preprocessor: Optional[TimeSeriesPreprocessor] = None,
     ) -> Dict[str, Any]:
+        """Implements the _get_config_kwargs method for TTM models.
+
+        Args:
+            parameters (Optional[ForecastingParameters], optional): Inference parameters. Defaults to None.
+            preprocessor (Optional[TimeSeriesPreprocessor], optional): Configured preprocessor. Defaults to None.
+
+        Returns:
+            Dict[str, Any]: Updated config arguments that get passed to during model load.
+        """
         config_kwargs = {
             "num_input_channels": preprocessor.num_input_channels,
             "prediction_filter_length": parameters.prediction_length,
