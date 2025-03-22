@@ -327,7 +327,7 @@ class TSFMForecastingInferenceHandler:
         return counts
 
 
-class TinyTimeMixerForecastingHandler(TSFMForecastingInferenceHandler):
+class TinyTimeMixerForecastingInferenceHandler(TSFMForecastingInferenceHandler):
     """Service handler for the tiny time mixer model"""
 
     def _get_config_kwargs(
