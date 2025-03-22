@@ -42,7 +42,6 @@ class BaseMetadataInput(BaseModel):
         description="Columns that define unique subsets of the time series data"
         " over which separate scaling factors should be applied. These columns"
         " must be a subset of the id_columns.",
-        default_factory=list,
         default=None,
         max_length=10,
         example=["ID2"],
