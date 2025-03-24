@@ -9,13 +9,6 @@ boilerplate:
 		if ! grep $$(basename $$f) tsfminference/.gitignore; then echo $$(basename $$f) >> tsfminference/.gitignore; fi \
 		done
 
-	for f in ../boilerplate/Dockerfile*; do \
-		echo $$f; \
-		cat ../boilerplate/warning.txt > ./$$(basename $$f); \
-		cat $$f>>./$$(basename $$f); \
-		if ! grep $$(basename $$f) ./.gitignore; then echo $$(basename $$f) >> ./.gitignore; fi \
-		done 
-
 create_prometheus_metrics_dir:
 	rm -rf prometheus_metrics > /dev/null 2>&1 | true
 	mkdir -m go+rwX prometheus_metrics
