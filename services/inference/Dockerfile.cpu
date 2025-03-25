@@ -1,21 +1,24 @@
 # Copyright contributors to the TSFM project
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
+FROM registry.access.redhat.com/ubi9/ubi:latest AS base
 
-RUN microdnf upgrade -y \
-    && microdnf clean all
+RUN yum upgrade -y \
+    && dnf remove -y --disableplugin=subscription-manager \
+     subscription-manager \
+    && yum clean all
 
 FROM base AS python-install
 
 ARG PYTHON_VERSION=3.12
-RUN microdnf install -y python${PYTHON_VERSION} \
+RUN yum install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
-    && microdnf clean all \
+    && yum clean all \
     && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
     && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
-    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin
+    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
 
 # ^^
 # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
@@ -49,8 +52,7 @@ RUN python -m venv ${HOME}/.venv --upgrade-deps \
 && pip uninstall -y torch \ 
 && for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
 && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
-&& rm -rf ${HOME}/.cache
-
+&& rm -rf ${HOME}/.cache 
 
 #RUN pip install --no-cache-dir poetry \
 #    && poetry install --no-cache \
@@ -61,7 +63,7 @@ RUN python -m venv ${HOME}/.venv --upgrade-deps \
 #    && rm -rf /${CODEDIR}/.cache || true \
 #    && yum remove -y git shadow-utils && yum clean all \
 #    && chown -R ${CODEDIR} /tsfm \
-#    && rpm -e $(microdnf repoquery python3-* -q --installed) microdnf python3 yum crypto-policies-scripts
+#    && rpm -e $(yum repoquery python3-* -q --installed) yum python3 yum crypto-policies-scripts
 
 
 ENV HF_HOME=/tmp
