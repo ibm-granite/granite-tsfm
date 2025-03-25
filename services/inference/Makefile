@@ -73,6 +73,7 @@ delete_models:
 # used in example code
 update_examples:
 	# our sagemaker stuff
+	poetry self add poetry-plugin-export
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
