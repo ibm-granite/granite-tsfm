@@ -17,8 +17,7 @@ RUN yum install -y python${PYTHON_VERSION} \
     && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
     && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
-    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin \
-    && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
+    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin
 
 # ^^
 # perl-Net-SSLeay.x86_64 and server_key.pem are installed with git as dependencies
@@ -54,17 +53,6 @@ RUN python -m venv ${HOME}/.venv --upgrade-deps \
 && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
 && rm -rf ${HOME}/.cache 
 
-#RUN pip install --no-cache-dir poetry \
-#    && poetry install --no-cache \
-#    && pip uninstall -y torch \
-#    && pip install https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
-#    && for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
-#    && rm -rf /root/.cache || true \
-#    && rm -rf /${CODEDIR}/.cache || true \
-#    && yum remove -y git shadow-utils && yum clean all \
-#    && chown -R ${CODEDIR} /tsfm \
-#    && rpm -e $(yum repoquery python3-* -q --installed) yum python3 yum crypto-policies-scripts
-
-
+HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
 ENV HF_HOME=/tmp
 
