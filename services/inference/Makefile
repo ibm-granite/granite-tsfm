@@ -28,24 +28,26 @@ stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
 image: boilerplate
-	$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .
+	find . -name "*.pyc" | xargs rm || true
+	# $(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .
 	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
-		--name tsfmserver \
+		--name tsfmserver-cpu \
         -e TSFM_MODEL_DIR=/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
         -v ./mytest-tsfm:/mytest-tsfm \
 		-v ./prometheus_metrics:/prometheus_metrics \
-        tsfminference-cpu
+        tsfminference-cpu python \
+		 -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
 	sleep 5
 
 stop_service_image:
-	$(CONTAINER_BUILDER) stop tsfmserver
+	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 test_local: clone_models boilerplate start_service_local
 	pytest --cov=tsfminference --cov-report term-missing tests ../tests
