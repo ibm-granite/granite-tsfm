@@ -1,21 +1,17 @@
 # Copyright contributors to the TSFM project
 
-FROM registry.access.redhat.com/ubi9/ubi-mini:latest AS base
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 
-RUN yum upgrade -y \
-    && dnf remove -y --disableplugin=subscription-manager \
-    subscription-manager \
-    && yum clean all \
-    && dnf clean all \
-    && rm -rf /var/cache/yum/*
+RUN microdnf upgrade -y \
+    && microdnf clean all
 
 FROM base AS python-install
 
 ARG PYTHON_VERSION=3.12
-RUN yum install -y python${PYTHON_VERSION} \
+RUN microdnf install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
-    && yum clean all \
+    && microdnf clean all \
     && ln -s /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
     && ln -s /usr/bin/pip-${PYTHON_VERSION} /usr/local/bin/pip \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
@@ -51,7 +47,9 @@ RUN python -m venv ${HOME}/.venv --upgrade-deps \
 && pip install --no-cache-dir poetry \
 && poetry install --no-cache \ 
 && pip uninstall -y torch \ 
-&& for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done 
+&& for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
+&& pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
+&& rm -rf ${HOME}/.cache
 
 
 #RUN pip install --no-cache-dir poetry \
@@ -63,7 +61,7 @@ RUN python -m venv ${HOME}/.venv --upgrade-deps \
 #    && rm -rf /${CODEDIR}/.cache || true \
 #    && yum remove -y git shadow-utils && yum clean all \
 #    && chown -R ${CODEDIR} /tsfm \
-#    && rpm -e $(dnf repoquery python3-* -q --installed) dnf python3 yum crypto-policies-scripts
+#    && rpm -e $(microdnf repoquery python3-* -q --installed) microdnf python3 yum crypto-policies-scripts
 
 
 ENV HF_HOME=/tmp
