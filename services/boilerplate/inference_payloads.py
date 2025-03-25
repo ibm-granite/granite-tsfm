@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
-EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$")]
+EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$|^\S$")]
 
 
 class BaseMetadataInput(BaseModel):
@@ -43,7 +43,7 @@ class BaseMetadataInput(BaseModel):
         " See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases"
         " for a description of the allowed values. If not provided, we will attempt to infer it from the data.",
         default=None,
-        pattern=r"^\d+(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
+        pattern=r"^\d*\.?\d*(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
         min_length=0,
         max_length=100,
         example="1h",
