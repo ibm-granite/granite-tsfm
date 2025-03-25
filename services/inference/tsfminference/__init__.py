@@ -32,11 +32,6 @@ TSFM_PYTHON_LOGGING_FORMAT = os.getenv(
 
 TSFM_ALLOW_LOAD_FROM_HF_HUB = int(os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB", "1")) == 1
 
-TSFM_CONFIG_FILE = os.getenv(
-    "TSFM_CONFIG_FILE",
-    os.path.realpath(os.path.join(os.path.dirname(__file__), "default_config.yml")),
-)
-
 # use TSFM_MODEL_DIR preferentially. If not set, use HF_HOME or the system tempdir if that's not set.
 TSFM_MODEL_DIR: str = os.environ.get("TSFM_MODEL_DIR", os.environ.get("HF_HOME", tempfile.gettempdir()))
 
