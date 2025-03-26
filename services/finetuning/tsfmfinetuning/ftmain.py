@@ -4,9 +4,7 @@ import sys
 import traceback
 
 import torch
-import yaml
 
-from tsfmfinetuning import TSFM_CONFIG_FILE
 from tsfmfinetuning.error_logging import write_termination_log
 from tsfmfinetuning.finetuning import FinetuningRuntime
 from tsfmfinetuning.ftargs import argparser
@@ -25,10 +23,7 @@ def main() -> int:
 
     if args.model_arch == "ttm" and args.task_type == "forecasting":
         input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**payload)
-        config_file = args.config_file if args.config_file else TSFM_CONFIG_FILE
-        with open(config_file, "r") as file:
-            config = yaml.safe_load(file)
-        ftr: FinetuningRuntime = FinetuningRuntime(config=config)
+        ftr: FinetuningRuntime = FinetuningRuntime()
         ftr.finetuning(input=input, tuned_model_name=args.model_name, output_dir=args.target_dir)
     else:
         raise NotImplementedError(f"model arch/task type not implemented {args.model_arch_type} {args.task_type}")

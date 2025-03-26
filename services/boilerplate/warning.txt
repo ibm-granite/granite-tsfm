@@ -1,6 +1,10 @@
-# THIS FILE IS COPIED FROM THE BOILERPLATE DIRECTORY,
-# DO NOT EDIT IT OR YOU WILL LOSE YOUR CHANGES.
-# MAKE CHANGES IN THE TOP LEVEL services/boilerplate DIRECTORY.
-#
-#
-#
+#################################################################
+#                                                               #
+#                                                               #
+# THIS FILE IS COPIED FROM THE BOILERPLATE DIRECTORY,           #
+# DO NOT EDIT IT OR YOU WILL LOSE YOUR CHANGES.                 #
+# MAKE CHANGES IN THE TOP LEVEL services/boilerplate DIRECTORY. #
+#                                                               #   
+#                                                               #
+#################################################################
+
