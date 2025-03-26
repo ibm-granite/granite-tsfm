@@ -11,8 +11,13 @@ boilerplate:
 		echo $$(basename $$f) >> tsfmfinetuning/.gitignore; \
 		done 
 	
-image:
-	$(CONTAINER_BUILDER) build -t tsfmfinetuning --build-arg CODEDIR="tsfmfinetuning" -f Dockerfile .
+image: boilerplate
+	# build our base inference images first
+	@cd ../inference ; make image
+	$(CONTAINER_BUILDER) \
+	build -t tsfmfinetuning-gpu \
+	--build-arg CODEDIR="tsfmfinetuning" \
+	-f Dockerfile.gpu .
 
 clone_models:
 	git lfs install || true
