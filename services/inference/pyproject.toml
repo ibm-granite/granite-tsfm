@@ -25,6 +25,8 @@ __version__ = "0.0.0"
 __version_tuple__ = (0, 0, 0)
 """
 
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"
 
 [tool.poetry.dependencies]
 # including 3.9 causes poetry lock to run forever
@@ -41,7 +43,7 @@ setuptools = { version = "*" }
 prometheus_client = { version = "*" }
 
 # ***********CVEs*************
-Jinja2 = { version = ">=3.1.6" }       # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
+Jinja2 = { version = ">=3.1.6" }        # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
 Werkzeug = { version = ">=3.0.6" }
 urllib3 = { version = ">=1.26.19,<2" }  # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 aiohttp = { version = ">=3.10.11" }

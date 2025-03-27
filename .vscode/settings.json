@@ -42,5 +42,8 @@
     "Uvicorn",
     "Werkzeug",
     "xgboostjobs"
-  ]
+  ],
+  "search.useGlobalIgnoreFiles": true,
+  "search.useParentIgnoreFiles": true,
+  "files.autoSave": "afterDelay",
 }
