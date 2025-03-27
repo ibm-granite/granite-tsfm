@@ -234,7 +234,8 @@ class LRFinder:
 
             args = {k: batch[k].to(self.device) for k in signature_args if k in batch}
             pred_outputs = self.model(**args)
-            pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
+            # pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
+            pred, loss = None, pred_outputs.loss
 
         else:
             self.xb, self.yb = batch[0], batch[1]
