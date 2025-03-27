@@ -591,6 +591,7 @@ class TTMGluonTSPredictor:
                 dset_train=dset_train_actual,
                 global_scaler=self.scaler,
                 use_train=self.insample_use_train,
+                prediction_channel_indices = self.prediction_channel_indices
             )
 
         if self.train_num_samples <= 10:
@@ -604,6 +605,7 @@ class TTMGluonTSPredictor:
         global_scaler,
         batch_size=128,
         use_train=False,
+        prediction_channel_indices = []
     ):
         if len(dset_valid) == 1:
             dataset = ConcatDataset((dset_train, dset_valid))
@@ -633,11 +635,13 @@ class TTMGluonTSPredictor:
             series_ids.extend(batch["item_id"])
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_true_unscaled = global_scaler.inverse_transform(y_true, series_ids)
+        y_true_unscaled = y_true_unscaled[:, :, prediction_channel_indices]
+        
 
         # Get validation predictions
         valid_preds_out = hf_trainer.predict(dataset)
         y_pred = valid_preds_out.predictions[0]
-        y_pred_unscaled = global_scaler.inverse_transform(y_pred, series_ids)
+        y_pred_unscaled = global_scaler.inverse_transform(y_pred, series_ids, prediction_channel_indices)
 
         # Create a pands dataframe
         # Flatten (H, C) into 2D arrays
