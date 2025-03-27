@@ -228,7 +228,7 @@ class LRFinder:
         # get the inputs
 
         if isinstance(batch, dict):
-            self.xb, self.yb = batch["past_values"], batch["future_values"]
+            # self.xb, self.yb = batch["past_values"], batch["future_values"]
             signature = inspect.signature(self.model.forward)
             signature_args = list(signature.parameters.keys())
 
