@@ -13,7 +13,7 @@ import pandas as pd
 import torch
 from gluonts.dataset.split import InputDataset, LabelDataset, TrainingDataset
 from gluonts.itertools import batcher
-from gluonts.model.forecast import QuantileForecast
+from gluonts.model.forecast import QuantileForecast, SampleForecast
 from scipy.stats import norm
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
@@ -919,7 +919,7 @@ class TTMGluonTSPredictor:
 
                     all_quantile_forecasts = self.compute_quantile_forecasts(dataloader, self.quantiles)
 
-                forecast_samples = np.array(all_quantile_forecasts)
+                    forecast_samples = np.array(all_quantile_forecasts)
                 if forecast_samples.shape[-1] == 1:
                     forecast_samples = np.squeeze(forecast_samples, axis=-1)
                 break
@@ -934,14 +934,23 @@ class TTMGluonTSPredictor:
         sample_forecasts = []
         for item, ts in zip(forecast_samples, test_data_input):
             forecast_start_date = ts["start"] + len(ts["target"])
-            sample_forecasts.append(
-                QuantileForecast(
-                    forecast_arrays=item,
-                    start_date=forecast_start_date,
-                    forecast_keys=self.quantile_keys,
-                    item_id=ts["item_id"],
+            if self.insample_forecast:
+                sample_forecasts.append(
+                    QuantileForecast(
+                        forecast_arrays=item,
+                        start_date=forecast_start_date,
+                        forecast_keys=self.quantile_keys,
+                        item_id=ts["item_id"],
+                    )
                 )
-            )
+            else:
+                sample_forecasts.append(
+                    SampleForecast(
+                        samples= np.expand_dims(item, axis=0), #item,
+                        start_date=forecast_start_date,
+                        item_id=ts["item_id"],
+                    )
+                )
 
         if self.plot_predictions:
             # plot random samples
