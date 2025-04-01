@@ -26,6 +26,7 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 ENV HF_HOME=/tmp
 
 ARG CODEDIR
+COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
 COPY --chown=tsfm:tsfm pyproject.toml poetry.lock ${CODEDIR} ${HOME}
 
 WORKDIR ${HOME}
