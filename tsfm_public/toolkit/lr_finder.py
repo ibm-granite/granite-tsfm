@@ -212,7 +212,7 @@ class LRFinder:
 
     def train_batch(self, batch: torch.Tensor):
         # forward + get loss + backward + optimize
-        pred, self.loss = self.train_step(batch)
+        self.loss = self.train_step(batch)
         # zero the parameter gradients
         self.opt.zero_grad()
         # gradient
@@ -226,15 +226,13 @@ class LRFinder:
 
     def train_step(self, batch: Union[Dict[str, Any], torch.Tensor]) -> Tuple[torch.Tensor, float]:
         # get the inputs
-
         if isinstance(batch, dict):
-            self.xb, self.yb = batch["past_values"], batch["future_values"]
             signature = inspect.signature(self.model.forward)
             signature_args = list(signature.parameters.keys())
 
             args = {k: batch[k].to(self.device) for k in signature_args if k in batch}
             pred_outputs = self.model(**args)
-            pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
+            loss = pred_outputs.loss
 
         else:
             self.xb, self.yb = batch[0], batch[1]
@@ -242,7 +240,7 @@ class LRFinder:
             pred = self.model(self.xb)
             loss = self.loss_func(self.yb, pred)
 
-        return pred, loss
+        return loss
 
     def after_batch_train(self):
         self.train_iter += 1
