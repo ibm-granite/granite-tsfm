@@ -23,7 +23,7 @@ start_service_local: create_prometheus_metrics_dir boilerplate
 	-w 1 \
 	-k uvicorn.workers.UvicornWorker \
 	--bind 127.0.0.1:8000 \
-	tsfminference.main:app && true &
+	tsfminference.main:app &
 stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
