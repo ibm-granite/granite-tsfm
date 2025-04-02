@@ -1,5 +1,6 @@
 # Copyright contributors to the TSFM project
 #
+import os
 from typing import Any, Dict
 
 import numpy as np
@@ -70,7 +71,11 @@ def ts_data(ts_data_base, request):
 def get_inference_response(
     msg: Dict[str, Any],
 ) -> pd.DataFrame:
-    URL = "http://127.0.0.1:8000/v1/inference/forecasting"
+    URL = (
+        "http://127.0.0.1:8000/v1/inference/forecasting"
+        if os.environ.get("TSFM_FORECASTING_ENDPOINT", None) is None
+        else os.environ.get("TSFM_FORECASTING_ENDPOINT")
+    )
     headers = {}
     req = requests.post(URL, json=msg, headers=headers)
 
