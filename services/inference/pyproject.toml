@@ -45,8 +45,8 @@ prometheus_client = { version = "*" }
 # ***********CVEs*************
 Jinja2 = { version = ">=3.1.6" }        # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
 Werkzeug = { version = ">=3.0.6" }
-urllib3 = { version = ">=1.26.19,<2" }  # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 aiohttp = { version = ">=3.11.15" }     # see https://github.com/aio-libs/aiohttp/issues/10617
+urllib3 = { version = ">=1.26.19" }     # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 transformers = { version = ">=4.48.0" }
 
 [tool.poetry.group.dev]
