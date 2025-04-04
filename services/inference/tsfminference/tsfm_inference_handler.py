@@ -48,6 +48,9 @@ class TSFMForecastingInferenceHandler:
         self.model = None
         self.preprocessor = None
 
+        # loosen the schema checking when using a saved preprocessor
+        self.strict_schema_match = False
+
     def _get_config_kwargs(
         self,
         parameters: Optional[ForecastingParameters] = None,
@@ -137,8 +140,8 @@ class TSFMForecastingInferenceHandler:
             LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
         else:
             # check payload, but only certain parameters
-            to_check = [
-                "freq",
+            # id_columns are not checked, since an artificial id may be added to do batch inference
+            to_check_columns = [
                 "timestamp_column",
                 "target_columns",
                 "conditional_columns",
@@ -148,12 +151,26 @@ class TSFMForecastingInferenceHandler:
                 "static_categorical_columns",
             ]
 
+            to_check_params = ["freq"]
+            to_check = to_check_columns.copy()
+            to_check.extend(to_check_params)
+
             for param in to_check:
-                param_val = preprocessor_params[param]
                 param_val_saved = getattr(preprocessor, param)
-                if param_val != param_val_saved:
+                param_val = preprocessor_params[param]
+                # if a parameter is passed we check it matches the preprocessor
+                if self.strict_schema_match or not (param_val is None or param_val == [] or param_val == ""):
+                    if param_val != param_val_saved:
+                        raise ValueError(
+                            f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                        )
+                # then we check that parameters from the saved preprocessor match what is in the data
+                if param in to_check_params:
+                    continue
+                p = param_val_saved if isinstance(param_val_saved, list) else [param_val_saved]
+                if any(c not in data.columns for c in p):
                     raise ValueError(
-                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                        f"Attempted to use a fine-tuned model with data that does not match the saved schema, please confirm you have the correct model_id and appropriate data. Error in parameter {param}: data does not contain a column named {param_val_saved}."
                     )
 
         model_config_kwargs = self._get_config_kwargs(
