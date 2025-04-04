@@ -609,7 +609,8 @@ def test_finetuned_model_inference(ts_data):
     out = get_inference_response(msg)
     assert "Attempted to use a fine-tuned model with a different schema" in out.text
 
-    test_data_ = test_data_.drop(columns=params["timestamp_column"])
+    # exact match of request and underlying schema
+    # test_data_ = test_data_.drop(columns=params["timestamp_column"])
     msg = {
         "model_id": model_id,
         "parameters": {
@@ -629,6 +630,45 @@ def test_finetuned_model_inference(ts_data):
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
+
+    # relaxed request
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+        },
+        "data": encoded_data,
+        "future_data": {},
+    }
+
+    df_out, _ = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+
+    # relaxed request, but data issue (missing column):
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+    test_data_ = test_data_.drop(columns=params["target_columns"][0])
+    encoded_data = encode_data(test_data_, params["timestamp_column"])
+
+    msg = {
+        "model_id": model_id,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+        },
+        "data": encoded_data,
+        "future_data": {},
+    }
+
+    out = get_inference_response(msg)
+    assert "Attempted to use a fine-tuned model with data that does not match the saved schema" in out.text
 
 
 @pytest.mark.parametrize(

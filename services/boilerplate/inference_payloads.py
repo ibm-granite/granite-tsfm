@@ -25,7 +25,7 @@ class BaseMetadataInput(BaseModel):
         " due to daylight savings change overs. There are many date formats"
         " in existence and inferring the correct one can be a challenge"
         " so please do consider adhering to ISO 8601.",
-        pattern=r"^\S.*\S$",
+        pattern=r"^\S.*\S$|^\S$",
         min_length=1,
         max_length=100,
         example="date",
@@ -112,7 +112,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["SCV1", "SCV2"],
+        example=["CV1", "CV2"],
         description="An optional array of column headings which identify"
         " categorical-valued channels in the input which can vary over time.",
     )
@@ -128,6 +128,16 @@ class BaseParameters(BaseModel):
         " size will be used.",
         default=None,
     )
+
+    @field_validator("inference_batch_size")
+    @classmethod
+    def check_inference_batch_size(cls, v: Optional[int]) -> float:
+        if v is not None and v < 1:
+            raise ValueError(
+                "If specified, `inference_batch_size` must be an integer >=1."
+                " When omitted the model default inference_batch_size will be used."
+            )
+        return v
 
 
 class ForecastingParameters(BaseParameters):
