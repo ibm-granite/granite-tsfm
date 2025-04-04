@@ -14,6 +14,7 @@ RUN dnf upgrade -y \
     && adduser --system --uid 1001 --gid 1001 --groups tsfm \
     --create-home --home-dir /home/tsfm --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
+    && chmod o+rX /home/tsfm \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -29,8 +30,8 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=1
 ENV HF_HOME=/tmp
 
 ARG CODEDIR
-COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm pyproject.toml poetry.lock ${CODEDIR} ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml poetry.lock ${CODEDIR} ${HOME}
 
 WORKDIR ${HOME}
 
