@@ -10,7 +10,10 @@ RUN dnf upgrade -y \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
-    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    && groupadd --system tsfm --gid 1001 \
+    && adduser --system --uid 1001 --gid 0 --groups tsfm \
+    --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    --comment "tsfm user" tsfm \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
