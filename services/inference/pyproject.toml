@@ -41,6 +41,7 @@ gunicorn = { version = "*" }
 uvicorn = { version = "*" }
 setuptools = { version = "*" }
 prometheus_client = { version = "*" }
+psutil = { version = "*" }            # to support memory use reporting in /metrics
 
 # ***********CVEs*************
 Jinja2 = { version = ">=3.1.6" }        # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
@@ -54,6 +55,7 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 locust = "*"
+inotify = "*"
 pytest-coverage = "*"
 gprof2dot = "*"
 
