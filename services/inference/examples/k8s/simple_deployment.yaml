@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsfminference
+  labels:
+    app: tsfminference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tsfminference
+  template:
+    metadata:
+      labels:
+        app: tsfminference
+    spec:
+      containers:
+      - name: tsfminference-service
+        # this assumes we're using a kind local registry
+        # change this to match your CR and container version
+        # image: localhost:5001/tsfminference:latest
+        image: localhost:5001/tsfminference:latest
+        command: ["/bin/sh"]
+        args:
+          - "-c"
+          - |
+            gunicorn \
+            --max-requests 250 \
+            -w 4 \
+            -k uvicorn.workers.UvicornWorker \
+            --bind 0.0.0.0:8000 \
+            tsfminference.main:app
+        volumeMounts:
+        - mountPath: /local-storage
+          name: local-storage
+        env:
+          - name: TSFM_MODEL_DIR
+            value: /local-storage/mytest-tsfm
+          - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
+            value: "0"
+          - name: PROMETHEUS_MULTIPROC_DIR
+            value: "/tmp"
+          - name: TSFM_PYTHON_LOGGING_LEVEL
+            value: "WARNING"
+          - name: TSFM_PYTHON_LOGGING_FORMAT
+            # lighter weight
+            value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(module)s:%(message)s"
+            # intensive but costly
+            # value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s"
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        ports:
+        - containerPort: 8000
+        resources:
+            requests:
+              # nvidia.com/gpu: 0
+              cpu: 1000m
+              memory: 4000Mi
+            limits:
+              # nvidia.com/gpu: 0
+              cpu: 8000m
+              memory: 64000Mi
+      volumes:
+      - name: local-storage
+        persistentVolumeClaim:
+          claimName: local-path-pvc
+     

@@ -2,7 +2,7 @@
 requires = ["setuptools>=66", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
-name = "tsfm_public"
+name = "granite-tsfm"
 requires-python = ">=3.9,<3.13"
 # version = "0.0.1"
 dynamic = ["version"]
@@ -21,8 +21,8 @@ dependencies = [
     "transformers[torch]>=4.38.0",
     "datasets",
     "deprecated",
-    "urllib3>=1.26.19,<2",         # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-    "numpy<2",
+    "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+    "numpy<3",
 ]
 
 [tool.setuptools]
@@ -31,7 +31,7 @@ packages = ["tsfm_public", "tsfmhfdemos"]
 [project.optional-dependencies]
 
 
-all = ["tsfm_public[notebooks,testing,dev]"]
+all = ["granite-tsfm[notebooks,testing,dev]"]
 
 notebooks = [
     "jupyter",
@@ -42,14 +42,14 @@ notebooks = [
     "kaleido",
     "tensorboard",
 ]
-testing = ["pytest", "tsfm_public[notebooks]", "parameterized"]
-dev = ["pre-commit", "tsfm_public[testing]", "ruff==0.4.4"]
+testing = ["pytest", "granite-tsfm[notebooks]", "parameterized"]
+dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
 ogv = ["datasets", "plotly", "kaleido"]
 demos = [
-    "tsfm_public[notebooks]",
+    "granite-tsfm[notebooks]",
     "streamlit",
     "altair<5",
     "plotly",

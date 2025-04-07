@@ -1,0 +1,10 @@
+dataset,CL,zs_mse,fs5_mse
+etth1,512,0.407,
+etth2,512,0.356,
+ettm1,512,0.392,
+ettm2,512,0.288,
+weather,512,0.23,
+electricity,512,0.212,
+traffic,512,0.561,
+exchange,512,0.387,
+zafnoo,512,0.517,

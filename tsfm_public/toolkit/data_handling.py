@@ -1,8 +1,8 @@
+# Copyright contributors to the TSFM project
+#
 """Utilities for handling datasets"""
 
-import glob
 import logging
-import os
 from importlib import resources
 from pathlib import Path
 from typing import Optional
@@ -24,13 +24,16 @@ def load_dataset(
     fewshot_location="first",
     dataset_root_path: str = "datasets/",
     dataset_path: Optional[str] = None,
+    use_frequency_token: bool = False,
+    enable_padding: bool = True,
+    seed: int = 42,
+    **dataset_kwargs,
 ):
     LOGGER.info(f"Dataset name: {dataset_name}, context length: {context_length}, prediction length {forecast_length}")
 
     config_path = resources.files("tsfm_public.resources.data_config")
-    configs = glob.glob(os.path.join(config_path, "*.yaml"))
+    names_to_config = {p.stem: p for p in config_path.iterdir() if p.suffix == ".yaml"}
 
-    names_to_config = {Path(p).stem: p for p in configs}
     config_path = names_to_config.get(dataset_name, None)
 
     if config_path is None:
@@ -74,6 +77,10 @@ def load_dataset(
         split_config=split_config,
         fewshot_fraction=fewshot_fraction,
         fewshot_location=fewshot_location,
+        use_frequency_token=use_frequency_token,
+        enable_padding=enable_padding,
+        seed=seed,
+        **dataset_kwargs,
     )
     LOGGER.info(f"Data lengths: train = {len(train_dataset)}, val = {len(valid_dataset)}, test = {len(test_dataset)}")
 

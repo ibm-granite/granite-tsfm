@@ -1,0 +1,27 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "TSFM Inference Server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "env": {"TSFM_MODEL_DIR": "./mytest-tsfm", "PROMETHEUS_MULTIPROC_DIR" : "/tmp"},
+            "cwd": "${workspaceFolder}/services/inference",
+            "args": [
+                "tsfminference.main:app",
+                "--reload",
+                "--workers",
+                "1",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000"
+            ],
+            "jinja": true
+        }
+    ]
+}

@@ -32,10 +32,14 @@ def strtobool(val):
 
 
 class FractionLocation(enum.Enum):
-    """`Enum` for the different locations where a fraction of data can be chosen."""
+    """`Enum` for the different methods of choosing the fraction of data. Options first and last are used
+    to select the fraction of data from of the begining or end of the full dataset. Uniform chooses windows
+    uniformly sampled from the dataset.
+    """
 
     FIRST = "first"
     LAST = "last"
+    UNIFORM = "uniform"
 
 
 def select_by_timestamp(
@@ -596,7 +600,7 @@ def convert_tsfile_to_dataframe(
                     tokens = line.split(" ")
                     token_len = len(tokens)
                     if token_len != 2:
-                        raise IOError("timestamps tag requires an associated Boolean " "value")
+                        raise IOError("timestamps tag requires an associated Boolean value")
                     elif tokens[1] == "true":
                         timestamps = True
                     elif tokens[1] == "false":
@@ -613,7 +617,7 @@ def convert_tsfile_to_dataframe(
                     tokens = line.split(" ")
                     token_len = len(tokens)
                     if token_len != 2:
-                        raise IOError("univariate tag requires an associated Boolean  " "value")
+                        raise IOError("univariate tag requires an associated Boolean  value")
                     elif tokens[1] == "true":
                         # univariate = True
                         pass
@@ -632,7 +636,7 @@ def convert_tsfile_to_dataframe(
                     tokens = line.split(" ")
                     token_len = len(tokens)
                     if token_len == 1:
-                        raise IOError("classlabel tag requires an associated Boolean  " "value")
+                        raise IOError("classlabel tag requires an associated Boolean  value")
                     if tokens[1] == "true":
                         class_labels = True
                     elif tokens[1] == "false":
@@ -641,7 +645,7 @@ def convert_tsfile_to_dataframe(
                         raise IOError("invalid classLabel value")
                     # Check if we have any associated class values
                     if token_len == 2 and class_labels:
-                        raise IOError("if the classlabel tag is true then class values " "must be supplied")
+                        raise IOError("if the classlabel tag is true then class values must be supplied")
                     has_class_labels_tag = True
                     class_label_list = [token.strip() for token in tokens[2:]]
                     metadata_started = True
@@ -688,7 +692,7 @@ def convert_tsfile_to_dataframe(
                         or not has_class_labels_tag
                         or not has_data_tag
                     ):
-                        raise IOError("a full set of metadata has not been provided " "before the data")
+                        raise IOError("a full set of metadata has not been provided before the data")
                     # Replace any missing values with the value specified
                     line = line.replace("?", replace_missing_vals_with)
                     # Check if we are dealing with data that has timestamps
@@ -1118,7 +1122,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         forecast_horizon,
         contain_missing_values,
         contain_equal_length,
-    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.NaN)
+    ) = convert_tsf_to_dataframe(filename, replace_missing_vals_with=np.nan)
 
     id_column_name = "id"
     timestamp_column_name = "timestamp"

@@ -2,8 +2,7 @@
 Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
 The core TSFM time series models have been made available on Hugging Face -- details can be found 
-[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](services/inference/README.md).
-
+[here](https://github.com/ibm-granite/granite-tsfm/wiki). Information on the services component can be found [here](https://github.com/ibm-granite/granite-tsfm/blob/main/services/inference/README.md).
 
 ## Python Version
 The current Python versions supported are 3.9, 3.10, 3.11, 3.12.
@@ -28,10 +27,11 @@ pip install ".[notebooks]"
 - Transfer learning with `PatchTSMixer` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tsmixer_transfer.ipynb)
 - Transfer learning with `PatchTST` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/patch_tst_transfer.ipynb)
 - Getting started with `TinyTimeMixer (TTM)` [[Try it out]](https://github.com/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb)
+- `TTM` full benchmarking scripts and results are available [[here]](https://github.com/ibm-granite/granite-tsfm/tree/main/notebooks/hfdemo/tinytimemixer/full_benchmarking)
 
 ## 📗 Google Colab Tutorials
-Run the TTM tutorial in Google Colab, and quickly build a forecasting application with pre-trained TSFM models.
-- [TTM Colab Tutorial](https://colab.research.google.com/github/IBM/tsfm/blob/main/notebooks/tutorial/ttm_tutorial.ipynb) 
+Run the TTM tutorial in Google Colab, and quickly build a forecasting application with the pre-trained TSFM models.
+- [TTM Colab Tutorial](https://colab.research.google.com/github/ibm-granite/granite-tsfm/blob/main/notebooks/hfdemo/ttm_getting_started.ipynb) 
 
 ## 💻 Demos Installation
 The demo presented at NeurIPS 2023 is available in `tsfmhfdemos`. This demo requires you to have pre-trained and finetuned models in place (we plan to release these at a later date). To install the requirements use `pip`:

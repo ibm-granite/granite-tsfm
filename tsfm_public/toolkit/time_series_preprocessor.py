@@ -6,9 +6,9 @@ import copy
 import datetime
 import enum
 import json
+import logging
 from collections import defaultdict
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
-from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,7 @@ from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
+from torch.utils.data import Subset
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
     PreTrainedFeatureExtractor,
@@ -33,6 +34,9 @@ from .util import (
 )
 
 
+LOGGER = logging.getLogger(__file__)
+
+
 INTERNAL_ID_COLUMN = "__id"
 INTERNAL_ID_VALUE = "0"
 
@@ -45,7 +49,9 @@ DEFAULT_FREQUENCY_MAPPING = {
     "15min": 5,
     "30min": 6,
     "h": 7,  # hourly
-    "d": 8,  # daily
+    "H": 7,  # hourly, for compatibility
+    "d": 8,  # daily, for compatibility
+    "D": 8,  # daily
     "W": 9,  # weekly
 }
 
@@ -117,17 +123,18 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 64,
         prediction_length: Optional[int] = None,
         scaling: bool = False,
-        # scale_outputs: bool = False,
         scaler_type: ScalerType = ScalerType.STANDARD.value,
         scaling_id_columns: Optional[List[str]] = None,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.FORECASTING.value,
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
         freq: Optional[Union[int, str]] = None,
+        scale_categorical_columns: bool = True,
         **kwargs,
     ):
         """Multi-time series aware data preprocessor. Provides functions for scaling data and facitilitates downstream
@@ -147,6 +154,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 percentage of a particular product is known and controllable in the future. Defaults to [].
             conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+                Defaults to [].
             static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the input
                 which are fixed over time. Defaults to [].
             context_length (int, optional): The length of the input context window. Defaults to 64.
@@ -155,14 +164,17 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             scaler_type (ScalerType, optional): The type of scaling to perform. See ScalerType for available scalers. Defaults to ScalerType.STANDARD.value.
             scaling_id_columns (Optional[List[str]], optional): In some cases we need to separate data by a different set of id_columns
                 when determining scaling factors. For the purposes of determining scaling, data will be grouped by the provided columns.
-                If None, the `id_columns` will be used. Defaults to None.
+                If None, the `id_columns` will be used. If and empty list ([]), the dataset will be treated as a single group for scaling.
+                Defaults to None. This should be a subset of the id_columns.
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
-            frequency_mapping (Dict[str, int], optional): _description_. Defaults to DEFAULT_FREQUENCY_MAPPING.
+            frequency_mapping (Dict[str, int], optional): A mapping which maps frequency strings to numerical values (integers). Defaults to DEFAULT_FREQUENCY_MAPPING.
             freq (Optional[Union[int, str]], optional): A frequency indicator for the given `timestamp_column`. See
                 https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
                 allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
                 inferred from `timestamp_column`. Defaults to None.
+            scale_categorical_columns (bool, optional): If True, the oridinal representations of categorical columns are scaled during preprocessing.
+                Defaults to True.
 
         Raises:
             ValueError: Raised if `id_columns` is not a list.
@@ -182,6 +194,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.observable_columns = list(observable_columns)
         self.control_columns = list(control_columns)
         self.conditional_columns = list(conditional_columns)
+        self.categorical_columns = list(categorical_columns)
         self.static_categorical_columns = list(static_categorical_columns)
 
         self.context_length = context_length
@@ -191,7 +204,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
-        self.scaling_id_columns = scaling_id_columns if scaling_id_columns is not None else copy.copy(id_columns)
+
+        # check subset
+        if scaling_id_columns is not None:
+            if not set(scaling_id_columns).issubset(self.id_columns):
+                raise ValueError("`scaling_id_columns` must be a subset of `id_columns`")
+            self.scaling_id_columns = scaling_id_columns
+        else:
+            self.scaling_id_columns = copy.copy(id_columns)
 
         # we maintain two scalers per time series to facilitate inverse scaling of the targets
         self.scaler_dict = {}
@@ -199,10 +219,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         self.categorical_encoder = None
         self.frequency_mapping = frequency_mapping
         self.freq = freq
+        self.scale_categorical_columns = scale_categorical_columns
 
         kwargs["processor_class"] = self.__class__.__name__
-
-        # self._validate_columns()
 
         super().__init__(**kwargs)
 
@@ -226,8 +245,16 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         if max(counter.values()) > 1:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columnts`, `conditional_columns`, `categorical_columns`, and `static_columns`."
+                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columns`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
             )
+
+        for c in self.categorical_columns:
+            if all(
+                c not in aset for aset in [self.conditional_columns, self.control_columns, self.observable_columns]
+            ):
+                raise ValueError(
+                    "Each specified categorical column must also be included in one of 'conditional_columns', 'control_columns', or 'observable_columns'."
+                )
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -346,7 +373,9 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         else:
             df = dataset.copy()
 
-        if not self.id_columns:
+        # add id column when there are no id or scaling_id columns
+        # or when scaling_id_columns == []
+        if not self.id_columns or self.scaling_id_columns == []:
             df[INTERNAL_ID_COLUMN] = INTERNAL_ID_VALUE
 
         return df
@@ -381,7 +410,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Yields:
             Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
         """
-        if self.scaling_id_columns:
+        if self.scaling_id_columns is not None and len(self.scaling_id_columns) > 0:
             group_by_columns = (
                 self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
             )
@@ -403,11 +432,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             List[str]: List of column names
         """
 
-        cols_to_scale = join_list_without_repeat(
+        column_lists = [
             self.observable_columns,
             self.control_columns,
             self.conditional_columns,
-        )
+        ]
+        if self.scale_categorical_columns:
+            column_lists.append(self.categorical_columns)
+        cols_to_scale = join_list_without_repeat(*column_lists)
 
         return cols_to_scale
 
@@ -420,7 +452,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         Returns:
             List[str]: List of column names
         """
-        cols_to_encode = self.static_categorical_columns
+        cols_to_encode = self.static_categorical_columns + self.categorical_columns
         return cols_to_encode
 
     def _train_scaler(self, df: pd.DataFrame):
@@ -463,7 +495,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             if token is not None:
                 return token
 
-        warn(f"Frequency token {token_name} was not found in the frequncy token mapping.")
+        logging.warning(f"Frequency token {token_name} was not found in the frequency token mapping.")
         token = self.frequency_mapping["oov"]
 
         return token
@@ -484,10 +516,25 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def num_input_channels(
         self,
     ) -> int:
+        """Return the number of input channels
+
+        Input channels are defined as those channels in:
+            target_columns
+            observable_columns
+            control_columns
+            conditional_columns
+
+        Note that categorical columns should be specified as catetgorical_columns, and included in one of the above lists.
+        """
         return len(self._get_real_valued_dynamic_channels())
 
     @property
     def exogenous_channel_indices(self) -> List[int]:
+        """Return the indices of the exogenous columns
+
+        In this case, exogenous are defined as control columns and observable columns. I.e., columns
+        where we know the future values.
+        """
         return [
             i
             for i, c in enumerate(self._get_real_valued_dynamic_channels())
@@ -496,7 +543,26 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
     @property
     def prediction_channel_indices(self) -> List[int]:
+        """Return the indices of the prediction columns, i.e. targets"""
         return [i for i, c in enumerate(self._get_real_valued_dynamic_channels()) if c in self.target_columns]
+
+    @property
+    def categorical_vocab_size_list(self) -> List[int]:
+        """Return the static_categorical_column vocabulary sizes."""
+        if not self.static_categorical_columns or not self.encode_categorical:
+            return None
+
+        if not self.categorical_encoder:
+            raise RuntimeError(
+                "Vocabulary sizes are only available after training the preprocessor. Please run the `train` method first."
+            )
+
+        sizes = []
+        for feat, cats in zip(self.categorical_encoder.feature_names_in_, self.categorical_encoder.categories_):
+            if feat in self.static_categorical_columns:
+                sizes.append(len(cats))
+
+        return sizes
 
     def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
         """Basic checks for input dataset.
@@ -526,14 +592,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
     def _estimate_frequency(self, df: pd.DataFrame):
         if self.timestamp_column:
             if self.id_columns:
-                # to do: be more efficient
                 grps = df.groupby(self.id_columns)
-                _, df_subset = list(grps)[0]
+                _, df_subset = next(iter(grps))
             else:
                 df_subset = df
 
-            # to do: make more robust
-            self.freq = df_subset[self.timestamp_column].iloc[-1] - df_subset[self.timestamp_column].iloc[-2]
+            self.freq = estimate_frequency(df_subset[self.timestamp_column])
 
             if not isinstance(self.freq, (str, int)):
                 self.freq = str(self.freq)
@@ -565,11 +629,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if self.freq is None:
             self._estimate_frequency(df)
 
-        if self.scaling:
-            self._train_scaler(df)
-
         if self.encode_categorical:
             self._train_categorical_encoder(df)
+            if self.scale_categorical_columns:
+                # process now so we can learn the scaling factors
+                df = self._process_encoding(df.copy())
+
+        if self.scaling:
+            self._train_scaler(df)
 
         self._clean_up_dataframe(df)
         return self
@@ -617,17 +684,25 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
                 )
             return grp
 
-        if self.scaling_id_columns:
+        if self.scaling_id_columns is not None and len(self.scaling_id_columns) > 0:
             id_columns = self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
         else:
             id_columns = INTERNAL_ID_COLUMN
 
-        df_inv = df.groupby(id_columns, group_keys=False).apply(
+        df_inv = df.groupby(id_columns, group_keys=False)[df.columns].apply(
             inverse_scale_func,
             id_columns=id_columns,
         )
         self._clean_up_dataframe(df_inv)
         return df_inv
+
+    def _process_encoding(self, df: pd.DataFrame):
+        cols_to_encode = self._get_columns_to_encode()
+        if self.encode_categorical and cols_to_encode:
+            if not self.categorical_encoder:
+                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
+            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
+        return df
 
     def preprocess(
         self,
@@ -641,6 +716,8 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
         self._check_dataset(dataset)
         df = self._standardize_dataframe(dataset)
+
+        df = self._process_encoding(df)
 
         if self.scaling:
             other_cols_to_scale = self._get_other_columns_to_scale()
@@ -664,24 +741,18 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
 
                 return grp
 
-            if self.scaling_id_columns:
+            if self.scaling_id_columns is not None and len(self.scaling_id_columns) > 0:
                 id_columns = (
                     self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
                 )
             else:
                 id_columns = INTERNAL_ID_COLUMN
 
-            df_out = df.groupby(id_columns, group_keys=False).apply(
+            df_out = df.groupby(id_columns, group_keys=False)[df.columns].apply(
                 scale_func,
                 id_columns=id_columns,
             )
             df = df_out
-
-        cols_to_encode = self._get_columns_to_encode()
-        if self.encode_categorical and cols_to_encode:
-            if not self.categorical_encoder:
-                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
-            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
 
         self._clean_up_dataframe(df)
         return df
@@ -790,6 +861,9 @@ def get_datasets(
     fewshot_location: str = FractionLocation.LAST.value,
     as_univariate: bool = False,
     use_frequency_token: bool = False,
+    enable_padding: bool = True,
+    seed: int = 42,
+    **dataset_kwargs,
 ) -> Tuple[Any]:
     """Creates the preprocessed pytorch datasets needed for training and evaluation
     using the HuggingFace trainer
@@ -815,17 +889,26 @@ def get_datasets(
             Defaults to 1.
         fewshot_fraction (float, optional): When non-null, return this percent of the original training
             dataset. This is done to support fewshot fine-tuning.
-        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
+        fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first", "last" and "uniform"
             as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
-            of the training dataset (i.e., "last").
+            of the training dataset (i.e., "last"). If fewshot enabled before windowing, then we support first and last,
+            if fewshot enabled after windowing, then we support uniform sampling.
         as_univariate (bool, optional): When True the datasets returned will contain only one target column. An
             additional ID is added to distinguish original column name. Only valid if there are no exogenous
             specified. Defaults to False.
         use_frequency_token (bool): If True, datasets are created that include the frequency token. Defaults to False.
+        enable_padding (bool): If True, datasets are created with padding. Padding will add zeros to the dataframe (per
+            time series) when there is insufficient data to form one record. If False, no padding is done and one or
+            more datasets may be empty.
+        seed (int): Seed to use.
+        dataset_kwargs: additional keyword arguments to pass to the torch datasets during creation.
+
 
     Returns:
         Tuple of pytorch datasets, including: train, validation, test.
     """
+
+    rng = np.random.default_rng(seed=seed)
 
     if not ts_preprocessor.context_length:
         raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
@@ -852,14 +935,14 @@ def get_datasets(
         "observable_columns": ts_preprocessor.observable_columns,
         "control_columns": ts_preprocessor.control_columns,
         "conditional_columns": ts_preprocessor.conditional_columns,
+        "categorical_columns": ts_preprocessor.categorical_columns,
         "static_categorical_columns": ts_preprocessor.static_categorical_columns,
     }
 
     # handle fewshot operation
-    if fewshot_fraction is not None:
-        if not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
-            raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
-
+    if (fewshot_fraction is not None) and not ((fewshot_fraction <= 1.0) and (fewshot_fraction > 0.0)):
+        raise ValueError(f"Fewshot fraction should be between 0 and 1, received {fewshot_fraction}")
+    if fewshot_fraction is not None and fewshot_location != FractionLocation.UNIFORM.value:
         train_data = select_by_fixed_fraction(
             train_data,
             id_columns=ts_preprocessor.id_columns,
@@ -872,6 +955,7 @@ def get_datasets(
     params["context_length"] = ts_preprocessor.context_length
     params["prediction_length"] = ts_preprocessor.prediction_length
     params["stride"] = stride
+    params["enable_padding"] = enable_padding
     if use_frequency_token:
         params["frequency_token"] = ts_preprocessor.get_frequency_token(ts_preprocessor.freq)
 
@@ -901,21 +985,36 @@ def get_datasets(
         params["target_columns"] = ["value"]
         params["id_columns"] = params["id_columns"] + ["column_id"]
 
-    return tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    params.update(**dataset_kwargs)
+
+    datasets = tuple([ForecastDFDataset(d, **params) for d in train_valid_test_prep])
+    for dset_name, dset in zip(["train", "valid", "test"], datasets):
+        if len(dset) == 0:
+            raise RuntimeError(f"One of the generated datasets ({dset_name}) is of zero length.")
+
+    if fewshot_fraction is not None and fewshot_location == FractionLocation.UNIFORM.value:
+        lst = rng.integers(low=0, high=len(datasets[0]), size=int(fewshot_fraction * len(datasets[0])))
+        few_shot_train = Subset(datasets[0], lst.tolist())
+
+        datasets = (few_shot_train, datasets[1], datasets[2])
+
+    return datasets
 
 
 def create_timestamps(
-    last_timestamp: Union[datetime.datetime, pd.Timestamp],
-    freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]] = None,
+    last_timestamp: Union[datetime.datetime, pd.Timestamp, np.datetime64, int, float, np.integer, np.floating],
+    freq: Optional[
+        Union[int, float, np.integer, np.floating, datetime.timedelta, pd.Timedelta, np.timedelta64, str]
+    ] = None,
     time_sequence: Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]] = None,
     periods: int = 1,
 ) -> List[pd.Timestamp]:
     """Simple utility to create a list of timestamps based on start, delta and number of periods
 
     Args:
-        last_timestamp (Union[datetime.datetime, pd.Timestamp]): The last observed timestamp, new timestamps will be created
+        last_timestamp (Union[datetime.datetime, pd.Timestamp, int, float, np.integer, np.floating]): The last observed timestamp, new timestamps will be created
             after this timestamp.
-        freq (Optional[Union[int, float, datetime.timedelta, pd.Timedelta, str]], optional): The frequency at which timestamps
+        freq (Optional[Union[int, float, np.integer, np.floating, datetime.timedelta, pd.Timedelta, np.timedelta, str]], optional): The frequency at which timestamps
             should be generated. Defaults to None.
         time_sequence (Optional[Union[List[int], List[float], List[datetime.datetime], List[pd.Timestamp]]], optional): A time sequence
             from which the frequency can be inferred. Defaults to None.
@@ -932,58 +1031,115 @@ def create_timestamps(
         raise ValueError("Neither `freq` nor `time_sequence` provided, cannot determine frequency.")
 
     if freq is None:
-        # to do: make more robust
-        freq = time_sequence[-1] - time_sequence[-2]
+        freq = estimate_frequency(time_sequence)
 
-    # more complex logic is required to support all edge cases
-    if isinstance(freq, (pd.Timedelta, datetime.timedelta, str)):
+    if freq is None:
+        raise ValueError(
+            "Could not extend time series because frequency was not provided and could not be estimated from the available data."
+        )
+
+    def convert_numeric(val: Any):
+        """Helper function to convert strings to numerical values"""
+        if isinstance(val, str):
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return val
+        return val
+
+    if isinstance(freq, str):
+        freq = convert_numeric(freq)
+
+    # freq is str, which is not convertible to numeric
+    if isinstance(freq, str):
+        # try to convert to pd.timedelta
         try:
-            # try date range directly
+            freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
+        except ValueError:
+            pass
+
+        return pd.date_range(
+            last_timestamp,
+            freq=freq,
+            periods=periods + 1,
+        ).tolist()[1:]
+    # frequency is timedelta like object
+    elif isinstance(freq, (pd.Timedelta, np.timedelta64, datetime.timedelta)):
+        if isinstance(last_timestamp, (np.datetime64, pd.Timestamp, datetime.datetime)):
             return pd.date_range(
                 last_timestamp,
-                freq=freq,
+                freq=pd.Timedelta(freq) if isinstance(freq, np.timedelta64) else freq,
                 periods=periods + 1,
             ).tolist()[1:]
-        except ValueError as e:
-            # if it fails, we can try to compute a timedelta from the provided string
-            if isinstance(freq, str):
-                freq = pd._libs.tslibs.timedeltas.Timedelta(freq)
-                return pd.date_range(
-                    last_timestamp,
-                    freq=freq,
-                    periods=periods + 1,
-                ).tolist()[1:]
-            else:
-                raise e
+            # [last_timestamp + i * freq for i in range(1, periods + 1)]
+        # last_timestamp is not date type, but freq is timedelta type -- ambiguous
+        else:
+            raise ValueError(
+                f"Ambiguous last_timestamp {last_timestamp} (type: {type(last_timestamp)}) with freq {freq}."
+            )
+    # frequency is numeric
+    elif isinstance(freq, (int, float, np.integer, np.floating)):
+        if isinstance(last_timestamp, (int, float, np.floating, np.integer)):
+            return [last_timestamp + i * freq for i in range(1, periods + 1)]
+        # last_timestamp is a date type, but freq is numeric -- ambiguous
+        else:
+            raise ValueError(
+                f"Ambiguous frequency {freq} with last_timestamp {last_timestamp} (type: {type(last_timestamp)})."
+            )
     else:
-        # numerical timestamp column
-        return [last_timestamp + i * freq for i in range(1, periods + 1)]
+        raise ValueError(
+            f"Could not create timestamps, given the following inputs: last_timestamp={last_timestamp}, freq={freq}, periods={periods}."
+        )
+
+
+def estimate_frequency(timestamp_data: Union[pd.Series, np.ndarray]):
+    if len(timestamp_data) < 2:
+        LOGGER.warning("Provided time series data is too short to estimate frequency.")
+        return None
+
+    if isinstance(timestamp_data, pd.Series):
+        return timestamp_data.iloc[-1] - timestamp_data.iloc[-2]
+    else:
+        return timestamp_data[-1] - timestamp_data[-2]
 
 
 def extend_time_series(
     time_series: pd.DataFrame,
-    # last_known_timestamp,
     timestamp_column: str,
     grouping_columns: List[str],
     freq: Optional[Union[int, float, datetime.timedelta, pd.Timedelta]] = None,
-    periods: int = 1,
-    # delta: datetime.timedelta = datetime.timedelta(days=1),
+    periods: int = None,
+    total_periods: Optional[int] = None,
 ):
     """Extends the provided time series with empty data for the number of periods specified. For each time series, based
     on groups defined by grouping columns, adds emptry records following the last timestamp. The empty records contain
     only timestamps and grouping indicators, remaining fields will be null.
+
+    One of periods or total_periods must be specified.
 
     Args:
         time_series (pd.DataFrame): _description_
         start_timestamp (_type_): _description_
         column_name (str): _description_
         grouping_columns (List[str]): _description_
+        freq:
         periods (int, optional): _description_. Defaults to 1.
-        delta (datetime.timedelta, optional): _description_. Defaults to datetime.timedelta(days=1).
+        total_periods (int, optional): total length of the series after extending. Defaults to None.
     """
 
-    def augment_one_series(group: Union[pd.Series, pd.DataFrame]):
+    def augment_one_series(
+        group: Union[pd.Series, pd.DataFrame], periods: Optional[int] = None, total_periods: Optional[int] = None
+    ):
         last_timestamp = group[timestamp_column].iloc[-1]
+
+        if periods is None:
+            periods = total_periods - len(group)
+
+        if periods < 1:
+            return group
 
         new_data = pd.DataFrame(
             {
@@ -996,16 +1152,18 @@ def extend_time_series(
             }
         )
 
-        df = pd.concat(
-            (group, new_data),
-            axis=0,
-        )
-        return df.reset_index(drop=True)
+        df = pd.concat((group, new_data), axis=0, ignore_index=True)
+        return df  # df.reset_index(drop=True)
+
+    if (periods is None and total_periods is None) or (periods is not None and total_periods is not None):
+        raise ValueError("Exactly one of `periods` or `total_periods` must be specified")
 
     if grouping_columns == []:
-        new_time_series = augment_one_series(time_series)
+        new_time_series = augment_one_series(time_series, periods=periods, total_periods=total_periods)
     else:
-        new_time_series = time_series.groupby(grouping_columns).apply(augment_one_series, include_groups=False)
+        new_time_series = time_series.groupby(grouping_columns).apply(
+            augment_one_series, include_groups=False, periods=periods, total_periods=total_periods
+        )
         idx_names = list(new_time_series.index.names)
         idx_names[-1] = "__delete"
         new_time_series = new_time_series.reset_index(names=idx_names)

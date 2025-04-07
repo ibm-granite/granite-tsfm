@@ -7,7 +7,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .model_parameters import (
@@ -30,7 +30,12 @@ class AsyncCallReturn(BaseModel):
 class TrainerArguments(BaseModel):
     """Class representing HF trainer arguments"""
 
-    learning_rate: float = 0.0
+    learning_rate: Optional[float] = Field(
+        description="The learning rate using during fine tuning."
+        "If not provided, a learning rate will be determined using the learning rate finder"
+        "(https://github.com/ibm-granite/granite-tsfm/blob/main/tsfm_public/toolkit/lr_finder.py)",
+        default=None,
+    )
     num_train_epochs: int = 100
     per_device_train_batch_size: int = 32
     per_device_eval_batch_size: int = per_device_train_batch_size
@@ -55,7 +60,9 @@ class ForecastingTuneInput(BaseTuneInput):
         pattern="file://.*",
         examples=["file:///a/path/to/data.csv", "file:///a/path/to/data.feather"],
     )
-    schema: ForecastingMetadataInput
+    schema: ForecastingMetadataInput = Field(
+        description="An object of ForecastingMetadataInput that contains the schema metadata of the 'data' input."
+    )
     parameters: ForecastingParameters
 
 
@@ -78,15 +85,20 @@ class TinyTimeMixerForecastingTuneInput(ForecastingTuneInput):
             default=1.0,
             description="Fraction of data to use for fine tuning.",
         )
+        fewshot_fraction_location: str = Field(
+            default="last",
+            description="""Location where to chose the fine tuning data. Possible values are first, last, uniform.
+            Uniform means that data is chosen uniformly over the entire fine tuning dataset.""",
+        )
         trainer_args: TrainerArguments = Field(default=TrainerArguments())
         model_parameters: TinyTimeMixerParameters = Field(default=TinyTimeMixerParameters())
 
-        @field_validator("fewshot_fraction")
-        @classmethod
-        def check_valid_fraction(cls, v: float) -> float:
-            if (v > 1) or (v <= 0):
-                raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
-            return v
+        # @field_validator("fewshot_fraction")
+        # @classmethod
+        # def check_valid_fraction(cls, v: float) -> float:
+        #    if (v > 1) or (v <= 0):
+        #        raise ValueError("`fewshot_fraction` should be a valid fraction between 0 and 1")
+        #    return v
 
     parameters: Parameters
 

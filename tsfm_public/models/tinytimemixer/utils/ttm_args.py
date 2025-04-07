@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import tempfile
 
 import torch
 
@@ -119,7 +120,7 @@ def get_ttm_args():
         "-sd",
         type=str,
         required=False,
-        default="tmp/",
+        default=tempfile.gettempdir(),
         help="Data path",
     )
     parser.add_argument(
@@ -138,11 +139,93 @@ def get_ttm_args():
         default=1,
         help="Whether to freeze the backbone during few-shot finetuning.",
     )
+    parser.add_argument(
+        "--enable_prefix_tuning",
+        "-ept",
+        type=int,
+        required=False,
+        default=0,
+        help="Enable prefix tuning in TTM.",
+    )
+    parser.add_argument(
+        "--hf_model_path",
+        "-hmp",
+        type=str,
+        required=False,
+        default="ibm-granite/granite-timeseries-ttm-r2",
+        help="Hugginface model card path.",
+    )
+
+    parser.add_argument(
+        "--datasets",
+        type=str,
+        default=None,
+        help="List of datasets, comma separated",
+    )
+
+    parser.add_argument(
+        "--zeroshot",
+        "-zs",
+        type=int,
+        required=False,
+        default=1,
+        help="Run Zeroshot",
+    )
+
+    parser.add_argument(
+        "--fewshot",
+        "-fs",
+        type=int,
+        required=False,
+        default=1,
+        help="Run Zeroshot",
+    )
+
+    parser.add_argument(
+        "--plot",
+        type=int,
+        required=False,
+        default=1,
+        help="Enable plotting",
+    )
+
+    parser.add_argument(
+        "--num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="Number of  layers",
+    )
+
+    parser.add_argument(
+        "--decoder_num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="Number of  decoder layers",
+    )
+
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        required=False,
+        default=0.2,
+        help="Dropout",
+    )
+
+    parser.add_argument(
+        "--head_dropout",
+        type=float,
+        required=False,
+        default=0.2,
+        help="head_dropout",
+    )
 
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
     args.freeze_backbone = int_to_bool(args.freeze_backbone)
+    args.enable_prefix_tuning = int_to_bool(args.enable_prefix_tuning)
     args.d_model = args.patch_length * args.d_model_scale
     args.decoder_d_model = args.patch_length * args.decoder_d_model_scale
 

@@ -3,6 +3,7 @@
 """Hugging Face Pipeline for Time Series Tasks"""
 
 import inspect
+from collections import defaultdict
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -84,13 +85,15 @@ class TimeSeriesPipeline(Pipeline):
             accumulator.append(item[model_output_key])
 
         # collect all ouputs needed for post processing
-        first = dataset[0]
-        model_outputs = {}
-        for k, v in first.items():
+        model_outputs = defaultdict(list)
+        items = list(dataset[0].items())
+        for r in dataset:
+            for k, v in items:
+                model_outputs[k].append(r[k])
+
+        for k, v in items:
             if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(tuple(r[k] for r in dataset))
-            else:
-                model_outputs[k] = [r[k] for r in dataset]
+                model_outputs[k] = torch.stack(model_outputs[k])
 
         # without shuffling in the dataloader above, we assume that order is preserved
         # otherwise we need to incorporate sequence id somewhere and do a proper join
@@ -134,6 +137,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 "observable_columns",
                 "control_columns",
                 "conditional_columns",
+                "categorical_columns",
                 "static_categorical_columns",
                 "freq",
             ]:
@@ -184,6 +188,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "future_time_series",
         ]
@@ -196,6 +201,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "observable_columns",
             "control_columns",
             "conditional_columns",
+            "categorical_columns",
             "static_categorical_columns",
             "freq",
             "explode_forecasts",
@@ -285,6 +291,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             conditional_columns (List[str]): List of column names which identify the conditional channels in the input.
                 Conditional channels are channels which we know in the past, but do not know in the future.
 
+            categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+
             static_categorical_columns (List[str]): List of column names which identify categorical-valued channels in the input
                 which are fixed over time.
 
@@ -359,7 +367,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                     raise ValueError(f"Future time series input contains an unknown column {c}.")
 
             if id_columns:
-                id_count = time_series[id_columns].unique().shape[0]
+                id_count = time_series[id_columns].drop_duplicates().shape[0]
             else:
                 id_count = 1
 
@@ -372,19 +380,21 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 # future data needs some values for targets, but they are unused
                 future_time_series[target_columns] = 0
                 future_time_series = self.feature_extractor.preprocess(future_time_series)
-                future_time_series.drop(columns=target_columns)
+                # future_time_series = future_time_series.drop(columns=target_columns)
+                future_time_series[target_columns] = np.nan
 
-            time_series = pd.concat((time_series, future_time_series), axis=0)
+            time_series = pd.concat((time_series, future_time_series), axis=0, ignore_index=True)
         else:
             # no additional exogenous data provided, extend with empty periods
             time_series = extend_time_series(
                 time_series=time_series,
+                freq=self.feature_extractor.freq if self.feature_extractor else None,
                 timestamp_column=timestamp_column,
                 grouping_columns=id_columns,
                 periods=prediction_length,
             )
 
-        # use forecasing dataset to do the preprocessing
+        # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
             time_series,
             **kwargs,
@@ -423,21 +433,25 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # name the predictions of target columns
         # outputs should only have size equal to target columns
 
+        # only allow adding ground truth when not exploding
+        add_known_ground_truth = kwargs["add_known_ground_truth"] if not kwargs["explode_forecasts"] else False
+
         prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
-            prediction_columns.append(f"{c}_prediction" if kwargs["add_known_ground_truth"] else c)
+            prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
             out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
-        if kwargs["add_known_ground_truth"]:
+        if add_known_ground_truth:
             for i, c in enumerate(kwargs["target_columns"]):
                 ground_truth = input["future_values"][:, :, i].numpy()
                 missing = ~input["future_observed_mask"][:, :, i].numpy()
-                ground_truth[missing] = np.NaN
+                ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
         if "timestamp_column" in kwargs:
             out[kwargs["timestamp_column"]] = input["timestamp"]
+        # copy ids
         for i, c in enumerate(kwargs["id_columns"]):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
@@ -477,7 +491,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
             out = self.feature_extractor.inverse_scale_targets(out)
-            if kwargs["add_known_ground_truth"]:
+            if add_known_ground_truth:
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out

@@ -5,12 +5,11 @@
 import logging
 
 import starlette.status as status
-import yaml
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+from prometheus_client import CollectorRegistry, make_asgi_app, multiprocess
 
 from . import (
-    TSFM_CONFIG_FILE,
     TSFM_MODEL_DIR,
     TSFM_PYTHON_LOGGING_FORMAT,
     TSFM_PYTHON_LOGGING_LEVEL,
@@ -26,20 +25,32 @@ logging.basicConfig(
 
 logging.info(f"Using TSFM_MODEL_DIR {TSFM_MODEL_DIR}")
 
-if TSFM_CONFIG_FILE:
-    with open(TSFM_CONFIG_FILE, "r") as file:
-        config = yaml.safe_load(file)
-else:
-    config = {}
-
-
 app = FastAPI(
     title="FM for Time Series API",
     version=API_VERSION,
     description="This FastAPI application provides service endpoints for performing inference tasks on TSFM HF models.",
 )
-ir = InferenceRuntime(config=config)
+
+
+# ############# PROMETHEUS METRICS ##############
+# Using multiprocess collector for registry
+def make_metrics_app():
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    return make_asgi_app(registry=registry)
+
+
+metrics_app = make_metrics_app()
+app.mount("/metrics", metrics_app)
+# ##############################################
+
+ir = InferenceRuntime()
 ir.add_routes(app)
+
+
+@app.get("/healthcheck")
+def healthcheck():
+    return {"message": "Server is healthy!"}
 
 
 @app.get("/")

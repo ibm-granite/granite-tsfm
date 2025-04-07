@@ -32,13 +32,21 @@ TSFM_PYTHON_LOGGING_FORMAT = os.getenv(
 
 TSFM_ALLOW_LOAD_FROM_HF_HUB = int(os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB", "1")) == 1
 
-TSFM_CONFIG_FILE = os.getenv(
-    "TSFM_CONFIG_FILE",
-    os.path.realpath(os.path.join(os.path.dirname(__file__), "default_config.yml")),
-)
-
 # use TSFM_MODEL_DIR preferentially. If not set, use HF_HOME or the system tempdir if that's not set.
-TSFM_MODEL_DIR: Path = Path(os.environ.get("TSFM_MODEL_DIR", os.environ.get("HF_HOME", tempfile.gettempdir())))
+TSFM_MODEL_DIR: str = os.environ.get("TSFM_MODEL_DIR", os.environ.get("HF_HOME", tempfile.gettempdir()))
 
-if not TSFM_MODEL_DIR.exists():
-    raise Exception(f"TSFM_MODEL_DIR {TSFM_MODEL_DIR} does not exist.")
+# basic checks
+# make sure at least one of them is a valid directory
+# make sure it's readable as well
+_amodeldir_found = next(
+    (
+        adir
+        for adir in (Path(p) for p in TSFM_MODEL_DIR.split(":"))
+        if adir.exists() and adir.is_dir() and os.access(adir, os.R_OK)
+    ),
+    None,
+)
+if not _amodeldir_found and not TSFM_ALLOW_LOAD_FROM_HF_HUB:
+    raise Exception(
+        f"None of the values given in TSFM_MODEL_DIR {TSFM_MODEL_DIR} are an existing and readable directory."
+    )

@@ -279,6 +279,7 @@ def plot_predictions(
         indices = [-1]  # indices not used in exploded case
     elif input_df is not None and predictions_df is not None:
         # 2) input_df and predictions plus column information is provided
+        pchannel = f"{channel}_prediction" if f"{channel}_prediction" in predictions_df else channel
 
         if indices is None:
             l = len(predictions_df)
@@ -289,7 +290,7 @@ def plot_predictions(
         gt_df = input_df.copy()
         gt_df = gt_df.set_index(timestamp_column)  # add id column logic here
 
-        prediction_length = len(predictions_subset[0][channel])
+        prediction_length = len(predictions_subset[0][pchannel])
         using_pipeline = True
         plot_test_data = True
     elif model is not None and dset is not None:
@@ -364,14 +365,15 @@ def plot_predictions(
 
         else:
             batch = dset[index]
-            ts_y_hat = np.arange(plot_context, plot_context + prediction_length)
+            feasible_plot_context = min(plot_context, batch["past_values"].shape[0])
+            ts_y_hat = np.arange(feasible_plot_context, feasible_plot_context + prediction_length)
             y_hat = predictions_subset[i]
 
-            ts_y = np.arange(plot_context + prediction_length)
+            ts_y = np.arange(feasible_plot_context + prediction_length)
             y = batch["future_values"][:, channel].squeeze().numpy()
-            x = batch["past_values"][-plot_context:, channel].squeeze().numpy()
+            x = batch["past_values"][-feasible_plot_context:, channel].squeeze().numpy()
             y = np.concatenate((x, y), axis=0)
-            border = plot_context
+            border = feasible_plot_context
             plot_title = f"Example {indices[i]}"
 
         # Plot predicted values with a dashed line

@@ -3,8 +3,6 @@
 import tempfile
 
 import pytest
-import yaml
-from tsfmfinetuning import TSFM_CONFIG_FILE
 from tsfmfinetuning.finetuning import FinetuningRuntime
 from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 
@@ -12,7 +10,7 @@ from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 PAYLOADS = [
     {
         "data": "file://./path/to/pandas.csv/or/pandas.feather/or/pandas.csv.gz",
-        "model_id": "ibm/test-ttm-v1",
+        "model_id": "mytest-tsfm/ttm-r1",
         "schema": {
             "timestamp_column": "date",
             "target_columns": ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"],
@@ -26,7 +24,9 @@ PAYLOADS = [
 ]
 
 file_data_uris = [
-    "file://./tests/data/ETTh2.feather",
+    "file://./data/ETTh1.feather",
+    "file://./data/ETTh1.csv",
+    "file://./data/ETTh1.csv.gz",
 ]
 
 
@@ -35,13 +35,8 @@ file_data_uris = [
 def test_fine_tune_forecasting_with_local_io(uri, payload):
     payload["data"] = uri
     input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**payload)
-    if TSFM_CONFIG_FILE:
-        with open(TSFM_CONFIG_FILE, "r") as file:
-            config = yaml.safe_load(file)
-    else:
-        config = {}
 
-    ftr: FinetuningRuntime = FinetuningRuntime(config=config)
+    ftr: FinetuningRuntime = FinetuningRuntime()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tuned_model_name = "pytest_tuned_model"

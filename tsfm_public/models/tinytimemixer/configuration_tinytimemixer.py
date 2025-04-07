@@ -69,9 +69,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         loss (`string`, *optional*, defaults to `"mse"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
-            error "mse" or "mae". Distribution head (nll) is currently disabled and not allowed.
+            The loss function to finetune or pretrain the the model. Allowed values are "mse" or "mae" or "pinball" or "huber".
+            Use pinball loss for probabilistic forecasts of different quantiles.
+            Distribution head (nll) is currently disabled and not allowed.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         post_init (`bool`, *optional*, defaults to `False`):
@@ -212,6 +212,10 @@ class TinyTimeMixerConfig(PretrainedConfig):
         # initialization parameters
         init_linear: str = "pytorch",
         init_embed: str = "pytorch",
+        quantile: float = 0.5,
+        huber_delta: float = 1,
+        # masked prediction,
+        mask_value: int = 0,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -266,6 +270,10 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.prediction_filter_length = prediction_filter_length
         self.init_linear = init_linear
         self.init_embed = init_embed
+        self.quantile = quantile
+        self.huber_delta = huber_delta
+        self.mask_value = mask_value
+        self.masked_context_length = None
 
         super().__init__(**kwargs)
 
@@ -273,7 +281,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.init_processing = True
 
         if not hasattr(self, "num_patches"):
-            context_length = self.context_length
+            context_length = (
+                self.masked_context_length if self.masked_context_length is not None else self.context_length
+            )
             self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:

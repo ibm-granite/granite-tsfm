@@ -3,6 +3,7 @@
 """Tools for building torch datasets"""
 
 import copy
+import logging
 from itertools import starmap
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -11,6 +12,9 @@ import pandas as pd
 import torch
 
 from .util import join_list_without_repeat
+
+
+LOGGER = logging.getLogger(__file__)
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
@@ -84,13 +88,17 @@ class BaseDFDataset(torch.utils.data.Dataset):
 
         # sort the data by datetime
         if timestamp_column in list(data_df.columns):
-            if not isinstance(data_df[timestamp_column].iloc[0], pd.Timestamp):
-                data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
+            # if not isinstance(data_df[timestamp_column].iloc[0], pd.Timestamp):
+            #     data_df[timestamp_column] = pd.to_datetime(data_df[timestamp_column])
             data_df = data_df.sort_values(timestamp_column, ignore_index=True)
 
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
         if zero_padding:
             data_df = self.pad_zero(data_df)
+        elif len(data_df) < self.context_length + self.prediction_length:
+            LOGGER.warning(
+                f"Padding is disabled and input data is shorter than required length. Received {len(data_df)} time point, but require at least {self.context_length + self.prediction_length} time points."
+            )
 
         if timestamp_column in list(data_df.columns):
             self.timestamps = data_df[timestamp_column].to_list()  # .values coerces timestamps
@@ -125,7 +133,17 @@ class BaseDFDataset(torch.utils.data.Dataset):
         )
 
     def __len__(self):
-        return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
+        return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
+
+    def _check_index(self, index: int) -> int:
+        if index >= len(self):
+            raise IndexError("Index exceeds dataset length")
+
+        if index < 0:
+            if -index > len(self):
+                raise ValueError("Absolute value of index should not exceed dataset length")
+            index = len(self) + index
+        return index
 
     def __getitem__(self, index: int):
         """
@@ -275,6 +293,9 @@ class PretrainDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
 
     The resulting dataset returns records (dictionaries) containing:
@@ -294,6 +315,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         super().__init__(
             data_df=data,
@@ -306,6 +328,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             target_columns=target_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
         self.n_inp = 1
 
@@ -322,6 +345,7 @@ class PretrainDFDataset(BaseConcatDFDataset):
             target_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.target_columns = target_columns
 
@@ -340,11 +364,14 @@ class PretrainDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
+            index = self._check_index(index)
+
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             ret = {
                 "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
@@ -376,6 +403,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             percentage of a particular product is known and controllable in the future. Defaults to [].
         conditional_columns (List[str], optional): List of column names which identify the conditional channels in the input.
             Conditional channels are channels which we know in the past, but do not know in the future. Defaults to [].
+        categorical_columns (List[str]): List of column names which identify time-varying categorical-valued channels in the input.
+            Defaults to [].
         static_categorical_columns (List[str], optional): List of column names which identify categorical-valued channels in the
             input which are fixed over time. Defaults to [].
         context_length (int, optional): Length of historical data used when creating individual examples in the torch dataset.
@@ -394,6 +423,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             mask in each of the the context windows (past_values) generated for that column. If a single index is provided, masking
             will begin at that index and continue to the end of the context window. If a tuple of two values is provded, they are
             treated as python list indices; the values given by these indices will be masked.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -418,6 +449,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         observable_columns: List[str] = [],
         control_columns: List[str] = [],
         conditional_columns: List[str] = [],
+        categorical_columns: List[str] = [],
         static_categorical_columns: List[str] = [],
         context_length: int = 1,
         prediction_length: int = 1,
@@ -427,6 +459,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+        enable_padding: bool = True,
         metadata_columns: List[str] = [],
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
@@ -441,11 +474,13 @@ class ForecastDFDataset(BaseConcatDFDataset):
             fill_value=fill_value,
             cls=self.BaseForecastDFDataset,
             stride=stride,
+            enable_padding=enable_padding,
             # extra_args
             target_columns=target_columns,
             observable_columns=observable_columns,
             control_columns=control_columns,
             conditional_columns=conditional_columns,
+            categorical_columns=categorical_columns,
             static_categorical_columns=static_categorical_columns,
             frequency_token=frequency_token,
             autoregressive_modeling=autoregressive_modeling,
@@ -474,12 +509,14 @@ class ForecastDFDataset(BaseConcatDFDataset):
             observable_columns: List[str] = [],
             control_columns: List[str] = [],
             conditional_columns: List[str] = [],
+            categorical_columns: List[str] = [],
             static_categorical_columns: List[str] = [],
             frequency_token: Optional[int] = None,
             autoregressive_modeling: bool = True,
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
+            enable_padding: bool = True,
             metadata_columns: List[str] = [],
         ):
             self.frequency_token = frequency_token
@@ -487,6 +524,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.observable_columns = observable_columns
             self.control_columns = control_columns
             self.conditional_columns = conditional_columns
+            self.categorical_columns = categorical_columns
             self.static_categorical_columns = static_categorical_columns
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
@@ -497,6 +535,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 observable_columns,
                 control_columns,
                 conditional_columns,
+                categorical_columns,
             )
             y_cols = copy.copy(x_cols)
 
@@ -526,6 +565,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def apply_masking_specification(self, past_values_tensor: np.ndarray) -> np.ndarray:
@@ -541,17 +581,18 @@ class ForecastDFDataset(BaseConcatDFDataset):
             for col_name, spec in self.masking_specification:
                 col_idx = self.column_name_to_index_map[col_name]
                 if isinstance(spec, (tuple, list)) and len(spec) == 2:
-                    past_values_tensor[spec[0] : spec[1], col_idx] = np.NaN
+                    past_values_tensor[spec[0] : spec[1], col_idx] = np.nan
                 else:
-                    past_values_tensor[spec:, col_idx] = np.NaN
+                    past_values_tensor[spec:, col_idx] = np.nan
             return past_values_tensor
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
 
-            seq_x = self.X[time_id : time_id + self.context_length].values.astype(np.float32)
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values.astype(np.float32)
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
 
@@ -559,7 +600,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x = self.apply_masking_specification(seq_x)
 
             # seq_y: batch_size x pred_len x num_x_cols
-            seq_y = self.y[
+            seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
             ].values
             seq_y[:, self.y_mask_conditional] = 0
@@ -592,7 +633,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             return ret
 
         def __len__(self):
-            return (len(self.X) - self.context_length - self.prediction_length) // self.stride + 1
+            return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
 
 class ReconstructionDFDataset(ForecastDFDataset):
@@ -627,7 +668,7 @@ class ReconstructionDFDataset(ForecastDFDataset):
             timestamp_column=timestamp_column,
             num_workers=num_workers,
             context_length=context_length,
-            prediction_length=0, #prediction_length,
+            prediction_length=0,  # prediction_length,
             fill_value=fill_value,
             stride=stride,
             # extra_args
@@ -644,30 +685,32 @@ class ReconstructionDFDataset(ForecastDFDataset):
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
         self.n_targets = self.n_vars
-        self.impute_dataset =  torch.tensor(impute_dataset) if impute_dataset is not None else None
+        self.impute_dataset = torch.tensor(impute_dataset) if impute_dataset is not None else None
         self.masking_ratio = masking_ratio
-        self.time_indexes = time_indexes #time indexes which need to be preserved
+        self.time_indexes = time_indexes  # time indexes which need to be preserved
+
     def __getitem__(self, idx):
         ret_item = super().__getitem__(idx)
-        #print(idx, ret_item.keys())
+        # print(idx, ret_item.keys())
         orig_values = ret_item["past_values"]
-        cl, n_vars = orig_values.shape # (cl,n_vars); vars include time index
+        cl, n_vars = orig_values.shape  # (cl,n_vars); vars include time index
         new_values = torch.cat((orig_values[1:], orig_values[1:]), 1)
         new_values[:, :n_vars] = orig_values[0]
-        ret_item["past_values"] = new_values #(cl-1, 2*n_vars)
-        
+        ret_item["past_values"] = new_values  # (cl-1, 2*n_vars)
+
         if self.masking_ratio == -1:
             ret_item["past_observed_mask"] = torch.ones_like(new_values).type(torch.bool)
-            ret_item["past_observed_mask"][...,-n_vars:] = False
+            ret_item["past_observed_mask"][..., -n_vars:] = False
         else:
             rarray = np.random.random(ret_item["past_values"].shape)
-            ret_item["past_observed_mask"] = (rarray < 1-self.masking_ratio)
-        ret_item["past_observed_mask"][:, self.time_indexes] = True #keep the time indexes as observed
+            ret_item["past_observed_mask"] = rarray < 1 - self.masking_ratio
+        ret_item["past_observed_mask"][:, self.time_indexes] = True  # keep the time indexes as observed
         # ret_item['label_ids'] = []
         # ret_item['label'] = []
-        
+
         return ret_item
-    
+
+
 class RegressionDFDataset(BaseConcatDFDataset):
     """A dataset used for forecasting pretraing and inference
 
@@ -684,6 +727,9 @@ class RegressionDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
@@ -706,6 +752,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         # self.y_cols = y_cols
 
@@ -722,6 +769,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
 
         self.n_inp = 2
@@ -745,6 +793,7 @@ class RegressionDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.target_columns = target_columns
             self.input_columns = input_columns
@@ -765,14 +814,16 @@ class RegressionDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
-            seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
+            seq_y = self.y.iloc[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             # return _torch(seq_x, seq_y)
 
             ret = {
@@ -808,6 +859,9 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         num_workers (int, optional): (Currently not used) Number of workers. Defaults to 1.
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
+        enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x len(input_columns))
@@ -830,6 +884,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         num_workers: int = 1,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
     ):
         super().__init__(
             data_df=data,
@@ -844,6 +899,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             static_categorical_columns=static_categorical_columns,
             stride=stride,
             fill_value=fill_value,
+            enable_padding=enable_padding,
         )
 
         self.n_inp = 2
@@ -863,6 +919,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
             static_categorical_columns: List[str] = [],
             stride: int = 1,
             fill_value: Union[float, int] = 0.0,
+            enable_padding: bool = True,
         ):
             self.label_column = label_column
             self.input_columns = input_columns
@@ -883,13 +940,15 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                 drop_cols=drop_cols,
                 stride=stride,
                 fill_value=fill_value,
+                zero_padding=enable_padding,
             )
 
         def __getitem__(self, index):
             # seq_x: batch_size x seq_len x num_x_cols
+            index = self._check_index(index)
 
             time_id = index * self.stride
-            seq_x = self.X[time_id : time_id + self.context_length].values
+            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
             # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
             seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
 
@@ -984,7 +1043,9 @@ def ts_padding(
         pad_df[c] = pad_df[c].astype(df.dtypes[c], copy=False)
 
     if timestamp_column:
-        if (df[timestamp_column].dtype.type == np.datetime64) or (df[timestamp_column].dtype == int):
+        if len(df) < 2:
+            pad_df[timestamp_column] = None
+        elif (df[timestamp_column].dtype.type == np.datetime64) or (df[timestamp_column].dtype == int):
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
             prepended_timestamps = [last_timestamp + offset * period for offset in range(-fill_length, 0)]

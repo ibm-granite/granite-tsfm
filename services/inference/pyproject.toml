@@ -25,32 +25,44 @@ __version__ = "0.0.0"
 __version_tuple__ = (0, 0, 0)
 """
 
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"
 
 [tool.poetry.dependencies]
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-tsfm_public = { git = "https://github.com/IBM-granite/granite-tsfm.git", tag = "v0.2.9" }
-
-# trying to pick up cpu version for tsfminference
-# to make image smaller
-torch = { version = ">2,<3", source = "pytorch" }
+granite-tsfm = "==0.2.23"
 
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }
+gunicorn = { version = "*" }
+# necessary for fast-api compatible uvicorn.workers.UvicornWorker worker
 uvicorn = { version = "*" }
 setuptools = { version = "*" }
-urllib3 = { version = ">=1.26.19,<2" } # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+prometheus_client = { version = "*" }
 
-[[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cpu"
-priority = "explicit"
+# ***********CVEs*************
+Jinja2 = { version = ">=3.1.6" }        # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
+Werkzeug = { version = ">=3.0.6" }
+aiohttp = { version = ">=3.11.15" }     # see https://github.com/aio-libs/aiohttp/issues/10617
+urllib3 = { version = ">=1.26.19" }     # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+transformers = { version = ">=4.48.0" }
 
 [tool.poetry.group.dev]
 optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
+locust = "*"
+pytest-coverage = "*"
+gprof2dot = "*"
+
+[tool.poetry.group.sagemaker]
+optional = true
+[tool.poetry.group.sagemaker.dependencies]
+sagemaker = "*"
+boto3 = "*"
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]

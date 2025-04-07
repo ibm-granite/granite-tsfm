@@ -2,164 +2,185 @@
 #
 """Tsfminference Runtime"""
 
-import datetime
+import copy
 import logging
+import os
 from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
+from prometheus_client import Histogram
+from starlette import status
 
-from tsfm_public import TimeSeriesForecastingPipeline, TimeSeriesPreprocessor
+from tsfm_public.toolkit.util import select_by_index
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
-from .hfutil import load_config, load_model, register_config
-from .inference_payloads import ForecastingInferenceInput, PredictOutput
+from .dataframe_checks import check
+from .dirutil import resolve_model_path
+from .errors import error_message
+from .inference_handler import InferenceHandler
+from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 
 
 LOGGER = logging.getLogger(__file__)
 
+FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
+FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
+
 
 class InferenceRuntime:
-    def __init__(self, config: Dict[str, Any] = {}):
-        self.config = config
-        model_map = {}
-
-        if "custom_modules" in config:
-            for custom_module in config["custom_modules"]:
-                register_config(
-                    custom_module["model_type"],
-                    custom_module["model_config_name"],
-                    custom_module["module_path"],
-                )
-                LOGGER.info(f"registered {custom_module['model_type']}")
-
-                model_map[custom_module["model_config_name"]] = custom_module["module_path"]
-
-        self.model_to_module_map = model_map
-
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
+        # /forecasting
         self.router.add_api_route(
             "/forecasting",
             self.forecast,
             methods=["POST"],
             response_model=PredictOutput,
         )
+        # /modelspec
+        self.router.add_api_route("/modelspec", self._modelspec, methods=["GET"])
         app.include_router(self.router)
 
-    def load(self, model_path: str):
-        try:
-            preprocessor = TimeSeriesPreprocessor.from_pretrained(model_path)
-            LOGGER.info("Successfully loaded preprocessor")
-        except OSError:
-            preprocessor = None
-            LOGGER.info("No preprocessor found")
-
-        # load config and model
-        conf = load_config(
-            model_path,
-        )
-
-        model = load_model(
-            model_path,
-            config=conf,
-            module_path=self.model_to_module_map.get(conf.__class__.__name__, None),
-        )
-        LOGGER.info("Successfully loaded model")
-        return model, preprocessor
+    def _modelspec(self, model_id: str):
+        model_path = resolve_model_path(TSFM_MODEL_DIR, model_id)
+        if not model_path:
+            raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
+        handler, e = InferenceHandler.load(model_id=model_id, model_path=model_path)
+        if handler.handler_config:
+            answer = {}
+            atts = [
+                "multivariate_support",
+                "missing_value_support",
+                "minimum_context_length",
+                "maximum_context_length",
+                "maximum_prediction_length",
+            ]
+            for at in atts:
+                if hasattr(handler.handler_config, at):
+                    answer[at] = getattr(handler.handler_config, at)
+            return answer
+        else:
+            raise HTTPException(status_code=404, detail=str(e))
 
     def forecast(self, input: ForecastingInferenceInput):
-        try:
-            LOGGER.info("calling forecast_common")
-            answer = self._forecast_common(input)
-            LOGGER.info("done, returning.")
-            return answer
-        except Exception as e:
-            LOGGER.exception(e)
-            raise HTTPException(status_code=500, detail=repr(e))
+        LOGGER.info("calling forecast_common")
+        start = os.times()
+        answer, ex = self._forecast_common(input)
+        finish = os.times()
+        FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
+        FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
+
+        if ex is not None:
+            import traceback
+
+            detail = error_message(ex)
+            LOGGER.exception(ex)
+            traceback.print_exception(ex)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+        LOGGER.info("done, returning.")
+        return answer
 
     def _forecast_common(self, input_payload: ForecastingInferenceInput) -> PredictOutput:
-        # we need some sort of model registry
-        # payload = input_payload.model_dump()  # do we need?
+        model_path = resolve_model_path(TSFM_MODEL_DIR, input_payload.model_id)
 
-        data = decode_data(input_payload.data, input_payload.schema)
-        future_data = decode_data(input_payload.future_data, input_payload.schema)
-
-        model_path = TSFM_MODEL_DIR / input_payload.model_id
-
-        if not model_path.is_dir():
+        if not model_path:
             LOGGER.info(f"Could not find model at path: {model_path}")
             if TSFM_ALLOW_LOAD_FROM_HF_HUB:
                 model_path = input_payload.model_id
                 LOGGER.info(f"Using HuggingFace Hub: {model_path}")
             else:
-                raise RuntimeError(
-                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR.as_posix()}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
+                return None, RuntimeError(
+                    f"Could not load model {input_payload.model_id} from {TSFM_MODEL_DIR}. If trying to load directly from the HuggingFace Hub please ensure that `TSFM_ALLOW_LOAD_FROM_HF_HUB=1`"
                 )
 
-        model, preprocessor = self.load(model_path)
+        handler, e = InferenceHandler.load(model_id=input_payload.model_id, model_path=model_path)
+        if e is not None:
+            return None, e
 
-        preprocessor_params = input_payload.schema.model_dump()
+        parameters = input_payload.parameters
+        schema = input_payload.schema
 
-        # preprocess
-        if preprocessor is None:
-            preprocessor = TimeSeriesPreprocessor(
-                **preprocessor_params,
-                scaling=False,
-                encode_categorical=False,
+        data, ex = decode_data(input_payload.data, schema)
+        if ex:
+            return None, ValueError("data:" + str(ex))
+
+        future_data, ex = decode_data(input_payload.future_data, schema)
+        if ex:
+            return None, ValueError("future_data:" + str(ex))
+
+        handler_config = handler.handler_config
+        # collect and check underlying time series lengths
+        if getattr(handler_config, "minimum_context_length", None) or getattr(
+            handler_config, "maximum_context_length", None
+        ):
+            if schema.id_columns:
+                data_lengths = data.groupby(schema.id_columns)[schema.id_columns].apply(len)
+                min_len_index = data_lengths.argmin()
+                min_data_length = data_lengths.iloc[min_len_index]
+                max_data_length = data_lengths.max()
+            else:
+                min_data_length = max_data_length = len(data)
+            LOGGER.info(
+                f"Data length recieved {len(data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
             )
-            # we don't set context length or prediction length above because it is not needed for inference
 
-            # train to estimate freq if not available
-            preprocessor.train(data)
+        if getattr(handler_config, "minimum_context_length", None):
+            if min_data_length < handler_config.minimum_context_length:
+                err_str = "Data should have time series of length that is at least the required model context length. "
+                if schema.id_columns:
+                    err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {handler_config.minimum_context_length} time points"
+                else:
+                    err_str += f"Received {min_data_length} time points, but model requires {handler_config.minimum_context_length} time points"
 
-        LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
+                return None, ValueError(err_str)
 
-        # warn if future data is not provided, but is needed by the model
-        if preprocessor.exogenous_channel_indices and future_data is None:
-            raise ValueError(
-                "Future data should be provided for exogenous columns where the future is known (`control_columns` and `observable_columns`)"
-            )
+        # truncate data length
+        if getattr(handler_config, "maximum_context_length", None):
+            if max_data_length > handler_config.maximum_context_length:
+                LOGGER.info(f"Truncating series lengths to {handler_config.maximum_context_length}")
+                data = select_by_index(
+                    data, id_columns=schema.id_columns, start_index=-handler_config.maximum_context_length
+                )
 
-        forecast_pipeline = TimeSeriesForecastingPipeline(
-            model=model,
-            explode_forecasts=True,
-            feature_extractor=preprocessor,
-            add_known_ground_truth=False,
-            freq=preprocessor.freq,
-        )
+        _, e = handler.prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
+        if e is not None:
+            return None, e
 
-        # truncate data length when exploding
-        # context_length = model.config.context_length
-        # if explode_forecasts and len(data) > context_length:
-        #     data = select_by_index(
-        #         data, id_columns=input.id_columns, start_index=-context_length
-        #     )
+        LOGGER.info(f"HANDLER: {type(handler)}")
+        output, e = handler.run(data=data, future_data=future_data, schema=schema, parameters=parameters)
 
-        # test_data = preprocessor.preprocess(data)
+        if e is not None:
+            return None, e
 
-        # if future_data is not None:
-        #     # future data needs some values for targets, but they are unused
-        #     # Eventually this will be part of the forecast pipeline.
-        #     future_data[input_payload.target_columns] = 0
-        #     future_data = preprocessor.preprocess(future_data)
-        #     future_data.drop(columns=input_payload.target_columns)
-
-        forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
-
-        return PredictOutput(
-            model_id=input_payload.model_id,
-            created_at=datetime.datetime.now().isoformat(),
-            results=[forecasts.to_dict(orient="list")],
-        )
+        return output, None
 
 
-def decode_data(data: Dict[str, List[Any]], schema: Dict[str, Any]) -> pd.DataFrame:
+def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) -> pd.DataFrame:
     if not data:
-        return None
+        return None, None
 
-    df = pd.DataFrame.from_dict(data)
-    if ts_col := schema.timestamp_column:
-        df[ts_col] = pd.to_datetime(df[ts_col])
-    return df
+    try:
+        df = pd.DataFrame.from_dict(data)
+
+        rc, msg = check(df, schema.model_dump())
+
+        if rc != 0:
+            return None, ValueError(msg)
+
+        if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
+            df[ts_col] = pd.to_datetime(df[ts_col], format="ISO8601")
+
+        sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
+
+        if ts_col:
+            sort_columns.append(ts_col)
+        if sort_columns:
+            return df.sort_values(sort_columns), None
+
+    except Exception as ex:
+        return None, ValueError(str(ex))
+
+    return df, None
