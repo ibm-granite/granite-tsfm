@@ -8,8 +8,9 @@ import os
 from typing import Any, Dict, List
 
 import pandas as pd
+import psutil
 from fastapi import APIRouter, HTTPException
-from prometheus_client import Histogram
+from prometheus_client import Summary
 from starlette import status
 
 from tsfm_public.toolkit.util import select_by_index
@@ -25,8 +26,9 @@ from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataIn
 
 LOGGER = logging.getLogger(__file__)
 
-FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
-FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
+FORECAST_PROMETHEUS_TIME_SPENT = Summary("forecast_time_spent", "Wall clock time.")
+FORECAST_PROMETHEUS_CPU_USED = Summary("forecast_cpu_user", "CPU user time.")
+FORECAST_PROMETHEUS_MEMORY_USED = Summary("forecast_memory_used_GB", "Memory in use.")
 
 
 class InferenceRuntime:
@@ -69,8 +71,10 @@ class InferenceRuntime:
         start = os.times()
         answer, ex = self._forecast_common(input)
         finish = os.times()
+        process = psutil.Process()
         FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
         FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
+        FORECAST_PROMETHEUS_MEMORY_USED.observe(process.memory_info().rss / 1e9)
 
         if ex is not None:
             import traceback
@@ -129,7 +133,7 @@ class InferenceRuntime:
 
         if getattr(handler_config, "minimum_context_length", None):
             if min_data_length < handler_config.minimum_context_length:
-                err_str = "Data should have time series of length that is at least the required model context length. "
+                err_str = f"Data for model {input_payload.model_id} should have time series of length that is at least the required model context length."
                 if schema.id_columns:
                     err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {handler_config.minimum_context_length} time points"
                 else:
