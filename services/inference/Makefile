@@ -14,16 +14,19 @@ create_prometheus_metrics_dir:
 	mkdir -m go+rwX prometheus_metrics
 
 # starts the tsfminference service (used mainly for test cases)
-start_service_local: create_prometheus_metrics_dir boilerplate
+start_service_local_watch: create_prometheus_metrics_dir boilerplate
 	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
 	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./foobaz:./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 	python -m gunicorn \
 	-w 1 \
+	--reload \
 	-k uvicorn.workers.UvicornWorker \
 	--bind 127.0.0.1:8000 \
-	tsfminference.main:app &
+	tsfminference.main:app
+start_service_local:
+	@make start_service_local_watch &
 stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
@@ -31,7 +34,7 @@ image: boilerplate
 	find . -name "*.pyc" | xargs rm || true
 	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .
-	
+
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
