@@ -62,10 +62,14 @@ spec:
             - "-c"
             - |
               gunicorn \
-              --max-requests 100 \
+              --max-requests 250 \
               -w 16 \
               -k uvicorn.workers.UvicornWorker \
               --bind 0.0.0.0:8000 \
+              --timeout 3600 \
+              --access-logfile - \
+              --error-logfile - \
+              --log-level info \
               tsfminference.main:app
           volumeMounts:
             - mountPath: /local-storage
@@ -78,7 +82,7 @@ spec:
             - name: TSFM_MODEL_DIR
               value: /local-storage/mytest-tsfm
             - name: PROMETHEUS_MULTIPROC_DIR
-              value: "/tmp"
+              value: "/home/tsfm/prometheus_metrics"
             - name: TSFM_PYTHON_LOGGING_LEVEL
               value: "WARNING"
             - name: TSFM_PYTHON_LOGGING_FORMAT
