@@ -1,6 +1,7 @@
 # Standard
 
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -14,38 +15,27 @@ from tsfminference.inference_payloads import (
 )
 
 
-# SERIES_LENGTH = int(os.getenv("TSFM_PROFILE_SERIES_LENGTH", 512))
-# FORECAST_LENGTH = 96
-# MODEL_ID = "ttm-r1"
-# NUM_TIMESERIES = int(os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2))
-
-
-def ts_data_base(series_length: int, num_timeseries: int) -> pd.DataFrame:
+def ts_data_base(series_length: int, num_timeseries: int, num_targets: int) -> pd.DataFrame:
     # Generate a date range
     length = series_length
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
     timeseries = []
     for idx in range(num_timeseries):
-        timeseries.append(
-            pd.DataFrame(
-                {
-                    "date": date_range,
-                    "ID": str(idx),
-                    "VAL": np.random.rand(length),
-                }
-            )
-        )
+        data: dict = {"date": date_range, "ID": str(idx)}
+        for idx in range(num_targets):
+            data[f"VAL{idx}"] = np.random.rand(series_length)
+        timeseries.append(pd.DataFrame(data))
 
     answer = pd.concat(timeseries, ignore_index=True)
     answer["date"] = answer["date"].astype(int)
     return answer
 
 
-def forecasting_input_base(model_id: str, series_length: int, num_timeseries: int) -> dict:
-    df: pd.DataFrame = ts_data_base(series_length, num_timeseries)
+def forecasting_input_base(model_id: str, series_length: int, num_timeseries: int, num_targets: int) -> dict:
+    df: pd.DataFrame = ts_data_base(series_length, num_timeseries, num_targets)
     schema: ForecastingMetadataInput = ForecastingMetadataInput(
-        timestamp_column="date", id_columns=["ID"], target_columns=["VAL"]
+        timestamp_column="date", id_columns=["ID"], target_columns=[f"VAL{idx}" for idx in range(num_targets)]
     )
     parameters: ForecastingParameters = ForecastingParameters()
     input: ForecastingInferenceInput = ForecastingInferenceInput(
@@ -57,22 +47,44 @@ def forecasting_input_base(model_id: str, series_length: int, num_timeseries: in
     return input.model_dump()
 
 
-class QuickstartUser(FastHttpUser):
-    _printed_error = {}
+class MyUser(FastHttpUser):
+    max_retries = 3  # custom retry count
 
     @task
     def forecast_synchronous(self):
         forecasting_url = self.host + "/inference/forecasting"
-
-        response = self.client.post(forecasting_url, json=self.payload, timeout=None, retries=10)
-        if not response.status_code == 200 and response.text not in QuickstartUser._printed_error:
-            print("#" * 25)
-            print(response.text)
-            print("#" * 25)
-            QuickstartUser._printed_error[response.text] = True
+        for attempt in range(self.max_retries):
+            try:
+                if attempt > 0:
+                    print(f"retrying on attempt {attempt+1}")
+                response = self.client.post(forecasting_url, json=self.payload, timeout=1200)
+                if response.status_code == 200:
+                    break
+                else:
+                    print(f"Attempt {attempt+1} failed with status: {response.status_code}")
+            except Exception as e:
+                print(f"Attempt {attempt+1} raised exception: {e}")
 
     def on_start(self):
-        self.payload = forecasting_input_base(model_id="ttm-r1", num_timeseries=500, series_length=512)
+        model_param_map = {
+            "ttm-r1": {"context_length": 512, "prediction_length": 96},
+            "ttm-1024-96-r1": {"context_length": 1024, "prediction_length": 96},
+            "ttm-r2": {"context_length": 512, "prediction_length": 96},
+            "ttm-r2-etth-finetuned": {"context_length": 512, "prediction_length": 96},
+            "ttm-r2-etth-finetuned-control": {"context_length": 512, "prediction_length": 96},
+            "ttm-1024-96-r2": {"context_length": 1024, "prediction_length": 96},
+            "ttm-1536-96-r2": {"context_length": 1536, "prediction_length": 96},
+            "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
+            "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
+        }
+
+        model_id = os.environ.get("MODEL_ID", "ttm-r1")
+        self.payload = forecasting_input_base(
+            model_id=model_id,
+            num_timeseries=int(os.environ.get("NUM_TIMESERIES", "10")),
+            series_length=model_param_map[model_id]["context_length"],
+            num_targets=int(os.environ.get("NUM_TARGETS", "1")),
+        )
 
     def on_stop(self):
         metrics_url = self.host.replace("/v1", "") + "/metrics"
