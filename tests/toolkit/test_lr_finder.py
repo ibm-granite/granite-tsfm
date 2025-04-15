@@ -42,7 +42,11 @@ def test_lr_finder(ttm_base_model, etth_data_base):
     )
 
     learning_rate, finetune_forecast_model = optimal_lr_finder(
-        model, train_dataset, batch_size=32, device="cpu", num_iter=10
+        model, train_dataset, device="cpu", batch_size=32, num_iter=10
     )
 
     np.testing.assert_allclose(learning_rate, 0.00035938136638046257)
+
+    learning_rate, finetune_forecast_model = optimal_lr_finder(
+        model, train_dataset, device="mps", batch_size=32, num_iter=10
+    )
