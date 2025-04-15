@@ -1,4 +1,5 @@
 CONTAINER_BUILDER ?= docker
+SKIP_GPU_BUILD ?= "0"
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -33,7 +34,11 @@ stop_service_local:
 image: boilerplate
 	find . -name "*.pyc" | xargs rm || true
 	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
-	$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .
+	@if [ "$$SKIP_GPU_BUILD" = "1" ]; then \
+		$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu . \
+	else \
+		echo "Skipping because GPU build"; \
+	fi
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
