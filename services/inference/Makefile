@@ -32,13 +32,14 @@ stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
 image: boilerplate
-	find . -name "*.pyc" | xargs rm || true
+	find . -name "*.pyc" | xargs rm -f || true
 	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
-	@if [ "$$SKIP_GPU_BUILD" = "1" ]; then \
-		$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu . \
+	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
+		$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
-		echo "Skipping because GPU build"; \
+		echo "Skipping GPU build"; \
 	fi
+
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
