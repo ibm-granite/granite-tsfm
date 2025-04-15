@@ -23,5 +23,4 @@ spec:
   volumes:
     - name: local-storage
       persistentVolumeClaim:
-        claimName: local-path-pvc
-
+        claimName: my-pvc

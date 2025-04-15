@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tsfmservices-fastapi-service
+spec:
+  type: NodePort
+  selector:
+    app: tsfmservices-fastapi
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.kubernetes.io/allow-http: "false"
+    ingress.kubernetes.io/ssl-redirect: "true"
+    kubernetes.io/ingress.class: f5
+    virtual-server.f5.com/balance: round-robin
+    virtual-server.f5.com/ip: 9.59.198.130
+    virtual-server.f5.com/partition: RIS3-INT-OCP-DAL12
+    virtual-server.f5.com/clientssl: '[ { "bigIpProfile": "/Common/BlueMix" } ]'
+  name: tsfmservices-fastapi-ingress
+  namespace: fctk
+spec:
+  rules:
+    - host: fctk.bx.cloud9.ibm.com
+      http:
+        paths:
+          - backend:
+              service:
+                name: tsfmservices-fastapi-service
+                port:
+                  number: 80
+            path: /
+            pathType: ImplementationSpecific
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsfmservices-fastapi
+  labels:
+    app: tsfmservices-fastapi
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: tsfmservices-fastapi
+  template:
+    metadata:
+      labels:
+        app: tsfmservices-fastapi
+    spec:
+      containers:
+        - name: tsfmservices-fastapi
+          image: us.icr.io/fctkstus/tsfminference:latest
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - |
+              gunicorn \
+              --max-requests 250 \
+              -w 4 \
+              -k uvicorn.workers.UvicornWorker \
+              --bind 0.0.0.0:8000 \
+              tsfminference.main:app
+          volumeMounts:
+            - mountPath: /nsf-storage
+              name: nsf-storage
+          env:
+            - name: CUDA_VISIBLE_DEVICES
+              value: ""
+            - name: TSFM_MODEL_DIR
+              value: /nsf-storage/tsfminference/tsfm_models
+            - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
+              value: "0"
+            - name: TSFM_PYTHON_LOGGING_LEVEL
+              value: "WARNING"
+            - name: TSFM_PYTHON_LOGGING_FORMAT
+              # lighter weight
+              value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(module)s:%(message)s"
+              # intensive but costly
+              # value: "%(asctime)s:%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s"
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4000Mi
+            limits:
+              cpu: 8000m
+              memory: 64000Mi
+
+        # Alpine Sidecar with Init Command
+        - name: alpine
+          image: alpine:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Installing required packages...";
+              apk update && apk add --no-cache curl jq bash;
+              echo "Installation complete. Running idle process...";
+              while true; do sleep 3600; done
+          volumeMounts:
+            - mountPath: /nsf-storage
+              name: nsf-storage
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4000Mi
+            limits:
+              cpu: 8000m
+              memory: 16000Mi
+
+      volumes:
+        - name: nsf-storage
+          persistentVolumeClaim:
+            claimName: my-pvc

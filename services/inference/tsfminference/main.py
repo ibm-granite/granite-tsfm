@@ -48,6 +48,11 @@ ir = InferenceRuntime()
 ir.add_routes(app)
 
 
+# @app.get("/routes")
+# def test_route():
+#    return {"routes": [route.path for route in app.routes]}
+
+
 @app.get("/healthcheck")
 def healthcheck():
     return {"message": "Server is healthy!"}
