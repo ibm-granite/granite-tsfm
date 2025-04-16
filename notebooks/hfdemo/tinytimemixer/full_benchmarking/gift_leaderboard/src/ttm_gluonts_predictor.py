@@ -125,6 +125,7 @@ class TTMGluonTSPredictor:
         self.insample_forecast = insample_forecast
         self.insample_use_train = insample_use_train
         self.plot_predictions = plot_predictions
+        self.prediction_channel_indices = []
         self.quantile_keys = [
             "0.1",
             "0.2",
@@ -635,7 +636,8 @@ class TTMGluonTSPredictor:
             series_ids.extend(batch["item_id"])
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_true_unscaled = global_scaler.inverse_transform(y_true, series_ids)
-        y_true_unscaled = y_true_unscaled[:, :, prediction_channel_indices]
+        if len(prediction_channel_indices) > 0:
+            y_true_unscaled = y_true_unscaled[:, :, prediction_channel_indices]
         
 
         # Get validation predictions
