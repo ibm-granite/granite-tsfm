@@ -37,23 +37,26 @@ granite-tsfm = "==0.2.23"
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }
 gunicorn = { version = "*" }
-# necessary for fast-api compatible uvicorn.workers.UvicornWorker worker
-uvicorn = { version = "*" }
+uvicorn-worker = { version = "*" }
 setuptools = { version = "*" }
 prometheus_client = { version = "*" }
+psutil = { version = "*" }            # to support memory use reporting in /metrics
 
 # ***********CVEs*************
 Jinja2 = { version = ">=3.1.6" }        # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
 Werkzeug = { version = ">=3.0.6" }
-urllib3 = { version = ">=1.26.19,<2" }  # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-aiohttp = { version = ">=3.10.11" }
+aiohttp = { version = ">=3.11.15" }     # see https://github.com/aio-libs/aiohttp/issues/10617
+urllib3 = { version = ">=1.26.19" }     # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
 transformers = { version = ">=4.48.0" }
+# no releases beyond 2.6.0 yet
+# torch = { version = ">2.6.0,<3" } # https://github.com/ibm-granite/granite-tsfm/security/dependabot/22
 
 [tool.poetry.group.dev]
 optional = true
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 locust = "*"
+inotify = "*"
 pytest-coverage = "*"
 gprof2dot = "*"
 
