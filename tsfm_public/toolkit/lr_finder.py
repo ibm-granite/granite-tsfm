@@ -171,15 +171,11 @@ class LRFinder:
         save_model(fname, self.model, getattr(self, "opt", None), **kwargs)
         return fname
 
-    def load(
-        self, fname: Union[str, Path], with_opt: bool = False, device: str = "cuda", strict: bool = True, **kwargs
-    ):
+    def load(self, fname: Union[str, Path], with_opt: bool = False, strict: bool = True, **kwargs):
         """
         load the model
         """
-        if not torch.cuda.is_available():
-            device = "cpu"
-        load_model(fname, self.model, self.opt, with_opt, device=device, strict=strict)
+        load_model(fname, self.model, self.opt, with_opt, device=self.device, strict=strict)
 
     def before_fit(self):
         self.model.to(self.device)
@@ -369,12 +365,24 @@ def optimal_lr_finder(
         "LR Finder: Running learning rate (LR) finder algorithm. If the suggested LR is very low, we suggest setting the LR manually."
     )
 
-    if torch.cuda.is_available():
+    # default to cuda, our preference in order is: cuda, mps, cpu
+    if device is None:
+        device = "cuda"
+
+    # check that selected device is valid
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "mps"
+
+    if device == "mps" and not torch.backends.mps.is_available():
+        device = "cpu"
+
+    # device is valid, now set appropriately
+    if device == "cuda":
         device = torch.cuda.current_device()
-        logger.info(f"LR Finder: Using GPU:{device}.")
     else:
-        logger.info("LR Finder: Using CPU.")
-        device = torch.device("cpu")
+        device = torch.device(device)
+
+    logger.info(f"LR Finder: Using {device}.")
 
     # create the right collator in the style of HF
     signature = inspect.signature(model.forward)

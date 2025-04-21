@@ -37,11 +37,13 @@ jobs:
     # for much, we just want to make sure
     # that it continues to build until we
     # do so
-    - name: image build
-      run: |
-        source .venv/bin/activate
-        cd services/finetuning
-        make image
+    # No need as image is now dependent on instance build
+    # which gets run as part of instance tests
+    # - name: image build
+    #  run: |
+    #    source .venv/bin/activate
+    #    cd services/finetuning
+    #    make image
     - name: test local
       run: |
         source .venv/bin/activate
