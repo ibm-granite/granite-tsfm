@@ -192,7 +192,18 @@ class PostHocGaussian(PosthocProbabilisticWrapperBase):
 #         return y_test_prob_pred
 
 
-class PostHocConformalProcessor(FeatureExtractionMixin):
+class PostHocProbabilisticProcessor(FeatureExtractionMixin):
+    """Entry point for posthoc probabilistic approaches
+
+    We adopt HF FeatureExtractionMixin to create the processor and support serialization and deserialization
+
+    Currently focusses on the conformal approach
+    To do:
+     - Integrate the Guassian approach above
+     - Full serialization support
+     - Better output, in dataframe format
+    """
+
     def __init__(
         self,
         window_size: Optional[int] = None,
@@ -211,13 +222,13 @@ class PostHocConformalProcessor(FeatureExtractionMixin):
 
         self.window_size = window_size
         self.quantiles = quantiles
-        self.false_alarm = np.min(quantiles) * 2
+        self.false_alarm = (np.min(quantiles) * 2).item()
         self.nonconformity_score = nonconformity_score
 
         if self.nonconformity_score in [NonconformityScores.ERROR.value]:
-            self.false_alarm = np.min(quantiles)
+            self.false_alarm = np.min(quantiles).item()
 
-        self.critical_size = np.ceil(1 / self.false_alarm)
+        self.critical_size = np.ceil(1 / self.false_alarm).item()
 
         if self.nonconformity_score not in [
             NonconformityScores.ABSOLUTE_ERROR.value,
@@ -225,9 +236,8 @@ class PostHocConformalProcessor(FeatureExtractionMixin):
         ]:
             raise ValueError(f"Provided nonconformity_score {self.nonconformity_score } is not valid.")
 
-        # WMG to do
-        # need to support serialization
-        # are these the right parameters
+        # WMG
+        # check that these are the right parameters
         self.model = WeightedConformalForecasterWrapper(
             window_size=window_size, false_alarm=self.false_alarm, nonconformity_score=nonconformity_score
         )
@@ -244,14 +254,7 @@ class PostHocConformalProcessor(FeatureExtractionMixin):
         """
         output = super().to_dict()
 
-        # for k, v in output["scaler_dict"].items():
-        #     output["scaler_dict"][k] = v.to_dict()
-
-        # for k, v in output["target_scaler_dict"].items():
-        #     output["target_scaler_dict"][k] = v.to_dict()
-
-        # if self.categorical_encoder:
-        #     output["categorical_encoder"] = output["categorical_encoder"].to_dict()
+        output["model"] = output["model"].to_dict()
 
         return output
 
@@ -453,7 +456,7 @@ class WeightedConformalWrapper:
         ), "Selected nonconformity score is not supported, choose from {}".format(
             str([s.value for s in NonconformityScores])
         )
-        self.nonconformity_score_func = nonconformity_score_functions
+        # self.nonconformity_score_func = nonconformity_score_functions
 
         self.quantile = 1 - false_alarm
         self.false_alarm = false_alarm
@@ -472,6 +475,32 @@ class WeightedConformalWrapper:
         self.cal_timestamps = []
 
         self.score_threshold = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this object.
+        """
+        output = {
+            "nonconformity_score": self.nonconformity_score,
+            "quantile": self.quantile,
+            "false_alarm": self.false_alarm,
+            "weighting": self.weighting,
+            "weighting_params": self.weighting_params,
+            "window_size": self.window_size,
+            "online_size": self.online_size,
+            "online": self.online,
+            "threshold_function": self.threshold_function,
+            "cal_scores": self.cal_scores,
+            "weights": self.weights,
+            "cal_X": self.cal_X,
+            "cal_timestamps": self.cal_timestamps,
+            "score_threshold": self.score_threshold,
+        }
+
+        return output
 
     def fit(
         self,
@@ -494,7 +523,7 @@ class WeightedConformalWrapper:
         if cal_timestamps is not None:
             self.cal_timestamps = cal_timestamps[-self.window_size :]
 
-        critical_efficient_size = np.ceil(1 / self.false_alarm)
+        critical_efficient_size = int(np.ceil(1 / self.false_alarm))
 
         # Certain Weighting Methods May Require Fitting
         if self.weighting in ["uniform", "exponential_decay"]:
@@ -707,7 +736,7 @@ class WeightedConformalWrapper:
             Batch Inference
             """
             output = None
-            for ix_b in np.arange(n_batches):
+            for ix_b in range(n_batches):
                 ix_ini = int(ix_b * self.online_size)
                 ix_end = np.minimum(int(ix_b * self.online_size + self.online_size), y_pred.shape[0])
 
@@ -783,7 +812,7 @@ class WeightedConformalForecasterWrapper:
         window_size: Optional[int] = None,
     ):
         self.nonconformity_score = nonconformity_score
-        self.nonconformity_score_func = nonconformity_score_functions
+        # self.nonconformity_score_func = nonconformity_score_functions
 
         self.quantile = 1 - false_alarm
         self.false_alarm = false_alarm
@@ -794,6 +823,30 @@ class WeightedConformalForecasterWrapper:
         self.online_size = 1
         self.threshold_function = threshold_function
         self.weights_adaptive = []
+        self.univariate_wrappers = {}
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this object.
+        """
+
+        output = {
+            "nonconformity_score": self.nonconformity_score,
+            "quantile": self.quantile,
+            "false_alarm": self.false_alarm,
+            "weighting": self.weighting,
+            "weighting_params": self.weighting_params,
+            "window_size": self.window_size,
+            "online_size": self.online_size,
+            "threshold_function": self.threshold_function,
+            "weights_adaptive": self.weights_adaptive,
+            "univariate_wrappers": {json.dumps(k): v.to_dict() for k, v in self.univariate_wrappers.items()},
+        }
+
+        return output
 
     def fit(self, y_cal_pred, y_cal_gt, X_cal=None, cal_timestamps=None):
         """
@@ -816,7 +869,7 @@ class WeightedConformalForecasterWrapper:
         )
 
         self.univariate_wrappers = {}
-        for ix_f in np.arange(y_cal_pred.shape[2]):
+        for ix_f in range(y_cal_pred.shape[2]):
             cal_weights = None
 
             """
@@ -833,7 +886,7 @@ class WeightedConformalForecasterWrapper:
                     2. Initialize Wass1 weight adapter
                     """
                     critical_efficient_size = int(np.ceil(1 / self.false_alarm))
-                    cal_scores = self.nonconformity_score_func(
+                    cal_scores = nonconformity_score_functions(
                         y_cal_pred[:, :, ix_f],
                         y_cal_gt[:, :, ix_f],
                         X=X_cal,
@@ -865,7 +918,7 @@ class WeightedConformalForecasterWrapper:
                         _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
                         cal_weights = awcsw.cal_weights
 
-            for ix_h in np.arange(y_cal_pred.shape[1]):
+            for ix_h in range(y_cal_pred.shape[1]):
                 cal_timestamps_i = None
                 if cal_timestamps is not None:
                     cal_timestamps_i = cal_timestamps[:, ix_h, ix_f]
@@ -891,8 +944,8 @@ class WeightedConformalForecasterWrapper:
         X_cal (optional): input covariates for input dependent conformal approaches size is num_samples x num_covariates
         cal_timestamps (optional): timestamps associated to the forecasted values, size is num_samples x forecast_length
         """
-        for ix_h in np.arange(y_pred.shape[1]):
-            for ix_f in np.arange(y_pred.shape[2]):
+        for ix_h in range(y_pred.shape[1]):
+            for ix_f in range(y_pred.shape[2]):
                 timestamps_i = None
                 if timestamps is not None:
                     timestamps_i = timestamps[:, ix_h, ix_f]
@@ -918,8 +971,8 @@ class WeightedConformalForecasterWrapper:
             output["outliers"] = np.zeros_like(y_pred)
             output["outliers_scores"] = np.zeros_like(y_pred)
 
-        for ix_h in np.arange(y_pred.shape[1]):
-            for ix_f in np.arange(y_pred.shape[2]):
+        for ix_h in range(y_pred.shape[1]):
+            for ix_f in range(y_pred.shape[2]):
                 timestamps_i = None
                 if timestamps is not None:
                     timestamps_i = timestamps[:, ix_h, ix_f]
