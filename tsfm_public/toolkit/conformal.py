@@ -337,15 +337,16 @@ class PostHocConformalProcessor(FeatureExtractionMixin):
             raise ValueError("y_cal_gt should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
         # WMG to do: check that updated window size is used in the fit call
-        if self.window_size is None:
-            window_size = y_cal_gt.shape[0]
-        else:
-            window_size = self.window_size
+        # (update) WMG: I don't think we need this
+        # if self.window_size is None:
+        #     window_size = y_cal_gt.shape[0]
+        # else:
+        #     window_size = self.window_size
 
         self.model.fit(
-            y_cal_pred=y_cal_pred,  ## ttm predicted values
-            y_cal_gt=y_cal_gt,
-        )  ## ttm corresponding gt values
+            y_cal_pred=y_cal_pred,  # ttm predicted values
+            y_cal_gt=y_cal_gt,  # ttm corresponding gt values
+        )
 
     def predict(self, y_test_pred: np.ndarray, quantiles: List[float] = []) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
@@ -859,16 +860,10 @@ class WeightedConformalForecasterWrapper:
                             },
                         )
 
-                        betas_fit = awcsw.fit(cal_scores[0 : int(n_cal_init)])
-                        betas_update = awcsw.predict(cal_scores[int(n_cal_init) :])
+                        # Need to call these because of side effects
+                        _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
+                        _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
                         cal_weights = awcsw.cal_weights
-                        # print(cal_weights.shape, np.min(cal_weights), np.max(cal_weights), np.sum(np.abs(cal_weights)))
-                        # print()
-                        # import matplotlib.pyplot as plt
-                        # plt.stem(cal_weights)
-                        # plt.show()
-
-                        # self.weights_adaptive.append(cal_weights)
 
             for ix_h in np.arange(y_cal_pred.shape[1]):
                 cal_timestamps_i = None
