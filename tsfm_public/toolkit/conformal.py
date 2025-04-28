@@ -238,9 +238,11 @@ class PostHocProbabilisticProcessor(FeatureExtractionMixin):
 
         # WMG
         # check that these are the right parameters
-        self.model = WeightedConformalForecasterWrapper(
-            window_size=window_size, false_alarm=self.false_alarm, nonconformity_score=nonconformity_score
-        )
+        self.model = kwargs.pop("model", None)
+        if self.model is None:
+            self.model = WeightedConformalForecasterWrapper(
+                window_size=window_size, false_alarm=self.false_alarm, nonconformity_score=nonconformity_score
+            )
 
         kwargs["processor_class"] = self.__class__.__name__
         super().__init__(**kwargs)
@@ -310,20 +312,9 @@ class PostHocProbabilisticProcessor(FeatureExtractionMixin):
             [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
             parameters.
         """
-
-        # scaler_type = feature_extractor_dict.get("scaler_type", None)
-
-        # scaler_class = cls._get_scaler_class(scaler_type)
-
-        # scaler_params = feature_extractor_dict.get("scaler_dict", None)
-        # if scaler_params is not None:
-        #     for k, v in scaler_params.items():
-        #         scaler_params[k] = scaler_class.from_dict(v)
-
-        # target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
-        # if target_scaler_params is not None:
-        #     for k, v in target_scaler_params.items():
-        #         target_scaler_params[k] = scaler_class.from_dict(v)
+        model = feature_extractor_dict.get("model", None)
+        if model is not None:
+            feature_extractor_dict["model"] = WeightedConformalForecasterWrapper.from_dict(model)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -485,13 +476,11 @@ class WeightedConformalWrapper:
         """
         output = {
             "nonconformity_score": self.nonconformity_score,
-            "quantile": self.quantile,
             "false_alarm": self.false_alarm,
             "weighting": self.weighting,
             "weighting_params": self.weighting_params,
             "window_size": self.window_size,
-            "online_size": self.online_size,
-            "online": self.online,
+            "online_adaptive": self.online,
             "threshold_function": self.threshold_function,
             "cal_scores": self.cal_scores,
             "weights": self.weights,
@@ -501,6 +490,37 @@ class WeightedConformalWrapper:
         }
 
         return output
+
+    @classmethod
+    def from_dict(cls, params: Dict[str, Any], **kwargs) -> "WeightedConformalWrapper":
+        """
+        Instantiates a type of [`~WeightedConformalWrapper`] from a Python dictionary of
+        parameters.
+
+        Args:
+            dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the object.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the object.
+
+        Returns:
+            [`~WeightedConformalWrapper`]: The WeightedcCnformalWrapper object instantiated from those
+            parameters.
+        """
+
+        params_copy = params.copy()
+
+        save_attrs = ["cal_scores", "weights", "cal_X", "cal_timestamps", "score_threshold"]
+        save_attrs_dict = {}
+        for attr in save_attrs:
+            save_attrs_dict[attr] = params_copy.pop(attr)
+
+        obj = cls(**params_copy, **kwargs)
+
+        for attr_name, attr_value in save_attrs_dict.items():
+            setattr(obj, attr_name, attr_value)
+
+        return obj
 
     def fit(
         self,
@@ -835,18 +855,57 @@ class WeightedConformalForecasterWrapper:
 
         output = {
             "nonconformity_score": self.nonconformity_score,
-            "quantile": self.quantile,
             "false_alarm": self.false_alarm,
             "weighting": self.weighting,
             "weighting_params": self.weighting_params,
             "window_size": self.window_size,
-            "online_size": self.online_size,
             "threshold_function": self.threshold_function,
             "weights_adaptive": self.weights_adaptive,
             "univariate_wrappers": {json.dumps(k): v.to_dict() for k, v in self.univariate_wrappers.items()},
         }
 
         return output
+
+    @classmethod
+    def from_dict(cls, params: Dict[str, Any], **kwargs) -> "WeightedConformalForecasterWrapper":
+        """
+        Instantiates a type of [`~WeightedConformalForecasterWrapper`] from a Python dictionary of
+        parameters.
+
+        Args:
+            dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the object.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the object.
+
+        Returns:
+            [`~WeightedConformalForecasterWrapper`]: The WeightedcCnformalForecaster object instantiated from those
+            parameters.
+        """
+
+        params_copy = params.copy()
+
+        save_attrs = ["weights_adaptive", "univariate_wrappers"]
+        copy_attrs = ["weights_adaptive"]
+
+        save_attrs_dict = {}
+        for attr in save_attrs:
+            save_attrs_dict[attr] = params_copy.pop(attr)
+
+        obj = cls(**params_copy, **kwargs)
+
+        for attr_name, attr_value in save_attrs_dict.items():
+            if attr_name in copy_attrs:
+                setattr(obj, attr_name, attr_value)
+
+        univariate_wrappers = {}
+        for k, v in save_attrs_dict["univariate_wrappers"].items():
+            k_decoded = tuple(json.loads(k))
+            univariate_wrappers[k_decoded] = WeightedConformalWrapper.from_dict(v)
+
+        obj.univariate_wrappers = univariate_wrappers
+
+        return obj
 
     def fit(self, y_cal_pred, y_cal_gt, X_cal=None, cal_timestamps=None):
         """
