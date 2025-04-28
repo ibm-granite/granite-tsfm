@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # WARNING: DO NOT IMPORT util here or else you'll get a circular dependency
 
-EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$")]
+EverythingPatternedString = Annotated[str, Field(min_length=0, max_length=100, pattern=r"^\S.*\S$|^\S$")]
 
 
 class BaseMetadataInput(BaseModel):
@@ -25,7 +25,7 @@ class BaseMetadataInput(BaseModel):
         " due to daylight savings change overs. There are many date formats"
         " in existence and inferring the correct one can be a challenge"
         " so please do consider adhering to ISO 8601.",
-        pattern=r"^\S.*\S$",
+        pattern=r"^\S.*\S$|^\S$",
         min_length=1,
         max_length=100,
         example="date",
@@ -38,12 +38,21 @@ class BaseMetadataInput(BaseModel):
         example=["ID1", "ID2"],
         min_length=0,
     )
+    scaling_id_columns: Optional[List[EverythingPatternedString]] = Field(
+        description="Columns that define unique subsets of the time series data"
+        " over which separate scaling factors should be applied. These columns"
+        " must be a subset of the id_columns.",
+        default=None,
+        max_length=10,
+        example=["ID2"],
+        min_length=0,
+    )
     freq: Optional[str] = Field(
         description="A frequency indicator for the given timestamp_column."
         " See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases"
         " for a description of the allowed values. If not provided, we will attempt to infer it from the data.",
         default=None,
-        pattern=r"^\d+(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
+        pattern=r"^\d*\.?\d*(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
         min_length=0,
         max_length=100,
         example="1h",
@@ -99,6 +108,15 @@ class ForecastingMetadataInput(BaseMetadataInput):
         " categorical-valued channels in the input which are fixed over time.",
     )
 
+    categorical_columns: List[EverythingPatternedString] = Field(
+        default_factory=list,
+        max_length=500,
+        min_length=0,
+        example=["CV1", "CV2"],
+        description="An optional array of column headings which identify"
+        " categorical-valued channels in the input which can vary over time.",
+    )
+
 
 class BaseParameters(BaseModel):
     model_config = ConfigDict(extra="allow", protected_namespaces=())
@@ -110,6 +128,16 @@ class BaseParameters(BaseModel):
         " size will be used.",
         default=None,
     )
+
+    @field_validator("inference_batch_size")
+    @classmethod
+    def check_inference_batch_size(cls, v: Optional[int]) -> float:
+        if v is not None and v < 1:
+            raise ValueError(
+                "If specified, `inference_batch_size` must be an integer >=1."
+                " When omitted the model default inference_batch_size will be used."
+            )
+        return v
 
 
 class ForecastingParameters(BaseParameters):

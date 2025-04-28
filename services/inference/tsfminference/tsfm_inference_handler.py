@@ -48,6 +48,9 @@ class TSFMForecastingInferenceHandler:
         self.model = None
         self.preprocessor = None
 
+        # loosen the schema checking when using a saved preprocessor
+        self.strict_schema_match = False
+
     def _get_config_kwargs(
         self,
         parameters: Optional[ForecastingParameters] = None,
@@ -73,7 +76,7 @@ class TSFMForecastingInferenceHandler:
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
     ) -> "TSFMForecastingInferenceHandler":
-        """Implementation of _prepare for HF-like models. We assume the model will make use of the TSFM
+        """Implementation of prepare for HF-like models. We assume the model will make use of the TSFM
         preprocessor and forecasting pipeline. This method:
         1) loades the preprocessor, creating a new one if the model does not already have a preprocessor
         2) updates model configuration arguments by calling _get_config_kwargs
@@ -113,7 +116,13 @@ class TSFMForecastingInferenceHandler:
             raise ValueError("Unexpected: model indicates that it is not finetuned but a preprocessor was found.")
 
         if preprocessor is None:
-            to_check = ["conditional_columns", "control_columns", "observable_columns", "static_categorical_columns"]
+            to_check = [
+                "conditional_columns",
+                "control_columns",
+                "observable_columns",
+                "static_categorical_columns",
+                "categorical_columns",
+            ]
 
             for param in to_check:
                 if param in preprocessor_params and preprocessor_params[param]:
@@ -131,21 +140,37 @@ class TSFMForecastingInferenceHandler:
             LOGGER.info(f"Data frequency determined: {preprocessor.freq}")
         else:
             # check payload, but only certain parameters
-            to_check = [
-                "freq",
+            # id_columns are not checked, since an artificial id may be added to do batch inference
+            to_check_columns = [
                 "timestamp_column",
                 "target_columns",
                 "conditional_columns",
                 "control_columns",
                 "observable_columns",
+                "categorical_columns",
+                "static_categorical_columns",
             ]
 
+            to_check_params = ["freq"]
+            to_check = to_check_columns.copy()
+            to_check.extend(to_check_params)
+
             for param in to_check:
-                param_val = preprocessor_params[param]
                 param_val_saved = getattr(preprocessor, param)
-                if param_val != param_val_saved:
+                param_val = preprocessor_params[param]
+                # if a parameter is passed we check it matches the preprocessor
+                if self.strict_schema_match or not (param_val is None or param_val == [] or param_val == ""):
+                    if param_val != param_val_saved:
+                        raise ValueError(
+                            f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                        )
+                # then we check that parameters from the saved preprocessor match what is in the data
+                if param in to_check_params:
+                    continue
+                p = param_val_saved if isinstance(param_val_saved, list) else [param_val_saved]
+                if any(c not in data.columns for c in p):
                     raise ValueError(
-                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                        f"Attempted to use a fine-tuned model with data that does not match the saved schema, please confirm you have the correct model_id and appropriate data. Error in parameter {param}: data does not contain a column named {param_val_saved}."
                     )
 
         model_config_kwargs = self._get_config_kwargs(
@@ -173,7 +198,9 @@ class TSFMForecastingInferenceHandler:
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
     ) -> pd.DataFrame:
-        """_summary_
+        """Implementation of run for TSFM models.
+        Checks prediction length, data length (both past and future exogenous), configures batch size, determines
+        device and uses the forecasting pipeline to generate forecasts.
 
         Args:
             data (pd.DataFrame): Input historical time series data.
@@ -248,6 +275,13 @@ class TSFMForecastingInferenceHandler:
                     total_periods=model_prediction_length,
                 )
 
+        batch_size = (
+            parameters.inference_batch_size
+            if parameters.inference_batch_size
+            else self.handler_config.inference_batch_size
+        )
+        LOGGER.info(f"Using inference batch size: {batch_size}")
+
         device = "cpu" if not torch.cuda.is_available() else "cuda"
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -256,6 +290,7 @@ class TSFMForecastingInferenceHandler:
             add_known_ground_truth=False,
             freq=self.preprocessor.freq,
             device=device,
+            batch_size=1000,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
@@ -309,7 +344,7 @@ class TSFMForecastingInferenceHandler:
         return counts
 
 
-class TinyTimeMixerForecastingHandler(TSFMForecastingInferenceHandler):
+class TinyTimeMixerForecastingInferenceHandler(TSFMForecastingInferenceHandler):
     """Service handler for the tiny time mixer model"""
 
     def _get_config_kwargs(
@@ -317,6 +352,15 @@ class TinyTimeMixerForecastingHandler(TSFMForecastingInferenceHandler):
         parameters: Optional[ForecastingParameters] = None,
         preprocessor: Optional[TimeSeriesPreprocessor] = None,
     ) -> Dict[str, Any]:
+        """Implements the _get_config_kwargs method for TTM models.
+
+        Args:
+            parameters (Optional[ForecastingParameters], optional): Inference parameters. Defaults to None.
+            preprocessor (Optional[TimeSeriesPreprocessor], optional): Configured preprocessor. Defaults to None.
+
+        Returns:
+            Dict[str, Any]: Updated config arguments that get passed to during model load.
+        """
         config_kwargs = {
             "num_input_channels": preprocessor.num_input_channels,
             "prediction_filter_length": parameters.prediction_length,

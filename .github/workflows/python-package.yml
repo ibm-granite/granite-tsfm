@@ -5,9 +5,9 @@ name: Python package
 
 on:
   push:
-    branches: [ "main", "destiny" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
   pull_request:
-    branches: [ "main", "destiny" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
 
 jobs:
   build:
@@ -29,11 +29,11 @@ jobs:
         python -m pip install --upgrade pip
         # python -m pip install flake8 pytest
         # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install ".[dev]"
+        pip install ".[dev,testing]"
     - name: Ruff quality checks
       run: |
         # use hf-style check
         make quality
     - name: Test with pytest
       run: |
-        pytest tests
+        pytest --cov=tsfm_public --cov-report term-missing tests

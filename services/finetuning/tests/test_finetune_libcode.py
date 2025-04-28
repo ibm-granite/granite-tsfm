@@ -3,8 +3,6 @@
 import tempfile
 
 import pytest
-import yaml
-from tsfmfinetuning import TSFM_CONFIG_FILE
 from tsfmfinetuning.finetuning import FinetuningRuntime
 from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 
@@ -37,13 +35,8 @@ file_data_uris = [
 def test_fine_tune_forecasting_with_local_io(uri, payload):
     payload["data"] = uri
     input: TinyTimeMixerForecastingTuneInput = TinyTimeMixerForecastingTuneInput(**payload)
-    if TSFM_CONFIG_FILE:
-        with open(TSFM_CONFIG_FILE, "r") as file:
-            config = yaml.safe_load(file)
-    else:
-        config = {}
 
-    ftr: FinetuningRuntime = FinetuningRuntime(config=config)
+    ftr: FinetuningRuntime = FinetuningRuntime()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tuned_model_name = "pytest_tuned_model"

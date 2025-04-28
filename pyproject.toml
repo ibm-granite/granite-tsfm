@@ -21,8 +21,8 @@ dependencies = [
     "transformers[torch]>=4.38.0",
     "datasets",
     "deprecated",
-    "urllib3>=1.26.19,<3",         # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-    "numpy<2",
+    "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+    "numpy<3",
 ]
 
 [tool.setuptools]
@@ -42,8 +42,13 @@ notebooks = [
     "kaleido",
     "tensorboard",
 ]
-testing = ["pytest", "granite-tsfm[notebooks]", "parameterized"]
-dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.4.4"]
+testing = [
+    "pytest",
+    "pytest-coverage",
+    "granite-tsfm[notebooks]",
+    "parameterized",
+]
+dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version

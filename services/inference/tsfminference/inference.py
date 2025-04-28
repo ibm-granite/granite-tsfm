@@ -8,8 +8,9 @@ import os
 from typing import Any, Dict, List
 
 import pandas as pd
+import psutil
 from fastapi import APIRouter, HTTPException
-from prometheus_client import Histogram
+from prometheus_client import Summary
 from starlette import status
 
 from tsfm_public.toolkit.util import select_by_index
@@ -25,15 +26,12 @@ from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataIn
 
 LOGGER = logging.getLogger(__file__)
 
-FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
-FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
+FORECAST_PROMETHEUS_TIME_SPENT = Summary("forecast_time_spent", "Wall clock time.")
+FORECAST_PROMETHEUS_CPU_USED = Summary("forecast_cpu_user", "CPU user time.")
+FORECAST_PROMETHEUS_MEMORY_USED = Summary("forecast_memory_used_GB", "Memory in use.")
 
 
 class InferenceRuntime:
-    def __init__(self, config: Dict[str, Any] = {}):
-        # to do: assess the need for config
-        self.config = config
-
     def add_routes(self, app):
         self.router = APIRouter(prefix=f"/{API_VERSION}/inference", tags=["inference"])
         # /forecasting
@@ -52,7 +50,7 @@ class InferenceRuntime:
         if not model_path:
             raise HTTPException(status_code=404, detail=f"model {model_id} not found.")
         handler, e = InferenceHandler.load(model_id=model_id, model_path=model_path)
-        if handler.implementation.handler_config:
+        if handler.handler_config:
             answer = {}
             atts = [
                 "multivariate_support",
@@ -62,7 +60,7 @@ class InferenceRuntime:
                 "maximum_prediction_length",
             ]
             for at in atts:
-                if hasattr(handler.implementation.handler_config, at):
+                if hasattr(handler.handler_config, at):
                     answer[at] = getattr(handler.handler_config, at)
             return answer
         else:
@@ -73,8 +71,10 @@ class InferenceRuntime:
         start = os.times()
         answer, ex = self._forecast_common(input)
         finish = os.times()
+        process = psutil.Process()
         FORECAST_PROMETHEUS_TIME_SPENT.observe(finish.elapsed - start.elapsed)
         FORECAST_PROMETHEUS_CPU_USED.observe(finish.user - start.user)
+        FORECAST_PROMETHEUS_MEMORY_USED.observe(process.memory_info().rss / 1e9)
 
         if ex is not None:
             import traceback
@@ -115,8 +115,7 @@ class InferenceRuntime:
         if ex:
             return None, ValueError("future_data:" + str(ex))
 
-        # temporary hack
-        handler_config = handler.implementation.handler_config
+        handler_config = handler.handler_config
         # collect and check underlying time series lengths
         if getattr(handler_config, "minimum_context_length", None) or getattr(
             handler_config, "maximum_context_length", None
@@ -134,7 +133,7 @@ class InferenceRuntime:
 
         if getattr(handler_config, "minimum_context_length", None):
             if min_data_length < handler_config.minimum_context_length:
-                err_str = "Data should have time series of length that is at least the required model context length. "
+                err_str = f"Data for model {input_payload.model_id} should have time series of length that is at least the required model context length."
                 if schema.id_columns:
                     err_str += f"Received {min_data_length} time points for id {data_lengths.index[min_len_index]}, but model requires {handler_config.minimum_context_length} time points"
                 else:
@@ -171,22 +170,23 @@ def decode_data(data: Dict[str, List[Any]], schema: ForecastingMetadataInput) ->
 
     try:
         df = pd.DataFrame.from_dict(data)
+
+        rc, msg = check(df, schema.model_dump())
+
+        if rc != 0:
+            return None, ValueError(msg)
+
+        if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
+            df[ts_col] = pd.to_datetime(df[ts_col], format="ISO8601")
+
+        sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
+
+        if ts_col:
+            sort_columns.append(ts_col)
+        if sort_columns:
+            return df.sort_values(sort_columns), None
+
     except Exception as ex:
         return None, ValueError(str(ex))
-
-    rc, msg = check(df, schema.model_dump())
-
-    if rc != 0:
-        return None, ValueError(msg)
-
-    if (ts_col := schema.timestamp_column) and pd.api.types.is_string_dtype(df[ts_col]):
-        df[ts_col] = pd.to_datetime(df[ts_col])
-
-    sort_columns = copy.copy(schema.id_columns) if schema.id_columns else []
-
-    if ts_col:
-        sort_columns.append(ts_col)
-    if sort_columns:
-        return df.sort_values(sort_columns), None
 
     return df, None

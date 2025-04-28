@@ -1,0 +1,46 @@
+# Copyright contributors to the TSFM project
+
+FROM registry.access.redhat.com/ubi9/ubi:latest AS base
+
+ARG PYTHON_VERSION=3.12
+RUN dnf upgrade -y \
+    && dnf remove -y --disableplugin=subscription-manager \
+     subscription-manager \
+    && dnf install -y python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-pip \
+    python${PYTHON_VERSION}-wheel \
+    && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
+    && adduser tsfm --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+FROM base AS tsfm-install
+
+ENV CUDA_VISIBLE_DEVICES=""
+
+USER tsfm
+
+ENV HOME=/home/tsfm
+ENV PATH=${HOME}/.venv/bin:${PATH}
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1
+ENV HF_HOME=/tmp
+ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
+
+ARG CODEDIR
+COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm pyproject.toml poetry.lock ${CODEDIR} ${HOME}
+
+WORKDIR ${HOME}
+
+RUN python${PYTHON_VERSION} -m venv ${HOME}/.venv \
+&& pip install --no-cache-dir poetry \
+&& poetry install --no-cache \ 
+&& pip uninstall -y torch \ 
+&& for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
+&& pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
+&& rm -rf ${HOME}/.cache \
+&& mkdir ${HOME}/prometheus_metrics
+
+HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
+
+

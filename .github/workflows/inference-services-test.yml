@@ -5,9 +5,9 @@ name: Tsfminference Service Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
 
 jobs:
   build:
@@ -42,4 +42,4 @@ jobs:
       run: |
         source .venv/bin/activate
         cd services/inference
-        make test_image
+        SKIP_GPU_BUILD="1" make test_image
