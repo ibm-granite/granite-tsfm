@@ -50,6 +50,7 @@ urllib3 = { version = ">=1.26.19" }     # see https://github.com/urllib3/urllib3
 transformers = { version = ">=4.48.0" }
 # no releases beyond 2.6.0 yet
 # torch = { version = ">2.6.0,<3" } # https://github.com/ibm-granite/granite-tsfm/security/dependabot/22
+h11= { version = ">=0.16.0" } # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
 
 [tool.poetry.group.dev]
 optional = true
@@ -59,6 +60,7 @@ locust = "*"
 inotify = "*"
 pytest-coverage = "*"
 gprof2dot = "*"
+ruff = {version="0.5.7"}
 
 [tool.poetry.group.sagemaker]
 optional = true
