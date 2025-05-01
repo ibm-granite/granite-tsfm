@@ -13,6 +13,8 @@ from transformers import (
     PreTrainedModel,
 )
 
+import tsfm_public
+
 
 LOGGER = logging.getLogger(__file__)
 
@@ -103,21 +105,28 @@ def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None
     """
     if module_path is not None:
         try:
-            mod = importlib.import_module(module_path)
+            mods = [importlib.import_module(module_path)]
         except ModuleNotFoundError as exc:
             raise AttributeError("Could not load module '{module_path}'.") from exc
     else:
-        mod = transformers
+        mods = [transformers, tsfm_public]
 
     # get architecture from model config
     architectures = getattr(config, "architectures", [])
     for arch in architectures:
-        try:
-            model_class = getattr(mod, arch)
-            return model_class
-        except AttributeError as exc:
-            # catch specific error import error or attribute error
-            raise AttributeError(f"Could not load model class for architecture '{arch}'.") from exc
+        model_class = None
+        for mod in mods:
+            model_class = getattr(mod, arch, None)
+            if model_class is not None:
+                return model_class
+        raise AttributeError(f"Could not load model class for architecture '{arch}'.")
+
+        # try:
+        #     model_class = getattr(mod, arch)
+        #     return model_class
+        # except AttributeError as exc:
+        #     # catch specific error import error or attribute error
+        #     raise AttributeError(f"Could not load model class for architecture '{arch}'.") from exc
 
 
 def load_model(
