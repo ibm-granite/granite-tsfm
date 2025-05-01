@@ -107,3 +107,10 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
+
+
+# regiset local models now
+from tsfm_public.toolkit.hf_util import register_config
+
+
+register_config(model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public")
