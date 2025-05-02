@@ -5,6 +5,7 @@
 import copy
 import enum
 from datetime import datetime
+from math import isnan
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1310,3 +1311,26 @@ def convert_tsfile(filename: str) -> pd.DataFrame:
     #     final_df["target"] = final_df["target"] - 1
 
     return final_df
+
+
+def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
+    """Encode data for sending when using services
+
+    Args:
+        df (pd.DataFrame): Input time series data
+        timestamp_column (str): Column in the input pandas dataframe where timestamp information resides.
+
+    Returns:
+        Dict[str, Any]: _description_
+    """
+    if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
+        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
+    data_payload = df.to_dict(orient="list")
+
+    for k, v in data_payload.items():
+        if isinstance(v[0], str):
+            continue
+        # rewrite all the nan to None
+        data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
+
+    return data_payload
