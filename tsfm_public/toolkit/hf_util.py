@@ -31,5 +31,4 @@ def register_config(model_type: str, model_config_name: str, module_path: str) -
     if conf_class is not None:
         AutoConfig.register(model_type, conf_class)
     else:
-        # issue warning?
-        pass
+        raise RuntimeError(f"Could not find {model_config_name}")
