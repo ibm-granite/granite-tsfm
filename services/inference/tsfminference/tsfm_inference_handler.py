@@ -283,6 +283,8 @@ class TSFMForecastingInferenceHandler:
         LOGGER.info(f"Using inference batch size: {batch_size}")
 
         device = "cpu" if not torch.cuda.is_available() else "cuda"
+
+        extra_pipeline_args = getattr(self.handler_config, "extra_pipeline_arguments", {})
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
             explode_forecasts=True,
@@ -291,6 +293,7 @@ class TSFMForecastingInferenceHandler:
             freq=self.preprocessor.freq,
             device=device,
             batch_size=1000,
+            **extra_pipeline_args,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 
