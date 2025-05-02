@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 # Check the dependencies satisfy the minimal versions required.
 from transformers.utils import _LazyModule
 
+from tsfm_public.toolkit.hf_util import register_config
+
 from .version import __version__, __version_tuple__
 
 
@@ -109,8 +111,5 @@ else:
     )
 
 
-# regiset local models now
-from tsfm_public.toolkit.hf_util import register_config
-
-
+# register local models now
 register_config(model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public")

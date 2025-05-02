@@ -13,6 +13,7 @@ from transformers import (
     PreTrainedModel,
 )
 
+import tsfm_public
 from tsfm_public.toolkit.hf_util import register_config
 
 
