@@ -597,15 +597,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 )
 
             if self.impute_method == ImputeMethod.FORWARD_FILL.value:
-                # impute the numpy matrix, time is the first dimension
-                # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
-                mask = np.isnan(seq_x)
-                idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
-                np.maximum.accumulate(idx, axis=0, out=idx)
-                seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
-
-                # fill any remaining nan
-                seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+                seq_x_imputed = impute_forward_fill(seq_x, self.fill_value)
             elif self.impute_method == ImputeMethod.LINEAR.value:
                 # interpolate for each channel
                 seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
@@ -647,17 +639,6 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
         def __len__(self):
             return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
-
-
-def interpolate_by_var(miss_seq):
-    nans = np.isnan(miss_seq)
-    if nans.sum() == 0:
-        return miss_seq
-
-    imputed = np.interp(np.where(nans)[0], np.where(~nans)[0], miss_seq[~nans])
-    miss_seq_copy = copy.copy(miss_seq)
-    miss_seq_copy[nans] = imputed
-    return miss_seq_copy
 
 
 class ImputeForecastDFDataset(BaseConcatDFDataset):
@@ -896,15 +877,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                 )
 
             if self.impute_method == ImputeMethod.FORWARD_FILL.value:
-                # impute the numpy matrix, time is the first dimension
-                # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
-                mask = np.isnan(seq_x)
-                idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
-                np.maximum.accumulate(idx, axis=0, out=idx)
-                seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
-
-                # fill any remaining nan
-                seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+                seq_x_imputed = impute_forward_fill(seq_x, self.fill_value)
             elif self.impute_method == ImputeMethod.LINEAR.value:
                 # interpolate for each channel
                 seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
@@ -1355,6 +1328,48 @@ def apply_masking_specification(
         else:
             past_values_tensor[spec:, col_idx] = np.nan
     return past_values_tensor
+
+
+def interpolate_by_var(miss_seq: np.ndarray) -> np.ndarray:
+    """Interpolate each column of the input numpy array using np.interpolate.
+
+    Args:
+        miss_seq (np.ndarray): Sequence potentially containing missing values.
+
+    Returns:
+        np.ndarray: Imputed sequence.
+    """
+    nans = np.isnan(miss_seq)
+    if nans.sum() == 0:
+        return miss_seq
+
+    imputed = np.interp(np.where(nans)[0], np.where(~nans)[0], miss_seq[~nans])
+    miss_seq_copy = miss_seq.copy()
+    miss_seq_copy[nans] = imputed
+    return miss_seq_copy
+
+
+def impute_forward_fill(miss_seq: np.ndarray, fill_value: float) -> np.ndarray:
+    """Impute each column of the input numpy array using forward filling.
+
+    Args:
+        miss_seq (np.ndarray): Sequence potentially containing missing values.
+        fill_value (float): Value used to impute any values that cannot be filled
+
+    Returns:
+        np.ndarray: Imputed sequence.
+    """
+    # impute the numpy matrix, time is the first dimension
+    # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
+    mask = np.isnan(miss_seq)
+    idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
+    np.maximum.accumulate(idx, axis=0, out=idx)
+    miss_seq_copy = miss_seq.copy()
+    seq_x_imputed = miss_seq_copy[idx, np.arange(idx.shape[1])[None, :]]
+
+    # fill any remaining nan
+    seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=fill_value)
+    return seq_x_imputed
 
 
 if __name__ == "__main__":
