@@ -479,7 +479,6 @@ def test_forecast_inference_with_impute(ts_data):
     test_data, params = ts_data
 
     prediction_length = params["prediction_length"]
-    context_length = params["context_length"]
     model_id = params["model_id"]
     model_id_path: str = model_id
 
