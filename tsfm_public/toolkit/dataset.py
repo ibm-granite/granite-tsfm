@@ -3,6 +3,7 @@
 """Tools for building torch datasets"""
 
 import copy
+import enum
 import logging
 from itertools import starmap
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -15,6 +16,13 @@ from .util import join_list_without_repeat
 
 
 LOGGER = logging.getLogger(__file__)
+
+
+class ImputeMethod(enum.Enum):
+    """`Enum` for the different imputation methods ."""
+
+    FORWARD_FILL = "forward_fill"
+    LINEAR = "linear"
 
 
 class BaseDFDataset(torch.utils.data.Dataset):
@@ -423,6 +431,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             treated as python list indices; the values given by these indices will be masked.
         enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
             If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+        metadata_columns (List[str], optional): List of columns to be passed through to the output of the dataset as `metadata`.
+            Defaults to [].
+        impute_method (str, optional): Enables imputation in the past_values of the dataset output. Possible options are in the
+            ImputeMethod enum, "forward_fill" fills the values using previous values. Any values which cannot be filled are filled with
+            `fill_value`. "linear" use linear interpolation to imput the missing values. None: use regular filling with `fill_value`.
+            Defaults to None.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -458,6 +472,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         enable_padding: bool = True,
         metadata_columns: List[str] = [],
+        impute_method: Optional[str] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -482,6 +497,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             autoregressive_modeling=autoregressive_modeling,
             masking_specification=masking_specification,
             metadata_columns=metadata_columns,
+            impute_method=impute_method,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -513,6 +529,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
             enable_padding: bool = True,
             metadata_columns: List[str] = [],
+            impute_method: Optional[str] = ImputeMethod.FORWARD_FILL.value,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -523,6 +540,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.autoregressive_modeling = autoregressive_modeling
             self.masking_specification = masking_specification
             self.metadata_columns = metadata_columns
+            self.impute_method = impute_method
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -578,6 +596,22 @@ class ForecastDFDataset(BaseConcatDFDataset):
                     column_name_to_index_map=self.column_name_to_index_map,
                 )
 
+            if self.impute_method == ImputeMethod.FORWARD_FILL.value:
+                # impute the numpy matrix, time is the first dimension
+                # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
+                mask = np.isnan(seq_x)
+                idx = np.where(~mask, np.expand_dims(np.arange(mask.shape[0]), 1), 0)
+                np.maximum.accumulate(idx, axis=0, out=idx)
+                seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
+
+                # fill any remaining nan
+                seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
+            elif self.impute_method == ImputeMethod.LINEAR.value:
+                # interpolate for each channel
+                seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
+            elif self.impute_method is None:
+                seq_x_imputed = np.nan_to_num(seq_x, nan=self.fill_value)
+
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
@@ -585,7 +619,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
-                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+                "past_values": np_to_torch(seq_x_imputed),
                 "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
@@ -666,6 +700,12 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
         artificial_missing_columns (List[str], optional): Column names on which to apply artificial missing. Defaults to None.
         artificial_missing_at_time_t (bool, optional): If True the point at time t (last point in the context window) is marked as
             missing. Defaults to False.
+        metadata_columns (List[str], optional): List of columns to be passed through to the output of the dataset as `metadata`.
+            Defaults to [].
+        impute_method (str, optional): Enables imputation in the past_values of the dataset output. Possible options are in the
+            ImputeMethod enum, "forward_fill" fills the values using previous values. Any values which cannot be filled are filled with
+            `fill_value`. "linear" use linear interpolation to imput the missing values. None: use regular filling with `fill_value`.
+            Defaults to None.
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -702,7 +742,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
         artificial_missing_columns: Optional[List[str]] = None,
         artificial_missing_at_time_t: bool = False,
         random_seed: int = 0,
-        impute_method: str = "forward_fill",
+        impute_method: Optional[str] = ImputeMethod.FORWARD_FILL.value,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -761,7 +801,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             artificial_missing_columns: Optional[List[str]] = None,
             artificial_missing_at_time_t: bool = False,
             rng=np.random.default_rng(),
-            impute_method: str = "forward_fill",
+            impute_method: Optional[str] = ImputeMethod.FORWARD_FILL.value,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -847,7 +887,6 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
 
             seq_x = self.X[time_id : time_id + self.context_length].values
-            # seq_x_imputed = self._X_imputed[time_id : time_id + self.context_length].values
 
             if self.masking_specification is not None:
                 seq_x = apply_masking_specification(
@@ -856,7 +895,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                     column_name_to_index_map=self.column_name_to_index_map,
                 )
 
-            if self.impute_method == "forward_fill":
+            if self.impute_method == ImputeMethod.FORWARD_FILL.value:
                 # impute the numpy matrix, time is the first dimension
                 # based on https://stackoverflow.com/questions/41190852/most-efficient-way-to-forward-fill-nan-values-in-numpy-array
                 mask = np.isnan(seq_x)
@@ -864,16 +903,15 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
                 np.maximum.accumulate(idx, axis=0, out=idx)
                 seq_x_imputed = seq_x[idx, np.arange(idx.shape[1])[None, :]]
 
-                # print(seq_x.shape, seq_x_imputed.shape)
                 # fill any remaining nan
                 seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=self.fill_value)
-            else:
+            elif self.impute_method == ImputeMethod.LINEAR.value:
                 # interpolate for each channel
                 seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
-                # print(seq_x[0], seq_x_imputed[0])
+            elif self.impute_method is None:
+                seq_x_imputed = np.nan_to_num(seq_x, nan=self.fill_value)
 
             # mask only on seq_x
-
             artificial_past_observed_seq = np.ones_like(seq_x, dtype=bool)
             artificial_past_observed_seq[:, self._artificial_missing_column_mask] = (
                 self._artificial_past_observed_mask[time_id : time_id + self.context_length]

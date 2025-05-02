@@ -346,6 +346,65 @@ def test_forecasting_observed_mask(ts_data_with_categorical):
     ds[4]["future_values"][1, 1] == fill_value
 
 
+def test_forecasting_imputation(ts_data_with_categorical):
+    prediction_length = 2
+    context_length = 5
+    fill_value = 0.1
+    target_columns = ["value2", "value3"]
+
+    df = ts_data_with_categorical.copy()
+    df.loc[1, "value3"] = np.nan
+    df.loc[0, "value2"] = np.nan
+
+    # linear
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method="linear",
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    assert past_values[1, 1] == (past_values[0, 1] + past_values[2, 1]) / 2
+    assert past_values[0, 0] == past_values[1, 0]
+
+    # forward fill
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method="forward_fill",
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    assert past_values[1, 1] == past_values[0, 1]
+    assert past_values[0, 0] == fill_value
+
+    # straight fill
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method=None,
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    assert past_values[1, 1] == fill_value
+    assert past_values[0, 0] == fill_value
+
+
 def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
     prediction_length = 2
     target_columns = ["value1"]
