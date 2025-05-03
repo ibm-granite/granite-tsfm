@@ -479,6 +479,13 @@ class ForecastDFDataset(BaseConcatDFDataset):
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
+        if not (
+            impute_method is None
+            or impute_method == ImputeMethod.FORWARD_FILL.value
+            or impute_method == ImputeMethod.LINEAR.value
+        ):
+            raise ValueError(f"Unknown impute_method {self.impute_method}.")
+
         super().__init__(
             data_df=data,
             id_columns=id_columns,
@@ -610,6 +617,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
             elif self.impute_method is None:
                 seq_x_imputed = np.nan_to_num(seq_x, nan=self.fill_value)
+            else:
+                raise ValueError(f"Unknown impute_method {self.impute_method}.")
 
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y.iloc[
