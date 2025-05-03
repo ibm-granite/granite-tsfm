@@ -191,6 +191,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "categorical_columns",
             "static_categorical_columns",
             "future_time_series",
+            "impute_method",
         ]
         postprocess_params = [
             "prediction_length",
