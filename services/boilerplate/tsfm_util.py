@@ -13,39 +13,11 @@ from transformers import (
     PreTrainedModel,
 )
 
+import tsfm_public
+from tsfm_public.toolkit.hf_util import register_config
+
 
 LOGGER = logging.getLogger(__file__)
-
-
-def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
-    """Register a configuration for a particular model architecture
-
-    Args:
-        model_type (Optional[str], optional): The type of the model, from the model implementation. Defaults to None.
-        model_config_name (Optional[str], optional): The name of configuration class for the model. Defaults to None.
-        module_path (Optional[str], optional): Python module path that can be used to load the
-            config/model. Defaults to None.
-
-    Raises:
-        RuntimeError: Raised when the module cannot be imported from the provided module path.
-    """
-    # example
-    # model_type: "tinytimemixer"
-    # model_config_name: "TinyTimeMixerConfig"
-    # module_path: "tsfm"  # place where config should be importable
-
-    # AutoConfig.register("tinytimemixer", TinyTimeMixerConfig)
-    try:
-        mod = importlib.import_module(module_path)
-        conf_class = getattr(mod, model_config_name, None)
-    except ModuleNotFoundError as exc:  # modulenot found, key error ?
-        raise RuntimeError(f"Could not load {model_config_name} from {module_path}") from exc
-
-    if conf_class is not None:
-        AutoConfig.register(model_type, conf_class)
-    else:
-        # issue warning?
-        pass
 
 
 def load_config(
@@ -103,21 +75,28 @@ def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None
     """
     if module_path is not None:
         try:
-            mod = importlib.import_module(module_path)
+            mods = [importlib.import_module(module_path)]
         except ModuleNotFoundError as exc:
             raise AttributeError("Could not load module '{module_path}'.") from exc
     else:
-        mod = transformers
+        mods = [transformers, tsfm_public]
 
     # get architecture from model config
     architectures = getattr(config, "architectures", [])
     for arch in architectures:
-        try:
-            model_class = getattr(mod, arch)
-            return model_class
-        except AttributeError as exc:
-            # catch specific error import error or attribute error
-            raise AttributeError(f"Could not load model class for architecture '{arch}'.") from exc
+        model_class = None
+        for mod in mods:
+            model_class = getattr(mod, arch, None)
+            if model_class is not None:
+                return model_class
+        raise AttributeError(f"Could not load model class for architecture '{arch}'.")
+
+        # try:
+        #     model_class = getattr(mod, arch)
+        #     return model_class
+        # except AttributeError as exc:
+        #     # catch specific error import error or attribute error
+        #     raise AttributeError(f"Could not load model class for architecture '{arch}'.") from exc
 
 
 def load_model(

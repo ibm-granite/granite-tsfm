@@ -42,6 +42,7 @@ class TSFMConfig(PushToHubMixin):
             no maximum. Defaults to None.
         inference_batch_size (int, optional): Size of batch to construct when performing inference. Defaults to 16.
         is_finetuned (bool, optional): Indicates that the model has been finetuned. Defaults to False.
+        extra_pipeline_arguments (dict, optional): Additional arguments that get passed during service operations. Defaults to {}.
 
     Notes:
         If module_path, model_type, model_config_name, model_class_name are absent, and the HFServiceHandler is used, the
@@ -66,6 +67,7 @@ class TSFMConfig(PushToHubMixin):
         self.maximum_prediction_length = kwargs.pop("maximum_prediction_length", None)
         self.is_finetuned = kwargs.pop("is_finetuned", False)
         self.inference_batch_size = kwargs.pop("inference_batch_size", 16)
+        self.extra_pipeline_arguments = kwargs.pop("extra_pipeline_arguments", {})
 
         # "maximum_prediction_length": 96,
         # "minimum_context_length": 512,
