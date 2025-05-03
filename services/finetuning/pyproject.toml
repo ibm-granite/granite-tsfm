@@ -30,7 +30,7 @@ __version_tuple__ = (0, 0, 0)
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-granite-tsfm = "==0.2.23"
+granite-tsfm = "==0.2.25"
 
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }

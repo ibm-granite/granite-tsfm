@@ -473,7 +473,6 @@ def test_future_data_forecast_inference(ts_data):
     assert counts["output_data_points"] == prediction_length * 1 * num_ids
 
 
-@pytest.mark.skip(reason="Will re-enable once updated tsfm_public is available.")
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-impute"], indirect=True)
 def test_forecast_inference_with_impute(ts_data):
     test_data, params = ts_data
