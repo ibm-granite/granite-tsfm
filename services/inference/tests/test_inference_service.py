@@ -23,6 +23,7 @@ model_param_map = {
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
     "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
     "ttm-r2-etth-finetuned-impute": {"context_length": 512, "prediction_length": 96},
+    "ttm-r2-no-tsfm-config": {"context_length": 512, "prediction_length": 96},
 }
 
 
@@ -92,7 +93,48 @@ def get_inference_response(
 
 
 @pytest.mark.parametrize(
-    "ts_data", ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"], indirect=True
+    "ts_data",
+    ["ttm-r2-no-tsfm-config"],
+    indirect=True,
+)
+def test_forecast_inference_no_config(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+    context_length = params["context_length"]
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    # test single
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, counts = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
+
+
+@pytest.mark.parametrize(
+    "ts_data",
+    ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"],
+    indirect=True,
 )
 def test_zero_shot_forecast_inference(ts_data):
     test_data, params = ts_data
