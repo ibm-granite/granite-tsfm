@@ -1,7 +1,6 @@
 # Copyright contributors to the TSFM project
 #
 import os
-from math import isnan
 from typing import Any, Dict
 
 import numpy as np
@@ -10,7 +9,7 @@ import pytest
 import requests
 
 from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
-from tsfm_public.toolkit.util import select_by_index
+from tsfm_public.toolkit.util import encode_data, select_by_index
 
 
 model_param_map = {
@@ -90,20 +89,6 @@ def get_inference_response(
     else:
         print(req.text)
         return req
-
-
-def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
-    if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
-        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
-    data_payload = df.to_dict(orient="list")
-
-    for k, v in data_payload.items():
-        if isinstance(v[0], str):
-            continue
-        # rewrite all the nan to None
-        data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
-
-    return data_payload
 
 
 @pytest.mark.parametrize(
