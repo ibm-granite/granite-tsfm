@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from prometheus_client import Histogram
 from starlette import status
 
 from tsfm_public.toolkit.util import select_by_index
@@ -25,8 +24,11 @@ from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataIn
 
 LOGGER = logging.getLogger(__file__)
 
-FORECAST_PROMETHEUS_TIME_SPENT = Histogram("forecast_time_spent", "Wall clock time histogram.")
-FORECAST_PROMETHEUS_CPU_USED = Histogram("forecast_cpu_user", "CPU user time histogram.")
+from tsfminference import TSFM_HISTOGRAM
+
+
+FORECAST_PROMETHEUS_TIME_SPENT = TSFM_HISTOGRAM("forecast_time_spent", "Wall clock time histogram.")
+FORECAST_PROMETHEUS_CPU_USED = TSFM_HISTOGRAM("forecast_cpu_user", "CPU user time histogram.")
 
 
 class InferenceRuntime:
