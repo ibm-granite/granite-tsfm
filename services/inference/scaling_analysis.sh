@@ -1,15 +1,15 @@
 #!/usr/bin/bash
-NUM_TIMESERIES=("1000" "500" "250" "125" "60" "30" "15" "10" "5" "1")
-NUM_TIMESERIES=("15" "10" "5" "1")
-NUM_TARGETS=("100" "90" "80" "70" "60" "50" "40" "30" "20" "10")
-#NUM_TIMESERIES=("1")
-#NUM_TARGETS=("10")
+#NUM_TIMESERIES=("1000" "500" "250" "125" "60" "30" "15" "10" "5" "1")
+#NUM_TARGETS=("100" "90" "80" "70" "60" "50" "40" "30" "20" "10")
 
-RUN_TIME=300
-PROCESSES=1
-SPAWN_RATE=1.0
-USERS=1
-ONLY_SUMMARY="--only-summary"
+NUM_TIMESERIES=("40")
+NUM_TARGETS=("1")
+
+RUN_TIME=150
+PROCESSES=5
+SPAWN_RATE=10
+USERS=25
+#ONLY_SUMMARY="--only-summary"
 
 for NTS in "${NUM_TIMESERIES[@]}"; do
     echo "******NUM_TIMESERIES=$NTS******"
