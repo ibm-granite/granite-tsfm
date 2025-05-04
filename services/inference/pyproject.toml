@@ -50,7 +50,8 @@ urllib3 = { version = ">=1.26.19" }     # see https://github.com/urllib3/urllib3
 transformers = { version = ">=4.48.0" }
 # no releases beyond 2.6.0 yet
 # torch = { version = ">2.6.0,<3" } # https://github.com/ibm-granite/granite-tsfm/security/dependabot/22
-h11 = { version = ">=0.16.0" } # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
+h11 = { version = ">=0.16.0" }      # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
+multidict = { version = ">=4.6.0" } # https://github.com/aio-libs/multidict/issues/1117
 
 [tool.poetry.group.dev]
 optional = true
