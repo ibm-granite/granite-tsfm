@@ -55,7 +55,7 @@ spec:
     spec:
       containers:
         - name: tsfmservices-fastapi
-          image: us.icr.io/fctkstus/tsfminference-cpu:latest
+          image: us.icr.io/fctkstus/tsfminference-cpu:v2.0.3
           imagePullPolicy: Always
           command: ["/bin/sh"]
           args:
@@ -63,7 +63,7 @@ spec:
             - |
               gunicorn \
               --max-requests 250 \
-              -w 8 \
+              -w 2 \
               -k uvicorn.workers.UvicornWorker \
               --bind 0.0.0.0:8000 \
               --timeout 1200 \
@@ -109,15 +109,15 @@ spec:
           resources:
             requests:
               # nvidia.com/gpu: 0
-              cpu: 8000m
-              memory: 32Gi
+              cpu: 1000m
+              memory: 4Gi
             limits:
               # nvidia.com/gpu: 0
-              cpu: 8000m
-              memory: 32Gi
+              cpu: 2000m
+              memory: 4Gi
           # Alpine Sidecar with Init Command
         - name: rest-client
-          image: us.icr.io/fctkstus/tsfminference-cpu:latest
+          image: us.icr.io/fctkstus/tsfminference-cpu:v2.0.3
           command: ["/bin/sh", "-c"]
           args:
             - |
