@@ -22,12 +22,20 @@ class NonconformityScores(enum.Enum):
     ABSOLUTE_ERROR = "absolute_error"
     ERROR = "error"
 
-
 class PositiveNonconformityScores(enum.Enum):
     """`Enum` for the different kinds of positive nonconformity scores."""
 
     ABSOLUTE_ERROR = "absolute_error"
 
+class ThresholdFunction(enum.Enum):
+    """`Enum` for the different kinds of nonconformity score thresholding functions."""
+    WEIGHTING = "weighting"
+
+
+class Weighting(enum.Enum):
+    """`Enum` for the different kinds of nonconformity score weighting approaches."""
+    UNIFORM = "uniform"
+    EXPONENTIAL_DECAY = "exponential_decay"
 
 """
 Post-Hoc Probabilistic Wrapper Classes
@@ -45,11 +53,11 @@ class PosthocProbabilisticWrapperBase:
         self.quantiles = quantiles
         self.critical_size = 1
 
-    def fit(self, y_cal_pred, y_cal_gt, **kwargs):
+    def fit(self, y_cal_gt, y_cal_pred,  **kwargs):
         """Fit posthoc probabilistic wrapper.
         Input:
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
         y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
+        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
         """
         return self
 
@@ -68,11 +76,11 @@ class PostHocGaussian(PosthocProbabilisticWrapperBase):
         super().__init__(window_size=window_size, quantiles=quantiles)
         self.variance = None
 
-    def fit(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray):
+    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray ):
         """Fit posthoc probabilistic wrapper.
         Input:
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
         y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
+        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
         """
         if self.window_size is None:
             window_size = y_cal_gt.shape[0]
@@ -435,9 +443,9 @@ class WeightedConformalWrapper:
         self,
         nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
         false_alarm: float = 0.05,
-        weighting: str = "uniform",
+        weighting: str = Weighting.UNIFORM.value,
         weighting_params: Dict[str, Any] = {},
-        threshold_function: str = "weighting",
+        threshold_function: str = ThresholdFunction.WEIGHTING.value,
         window_size: Optional[int] = None,
         online_adaptive: bool = False,
     ):
@@ -524,8 +532,8 @@ class WeightedConformalWrapper:
 
     def fit(
         self,
-        y_cal_pred: np.ndarray,
         y_cal_gt: np.ndarray,
+        y_cal_pred: np.ndarray,
         X_cal: Optional[np.ndarray] = None,
         cal_timestamps: Optional[np.ndarray] = None,
     ):
@@ -546,11 +554,11 @@ class WeightedConformalWrapper:
         critical_efficient_size = int(np.ceil(1 / self.false_alarm))
 
         # Certain Weighting Methods May Require Fitting
-        if self.weighting in ["uniform", "exponential_decay"]:
+        if self.weighting in [Weighting.UNIFORM.value, Weighting.EXPONENTIAL_DECAY.value]: #["uniform", "exponential_decay"]:
             cal_weights = self.get_weights()
             self.weights.append(cal_weights)
             # self.weights.append(cal_weights[-self.cal_scores.shape[0]:])
-            if self.threshold_function == "weighting":
+            if self.threshold_function == ThresholdFunction.WEIGHTING.value: #  "weighting":
                 self.score_threshold = self.score_threshold_func(cal_weights, false_alarm=self.false_alarm)
         assert (
             np.sum(cal_weights) >= critical_efficient_size
@@ -568,16 +576,16 @@ class WeightedConformalWrapper:
         if false_alarm is None:
             false_alarm = self.false_alarm
 
-        if self.weighting in ["uniform", "exponential_decay"]:
+        if self.weighting in [Weighting.UNIFORM.value, Weighting.EXPONENTIAL_DECAY.value]:#["uniform", "exponential_decay"]:
             if len(self.weights) > 0:
                 return self.weights[-1]
             else:
-                if self.weighting == "uniform":
+                if self.weighting == Weighting.UNIFORM.value:
                     # return np.ones(y_pred.shape[0],self.cal_scores.shape[0])
                     # return np.ones(self.cal_scores.shape[0])
                     return np.ones(self.window_size)
 
-                if self.weighting == "exponential_decay":
+                if self.weighting == Weighting.EXPONENTIAL_DECAY.value:
                     decay_param = self.weighting_params.get("decay_param", 0.99)
                     return decay_param ** (self.window_size - np.arange(self.window_size))
 
@@ -600,7 +608,7 @@ class WeightedConformalWrapper:
         assert n_cal_scores >= np.ceil(1 / false_alarm), " not enough calibration scores for error rate " + str(
             false_alarm
         )
-        if self.threshold_function == "weighting":
+        if self.threshold_function == ThresholdFunction.WEIGHTING.value: #"weighting":
             if self.nonconformity_score in PositiveNonconformityScores:
                 if len(cal_weights.shape) == 1:  # same weights for all y
                     score_threshold = weighted_conformal_quantile(
@@ -693,8 +701,8 @@ class WeightedConformalWrapper:
         # Score Threshold
         if (
             (false_alarm == self.false_alarm)
-            and (self.weighting in ["uniform"])
-            and (self.threshold_function in ["weighting"])
+            and (self.weighting in [Weighting.UNIFORM.value])
+            and (self.threshold_function in [ThresholdFunction.WEIGHTING.value])
         ):
             score_threshold = self.score_threshold
         else:
@@ -815,9 +823,9 @@ class WeightedConformalWrapper:
             self.cal_X = np.append(self.cal_X, X, axis=0)
             self.cal_X = self.cal_X[-self.window_size :]
 
-        if self.weighting == "uniform":
+        if self.weighting == Weighting.UNIFORM.value: #"uniform":
             cal_weights = self.get_weights()
-            if self.threshold_function == "weighting":
+            if self.threshold_function == ThresholdFunction.WEIGHTING.value:
                 self.score_threshold = self.score_threshold_func(cal_weights, false_alarm=self.false_alarm)
 
 
@@ -826,9 +834,9 @@ class WeightedConformalForecasterWrapper:
         self,
         nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
         false_alarm: float = 0.05,
-        weighting: str = "uniform",
+        weighting: str = Weighting.UNIFORM.value,
         weighting_params: Dict[str, Any] = {},
-        threshold_function: str = "weighting",
+        threshold_function: str = ThresholdFunction.WEIGHTING.value,
         window_size: Optional[int] = None,
     ):
         self.nonconformity_score = nonconformity_score
@@ -907,10 +915,10 @@ class WeightedConformalForecasterWrapper:
 
         return obj
 
-    def fit(self, y_cal_pred, y_cal_gt, X_cal=None, cal_timestamps=None):
+    def fit(self, y_cal_gt, y_cal_pred,  X_cal=None, cal_timestamps=None):
         """
-        y_cal_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
         y_cal_gt : ground truth values, size is num_samples x forecast_length x num_features
+        y_cal_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
         X_cal (optional): input covariates for input dependent conformal approaches size is num_samples x num_covariates
         cal_timestamps (optional): timestamps associated to the forecasted values, size is num_samples x forecast_length
         """
@@ -963,7 +971,7 @@ class WeightedConformalForecasterWrapper:
                         awcsw = AdaptiveWeightedConformalScoreWrapper(
                             false_alarm=self.false_alarm,
                             window_size=self.window_size,
-                            weighting="uniform",
+                            weighting=Weighting.UNIFORM.value,
                             weighting_params={
                                 "n_batch_update": n_batch_update,
                                 "conformal_weights_update": False,
@@ -1156,7 +1164,7 @@ class AdaptiveWeightedConformalScoreWrapper:
         self,
         false_alarm: float = 0.05,
         window_size: Optional[int] = None,
-        weighting: str = "uniform",
+        weighting: str = Weighting.UNIFORM.value,
         weighting_params: Dict[str, Any] = {},
     ):  # , threshold_function = 'weighting'):
         self.weighting = weighting
