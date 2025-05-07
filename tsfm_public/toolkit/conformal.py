@@ -203,14 +203,14 @@ class PostHocGaussian(PosthocProbabilisticWrapperBase):
 #         return y_test_prob_pred
 
 
-class PostHocProbabilisticProcessor(FeatureExtractionMixin):
+class PostHocProbabilisticProcessor(FeatureExtractionMixin): #this is forecast specific
     """Entry point for posthoc probabilistic approaches
 
     We adopt HF FeatureExtractionMixin to create the processor and support serialization and deserialization
 
     Currently focusses on the conformal approach
     To do:
-     - Integrate the Guassian approach above
+     - Integrate the Gaussian approach above
      - Full serialization support
      - Better output, in dataframe format
     """
@@ -384,7 +384,7 @@ class PostHocProbabilisticProcessor(FeatureExtractionMixin):
                     output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
                     y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
                 else:
-                    if self.model.nonconformity_score in ["error"]:
+                    if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
                         q_pi_error_rate = 0.5
                         output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
                         y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
