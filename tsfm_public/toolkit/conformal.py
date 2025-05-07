@@ -932,7 +932,7 @@ class WeightedConformalForecasterWrapper:
 
         return obj
 
-    def fit(self, y_cal_gt, y_cal_pred,  X_cal=None, cal_timestamps=None):
+    def fit(self, y_cal_gt:np.ndarray, y_cal_pred:np.ndarray,  X_cal:np.ndarray=None, cal_timestamps:np.ndarray=None):
         """
         y_cal_gt : ground truth values, size is num_samples x forecast_length x num_features
         y_cal_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
@@ -1021,7 +1021,7 @@ class WeightedConformalForecasterWrapper:
                 if cal_weights is not None:
                     self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
 
-    def update(self, y_pred, y_gt, X=None, timestamps=None):
+    def update(self, y_gt:np.ndarray, y_pred:np.ndarray, X:np.ndarray=None, timestamps:np.ndarray=None):
         """
         y_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
         y_gt (optional for anomaly detection) : ground truth values, size is num_samples x forecast_length x num_features
