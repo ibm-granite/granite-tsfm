@@ -37,6 +37,9 @@ class Weighting(enum.Enum):
     UNIFORM = "uniform"
     EXPONENTIAL_DECAY = "exponential_decay"
 
+class WeightingOptimization(enum.Enum):
+    """`Enum` for the different nonconformity score weighting optimization approaches."""
+    WASS1 = "wass1"
 """
 Post-Hoc Probabilistic Wrapper Classes
 """
@@ -53,7 +56,7 @@ class PosthocProbabilisticWrapperBase:
         self.quantiles = quantiles
         self.critical_size = 1
 
-    def fit(self, y_cal_gt, y_cal_pred,  **kwargs):
+    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray,  **kwargs):
         """Fit posthoc probabilistic wrapper.
         Input:
         y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
@@ -61,7 +64,7 @@ class PosthocProbabilisticWrapperBase:
         """
         return self
 
-    def predict(self, y_test_pred, quantiles=[], **kwargs):
+    def predict(self, y_test_pred: np.ndarray, quantiles=[], **kwargs):
         """Predic posthoc probabilistic wrapper.
         Input:
         y_test_pred: nsamples x forecast_horizon x number_features
@@ -97,7 +100,7 @@ class PostHocGaussian(PosthocProbabilisticWrapperBase):
             len(y_cal_pred[-window_size:]) - 1
         )  # dimension should be
 
-    def predict(self, y_test_pred, quantiles=[]):
+    def predict(self, y_test_pred: np.ndarray, quantiles=[]):
         """Predict posthoc probabilistic wrapper.
         Input:
         y_test_pred: nsamples x forecast_horizon x number_features
@@ -346,8 +349,9 @@ class PostHocProbabilisticProcessor(FeatureExtractionMixin):
         #     window_size = self.window_size
 
         self.model.fit(
+            y_cal_gt=y_cal_gt,
             y_cal_pred=y_cal_pred,  # ttm predicted values
-            y_cal_gt=y_cal_gt,  # ttm corresponding gt values
+              # ttm corresponding gt values
         )
 
     def predict(self, y_test_pred: np.ndarray, quantiles: List[float] = []) -> np.ndarray:
@@ -413,8 +417,8 @@ def error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
 
 
 def nonconformity_score_functions(
-    y_pred: np.ndarray,
     y_gt: np.ndarray,
+    y_pred: np.ndarray,
     X: Optional[np.ndarray] = None,
     nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
 ) -> np.ndarray:
@@ -448,7 +452,19 @@ class WeightedConformalWrapper:
         threshold_function: str = ThresholdFunction.WEIGHTING.value,
         window_size: Optional[int] = None,
         online_adaptive: bool = False,
+        online_size: Optional[int] = 1,
     ):
+        """Weighted Split Conformal Wrapper.
+        Input:
+        nonconformity_score: nonconformity score to be considered
+        false_alarm: false alarm or error rate for the prediction intervals
+        weighting: type of nonconformity score weights
+        weighting_params: dictionary with weighting parameters if applicable
+        threshold_function: type of nonconformity score threshold function
+        window_size: maximum number of calibration (past values) nonconformity scores to be considered
+        online_adaptive: flag indicating if the approach is adaptive/online
+        online_size: integer indicating the stride between online updates
+        """
         self.nonconformity_score = nonconformity_score
         assert (
             self.nonconformity_score in NonconformityScores
@@ -463,7 +479,7 @@ class WeightedConformalWrapper:
         self.weighting = weighting
         self.weighting_params = weighting_params
         self.window_size = window_size
-        self.online_size = 1
+        self.online_size = online_size
         self.online = online_adaptive
 
         self.threshold_function = threshold_function
@@ -489,6 +505,7 @@ class WeightedConformalWrapper:
             "weighting_params": self.weighting_params,
             "window_size": self.window_size,
             "online_adaptive": self.online,
+            "online_size": self.online_size,
             "threshold_function": self.threshold_function,
             "cal_scores": self.cal_scores,
             "weights": self.weights,
@@ -540,7 +557,7 @@ class WeightedConformalWrapper:
         if self.window_size is None:
             self.window_size = y_cal_pred.shape[0]
         self.cal_scores = nonconformity_score_functions(
-            y_cal_pred, y_cal_gt, X=X_cal, nonconformity_score=self.nonconformity_score
+            y_cal_gt, y_cal_pred,  X=X_cal, nonconformity_score=self.nonconformity_score
         )
 
         self.cal_scores = self.cal_scores[-self.window_size :]
@@ -717,7 +734,7 @@ class WeightedConformalWrapper:
         if y_gt is not None:
             # Compute nonconformity scores of input
             test_scores = nonconformity_score_functions(
-                y_pred, y_gt, X=X, nonconformity_score=self.nonconformity_score
+                y_gt, y_pred,  X=X, nonconformity_score=self.nonconformity_score
             )
 
             # Outlier Flag and Outlier Scores
@@ -945,7 +962,7 @@ class WeightedConformalForecasterWrapper:
             # Copy the dictionary
             weighting_params = self.weighting_params.copy()
             if "optimization" in self.weighting_params.keys():
-                if self.weighting_params["optimization"] == "wass1":
+                if self.weighting_params["optimization"] == WeightingOptimization.WASS1.value: #"wass1":
                     weighting_params.pop("optimization", None)
                     """
                     Fitting Weights
@@ -954,8 +971,8 @@ class WeightedConformalForecasterWrapper:
                     """
                     critical_efficient_size = int(np.ceil(1 / self.false_alarm))
                     cal_scores = nonconformity_score_functions(
-                        y_cal_pred[:, :, ix_f],
                         y_cal_gt[:, :, ix_f],
+                        y_cal_pred[:, :, ix_f],
                         X=X_cal,
                         nonconformity_score=self.nonconformity_score,
                     )
@@ -996,10 +1013,10 @@ class WeightedConformalForecasterWrapper:
                     weighting_params=weighting_params,
                     threshold_function=self.threshold_function,
                     window_size=self.window_size,
-                    online_adaptive=self.online_size,
+                    online_size=self.online_size,
                 )
                 self.univariate_wrappers[ix_h, ix_f].fit(
-                    y_cal_pred[:, ix_h, ix_f], y_cal_gt[:, ix_h, ix_f], X_cal=X_cal, cal_timestamps=cal_timestamps_i
+                    y_cal_gt[:, ix_h, ix_f], y_cal_pred[:, ix_h, ix_f],  X_cal=X_cal, cal_timestamps=cal_timestamps_i
                 )
                 if cal_weights is not None:
                     self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
