@@ -61,6 +61,7 @@ stop_service_image:
 
 test_local: clone_models boilerplate start_service_local
 	pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 	$(MAKE) stop_service_local
