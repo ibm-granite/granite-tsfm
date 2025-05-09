@@ -1,5 +1,6 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
+NO_DOCKER_CACHE ?= 
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -33,9 +34,9 @@ stop_service_local:
 
 image: boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
-	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
+	$(CONTAINER_BUILDER) build $(NO_DOCKER_CACHE) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
-		$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
+		$(CONTAINER_BUILDER) build $(NO_DOCKER_CACHE) -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
 		echo "Skipping GPU build"; \
 	fi
@@ -60,6 +61,7 @@ stop_service_image:
 
 test_local: clone_models boilerplate start_service_local
 	pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 	$(MAKE) stop_service_local

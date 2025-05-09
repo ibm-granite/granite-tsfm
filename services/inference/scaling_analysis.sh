@@ -26,7 +26,7 @@ for NTS in "${NUM_TIMESERIES[@]}"; do
         oc exec $TSFM_POD -c rest-client  -- bash -c \
         "NUM_TIMESERIES=$NTS NUM_TARGETS=$NTARGETS locust \
         -f /local-storage/tests/locust/locustfile.py \
-        --config /local-storage/tests/locust/locust.ris3.inference.forecast.conf \
+        --config /local-storage/tests/locust/locust.conf \
         -t $RUN_TIME \
         --headless \
         --users $USERS \
