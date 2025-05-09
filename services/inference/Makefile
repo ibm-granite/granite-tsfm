@@ -34,13 +34,12 @@ stop_service_local:
 
 image: boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
-	$(CONTAINER_BUILDER) build $(NO_DOCKER_CACHE) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
+	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
-		$(CONTAINER_BUILDER) build $(NO_DOCKER_CACHE) -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
+		$(CONTAINER_BUILDER) build -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
 		echo "Skipping GPU build"; \
 	fi
-
 
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
