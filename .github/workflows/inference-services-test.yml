@@ -5,9 +5,9 @@ name: Tsfminference Service Tests
 
 on:
   push:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "destiny_patches" ]
   pull_request:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "destiny_patches" ]
 
 jobs:
   build:
