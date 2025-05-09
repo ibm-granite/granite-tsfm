@@ -87,6 +87,6 @@ class MyUser(FastHttpUser):
         )
 
     def on_stop(self):
-        metrics_url = self.host.replace("/v1", "") + "/metrics"
-        print(self.client.post(metrics_url, json=self.payload, timeout=None, retries=10).text)
+        # metrics_url = self.host.replace("/v1", "") + "/metrics"
+        # print(self.client.post(metrics_url, json=self.payload, timeout=None, retries=10).text)
         print(f"payload length was {len(json.dumps(self.payload))/1E6}MB")
