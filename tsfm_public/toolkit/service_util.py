@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 from transformers import PreTrainedModel
 
-from .time_series_preprocessor import TimeSeriesProcessor
+from .time_series_preprocessor import TimeSeriesPreprocessor
 from .tsfm_config import TSFMConfig
 
 
@@ -37,7 +37,10 @@ service_handler_mapping = {
 
 
 def save_deployment_package(
-    save_path: Union[Path, str], model: PreTrainedModel, ts_processor: Optional[TimeSeriesProcessor] = None, **kwargs
+    save_path: Union[Path, str],
+    model: PreTrainedModel,
+    ts_processor: Optional[TimeSeriesPreprocessor] = None,
+    **kwargs,
 ):
     """Convenience function for saving the deployment package needed to use the services.
 
@@ -65,7 +68,7 @@ def save_deployment_package(
     params = {}
 
     config_class = model.config.__class__.__name__
-    handler_params = getattr(service_handler_mapping, config_class, None)
+    handler_params = service_handler_mapping.get(config_class, None)
 
     if handler_params is None:
         raise ValueError(f"Could not find suitable handler information for config class {config_class}")
