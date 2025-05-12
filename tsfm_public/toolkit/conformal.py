@@ -626,7 +626,7 @@ class WeightedConformalWrapper:
             false_alarm
         )
         if self.threshold_function == ThresholdFunction.WEIGHTING.value: #"weighting":
-            if self.nonconformity_score in [s.value for s in PositiveNonconformityScores]: 
+            if self.nonconformity_score in [s.value for s in PositiveNonconformityScores]:
                 if len(cal_weights.shape) == 1:  # same weights for all y
                     score_threshold = weighted_conformal_quantile(
                         np.append(cal_scores, np.array([np.inf]), axis=0),
