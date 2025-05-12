@@ -329,7 +329,7 @@ class PostHocProbabilisticProcessor(FeatureExtractionMixin): #this is forecast s
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def train(self, y_cal_pred, y_cal_gt):
+    def train(self, y_cal_pred: np.ndarray , y_cal_gt: np.ndarray):
         """Fit posthoc probabilistic wrapper.
         Input:
         y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
@@ -423,7 +423,7 @@ def nonconformity_score_functions(
     nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
 ) -> np.ndarray:
     assert (
-        nonconformity_score in NonconformityScores
+        nonconformity_score in [s.value for s in NonconformityScores]
     ), "Selected nonconformity score is not supported, choose from {}".format(
         str([s.value for s in NonconformityScores])
     )
@@ -467,7 +467,7 @@ class WeightedConformalWrapper:
         """
         self.nonconformity_score = nonconformity_score
         assert (
-            self.nonconformity_score in NonconformityScores
+            self.nonconformity_score in [s.value for s in NonconformityScores]
         ), "Selected nonconformity score is not supported, choose from {}".format(
             str([s.value for s in NonconformityScores])
         )
@@ -626,7 +626,7 @@ class WeightedConformalWrapper:
             false_alarm
         )
         if self.threshold_function == ThresholdFunction.WEIGHTING.value: #"weighting":
-            if self.nonconformity_score in PositiveNonconformityScores:
+            if self.nonconformity_score in [s.value for s in PositiveNonconformityScores]: 
                 if len(cal_weights.shape) == 1:  # same weights for all y
                     score_threshold = weighted_conformal_quantile(
                         np.append(cal_scores, np.array([np.inf]), axis=0),
@@ -932,7 +932,7 @@ class WeightedConformalForecasterWrapper:
 
         return obj
 
-    def fit(self, y_cal_gt:np.ndarray, y_cal_pred:np.ndarray,  X_cal:np.ndarray=None, cal_timestamps:np.ndarray=None):
+    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray,  X_cal: np.ndarray=None, cal_timestamps: np.ndarray=None):
         """
         y_cal_gt : ground truth values, size is num_samples x forecast_length x num_features
         y_cal_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
@@ -1021,7 +1021,7 @@ class WeightedConformalForecasterWrapper:
                 if cal_weights is not None:
                     self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
 
-    def update(self, y_gt:np.ndarray, y_pred:np.ndarray, X:np.ndarray=None, timestamps:np.ndarray=None):
+    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray =None, timestamps: np.ndarray =None):
         """
         y_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
         y_gt (optional for anomaly detection) : ground truth values, size is num_samples x forecast_length x num_features
@@ -1040,7 +1040,7 @@ class WeightedConformalForecasterWrapper:
                     y_pred[:, ix_h, ix_f], y_gt=y_gt_i, X=X, timestamps=timestamps_i, update=True
                 )
 
-    def predict(self, y_pred, y_gt=None, X=None, timestamps=None, false_alarm=None, update=False):
+    def predict(self, y_pred: np.ndarray, y_gt: np.ndarray=None, X: np.ndarray=None, timestamps: np.ndarray=None, false_alarm:float=None, update:bool =False):
         """
         y_pred : tsfm forecasts, size is num_samples x forecast_length x num_features
         y_gt (optional for anomaly detection) : ground truth values, size is num_samples x forecast_length x num_features
@@ -1048,7 +1048,7 @@ class WeightedConformalForecasterWrapper:
         cal_timestamps (optional): timestamps associated to the forecasted values, size is num_samples x forecast_length
         """
         output = {}
-        if self.nonconformity_score in NonconformityScores:  #'absolute_error':
+        if self.nonconformity_score in [s.value for s in NonconformityScores]:  #'absolute_error':
             output["prediction_interval"] = {"y_low": np.zeros_like(y_pred), "y_high": np.zeros_like(y_pred)}
 
         if y_gt is not None:
@@ -1074,7 +1074,7 @@ class WeightedConformalForecasterWrapper:
                     update=update,
                 )
 
-                if self.nonconformity_score in NonconformityScores:  # 'absolute_error':
+                if self.nonconformity_score in [s.value for s in NonconformityScores]:  # 'absolute_error':
                     output["prediction_interval"]["y_low"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_low"]
                     output["prediction_interval"]["y_high"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_high"]
 
