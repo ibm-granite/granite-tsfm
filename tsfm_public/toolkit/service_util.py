@@ -85,12 +85,13 @@ def save_deployment_package(
     params["model_type"] = model.config.model_type
     params["module_path"] = model.__class__.__module__  # "tsfm_public", maybe filter
 
-    params["is_fine_tuned"] = ts_processor is not None
+    params["is_finetuned"] = ts_processor is not None
 
     # assumes we are dealing with one of the known IBM models
     params["minimum_context_length"] = kwargs.pop("minimum_context_length", model.config.context_length)
     params["maximum_context_length"] = kwargs.pop("maximum_context_length", model.config.context_length)
     params["maximum_prediction_length"] = kwargs.pop("maximum_prediction_length", model.config.prediction_length)
+    params.update(**kwargs)
 
     svc_config = TSFMConfig(**params)
 

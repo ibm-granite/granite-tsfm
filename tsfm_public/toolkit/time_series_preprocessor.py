@@ -366,7 +366,6 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         def deserialize_key(key, key_types=None):
             if key_types is None:
                 return key
-            # assume homogenous types
 
             key = json.loads(key)
             if isinstance(key, (Tuple, List)):
