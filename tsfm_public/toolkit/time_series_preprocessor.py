@@ -297,32 +297,31 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
         dictionary = self.to_dict()
 
-        def make_value_serializable(value):
-            if isinstance(value, np.ndarray):
-                return value.tolist()
-            elif isinstance(value, np.integer):
+        def serialize_np_scalar(value):
+            if isinstance(value, np.integer):
                 return int(value)
-            elif isinstance(value, np.floating):
+            if isinstance(value, np.floating):
                 return float(value)
-            elif isinstance(value, list):
-                return [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
-            else:
-                return value
+            return value
 
         def recursive_check_ndarray(dictionary):
             key_map = {}
             for key, value in dictionary.items():
                 if isinstance(key, tuple):
-                    new_key = json.dumps([make_value_serializable(k) for k in key])
+                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
                     key_map[key] = new_key
 
                 if key == "dtype":
                     # to do: ensure deserializable
                     dictionary[key] = value.__name__
+                elif isinstance(value, np.ndarray):
+                    dictionary[key] = value.tolist()
+                elif isinstance(value, (np.integer, np.floating)):
+                    dictionary[key] = serialize_np_scalar(value)
+                elif isinstance(value, list):
+                    dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
-                else:
-                    dictionary[key] = make_value_serializable(value)
 
             for key, new_key in key_map.items():
                 dictionary[new_key] = dictionary.pop(key)
