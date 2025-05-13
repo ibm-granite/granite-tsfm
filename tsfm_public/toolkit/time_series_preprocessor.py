@@ -139,7 +139,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessor):
         scale_categorical_columns: bool = True,
         **kwargs,
     ):
-        """Multi-time series aware data preprocessor. Provides functions for scaling data and facitilitates downstream
+        """Multi-time series aware data preprocessor. Provides functions for scaling data and facilitates downstream
         operations on time series data, including model training and inference.
 
         Args:

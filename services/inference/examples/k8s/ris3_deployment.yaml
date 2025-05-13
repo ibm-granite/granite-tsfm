@@ -63,10 +63,10 @@ spec:
             - |
               gunicorn \
               --max-requests 250 \
-              -w 16 \
+              -w 2 \
               -k uvicorn.workers.UvicornWorker \
               --bind 0.0.0.0:8000 \
-              --timeout 3600 \
+              --timeout 1200 \
               --access-logfile - \
               --error-logfile - \
               --log-level info \
@@ -76,13 +76,13 @@ spec:
               name: local-storage
           env:
             - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
-              value: "1"
+              value: "0"
             - name: CUDA_VISIBLE_DEVICES
               value: ""
             - name: TSFM_MODEL_DIR
               value: /local-storage/mytest-tsfm
             - name: PROMETHEUS_MULTIPROC_DIR
-              value: "/home/tsfm/prometheus_metrics"
+              value: "/tmp"
             - name: TSFM_PYTHON_LOGGING_LEVEL
               value: "WARNING"
             - name: TSFM_PYTHON_LOGGING_FORMAT
@@ -109,12 +109,12 @@ spec:
           resources:
             requests:
               # nvidia.com/gpu: 0
-              cpu: 16000m
-              memory: 64Gi
+              cpu: 2000m
+              memory: 8Gi
             limits:
               # nvidia.com/gpu: 0
-              cpu: 16000m
-              memory: 64Gi
+              cpu: 2000m
+              memory: 8Gi
           # Alpine Sidecar with Init Command
         - name: rest-client
           image: us.icr.io/fctkstus/tsfminference-cpu:latest

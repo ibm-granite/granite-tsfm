@@ -9,11 +9,13 @@ RUN dnf upgrade -y \
     && dnf install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
+    && pip${PYTHON_VERSION} install pip -U \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && groupadd --system tsfm --gid 1001 \
     && adduser --system --uid 1001 --gid 1001 --groups tsfm \
     --create-home --home-dir /home/tsfm --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
+    && chmod o+rX /home/tsfm \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
@@ -30,12 +32,12 @@ ENV HF_HOME=/tmp
 ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
 
 ARG CODEDIR
-COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm pyproject.toml poetry.lock ${CODEDIR} ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml poetry.lock ${CODEDIR} ${HOME}
 
 WORKDIR ${HOME}
 
-RUN python${PYTHON_VERSION} -m venv ${HOME}/.venv \
+RUN python${PYTHON_VERSION} -m venv --upgrade-deps ${HOME}/.venv \
 && pip install --no-cache-dir poetry \
 && poetry install --no-cache \ 
 && pip uninstall -y torch \ 

@@ -1,5 +1,6 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
+NO_DOCKER_CACHE ?= 
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -40,7 +41,6 @@ image: boilerplate
 		echo "Skipping GPU build"; \
 	fi
 
-
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
@@ -60,6 +60,7 @@ stop_service_image:
 
 test_local: clone_models boilerplate start_service_local
 	pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
 	$(MAKE) stop_service_local
 	$(MAKE) delete_models
 	$(MAKE) stop_service_local
