@@ -3,6 +3,7 @@
 
 """Tests the time series preprocessor and functions"""
 
+import tempfile
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -671,3 +672,59 @@ def test_get_datasets_with_categoricical(ts_data):
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
     expected = np.array([0.0000, 0.7071, 1.4142, -1.4142, -0.7071])
     np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected, rtol=1e-4)
+
+
+def test_time_series_preprocessor_serializes(ts_data_runs):
+    # two string ids
+    df = ts_data_runs.copy()
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert new_tsp.target_scaler_dict.keys() == tsp.target_scaler_dict.keys()
+
+    # mixed, str int
+    df = ts_data_runs.copy()
+    df["run_id2"] = df["run_id"].astype(int)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id2"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert new_tsp.target_scaler_dict.keys() == tsp.target_scaler_dict.keys()
+
+    # mixed, str int float
+    df = ts_data_runs.copy()
+    df["run_id2"] = df["run_id"].astype(int)
+    df["run_id3"] = df["run_id"].astype(float)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id2", "run_id3"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    with pytest.raises(Exception):
+        tsp.train(df)
