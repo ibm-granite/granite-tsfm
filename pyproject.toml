@@ -43,7 +43,12 @@ notebooks = [
     "kaleido",
     "tensorboard",
 ]
-testing = ["pytest", "granite-tsfm[notebooks]", "parameterized"]
+testing = [
+    "pytest",
+    "pytest-coverage",
+    "granite-tsfm[notebooks]",
+    "parameterized",
+]
 dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
