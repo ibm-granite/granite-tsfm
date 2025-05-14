@@ -275,11 +275,14 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
             output["target_scaler_dict"][k] = v.to_dict()
 
         # get type information; assume homogeneous types
-        akey = next(iter(self.target_scaler_dict.keys()))
-        if isinstance(akey, Tuple):
-            key_types = [type(k) for k in akey]
+        if self.scaling_id_columns and self.scaling:
+            akey = next(iter(self.target_scaler_dict.keys()))
+            if isinstance(akey, Tuple):
+                key_types = [type(k) for k in akey]
+            else:
+                key_types = [type(akey)]
         else:
-            key_types = [type(akey)]
+            key_types = []
 
         output["scaling_id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
 
@@ -363,7 +366,7 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         id_types = feature_extractor_dict.get("scaling_id_columns_types", None)
 
         def deserialize_key(key, key_types=None):
-            if key_types is None:
+            if not key_types:
                 return key
 
             key = json.loads(key)

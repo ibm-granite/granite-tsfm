@@ -728,3 +728,38 @@ def test_time_series_preprocessor_serializes(ts_data_runs):
 
     with pytest.raises(Exception):
         tsp.train(df)
+
+    # no scaling
+    df = ts_data_runs.copy()
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        target_columns=["value1"],
+        id_columns=["asset_id", "run_id"],
+        scaling=False,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert len(new_tsp.target_scaler_dict.keys()) == 0
+
+    # no ids
+    df = ts_data_runs.copy()
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert len(new_tsp.target_scaler_dict.keys()) == len(tsp.target_scaler_dict.keys())
+        assert len(new_tsp.target_scaler_dict.keys()) == 1
