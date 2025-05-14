@@ -4,6 +4,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from typing import Dict, Optional
 
 from .version import __version__, __version_tuple__
 
@@ -50,3 +51,18 @@ if not _amodeldir_found and not TSFM_ALLOW_LOAD_FROM_HF_HUB:
     raise Exception(
         f"None of the values given in TSFM_MODEL_DIR {TSFM_MODEL_DIR} are an existing and readable directory."
     )
+
+
+DO_PROMETHEUS_TRACKING = int(os.environ.get("TSFM_DO_PROMETHEUS_TRACKING", "0")) == 1
+
+if DO_PROMETHEUS_TRACKING:
+    from prometheus_client import Histogram as TSFM_HISTOGRAM
+else:
+
+    class TSFM_HISTOGRAM:
+        # A no-op histogram impl
+        def __init__(self, name: str, descr: str):
+            """This is not a full API match for the Histogram __init__"""
+            ...
+
+        def observe(self, amount: float, exemplar: Optional[Dict[str, str]] = None) -> None: ...
