@@ -1304,14 +1304,14 @@ files = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.2.26"
+version = "0.2.27"
 description = "Public notebooks and utilities for TSFM"
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "granite_tsfm-0.2.26-py3-none-any.whl", hash = "sha256:870ea952d451a1b7715263d80ade7c0e2513894fb9085782ab7c5c65929cf626"},
-    {file = "granite_tsfm-0.2.26.tar.gz", hash = "sha256:80c3afa6eb2173606a3a980642d37e64ab73003065bb3517046750d6e8746da6"},
+    {file = "granite_tsfm-0.2.27-py3-none-any.whl", hash = "sha256:ebae37fc01aa758a55d3fba97e4c6103b7e4d0da0a7beeb93d19930cd23bdc67"},
+    {file = "granite_tsfm-0.2.27.tar.gz", hash = "sha256:8296537c4bd69c6e19521ddaf4b2a7f709f4fd20a1c450e83f3c220c304d2962"},
 ]
 
 [package.dependencies]
@@ -4641,4 +4641,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "d5c3acf7c76b254166a1fa1aa948821f1237e4d2f6a8a91fb47d85e417380e5a"
+content-hash = "454e9817cdd0a0f3da6bfd0daef8b9b35c759fcaeb67e6f25fd7240481819aee"
