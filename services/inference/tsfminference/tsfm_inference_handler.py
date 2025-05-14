@@ -14,11 +14,13 @@ from tsfm_public import TimeSeriesForecastingPipeline
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor, extend_time_series
 from tsfm_public.toolkit.util import select_by_index
 
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
 from .tsfm_config import TSFMConfig
 from .tsfm_util import load_config, load_model, register_config
 
 
+LOCAL_FILES_ONLY = not TSFM_ALLOW_LOAD_FROM_HF_HUB
 LOGGER = logging.getLogger(__file__)
 
 
@@ -115,7 +117,7 @@ class TSFMForecastingInferenceHandler:
 
         # load preprocessor
         try:
-            preprocessor = TimeSeriesPreprocessor.from_pretrained(self.model_path)
+            preprocessor = TimeSeriesPreprocessor.from_pretrained(self.model_path, local_files_only=LOCAL_FILES_ONLY)
             LOGGER.info("Successfully loaded preprocessor")
         except OSError:
             preprocessor = None
