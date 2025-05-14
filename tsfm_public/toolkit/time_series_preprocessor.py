@@ -619,6 +619,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         if dataset is None or len(dataset) == 0:
             raise ValueError("Input dataset must not be null or zero length.")
 
+        if self.id_columns:
+            dtypes = dataset.dtypes
+            for id in self.id_columns:
+                if not (pd.api.types.is_string_dtype(dtypes[id]) or pd.api.types.is_integer_dtype(dtypes[id])):
+                    raise ValueError(f"Data for identifier column {id} must be a string or integer type.")
+
     def _set_targets(self, dataset: pd.DataFrame) -> None:
         if self.target_columns == []:
             skip_columns = copy.copy(self.id_columns) + [INTERNAL_ID_COLUMN]
