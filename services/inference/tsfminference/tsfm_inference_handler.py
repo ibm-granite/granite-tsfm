@@ -12,11 +12,11 @@ import torch
 
 from tsfm_public import TimeSeriesForecastingPipeline
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor, extend_time_series
+from tsfm_public.toolkit.tsfm_config import TSFMConfig
 from tsfm_public.toolkit.util import select_by_index
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
-from .tsfm_config import TSFMConfig
 from .tsfm_util import load_config, load_model, register_config
 
 
