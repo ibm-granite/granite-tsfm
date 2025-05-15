@@ -36,5 +36,4 @@ jobs:
         make quality
     - name: Test with pytest
       run: |
-        python -c"import tsfm_public; print(tsfm_public.__file__)"
         pytest --cov=tsfm_public --cov-report term-missing tests
