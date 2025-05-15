@@ -9,7 +9,7 @@ import pytest
 import requests
 
 from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
-from tsfm_public.toolkit.util import select_by_index
+from tsfm_public.toolkit.util import encode_data, select_by_index
 
 
 model_param_map = {
@@ -22,6 +22,8 @@ model_param_map = {
     "ttm-1536-96-r2": {"context_length": 1536, "prediction_length": 96},
     "ibm/test-patchtst": {"context_length": 512, "prediction_length": 96},
     "ibm/test-patchtsmixer": {"context_length": 512, "prediction_length": 96},
+    "ttm-r2-etth-finetuned-impute": {"context_length": 512, "prediction_length": 96},
+    "ttm-r2-no-tsfm-config": {"context_length": 512, "prediction_length": 96},
 }
 
 
@@ -90,15 +92,49 @@ def get_inference_response(
         return req
 
 
-def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
-    if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
-        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
-    data_payload = df.to_dict(orient="list")
-    return data_payload
+@pytest.mark.parametrize(
+    "ts_data",
+    ["ttm-r2-no-tsfm-config"],
+    indirect=True,
+)
+def test_forecast_inference_no_config(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+    context_length = params["context_length"]
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    # test single
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            # "prediction_length": params["prediction_length"],
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, counts = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
 
 
 @pytest.mark.parametrize(
-    "ts_data", ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"], indirect=True
+    "ts_data",
+    ["ttm-r1", "ttm-1024-96-r1", "ttm-r2", "ttm-1024-96-r2", "ttm-1536-96-r2"],
+    indirect=True,
 )
 def test_zero_shot_forecast_inference(ts_data):
     test_data, params = ts_data
@@ -462,6 +498,58 @@ def test_future_data_forecast_inference(ts_data):
         * num_ids
     )
     assert counts["output_data_points"] == prediction_length * 1 * num_ids
+
+
+@pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-impute"], indirect=True)
+def test_forecast_inference_with_impute(ts_data):
+    test_data, params = ts_data
+
+    prediction_length = params["prediction_length"]
+    model_id = params["model_id"]
+    model_id_path: str = model_id
+
+    id_columns = params["id_columns"]
+
+    # test single series, longer future data
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    num_ids = 1
+
+    target_columns = ["OT"]
+    mask = np.random.rand(len(test_data_)) < 0.1
+    test_data_.loc[mask, target_columns[0]] = np.nan
+
+    future_data = extend_time_series(
+        select_by_index(test_data_, id_columns=params["id_columns"], start_index=-1),
+        timestamp_column=params["timestamp_column"],
+        grouping_columns=params["id_columns"],
+        total_periods=20,
+        freq="1h",
+    )
+    future_data = future_data.fillna(0)
+
+    prediction_length = 20
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": prediction_length,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": target_columns,
+            "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+            "freq": "1h",
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": encode_data(future_data, params["timestamp_column"]),
+    }
+
+    df_out, counts = get_inference_response(msg)
+
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length * num_ids
 
 
 @pytest.mark.parametrize(

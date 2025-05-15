@@ -2,14 +2,14 @@
 NUM_TIMESERIES=("1000" "500" "250" "125" "60" "30" "15" "10" "5" "1")
 NUM_TIMESERIES=("15" "10" "5" "1")
 NUM_TARGETS=("100" "90" "80" "70" "60" "50" "40" "30" "20" "10")
-#NUM_TIMESERIES=("1")
-#NUM_TARGETS=("10")
+NUM_TIMESERIES=("50")
+NUM_TARGETS=("1")
 
 RUN_TIME=300
-PROCESSES=1
-SPAWN_RATE=1.0
-USERS=1
-ONLY_SUMMARY="--only-summary"
+PROCESSES=5
+SPAWN_RATE=10
+USERS=25
+#ONLY_SUMMARY="--only-summary"
 
 for NTS in "${NUM_TIMESERIES[@]}"; do
     echo "******NUM_TIMESERIES=$NTS******"
@@ -26,7 +26,7 @@ for NTS in "${NUM_TIMESERIES[@]}"; do
         oc exec $TSFM_POD -c rest-client  -- bash -c \
         "NUM_TIMESERIES=$NTS NUM_TARGETS=$NTARGETS locust \
         -f /local-storage/tests/locust/locustfile.py \
-        --config /local-storage/tests/locust/locust.ris3.inference.forecast.conf \
+        --config /local-storage/tests/locust/locust.conf \
         -t $RUN_TIME \
         --headless \
         --users $USERS \

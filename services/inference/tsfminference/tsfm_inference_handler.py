@@ -2,6 +2,8 @@
 
 import copy
 import logging
+import tempfile
+from functools import cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
@@ -67,6 +69,18 @@ class TSFMForecastingInferenceHandler:
             Dict[str, Any]: Dictionary of additional arguments that are used later as keyword arguments to the config.
         """
         return {"num_input_channels": preprocessor.num_input_channels}
+
+    @classmethod
+    @cache
+    def _cached_load_model(cls, model_path, config: str, module_path, config_class):
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=True) as tmp:
+            tmp.write(config)
+            tmp.flush()
+            return load_model(
+                model_path=model_path,
+                config=config_class.from_json_file(tmp.name),
+                module_path=module_path,
+            )
 
     def prepare(
         self,
@@ -180,10 +194,11 @@ class TSFMForecastingInferenceHandler:
         LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
         model_config = load_config(self.model_path, **model_config_kwargs)
 
-        model = load_model(
+        model = TSFMForecastingInferenceHandler._cached_load_model(
             self.model_path,
-            config=model_config,
+            config=model_config.to_json_string(),
             module_path=self.handler_config.module_path,
+            config_class=model_config.__class__,
         )
 
         self.config = model_config
@@ -283,6 +298,8 @@ class TSFMForecastingInferenceHandler:
         LOGGER.info(f"Using inference batch size: {batch_size}")
 
         device = "cpu" if not torch.cuda.is_available() else "cuda"
+
+        extra_pipeline_args = getattr(self.handler_config, "extra_pipeline_arguments", {})
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
             explode_forecasts=True,
@@ -291,6 +308,7 @@ class TSFMForecastingInferenceHandler:
             freq=self.preprocessor.freq,
             device=device,
             batch_size=1000,
+            **extra_pipeline_args,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
 

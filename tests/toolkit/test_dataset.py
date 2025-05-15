@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, default_collate
 from tsfm_public.toolkit.dataset import (
     ClassificationDFDataset,
     ForecastDFDataset,
+    ImputeForecastDFDataset,
     PretrainDFDataset,
     RegressionDFDataset,
     ts_padding,
@@ -345,6 +346,65 @@ def test_forecasting_observed_mask(ts_data_with_categorical):
     ds[4]["future_values"][1, 1] == fill_value
 
 
+def test_forecasting_imputation(ts_data_with_categorical):
+    prediction_length = 2
+    context_length = 5
+    fill_value = 0.1
+    target_columns = ["value2", "value3"]
+
+    df = ts_data_with_categorical.copy()
+    df.loc[1, "value3"] = np.nan
+    df.loc[0, "value2"] = np.nan
+
+    # linear
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method="linear",
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    np.testing.assert_allclose(past_values[1, 1], (past_values[0, 1] + past_values[2, 1]) / 2)
+    np.testing.assert_allclose(past_values[0, 0], past_values[1, 0])
+
+    # forward fill
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method="forward_fill",
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    np.testing.assert_allclose(past_values[1, 1], past_values[0, 1])
+    np.testing.assert_allclose(past_values[0, 0], fill_value)
+
+    # straight fill
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method=None,
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    np.testing.assert_allclose(past_values[1, 1], fill_value)
+    np.testing.assert_allclose(past_values[0, 0], fill_value)
+
+
 def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
     prediction_length = 2
     target_columns = ["value1"]
@@ -480,3 +540,149 @@ def test_metadata(ts_data):
     assert ds[0]["metadata"][0][1] == "B"
 
     assert len(ds[0]["metadata"]) == ds.context_length + ds.prediction_length
+
+
+def test_imputation_forecasting_observed_masks(ts_data_with_categorical):
+    prediction_length = 2
+    context_length = 5
+    fill_value = 0.0
+    target_columns = ["value2", "value3"]
+
+    df = ts_data_with_categorical.copy()
+    df.loc[10, "value3"] = np.nan
+
+    # check no missing by default
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+    )
+
+    assert np.all(ds[0]["artificial_past_observed_mask"].numpy())
+
+    # check that the missing rate is respected
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.9,
+    )
+
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.1, atol=0.01)
+
+    # check reproducibility
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=42,
+    )
+
+    apom_1 = ds[0]["artificial_past_observed_mask"].numpy()
+
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=42,
+    )
+
+    apom_2 = ds[0]["artificial_past_observed_mask"].numpy()
+
+    np.testing.assert_allclose(apom_1, apom_2)
+
+    # ensure seed is respected
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        random_seed=41,
+    )
+
+    apom_3 = ds[0]["artificial_past_observed_mask"].numpy()
+    assert np.any(np.logical_xor(apom_2, apom_3))
+
+    # check missing column argument
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        artificial_missing_columns=["value3"],
+        random_seed=41,
+    )
+
+    np.testing.assert_allclose(np.mean([dsi["artificial_past_observed_mask"].numpy()[:, 0].mean() for dsi in ds]), 1)
+    np.testing.assert_allclose(ds.datasets[0]._artificial_past_observed_mask.mean(), 0.5, atol=0.02)
+
+    # check time t is missing
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0.5,
+        artificial_missing_columns=["value3"],
+        artificial_missing_at_time_t=True,
+        random_seed=41,
+    )
+
+    assert np.all(
+        [
+            dsi["artificial_past_observed_mask"].numpy()[-1, 1] == ~dsi["past_observed_mask"].numpy()[-1, 1]
+            for dsi in ds
+        ]
+    )
+
+    # check the mask specification
+    ds = ImputeForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        artificial_missing_rate=0,
+        masking_specification=[("value2", -2)],
+        artificial_missing_columns=["value3"],
+        artificial_missing_at_time_t=True,
+        random_seed=41,
+    )
+
+    # check that the mask is honored
+    assert np.all(~ds[5]["past_observed_mask"][-2:, 0].numpy())
+    assert np.all(ds[5]["past_observed_mask"][:-2, 0].numpy())
+
+    # mask should not be altered in the second column
+    assert np.all(ds[5]["past_observed_mask"][:, 1].numpy())
