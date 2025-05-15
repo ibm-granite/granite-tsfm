@@ -36,6 +36,5 @@ jobs:
         make quality
     - name: Test with pytest
       run: |
-        pwd
-        ls -lR *
-        pytest --cov=build/lib/tsfm_public --cov-report term-missing tests
+        ls -lR tsfm_public
+        pytest --cov=tsfm_public --cov-report term-missing tests
