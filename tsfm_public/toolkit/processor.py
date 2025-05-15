@@ -1,6 +1,9 @@
 # Copyright contributors to the TSFM project
 #
-"""Processor for time series data preparation, and pre/post-processing"""
+"""Processor for time series data preparation, and pre/post-processing
+
+Adapted from HF FeatureExtractionMixin, but allows customization of the serialized file name
+"""
 
 import json
 import logging
