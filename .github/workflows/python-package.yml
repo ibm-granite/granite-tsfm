@@ -29,7 +29,7 @@ jobs:
         python -m pip install --upgrade pip
         # python -m pip install flake8 pytest
         # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install ".[dev,testing]"
+        pip install -e ".[dev,testing]"
     - name: Ruff quality checks
       run: |
         # use hf-style check
@@ -37,4 +37,4 @@ jobs:
     - name: Test with pytest
       run: |
         python -c"import tsfm_public; print(tsfm_public.__file__)"
-        pytest --cov=/home/runner/work/granite-tsfm/granite-tsfm/tsfm_public --cov-report term-missing tests
+        pytest --cov=tsfm_public --cov-report term-missing tests
