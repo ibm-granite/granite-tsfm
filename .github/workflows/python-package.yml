@@ -38,4 +38,4 @@ jobs:
       run: |
         pwd
         ls -lR *
-        pytest --cov=tsfm_public --cov-report term-missing tests
+        pytest --cov=build/lib/tsfm_public --cov-report term-missing tests
