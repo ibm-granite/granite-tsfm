@@ -1,6 +1,6 @@
 # Copyright contributors to the TSFM project
 #
-"""Processor for time series data preparation, and pre/post-processing
+"""Base processor for time series data preparation, and pre/post-processing
 
 Adapted from HF FeatureExtractionMixin, but allows customization of the serialized file name
 """
@@ -28,7 +28,7 @@ from transformers.utils import (
 LOGGER = logging.getLogger(__file__)
 
 
-class TimeSeriesProcessor(FeatureExtractionMixin):
+class BaseProcessor(FeatureExtractionMixin):
     PROCESSOR_NAME = "processor_config.json"
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):

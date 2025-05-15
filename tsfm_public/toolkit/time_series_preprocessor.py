@@ -24,7 +24,7 @@ from transformers.feature_extraction_utils import (
 )
 
 from .dataset import ForecastDFDataset
-from .processor import TimeSeriesProcessor
+from .processor import BaseProcessor
 from .util import (
     FractionLocation,
     convert_to_univariate,
@@ -115,7 +115,7 @@ class ScalerType(enum.Enum):
     STANDARD = "standard"
 
 
-class TimeSeriesPreprocessor(TimeSeriesProcessor):
+class TimeSeriesPreprocessor(BaseProcessor):
     """A preprocessor for supporting time series modeling tasks"""
 
     PROCESSOR_NAME = "preprocessor_config.json"
