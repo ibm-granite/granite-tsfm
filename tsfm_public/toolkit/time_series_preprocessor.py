@@ -20,11 +20,11 @@ from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
 from torch.utils.data import Subset
 from transformers.feature_extraction_utils import (
-    FeatureExtractionMixin,
     PreTrainedFeatureExtractor,
 )
 
 from .dataset import ForecastDFDataset
+from .processor import BaseProcessor
 from .util import (
     FractionLocation,
     convert_to_univariate,
@@ -115,8 +115,10 @@ class ScalerType(enum.Enum):
     STANDARD = "standard"
 
 
-class TimeSeriesPreprocessor(FeatureExtractionMixin):
+class TimeSeriesPreprocessor(BaseProcessor):
     """A preprocessor for supporting time series modeling tasks"""
+
+    PROCESSOR_NAME = "preprocessor_config.json"
 
     def __init__(
         self,

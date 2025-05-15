@@ -369,8 +369,8 @@ def test_forecasting_imputation(ts_data_with_categorical):
     )
 
     past_values = ds[0]["past_values"].numpy()
-    assert past_values[1, 1] == (past_values[0, 1] + past_values[2, 1]) / 2
-    assert past_values[0, 0] == past_values[1, 0]
+    np.testing.assert_allclose(past_values[1, 1], (past_values[0, 1] + past_values[2, 1]) / 2)
+    np.testing.assert_allclose(past_values[0, 0], past_values[1, 0])
 
     # forward fill
     ds = ForecastDFDataset(
@@ -385,8 +385,8 @@ def test_forecasting_imputation(ts_data_with_categorical):
     )
 
     past_values = ds[0]["past_values"].numpy()
-    assert past_values[1, 1] == past_values[0, 1]
-    assert past_values[0, 0] == fill_value
+    np.testing.assert_allclose(past_values[1, 1], past_values[0, 1])
+    np.testing.assert_allclose(past_values[0, 0], fill_value)
 
     # straight fill
     ds = ForecastDFDataset(
@@ -401,8 +401,8 @@ def test_forecasting_imputation(ts_data_with_categorical):
     )
 
     past_values = ds[0]["past_values"].numpy()
-    assert past_values[1, 1] == fill_value
-    assert past_values[0, 0] == fill_value
+    np.testing.assert_allclose(past_values[1, 1], fill_value)
+    np.testing.assert_allclose(past_values[0, 0], fill_value)
 
 
 def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):
