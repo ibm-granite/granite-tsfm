@@ -4,5 +4,4 @@ dirutil.py
 errors.py
 inference_payloads.py
 service_handler.py
-tsfm_config.py
 tsfm_util.py

@@ -55,6 +55,9 @@ DEFAULT_FREQUENCY_MAPPING = {
     "W": 9,  # weekly
 }
 
+TYPE_TO_STRING = {int: "int", np.int64: "numpy.int64", str: "str", float: "float", np.float64: "numpy.float64"}
+STRING_TO_TYPE = {_v: _k for _k, _v in TYPE_TO_STRING.items()}
+
 
 class SKLearnFeatureExtractionBase:
     """Simple wrapper class to adapt Sklearn functions to work with the HF
@@ -271,6 +274,18 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         for k, v in output["target_scaler_dict"].items():
             output["target_scaler_dict"][k] = v.to_dict()
 
+        # get type information; assume homogeneous types
+        if self.scaling_id_columns and self.scaling:
+            akey = next(iter(self.target_scaler_dict.keys()))
+            if isinstance(akey, Tuple):
+                key_types = [type(k) for k in akey]
+            else:
+                key_types = [type(akey)]
+        else:
+            key_types = []
+
+        output["scaling_id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
+
         if self.categorical_encoder:
             output["categorical_encoder"] = output["categorical_encoder"].to_dict()
 
@@ -285,19 +300,35 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
         dictionary = self.to_dict()
 
+        def serialize_np_scalar(value):
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.floating):
+                return float(value)
+            return value
+
         def recursive_check_ndarray(dictionary):
+            key_map = {}
             for key, value in dictionary.items():
+                if isinstance(key, tuple):
+                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
+                    key_map[key] = new_key
+
                 if key == "dtype":
                     # to do: ensure deserializable
                     dictionary[key] = value.__name__
                 elif isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
-                elif isinstance(value, np.int64):
-                    dictionary[key] = int(value)
+                elif isinstance(value, (np.integer, np.floating)):
+                    dictionary[key] = serialize_np_scalar(value)
                 elif isinstance(value, list):
                     dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
+
+            for key, new_key in key_map.items():
+                dictionary[new_key] = dictionary.pop(key)
+
             return dictionary
 
         dictionary = recursive_check_ndarray(dictionary)
@@ -332,16 +363,31 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         scaler_type = feature_extractor_dict.get("scaler_type", None)
 
         scaler_class = cls._get_scaler_class(scaler_type)
+        id_types = feature_extractor_dict.get("scaling_id_columns_types", None)
+
+        def deserialize_key(key, key_types=None):
+            if not key_types:
+                return key
+
+            key = json.loads(key)
+            if isinstance(key, (Tuple, List)):
+                return tuple([STRING_TO_TYPE[k_type](k_item) for k_item, k_type in zip(key, key_types)])
+            else:
+                return STRING_TO_TYPE[key_types[0]](key)
 
         scaler_params = feature_extractor_dict.get("scaler_dict", None)
         if scaler_params is not None:
+            scaler_params_copy = {}
             for k, v in scaler_params.items():
-                scaler_params[k] = scaler_class.from_dict(v)
+                scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
+            feature_extractor_dict["scaler_dict"] = scaler_params_copy
 
         target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
         if target_scaler_params is not None:
+            target_scaler_params_copy = {}
             for k, v in target_scaler_params.items():
-                target_scaler_params[k] = scaler_class.from_dict(v)
+                target_scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
+            feature_extractor_dict["target_scaler_dict"] = target_scaler_params_copy
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -575,6 +621,12 @@ class TimeSeriesPreprocessor(FeatureExtractionMixin):
         """
         if dataset is None or len(dataset) == 0:
             raise ValueError("Input dataset must not be null or zero length.")
+
+        if self.id_columns:
+            dtypes = dataset.dtypes
+            for id in self.id_columns:
+                if not (pd.api.types.is_string_dtype(dtypes[id]) or pd.api.types.is_integer_dtype(dtypes[id])):
+                    raise ValueError(f"Data for identifier column {id} must be a string or integer type.")
 
     def _set_targets(self, dataset: pd.DataFrame) -> None:
         if self.target_columns == []:

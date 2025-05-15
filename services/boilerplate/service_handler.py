@@ -8,11 +8,12 @@ from typing import Optional, Tuple, Union
 
 import pandas as pd
 
+from tsfm_public.toolkit.tsfm_config import TSFMConfig
+
 from .inference_payloads import (
     BaseMetadataInput,
     BaseParameters,
 )
-from .tsfm_config import TSFMConfig
 
 
 LOGGER = logging.getLogger(__file__)
