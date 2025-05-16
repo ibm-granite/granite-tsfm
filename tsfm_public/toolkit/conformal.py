@@ -432,30 +432,35 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             len(y_test_pred.shape) == 3
         ), " y_test_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
 
+        
+        
         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
-        ix_q = 0
-        for q in quantiles:
-            if self.model.nonconformity_score in [
-                NonconformityScores.ABSOLUTE_ERROR.value,
-                NonconformityScores.ERROR.value,
-            ]:
-                if q < 0.5:
-                    q_pi_error_rate = q * 2
-                    output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                    y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_low"]
-                elif q > 0.5:
-                    q_pi_error_rate = (1 - q) * 2
-                    output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                    y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-                else:
-                    if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
-                        q_pi_error_rate = 0.5
+        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+            ix_q = 0
+            for q in quantiles:
+                if self.model.nonconformity_score in [
+                    NonconformityScores.ABSOLUTE_ERROR.value,
+                    NonconformityScores.ERROR.value,
+                ]:
+                    if q < 0.5:
+                        q_pi_error_rate = q * 2
+                        output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
+                        y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_low"]
+                    elif q > 0.5:
+                        q_pi_error_rate = (1 - q) * 2
                         output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
                         y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
                     else:
-                        y_test_prob_pred[..., ix_q] = y_test_pred
+                        if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
+                            q_pi_error_rate = 0.5
+                            output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
+                            y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
+                        else:
+                            y_test_prob_pred[..., ix_q] = y_test_pred
 
-            ix_q += 1
+                ix_q += 1
+        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+            y_test_prob_pred = self.model.predict(y_test_pred)
 
         return y_test_prob_pred
 
@@ -523,10 +528,6 @@ def nonconformity_score_functions(
     Returns:
         np.ndarray: Computed nonconformity scores.
     """
-
-    assert (
-        nonconformity_score in [s.value for s in NonconformityScores]
-    ), "Selected nonconformity score is not supported, choose from {}".format(
     assert nonconformity_score in [
         s.value for s in NonconformityScores
     ], "Selected nonconformity score is not supported, choose from {}".format(
