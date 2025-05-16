@@ -77,9 +77,17 @@ def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
     # expected length
     assert len(results) == FORECAST_LENGTH * NUM_TIMESERIES
     # expected start time
-    assert results["date"].iloc[0] - df["date"].iloc[-1] == timedelta(hours=1)
+    answer = results["date"].iloc[0] - df["date"].iloc[-1]
+    assert (
+        answer == timedelta(hours=1) if isinstance(answer, timedelta) else answer == timedelta(hours=1).total_seconds()
+    )
     # expected end time
-    assert results["date"].iloc[-1] - df["date"].iloc[-1] == timedelta(hours=FORECAST_LENGTH)
+    answer = results["date"].iloc[-1] - df["date"].iloc[-1]
+    assert (
+        answer == timedelta(hours=FORECAST_LENGTH)
+        if isinstance(answer, timedelta)
+        else answer == timedelta(hours=FORECAST_LENGTH).total_seconds()
+    )
 
 
 def test_forecast_with_decimal_freq(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
@@ -87,6 +95,18 @@ def test_forecast_with_decimal_freq(ts_data_base: pd.DataFrame, forecasting_inpu
     input: ForecastingInferenceInput = copy.deepcopy(input)
     input.schema.freq = "3600.0s"  # 1-hr
     df = copy.deepcopy(ts_data_base)
+    input.data = df.to_dict(orient="list")
+    runtime: InferenceRuntime = InferenceRuntime()
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    _basic_result_checks(results, df)
+
+    # without a period specifier
+    input: ForecastingInferenceInput = forecasting_input_base
+    input: ForecastingInferenceInput = copy.deepcopy(input)
+    input.schema.freq = "3600.0"  # 1-hr
+    df = copy.deepcopy(ts_data_base)
+    df["date"] = df["date"].values.astype("int64") // 10**9
     input.data = df.to_dict(orient="list")
     runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
