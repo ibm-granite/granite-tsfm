@@ -39,6 +39,26 @@ def ts_data():
 
 
 @pytest.fixture(scope="module")
+def ts_data_nested():
+    series_length = 20
+    series_set_1 = [pd.Series(np.arange(series_length) / (i + 1)) for i in range(15)]
+
+    series_set_2 = [np.sin(s) for s in series_set_1]
+
+    df = pd.DataFrame(
+        {
+            "time_int": range(15),
+            "id": ["A", "B", "C"] * 5,
+            "val": series_set_1,
+            "val2": series_set_2,
+            "label": [s.iloc[-1] > 0.5 for s in series_set_2],
+        }
+    )
+    df["time_date"] = df["time_int"] * timedelta(days=1) + datetime(2020, 1, 1)
+    return df
+
+
+@pytest.fixture(scope="module")
 def ts_data_with_categorical():
     return pd.DataFrame(
         {
@@ -439,6 +459,7 @@ def test_clasification_df_dataset(ts_data):
         label_column=["label"],
         id_columns=["id", "id2"],
         context_length=4,
+        full_series=False,
     )
 
     # check length
@@ -471,9 +492,28 @@ def test_clasification_df_dataset(ts_data):
         id_columns=["id", "id2"],
         context_length=4,
         enable_padding=False,
+        full_series=False,
     )
 
     assert len(ds) == 7
+
+
+def test_classification_dataset_full_series(ts_data_nested):
+    data = ts_data_nested.copy()
+
+    ds = ClassificationDFDataset(
+        data,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column=["label"],
+        id_columns=[
+            "id",
+        ],
+        context_length=32,
+    )
+
+    assert len(ds.datasets) == 3
+    assert ds[0]["past_values"].numpy().shape == (32, 2)
 
 
 def test_datetime_handling(ts_data):
