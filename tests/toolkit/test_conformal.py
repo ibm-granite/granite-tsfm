@@ -43,45 +43,50 @@ def test_posthoc_probabilistic_processor():
     y_test_gt = y_gt[-10:]
 
     for method in ['gaussian','conformal']:
-        print(method)
-        p = PostHocProbabilisticProcessor(
-            window_size=window_size,
-            quantiles=quantiles,
-            nonconformity_score=nonconformity_score,
-            method=method
-            )
-        p.train(y_cal_gt=y_cal_gt,y_cal_pred=y_cal_pred)
-        y_test_prob_pred = p.predict(y_test_pred)
-        # print(y_test_prob_pred)
-
-
-        ### ASSERTIONS ###
-
-        ## Attributes checked correctly
-        assert p.method == method, ' method attribute wasnt assigned properly'
-        assert p.window_size == window_size, ' window_size attribute wasnt assigned properly'
-        assert p.quantiles == quantiles, ' quantiles attribute wasnt assigned properly'
-        assert p.nonconformity_score == nonconformity_score, ' nonconformity_score attribute wasnt assigned properly'
-
-        assert p.model.window_size == window_size, ' window_size attribute of processors model wasnt assigned properly'
-
-        ## Check based on method
-        if method == 'gaussian':
-            assert isinstance(p.model, PostHocGaussian), "model is not an instance of PostHocGaussian"
-
+        
         if method == 'conformal':
-            assert isinstance(p.model, WeightedConformalForecasterWrapper), "model is not an instance of WeightedConformalForecasterWrapper"
+            nonconformity_score_list = ['absolute_error', 'error']
+        else:
+            nonconformity_score_list = ['absolute_error']
+        for nonconformity_score in nonconformity_score_list:
+            # print(method,nonconformity_score )
+            p = PostHocProbabilisticProcessor(
+                window_size=window_size,
+                quantiles=quantiles,
+                nonconformity_score=nonconformity_score,
+                method=method
+                )
+            p.train(y_cal_gt=y_cal_gt,y_cal_pred=y_cal_pred)
+            y_test_prob_pred = p.predict(y_test_pred)
+            # print(y_test_prob_pred)
 
-        ## Prediction Output check
-        assert isinstance(y_test_prob_pred, np.ndarray), "Unexpected output type from predict(), it should be np array"
-        assert y_test_prob_pred.shape == (
-            y_test_pred.shape[0], forecast_horizon, n_features, len(quantiles)
-        ), "Unexpected output shape from predict()"
 
-        # Monotonicity check across quantiles
-        assert np.all(y_test_prob_pred[..., 0] <= y_test_prob_pred[..., 1]), "Quantile 0.1 is not <= 0.5"
-        assert np.all(y_test_prob_pred[..., 1] <= y_test_prob_pred[..., 2]), "Quantile 0.5 is not <= 0.9"
+            ### ASSERTIONS ###
 
+            ## Attributes checked correctly
+            assert p.method == method, ' method attribute wasnt assigned properly for method {} nonconformity score {}'.format(method,nonconformity_score)
+            assert p.window_size == window_size, ' window_size attribute wasnt assigned properly for method {} nonconformity score {}'.format(method,nonconformity_score)
+            assert p.quantiles == quantiles, ' quantiles attribute wasnt assigned properly for method {} nonconformity score {}'.format(method,nonconformity_score)
+            assert p.nonconformity_score == nonconformity_score, ' nonconformity_score attribute wasnt assigned properly for method {} nonconformity score {}'.format(method,nonconformity_score)
+
+            assert p.model.window_size == window_size, ' window_size attribute of processors model wasnt assigned properly for method {} nonconformity score {}'.format(method,nonconformity_score)
+
+            ## Check based on method
+            if method == 'gaussian':
+                assert isinstance(p.model, PostHocGaussian), "model is not an instance of PostHocGaussian for method {} nonconformity score {}".format(method,nonconformity_score)
+
+            if method == 'conformal':
+                assert isinstance(p.model, WeightedConformalForecasterWrapper), "model is not an instance of WeightedConformalForecasterWrapper for method {} nonconformity score {}".format(method,nonconformity_score)
+
+            ## Prediction Output check
+            assert isinstance(y_test_prob_pred, np.ndarray), "Unexpected output type from predict(), it should be np array for method {} nonconformity score {}".format(method,nonconformity_score)
+            assert y_test_prob_pred.shape == (
+                y_test_pred.shape[0], forecast_horizon, n_features, len(quantiles)
+            ), "Unexpected output shape from predict() for method {} nonconformity score {}".format(method,nonconformity_score)
+
+            # Monotonicity check across quantiles
+            assert np.all(y_test_prob_pred[..., 0] <= y_test_prob_pred[..., 1]), "Quantile 0.1 is not <= 0.5 for method {} nonconformity score {}".format(method,nonconformity_score)
+            assert np.all(y_test_prob_pred[..., 1] <= y_test_prob_pred[..., 2]), "Quantile 0.5 is not <= 0.9 for method {} nonconformity score {}".format(method,nonconformity_score)
 
 
 # if __name__ == '__main__':
