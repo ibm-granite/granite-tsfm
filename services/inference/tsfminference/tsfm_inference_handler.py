@@ -2,6 +2,8 @@
 
 import copy
 import logging
+import tempfile
+from functools import cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
@@ -10,13 +12,15 @@ import torch
 
 from tsfm_public import TimeSeriesForecastingPipeline
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor, extend_time_series
+from tsfm_public.toolkit.tsfm_config import TSFMConfig
 from tsfm_public.toolkit.util import select_by_index
 
+from . import TSFM_ALLOW_LOAD_FROM_HF_HUB
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
-from .tsfm_config import TSFMConfig
 from .tsfm_util import load_config, load_model, register_config
 
 
+LOCAL_FILES_ONLY = not TSFM_ALLOW_LOAD_FROM_HF_HUB
 LOGGER = logging.getLogger(__file__)
 
 
@@ -68,6 +72,18 @@ class TSFMForecastingInferenceHandler:
         """
         return {"num_input_channels": preprocessor.num_input_channels}
 
+    @classmethod
+    @cache
+    def _cached_load_model(cls, model_path, config: str, module_path, config_class):
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=True) as tmp:
+            tmp.write(config)
+            tmp.flush()
+            return load_model(
+                model_path=model_path,
+                config=config_class.from_json_file(tmp.name),
+                module_path=module_path,
+            )
+
     def prepare(
         self,
         data: pd.DataFrame,
@@ -101,7 +117,7 @@ class TSFMForecastingInferenceHandler:
 
         # load preprocessor
         try:
-            preprocessor = TimeSeriesPreprocessor.from_pretrained(self.model_path)
+            preprocessor = TimeSeriesPreprocessor.from_pretrained(self.model_path, local_files_only=LOCAL_FILES_ONLY)
             LOGGER.info("Successfully loaded preprocessor")
         except OSError:
             preprocessor = None
@@ -180,10 +196,11 @@ class TSFMForecastingInferenceHandler:
         LOGGER.info(f"model_config_kwargs: {model_config_kwargs}")
         model_config = load_config(self.model_path, **model_config_kwargs)
 
-        model = load_model(
+        model = TSFMForecastingInferenceHandler._cached_load_model(
             self.model_path,
-            config=model_config,
+            config=model_config.to_json_string(),
             module_path=self.handler_config.module_path,
+            config_class=model_config.__class__,
         )
 
         self.config = model_config

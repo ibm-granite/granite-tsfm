@@ -76,7 +76,7 @@ spec:
               name: local-storage
           env:
             - name: TSFM_ALLOW_LOAD_FROM_HF_HUB
-              value: "1"
+              value: "0"
             - name: CUDA_VISIBLE_DEVICES
               value: ""
             - name: TSFM_MODEL_DIR

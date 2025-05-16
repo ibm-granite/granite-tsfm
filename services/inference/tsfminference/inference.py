@@ -10,10 +10,10 @@ from typing import Any, Dict, List
 import pandas as pd
 import psutil
 from fastapi import APIRouter, HTTPException
-from prometheus_client import Summary
 from starlette import status
 
 from tsfm_public.toolkit.util import select_by_index
+from tsfminference import TSFM_HISTOGRAM
 
 from . import TSFM_ALLOW_LOAD_FROM_HF_HUB, TSFM_MODEL_DIR
 from .constants import API_VERSION
@@ -24,11 +24,11 @@ from .inference_handler import InferenceHandler
 from .inference_payloads import ForecastingInferenceInput, ForecastingMetadataInput, PredictOutput
 
 
-LOGGER = logging.getLogger(__file__)
+FORECAST_PROMETHEUS_TIME_SPENT = TSFM_HISTOGRAM("forecast_time_spent", "Wall clock time histogram.")
+FORECAST_PROMETHEUS_CPU_USED = TSFM_HISTOGRAM("forecast_cpu_user", "CPU user time histogram.")
+FORECAST_PROMETHEUS_MEMORY_USED = TSFM_HISTOGRAM("forecast_memory_used", "memory used histogram.")
 
-FORECAST_PROMETHEUS_TIME_SPENT = Summary("forecast_time_spent", "Wall clock time.")
-FORECAST_PROMETHEUS_CPU_USED = Summary("forecast_cpu_user", "CPU user time.")
-FORECAST_PROMETHEUS_MEMORY_USED = Summary("forecast_memory_used_GB", "Memory in use.")
+LOGGER = logging.getLogger(__file__)
 
 
 class InferenceRuntime:
