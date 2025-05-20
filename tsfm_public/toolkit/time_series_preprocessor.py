@@ -13,7 +13,6 @@ from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from datasets import Dataset
-from deprecated import deprecated
 from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import LabelEncoder as LabelEncoder_
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
@@ -895,55 +894,6 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
 
         self._clean_up_dataframe(df)
         return df
-
-    @deprecated(version="0.1.1", reason="Please use the standalone function `get_datasets()`.")
-    def get_datasets(
-        self,
-        dataset: Union[Dataset, pd.DataFrame],
-        split_config: Dict[str, Union[List[Union[int, float]], float]],
-        fewshot_fraction: Optional[float] = None,
-        fewshot_location: str = FractionLocation.LAST.value,
-        use_frequency_token: bool = False,
-    ) -> Tuple[Any]:
-        """Creates the preprocessed pytorch datasets needed for training and evaluation
-        using the HuggingFace trainer
-
-        Args:
-            dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
-                split_config (Dict[str, Union[List[Union[int, float]], float]]): Dictionary of dictionaries containing
-                split parameters. Two configurations are possible:
-                1. Specify train/valid/test indices or relative fractions
-                    {
-                        train: [0, 50],
-                        valid: [50, 70],
-                        test:  [70, 100]
-                    }
-                end value is not inclusive
-                2. Specify train/test fractions:
-                    {
-                        train: 0.7
-                        test: 0.2
-                    }
-                    A valid split should not be specified directly; the above implies valid = 0.1
-
-            fewshot_fraction (float, optional): When non-null, return this percent of the original training
-                dataset. This is done to support fewshot fine-tuning.
-            fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
-                as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
-                of the training dataset (i.e., "last").
-
-        Returns:
-            Tuple of pytorch datasets, including: train, validation, test.
-        """
-
-        return get_datasets(
-            self,
-            dataset,
-            split_config=split_config,
-            fewshot_fraction=fewshot_fraction,
-            fewshot_location=fewshot_location,
-            use_frequency_token=use_frequency_token,
-        )
 
 
 def prepare_data_splits(
