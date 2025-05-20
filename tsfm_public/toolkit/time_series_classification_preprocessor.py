@@ -343,17 +343,21 @@ def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     series_lengths = df[columns[0]].apply(len).to_list()
     unnested = [[f"{i}"] * series_lengths[i] for i in range(len(df))]
     # flatten
-    unnested = [list(itertools.chain.from_iterable(unnested))]
+    unnested = [np.asarray(list(itertools.chain.from_iterable(unnested)))]
 
     for c in columns:
         unnested.append(np.concatenate([d.values for d in df[c].to_list()]))
 
     unnested = pd.DataFrame(
-        np.asarray(unnested).T,
-        columns=[
-            NESTED_ID_COLUMN,
-        ]
-        + columns,
+        dict(
+            zip(
+                [
+                    NESTED_ID_COLUMN,
+                ]
+                + columns,
+                unnested,
+            )
+        ),
     )
     return unnested
 
