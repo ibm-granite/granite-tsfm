@@ -315,10 +315,25 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
                 id_columns = INTERNAL_ID_COLUMN
 
             df_out = df.groupby(id_columns, group_keys=False)[df.columns].apply(
-                scale_func, id_columns=id_columns, nested=self.is_nested
+                scale_func, id_columns=id_columns, nested=self._is_nested
             )
             df = df_out
 
+        self._clean_up_dataframe(df)
+        return df
+
+    def inverse_transform_labels(self, dataset: pd.DataFrame) -> pd.DataFrame:
+        """Inverse transform the labels back to their original values.
+
+        Args:
+            dataset (pd.DataFrame): The input dataframe.
+
+        Returns:
+            pd.DataFrame: Dataframe with original values in the label_column
+        """
+        self._check_dataset(dataset)
+        df = self._standardize_dataframe(dataset)
+        df[self.label_column] = self.label_encoder.inverse_transform(df[self.label_column])
         self._clean_up_dataframe(df)
         return df
 
