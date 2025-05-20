@@ -1334,3 +1334,15 @@ def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
         data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
 
     return data_payload
+
+
+def is_nested_dataframe(df: pd.DataFrame, column: str) -> bool:
+    """Checks if a dataframe contains cell entries which are series.
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        column (str): A column to check in the input dataframe.
+    Returns:
+        bool: True if the column contains pandas series, False otherwise.
+    """
+    return isinstance(df.iloc[0][column], pd.Series)

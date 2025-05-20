@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .util import join_list_without_repeat
+from .util import is_nested_dataframe, join_list_without_repeat
 
 
 LOGGER = logging.getLogger(__file__)
@@ -1129,7 +1129,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         full_series: bool = True,
     ):
         if full_series:
-            if not isinstance(data.iloc[0][input_columns[0]], pd.Series):
+            if not is_nested_dataframe(data, column=input_columns[0]):
                 raise ValueError(
                     "The provided data does not appear to contain row entries which contain a full time series."
                 )

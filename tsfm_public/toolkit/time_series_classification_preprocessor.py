@@ -14,7 +14,7 @@ from .time_series_preprocessor import (
     TimeSeriesProcessorBase,
     TimeSeriesTask,
 )
-from .util import join_list_without_repeat
+from .util import is_nested_dataframe, join_list_without_repeat
 
 
 NESTED_ID_COLUMN = "__nested_series_id"
@@ -336,10 +336,6 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         df[self.label_column] = self.label_encoder.inverse_transform(df[self.label_column])
         self._clean_up_dataframe(df)
         return df
-
-
-def is_nested_dataframe(df: pd.DataFrame, column: str) -> bool:
-    return isinstance(df.iloc[0][column], pd.Series)
 
 
 def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
