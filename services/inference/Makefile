@@ -88,7 +88,7 @@ update_examples:
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
-profile_inference:
+profile_inference: delete_models clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
 	TSFM_PROFILE_NUM_TIMESERIES=10000 \
 	python -m cProfile -o profile.out -s cumtime \
