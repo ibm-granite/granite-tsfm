@@ -63,7 +63,7 @@ spec:
             - |
               gunicorn \
               --max-requests 250 \
-              -w 2 \
+              -w 8 \
               -k uvicorn.workers.UvicornWorker \
               --bind 0.0.0.0:8000 \
               --timeout 1200 \
@@ -109,12 +109,12 @@ spec:
           resources:
             requests:
               # nvidia.com/gpu: 0
-              cpu: 2000m
-              memory: 8Gi
+              cpu: 8000m
+              memory: 32Gi
             limits:
               # nvidia.com/gpu: 0
-              cpu: 2000m
-              memory: 8Gi
+              cpu: 8000m
+              memory: 32Gi
           # Alpine Sidecar with Init Command
         - name: rest-client
           image: us.icr.io/fctkstus/tsfminference-cpu:latest

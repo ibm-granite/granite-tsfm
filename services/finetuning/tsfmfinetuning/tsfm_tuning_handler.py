@@ -19,12 +19,12 @@ from transformers import (
 from tsfm_public import ForecastDFDataset
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
+from tsfm_public.toolkit.tsfm_config import TSFMConfig
 from tsfm_public.toolkit.util import FractionLocation, select_by_fixed_fraction
 
 from .filelogging_tracker import FileLoggingCallback
 from .ftpayloads import TuneTypeEnum
 from .inference_payloads import ForecastingMetadataInput, ForecastingParameters
-from .tsfm_config import TSFMConfig
 from .tsfm_util import load_config, load_model, register_config
 
 
