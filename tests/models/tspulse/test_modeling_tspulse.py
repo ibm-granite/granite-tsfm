@@ -4,37 +4,20 @@
 """Testing suite for the PyTorch TSPulse model."""
 
 import itertools
-
-# import torchinfo
+import math
 import unittest
 
 import numpy as np
 import torch
 from parameterized import parameterized
+from torch.utils.data import DataLoader, Dataset
 
 from tsfm_public.models.tspulse import (
     TSPulseConfig,
-    TSPulseForClassificationOrRegression,
+    TSPulseForClassification,
     TSPulseForReconstruction,
 )
-
-
-# from tsfm.models.tspulse.modeling_tspulse import TSPulseFFTMasker, TSPulseMasking
-
-
-# # Local
-# from ...test_configuration_common import ConfigTester
-# from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-# from ...test_pipeline_mixin import PipelineTesterMixin
-
-
-# # from transformers.tests.test_configuration_common import ConfigTester
-# from transformers.tests.test_modeling_common import (
-#     ModelTesterMixin,
-#     floats_tensor,
-#     ids_tensor,
-# )
-# # from transformers.tests.test_pipeline_mixin import PipelineTesterMixin
+from tsfm_public.models.tspulse.utils.helpers import PatchMaskingDatasetWrapper, patchwise_stitched_reconstruction
 
 
 TOLERANCE = 1e-4
@@ -99,10 +82,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             fft_applied_on="scaled_ts",
         )
 
-        # cls.params["patch_stride"] = int(cls.params["stride_ratio"] * cls.params["patch_length"])
-        # cls.params["d_model"] = int(cls.params["d_model_scale"] * cls.params["patch_length"])
-        # cls.params["decoder_d_model"] = int(cls.params["decoder_d_model_scale"] * cls.params["patch_length"])
-
         cls.num_patches = (
             max(cls.params["context_length"], cls.params["patch_length"]) - cls.params["patch_length"]
         ) // cls.params["patch_stride"] + 1
@@ -137,9 +116,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             cls.num_patches,
             cls.params["d_model"],
         )
-        # cls.small_input = torch.randn(
-        #     6, 12, 1
-        # )  # [B, T, C] (B=6, T=12, C=1), divisible by 4
 
         cls.dec_output = torch.rand(
             batch_size,
@@ -165,11 +141,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             cls.params["num_targets"],
         )
 
-        cls.correct_regression_output = torch.rand(
-            batch_size,
-            cls.params["num_targets"],
-        )
-
         cls.future_values = torch.rand(
             batch_size,
             cls.params["prediction_length"],
@@ -177,23 +148,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
         )
 
         cls.correct_classification_classes = torch.randint(0, cls.params["num_targets"], (batch_size,))
-
-    # def test_patchmodel(self):
-    #     config = TSPulseConfig(**self.__class__.params)
-    #     mdl = TSPulseModel(config)
-    #     output = mdl(self.__class__.data)
-    #     self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
-    #     self.assertEqual(output.patch_input.shape, self.__class__.enc_data.shape)
-
-    # def test_forecast_head(self):
-    #     config = TSPulseConfig(**self.__class__.params)
-    #     head = TSPulseForReconstructionHead(
-    #         config=config,
-    #     )
-    #     # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
-    #     output = head(self.__class__.enc_output)
-
-    #     self.assertEqual(output.shape, self.__class__.correct_reconstruction_output.shape)
 
     def check_module(
         self,
@@ -209,14 +163,9 @@ class TSPulseFunctionalTests(unittest.TestCase):
             target_output = target_input
         elif task == "classification":
             config.loss = "cross_entropy"
-            mdl = TSPulseForClassificationOrRegression(config)
+            mdl = TSPulseForClassification(config)
             target_output = self.__class__.correct_classification_output
             target_input = self.__class__.correct_classification_classes
-
-        elif task == "regression":
-            mdl = TSPulseForClassificationOrRegression(config)
-            target_output = self.__class__.correct_regression_output
-            target_input = self.__class__.correct_regression_output
 
         else:
             print("invalid task")
@@ -233,7 +182,7 @@ class TSPulseFunctionalTests(unittest.TestCase):
             enc_output_shape = list(enc_output.shape)
             dec_output_shape = list(dec_output.shape)
 
-        if config.mode == "common_channel" or task in ["classification", "regression"]:
+        if config.mode == "common_channel" or task in ["classification"]:
             enc_output_shape[1] = config.num_input_channels  # no compression for these cases
 
         if config.fuse_fft:
@@ -244,33 +193,27 @@ class TSPulseFunctionalTests(unittest.TestCase):
             enc_output_shape[2] += config.patch_register_tokens
 
             if task == "reconstruction" or (
-                task in ["classification", "regression"] and config.classification_mode == "full_embedding"
+                task in ["classification"] and config.classification_mode == "full_embedding"
             ):
                 dec_output_shape[2] += config.patch_register_tokens
 
-            if task in ["classification", "regression"] and config.classification_mode == "short_embedding":
+            if task in ["classification"] and config.classification_mode == "short_embedding":
                 dec_output_shape[2] = config.patch_register_tokens
 
-            if (
-                task in ["classification", "regression"]
-                and config.classification_mode == "time_with_short_fft_embedding"
-            ):
+            if task in ["classification"] and config.classification_mode == "time_with_short_fft_embedding":
                 dec_output_shape[2] = (dec_output_shape[2] // 2) + config.patch_register_tokens
 
             if task in [
                 "classification",
-                "regression",
             ] and config.classification_mode in ["fft_embedding", "time_embedding"]:
                 dec_output_shape[2] = dec_output_shape[2] // 2
 
         if config.channel_register_tokens is not None:
             enc_output_shape[1] += config.channel_register_tokens
-            # dec_output_shape[1] += config.channel_register_tokens
 
         if config.channel_virtual_expand_scale > 1:
             enc_output_shape[1] *= config.channel_virtual_expand_scale
 
-            # dec_output_shape[1] += config.channel_register_tokens
         enc_output = torch.rand(tuple(enc_output_shape)).flatten(start_dim=2)
         dec_output = torch.rand(tuple(dec_output_shape)).flatten(start_dim=2)
 
@@ -278,11 +221,7 @@ class TSPulseFunctionalTests(unittest.TestCase):
         if "categorical_vocab_size_list" in params and params["categorical_vocab_size_list"]:
             b = self.__class__.batch_size
             cat_samples = [torch.randint(0, a, (b, 1)) for a in params["categorical_vocab_size_list"]]
-            # for i in cat_samples:
-            #     print(i.shape,"jjj")
             cat_samples = torch.stack(cat_samples, dim=1).squeeze()
-            # print(cat_samples.shape)
-            # print(cat_samples)
 
         if task == "reconstruction":
             output = mdl(
@@ -335,11 +274,8 @@ class TSPulseFunctionalTests(unittest.TestCase):
 
             if config.fuse_fft:
                 pass
-            # if mdl.config.variational is True:
-            #     samples = mdl.samples(target_output.shape[0])
-            #     self.assertEqual(samples.shape, target_output.shape)
 
-        elif task in ["classification", "regression"]:
+        elif task in ["classification"]:
             output = mdl(
                 self.__class__.data,
                 output_hidden_states=output_hidden_states,
@@ -350,11 +286,8 @@ class TSPulseFunctionalTests(unittest.TestCase):
 
         self.assertEqual(output.loss.item() < np.inf, True)
 
-        # enc_output_shape = list(enc_output.shape)
-        # dec_output_shape = list(dec_output.shape)
-        # self.assertEqual(list(output.backbone_hidden_state.shape), enc_output.shape)
         self.assertEqual(output.backbone_hidden_state.shape, enc_output.shape)
-        # self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
+
         self.assertEqual(output.loc.shape, self.__class__.loc.shape)
         self.assertEqual(output.scale.shape, self.__class__.loc.shape)
         self.assertEqual(output.decoder_hidden_state.shape, dec_output.shape)
@@ -405,17 +338,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             fft_applied_on=fft_applied_on,
         )
 
-        # print(
-        #     mode,
-        #     decoder_mode,
-        #     fuse_fft,
-        #     patch_register_tokens,
-        #     fft_remove_component,
-        #     loss_apply_mode,
-        #     enable_fft_prob_loss,
-        #     fft_time_add_forecasting_pt_loss,
-        #     fft_original_signal_loss_weight,
-        # )
         self.check_module(task="reconstruction", params=params)
 
         params.update(
@@ -527,9 +449,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
         )
 
         self.check_module(task="reconstruction", params=params)
-        # self.check_module(
-        #     task="reconstruction", params=params, output_hidden_states=False
-        # )
 
     @parameterized.expand(
         list(
@@ -575,9 +494,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
         )
 
         self.check_module(task="reconstruction", params=params)
-        # self.check_module(
-        #     task="reconstruction", params=params, output_hidden_states=False
-        # )
 
     @parameterized.expand(
         list(
@@ -604,7 +520,7 @@ class TSPulseFunctionalTests(unittest.TestCase):
             )
         )
     )
-    def test_classification_or_regression(
+    def test_classification(
         self,
         mode,
         self_attn,
@@ -633,159 +549,12 @@ class TSPulseFunctionalTests(unittest.TestCase):
             classification_mode=classification_mode,
             channel_virtual_expand_scale=channel_virtual_expand_scale,
             disable_mask_in_classification_eval=disable_mask_in_classification_eval,
-            # decoder_num_layers=2,
-            # decoder_d_model_layerwise=[0.25, 0.125],
-            # decoder_num_patches_layerwise_scale=[0.25, 0.25],
-            # num_channels_layerwise_scale=None,
-            # decoder_num_channels_layerwise_scale=[1, 0.5],
         )
 
-        # print(
-        #     mode,
-        #     self_attn,
-        #     scaling,
-        #     gated_attn,
-        #     decoder_mode,
-        #     pooling,
-        #     fuse_fft,
-        #     patch_register_tokens,
-        #     channel_register_tokens,
-        #     classification_mode,
-        #     channel_virtual_expand_scale,
-        #     # use_channel_register_tokens_for_classification_head,
-        # )
         self.check_module(task="classification", params=params)
-        self.check_module(task="regression", params=params)
-        # self.check_module(task="classification", params=params, output_hidden_states=False)
-
-    # def test_classification_sample(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         inject_statistics=True,
-    #         head_aggregation="max_pool",
-    #         decoder_mode="mix_channel",
-    #         mode="mix_channel",
-    #         decoder_num_layers=2,
-    #         decoder_d_model_layerwise=[0.25, 0.125],
-    #         decoder_num_patches_layerwise_scale=[0.25, 0.25],
-    #         num_channels_layerwise_scale=None,
-    #         decoder_num_channels_layerwise_scale=[1, 0.5],
-    #     )
-    #     self.check_module(task="classification", params=params)
-
-    # @parameterized.expand(
-    #     list(
-    #         itertools.product(
-    #             [[5, 10, 29], None],
-    #             [[1, 0.5], None],
-    #             ["max_pool", "avg_pool"],
-    #             [True, False],
-    #         )
-    #     )
-    # )
-    # def test_classification_categorical(
-    #     self,
-    #     categorical_vocab_size_list,
-    #     decoder_num_channels_layerwise_scale,
-    #     head_aggregation,
-    #     inject_statistics,
-    # ):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         inject_statistics=inject_statistics,
-    #         head_aggregation=head_aggregation,
-    #         decoder_mode="mix_channel",
-    #         mode="mix_channel",
-    #         decoder_num_layers=2,
-    #         decoder_d_model_layerwise=[0.25, 0.125],
-    #         decoder_num_patches_layerwise_scale=[0.25, 0.25],
-    #         num_channels_layerwise_scale=None,
-    #         decoder_num_channels_layerwise_scale=decoder_num_channels_layerwise_scale,
-    #         categorical_vocab_size_list=categorical_vocab_size_list,
-    #     )
-    #     self.check_module(task="classification", params=params)
-
-    # def reconstruct_full_module(
-    #     self, params=None, output_hidden_states=False, return_dict=None
-    # ):
-    #     config = TSPulseConfig(**params)
-
-    #     mdl = TSPulseForReconstruction(config)
-    #     target_val = self.__class__.correct_reconstruction_output
-
-    #     if config.mode == "common_channel":
-    #         enc_output = self.__class__.enc_output_cc
-    #     else:
-    #         enc_output = self.__class__.enc_output
-
-    #     dec_output = self.__class__.dec_output
-
-    #     output = mdl(
-    #         self.__class__.data,
-    #         output_hidden_states=output_hidden_states,
-    #         return_dict=return_dict,
-    #     )
-
-    #     # print(mdl)
-    #     # from torchsummary import summary
-
-    #     # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    #     # mdl = mdl.to(device)
-    #     # summary(mdl, self.__class__.data.shape)
-
-    #     if isinstance(output, tuple):
-    #         output = TSPulseForReconstructionOutput(*output)
-
-    #     if config.loss == "mse":
-    #         self.assertEqual(output.reconstruction_outputs.shape, target_val.shape)
-    #     enc_output_shape = list(enc_output.shape)
-    #     dec_output_shape = list(dec_output.shape)
-
-    #     if "total_embedding_size" in params and params["total_embedding_size"]:
-    #         enc_output_shape = tuple(enc_output.shape)
-    #         total_embedding_size = params["total_embedding_size"]
-
-    #         if mdl.config.mode == "mix_channel":
-    #             total_embedding_size = (
-    #                 total_embedding_size * mdl.config.num_input_channels
-    #             )
-    #         # print(enc_output_shape)
-    #         enc_output_shape = list(enc_output_shape[:-1] + (total_embedding_size,))
-    #         enc_output = torch.rand(enc_output_shape)
-
-    #     print("---", output.backbone_hidden_state.shape, enc_output_shape)
-    #     self.assertEqual(list(output.backbone_hidden_state.shape), enc_output_shape)
-    #     self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
-
-    #     # if output_hidden_states is True:
-    #     #     print("ooo", len(output.hidden_states))
-    #     #     self.assertEqual(len(output.hidden_states), params["num_layers"])
-
-    #     # else:
-    #     #     self.assertEqual(output.hidden_states, None)
-
-    #     self.assertEqual(output.loss.item() < np.inf, True)
-
-    # def test_reconstruction_full(self):
-    #     self.check_module(
-    #         task="reconstruction",
-    #         params=self.__class__.params,
-    #         output_hidden_states=True,
-    #     )
-    #     # self.reconstruct_full_module(self.__class__.params, output_hidden_states = True)
 
     def test_reconstruction_full_2(self):
         params = self.__class__.params.copy()
-        # params.update(
-        #     mode="mix_channel",
-        #     # num_layers=4,
-        #     # decoder_num_layers=4,
-        #     decoder_mode="mix_channel",
-        #     fuse_fft=True,
-        #     mask_ratio=0.3,
-        #     fft_mask_ratio=0.3,
-        #     mask_type="point",
-        # )
         params.update(
             {
                 "context_length": 16,
@@ -847,120 +616,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             output_hidden_states=True,
         )
 
-    # def test_masking(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         mode="mix_channel",
-    #         fuse_fft=True,
-    #         mask_ratio=0.7,
-    #         fft_mask_ratio=0.7,
-    #         channel_register_tokens=None,
-    #         patch_register_tokens=2,
-    #         mask_type="block",
-    #     )
-    #     config = TSPulseConfig(**params)
-    #     x = self.__class__.small_input  # Shape: [6, T, C]
-    #     device = x.device
-
-    #     def check_masking(masker, label):
-    #         masked_x, mask = masker(x)
-    #         assert masked_x.shape == x.shape
-    #         assert mask.shape == x.shape
-    #         if label == "full":
-    #             assert mask.any(), "Expected some masking in full mode"
-    #         elif label == "odd":
-    #             for i in range(x.size(0)):
-    #                 assert (
-    #                     mask[i].any() if i % 2 == 1 else not mask[i].any()
-    #                 ), f"{label} batch error at {i}"
-    #         elif label == "even":
-    #             for i in range(x.size(0)):
-    #                 assert (
-    #                     mask[i].any() if i % 2 == 0 else not mask[i].any()
-    #                 ), f"{label} batch error at {i}"
-
-    #     for mode in ["full", "odd", "even"]:
-    #         masker = TSPulseMasking(config, device=device, batch_mode=mode)
-    #         check_masking(masker, label=mode)
-
-    #     fft_input = (
-    #         torch.fft.fft(x.squeeze(-1), norm="ortho").unsqueeze(-1).to(device)
-    #     )  # [B, T, 1]
-    #     fft_input = torch.cat([fft_input.real, fft_input.imag], dim=1)  # [B, 2T, 1]
-
-    #     for mode in ["full", "odd", "even"]:
-    #         fft_masker = TSPulseFFTMasker(config, batch_mode=mode)
-    #         masked_fft, fft_mask = fft_masker(fft_input.clone())
-    #         assert masked_fft.shape == fft_input.shape
-    #         assert fft_mask.shape == fft_input.shape
-    #         if mode == "full":
-    #             assert fft_mask.any(), "Expected some masking in full mode"
-    #         elif mode == "odd":
-    #             for i in range(fft_input.size(0)):
-    #                 assert (
-    #                     fft_mask[i].any() if i % 2 == 1 else not fft_mask[i].any()
-    #                 ), f"FFT odd batch error at {i}"
-    #         elif mode == "even":
-    #             for i in range(fft_input.size(0)):
-    #                 assert (
-    #                     fft_mask[i].any() if i % 2 == 0 else not fft_mask[i].any()
-    #                 ), f"FFT even batch error at {i}"
-
-    # def test_masking_old(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         mode="mix_channel",
-    #         # num_layers=4,
-    #         # decoder_num_layers=4,
-    #         fuse_fft=True,
-    #         mask_ratio=0.7,
-    #         fft_mask_ratio=0.7,
-    #         channel_register_tokens=None,
-    #         patch_register_tokens=2,
-    #         mask_type="block",
-    #     )
-    #     config = TSPulseConfig(**params)
-
-    #     masker = TSPulseMasking(
-    #         config, device=self.__class__.small_input.device, batch_mode="full"
-    #     )
-    #     x = self.__class__.small_input
-    #     masked_x, mask = masker(x)
-
-    #     assert masked_x.shape == x.shape
-    #     assert mask.shape == x.shape
-    #     assert mask.any(), "At least some elements should be masked in 'full' mode"
-
-    #     masker = TSPulseMasking(
-    #         config, device=self.__class__.small_input.device, batch_mode="odd"
-    #     )
-
-    #     masked_x, mask = masker(x)
-
-    #     assert masked_x.shape == x.shape
-    #     assert mask.shape == x.shape
-    #     # Only odd indices [1, 3, 5] should be masked
-    #     for i in range(6):
-    #         if i % 2 == 0:
-    #             assert not mask[i].any(), f"Even sample {i} should NOT be masked"
-    #         else:
-    #             assert mask[i].any(), f"Odd sample {i} should be masked"
-
-    #     masker = TSPulseMasking(
-    #         config, device=self.__class__.small_input.device, batch_mode="even"
-    #     )
-
-    #     masked_x, mask = masker(x)
-
-    #     assert masked_x.shape == x.shape
-    #     assert mask.shape == x.shape
-    #     # Only odd indices [1, 3, 5] should be masked
-    #     for i in range(6):
-    #         if i % 2 == 1:
-    #             assert not mask[i].any(), f"Even sample {i} should NOT be masked"
-    #         else:
-    #             assert mask[i].any(), f"Odd sample {i} should be masked"
-
     def test_classification_2(self):
         params = self.__class__.params.copy()
         params.update(
@@ -979,70 +634,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             params=params,
             output_hidden_states=True,
         )
-
-    # def test_explicit_masking(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         mode="mix_channel",
-    #         fuse_fft=True,
-    #         mask_ratio=0.3,
-    #         fft_mask_ratio=0.3,
-    #         channel_register_tokens=None,
-    #         patch_register_tokens=2,
-    #     )
-
-    #     mdl = TSPulseForReconstruction(TSPulseConfig(**params))
-
-    #     # ---- CASE 1: 1D Shared Mask for All Batch Samples ----
-    #     shared_mask = torch.tensor([0, 1, 2])  # Mask patches 0, 1, 2 for all samples
-    #     output_shared = mdl(
-    #         self.__class__.correct_reconstruction_output,
-    #         explicit_mask_positions=shared_mask,
-    #     )
-
-    #     b, l, c = output_shared.mask.shape
-    #     patch_size = mdl.config.patch_length
-    #     num_masked_positions = len(shared_mask) * patch_size
-    #     expected_shared = (
-    #         torch.arange(l, device=output_shared.mask.device).unsqueeze(0).unsqueeze(-1)
-    #     )  # [1, l, 1]
-    #     expected_shared = (
-    #         expected_shared < num_masked_positions
-    #     )  # True for first k*patch_len, False after
-
-    #     expected_shared = expected_shared.expand(b, l, c)
-    #     # Ensure all batch samples are masked identically
-    #     assert torch.all(output_shared.mask == expected_shared), "Shared mask failed"
-
-    #     # ---- CASE 2: 2D Per-Sample Mask ----
-    #     per_sample_mask = torch.tensor(
-    #         [
-    #             [0, 1],  # Sample 0 masks patch 0 and 1
-    #             [2, 3],  # Sample 1 masks patch 2 and 3
-    #         ],
-    #         device=output_shared.mask.device,
-    #     )
-
-    #     output_per_sample = mdl(
-    #         self.__class__.correct_reconstruction_output[:2],
-    #         explicit_mask_positions=per_sample_mask,
-    #     )
-
-    #     b2, l2, c2 = output_per_sample.mask.shape
-
-    #     expected_per_sample = torch.zeros(
-    #         (b2, l2, c2), dtype=torch.bool, device=output_per_sample.mask.device
-    #     )
-
-    #     for i, masked_patches in enumerate(per_sample_mask):
-    #         for patch_idx in masked_patches:
-    #             start = patch_idx * patch_size
-    #             end = (patch_idx + 1) * patch_size
-    #             expected_per_sample[i, start:end, :] = True
-
-    #     assert torch.all(
-    #         output_per_sample.mask == expected_per_sample
-    #     ), "Per-sample mask failed"
 
     @parameterized.expand(
         list(
@@ -1169,21 +760,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
             f"Actual mask ratio {actual_ratio:.4f} > expected {expected_ratio}",
         )
 
-        # masked_elements = mask.sum().item()
-        # expected = int(total_elements * params["mask_ratio"])
-        # self.assertTrue(abs(masked_elements - expected) / total_elements < 0.1)
-
-        # === Test with mask_percentage = 1.0
-        # masked_tensor, mask = (
-        #     mdl.backbone.time_masker.variable_length_hybrid_masking_with_token(
-        #         tensor=x,
-        #         mask_percentage=1.0,
-        #         patch_size=patch_size,
-        #         full_patch_mask_percentage=params["full_patch_mask_percentage"],
-        #     )
-        # )
-        # self.assertTrue(torch.all(mask))
-
     def test_past_observed_mask(self):
         params = self.__class__.params.copy()
         params.update(
@@ -1210,11 +786,6 @@ class TSPulseFunctionalTests(unittest.TestCase):
         masked_tensor = model_output.masked_past_values
         mask = model_output.mask
 
-        # # future_values=self.__class__.future_values,
-        # masked_tensor, mask = mdl.backbone.time_masker(
-        #     x, past_observed_mask=past_observed_mask
-        # )
-
         patch_ids_relative = torch.arange(T) % patch_size
         patch_pos = patch_ids_relative.view(1, T, 1).expand(B, T, C)
         expected_token = mask_token_values[patch_pos]
@@ -1228,53 +799,150 @@ class TSPulseFunctionalTests(unittest.TestCase):
         # Check unmasked positions remain unchanged
         self.assertTrue(torch.allclose(masked_tensor[~mask], x[~mask]))
 
-    # def test_explict_masking(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         mode="mix_channel",
-    #         # num_layers=4,
-    #         # decoder_num_layers=4,
-    #         fuse_fft=True,
-    #         mask_ratio=0.3,
-    #         fft_mask_ratio=0.3,
-    #         channel_register_tokens=None,
-    #         patch_register_tokens=2,
-    #     )
+    def test_patchwise_stitched_reconstruction(self):
+        params = self.__class__.params.copy()
 
-    #     mdl = TSPulseForReconstruction(TSPulseConfig(**params))
-    #     output = mdl(
-    #         self.__class__.correct_reconstruction_output,
-    #         explicit_mask_positions=torch.tensor([0, 1, 2]),
-    #     )
-    #     b, l, c = output.mask.shape
-    #     expected = (
-    #         torch.arange(l, device=output.mask.device).unsqueeze(0).unsqueeze(-1)
-    #     )  # [1, l, 1]
-    #     expected = expected < 6  # [1, l, 1] --> True for first k, False after
-    #     assert torch.all(output.mask == expected)
+        params.update(
+            context_length=512,
+            patch_length=16,
+            patch_stride=16,
+            fft_time_add_forecasting_pt_loss=False,
+            num_input_channels=4,
+            mask_type="user",
+        )
 
-    # self.reconstruct_full_module(params, output_hidden_states=True)
+        model = TSPulseForReconstruction(TSPulseConfig(**params))
 
-    # def test_components(self):
-    #     params = self.__class__.params.copy()
-    #     params.update(
-    #         mode="mix_channel",
-    #         num_layers=4,
-    #         decoder_num_layers=4,
-    #         d_model_layerwise_compression_scale=[1, 0.75, 0.5, 0.25],
-    #         decoder_d_model_layerwise_expansion_scale=[0.25, 0.5, 0.75, 1],
-    #     )
+        # # Load pre-trained model
+        # model = TSPulseForReconstruction.from_pretrained(
+        #     "./tspulse_model",
+        #     fft_time_add_forecasting_pt_loss=False,
+        #     num_input_channels=4,
+        #     mask_type="user",
+        # ).to("cuda")
+        # model.eval()
 
-    #     config = TSPulseConfig(**params)
+        B, L, C = 2, 512, 4  # 4 channels with 1x, 2x, 3x, 4x base frequency
+        base_freq = 1.0
 
-    #     encoder = TSPulseModel(config)
-    #     decoder = TSPulseDecoderWithReconstructionHead(config)
+        t = torch.linspace(0, 2 * math.pi, L).unsqueeze(1)  # [L, 1]
+        waves = []
 
-    #     encoder_output = encoder(self.__class__.data)
+        for c in range(C):
+            freq = base_freq * (c + 1)
+            wave = torch.sin(freq * t)  # [L, 1]
+            waves.append(wave)
 
-    #     reconstructed_output = decoder(
-    #         decoder_input=encoder_output.last_hidden_flatten_state, loc=encoder_output.loc, scale=encoder_output.scale
-    #     )
-    #     self.assertEqual(self.__class__.data.shape, reconstructed_output.reconstruction_outputs.shape)
-    #     enc_output_shape = list(self.__class__.enc_output.shape)
-    #     # self.assertEqual(list(encoder_output.last_hidden_flatten_state.shape), enc_output_shape)
+        # Stack along channel dimension → [L, C], then expand to [B, L, C]
+        past_values = torch.cat(waves, dim=1).unsqueeze(0).repeat(B, 1, 1)  # [B, L, C]
+
+        patch_size = params["patch_length"]
+        patchwise_stitched_reconstruction(
+            model,
+            past_values=past_values,
+            patch_size=patch_size,
+            keys_to_stitch=["reconstruction_outputs", "fft_reconstruction_outputs"],
+            keys_to_aggregate=[
+                # # "forecast_output",
+                # "fft_reconstruction_outputs",
+                # "original_past_values_fft",
+                # # "future_values",
+                # "original_fft_softmax",
+                # "fft_softmax_preds",
+            ],
+            reconstruct_start=0,
+            reconstruct_end=100,  # to get reconstruction of first 100 points.
+            debug=False,
+        )
+
+    def test_patchmaskingdatasetwrapper(self):
+        class DummyTimeSeriesDataset(Dataset):
+            def __init__(self, num_samples=5, T=512, C=2):
+                self.T = T
+                self.C = C
+                self.data = [
+                    {
+                        "past_values": torch.arange(i * T * C, (i + 1) * T * C).view(T, C).float(),
+                        "label": i,
+                    }
+                    for i in range(num_samples)
+                ]
+
+            def __len__(self):
+                return len(self.data)
+
+            def __getitem__(self, idx):
+                return self.data[idx]
+
+        window_length = 100
+        patch_length = 16
+        num_patches = math.ceil(window_length / patch_length)
+        total_samples = 5
+
+        for window_position in ["last", "first"]:
+            base_dataset = DummyTimeSeriesDataset(num_samples=total_samples, T=512, C=2)
+            wrapper = PatchMaskingDatasetWrapper(
+                base_dataset,
+                window_length=window_length,
+                patch_length=patch_length,
+                window_position=window_position,
+            )
+            loader = DataLoader(wrapper, batch_size=1, shuffle=False)
+            assert len(wrapper) == total_samples * num_patches
+
+            prev_pv = None
+            pv_count = 0
+            mask_positions = []
+
+            for i, batch in enumerate(loader):
+                past_values = batch["past_values"][0]
+                past_observed_mask = batch["past_observed_mask"][0]
+
+                if prev_pv is None:
+                    prev_pv = past_values
+                    pv_count = 1
+                elif torch.equal(prev_pv, past_values):
+                    pv_count += 1
+                else:
+                    # Check that patch indices were covered in order: always LTR
+                    expected = list(range(num_patches))
+                    assert (
+                        mask_positions == expected
+                    ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+                    assert pv_count == num_patches, f"Expected {num_patches} reps, got {pv_count}"
+                    prev_pv = past_values
+                    pv_count = 1
+                    mask_positions = []
+
+                T, C = past_values.shape
+                assert past_observed_mask.shape == (T, C)
+
+                # Check where mask is False (i.e. masked)
+                mask = past_observed_mask == 0
+                masked_rows = (mask.any(dim=1)).nonzero(as_tuple=True)[0]
+                assert masked_rows.numel() > 0, "Each sample must have some masked patch"
+
+                start = masked_rows[0].item()
+
+                # FIX: Normalize start to window to get correct patch_idx
+                window_start = 0 if window_position == "first" else T - window_length
+                relative_start = start - window_start
+                patch_idx = relative_start // patch_length
+                mask_positions.append(patch_idx)
+
+                # Ensure mask is inside selected window
+                assert window_start <= start < window_start + window_length
+
+                # Validate expected masked length
+                expected_masked_len = min(patch_length, T - start)
+                actual_masked_len = (mask[start : start + expected_masked_len].any(dim=1)).sum().item()
+                assert (
+                    actual_masked_len == expected_masked_len
+                ), f"Expected {expected_masked_len} rows masked, got {actual_masked_len}"
+
+            # Final flush for last group
+            expected = list(range(num_patches))
+            assert (
+                mask_positions == expected
+            ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+            assert pv_count == num_patches, f"Expected {num_patches} reps at end, got {pv_count}"

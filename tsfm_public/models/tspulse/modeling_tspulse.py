@@ -1,6 +1,9 @@
 # Copyright contributors to the TSFM project
 #
-"""PyTorch TSPulse model."""
+"""
+TSPulse model (Pytorch, HuggingFace-style)
+TSPulse is ultra-compact pretrained-models that can be specialized for various tasks such as Anomaly Detection, Classification, Search and Imputation.
+"""
 
 import copy
 import math
@@ -1840,7 +1843,7 @@ class TSPulseForReconstructionOutput(ModelOutput):
 
 
 @dataclass
-class TSPulseForClassificationOrRegressionOutput(ModelOutput):
+class TSPulseForClassificationOutput(ModelOutput):
     """
     Output type of [`TSPulseForReconstructionOutput`].
 
@@ -1848,7 +1851,7 @@ class TSPulseForClassificationOrRegressionOutput(ModelOutput):
         loss (`torch.FloatTensor`, *optional*, shape `()`):
             Total loss computed during training.
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
-            Output predictions from the classification or regression head.
+            Output predictions from the classification head.
         backbone_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings from the encoder before being passed to the decoder.
         decoder_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
@@ -1926,13 +1929,13 @@ class TSPulseCategoricalEmbeddingLayer(nn.Module):
 
 
 @dataclass
-class TSPulseDecoderWithClassificationOrRegressionHeadOutput(ModelOutput):
+class TSPulseDecoderWithClassificationHeadOutput(ModelOutput):
     """
     Output type of [`TSPulseDecoderWithClassificationHeadOutput`].
 
     Args:
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
-            Output logits from the classification or regression head.
+            Output logits from the classification head.
         decoder_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Final hidden states from the decoder prior to being passed to the head. num_patches wil be 2*input_num_patches + patch_register_tokens
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -2724,10 +2727,10 @@ class TSPulseMasking(nn.Module):
         return masked_inputs, mask
 
 
-class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
+class TSPulseForClassification(TSPulsePreTrainedModel):
     r"""
-    `TSPulse` for ClassificationOrRegression application. Based on the loss function, we apply
-    classification or regression.
+    `TSPulse` for Classification application. Based on the loss function, we apply
+    classification.
 
     Args:
         config (`TSPulseConfig`, *required*):
@@ -2740,7 +2743,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
     def __init__(self, config: TSPulseConfig):
         super().__init__(config)
 
-        config.check_and_init_preprocessing(task="classification_or_regression")
+        config.check_and_init_preprocessing(task="classification")
 
         self.config = config
 
@@ -2759,7 +2762,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
 
         self.backbone = TSPulseModel(config)
 
-        self.decoder_with_head = TSPulseDecoderWithClassificationOrRegressionHead(config)
+        self.decoder_with_head = TSPulseDecoderWithClassificationHead(config)
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -2767,7 +2770,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
-    #     output_type=TSPulseForClassificationOrRegressionOutput,
+    #     output_type=TSPulseForClassificationOutput,
     #     config_class=_CONFIG_FOR_DOC,
     # )
     def forward(
@@ -2780,14 +2783,13 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
         return_dict: Optional[bool] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
         class_weights: torch.Tensor = None,
-    ) -> TSPulseForClassificationOrRegressionOutput:
+    ) -> TSPulseForClassificationOutput:
         """
         Args:
         past_values (`torch.FloatTensor` of shape `(batch_size, context_length, num_input_channels)`):
             Input time series values from the past window.
-        target_values (`torch.FloatTensor` of shape `(batch_size,)` for classification or `(batch_size, num_targets)` for regressio, *optional*):
+        target_values (`torch.FloatTensor` of shape `(batch_size,)` for classification:
             Target values or class labels used for computing the loss. For classification, this should be class indices.
-            For regression, this should be real-valued targets.
         past_observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
             Binary mask indicating observed (1.0) vs. missing (0.0) values in `past_values`. Missing values are assumed
             to have been imputed (e.g., with zeros). Used only when mask_type = user.
@@ -2796,7 +2798,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
         return_loss (`bool`, *optional*, defaults to `True`):
             Whether to compute and return the loss in the output.
         return_dict (`bool`, *optional*):
-            If `True`, returns a [`TSPulseForClassificationOrRegressionOutput`] dictionary.
+            If `True`, returns a [`TSPulseForClassificationOutput`] dictionary.
             If `False`, returns a tuple of outputs instead.
         static_categorical_values (`torch.FloatTensor` of shape `(batch_size, num_categorical_features)`, *optional*):
             Tokenized categorical variables associated with each instance. Must match the order of
@@ -2804,7 +2806,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
         class_weights (`torch.FloatTensor` of shape `(num_classes,)`, *optional*):
             Optional weights to apply to each class when computing classification loss. Not allowed currently
 
-        Returns: TSPulseForClassificationOrRegressionOutput or Tuple
+        Returns: TSPulseForClassificationOutput or Tuple
 
         """
         if self.config.loss == "cross_entropy" and class_weights is not None and return_loss is True:
@@ -2845,9 +2847,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
         )
 
         if isinstance(decoder_with_head_output, tuple):
-            decoder_with_head_output = TSPulseDecoderWithClassificationOrRegressionHeadOutput(
-                *decoder_with_head_output
-            )
+            decoder_with_head_output = TSPulseDecoderWithClassificationHeadOutput(*decoder_with_head_output)
 
         # if output_hidden_states:
         #     hidden_states.extend(decoder_with_head_output.hidden_states)
@@ -2871,7 +2871,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
                 ]
             )
 
-        return TSPulseForClassificationOrRegressionOutput(
+        return TSPulseForClassificationOutput(
             loss=loss_val,
             prediction_outputs=decoder_with_head_output.prediction_outputs,  # tensor [batch_size x num_targets]
             backbone_hidden_state=model_output.last_hidden_flatten_state,  # x: [batch_size x nvars x num_patch * d_model]
@@ -2882,7 +2882,7 @@ class TSPulseForClassificationOrRegression(TSPulsePreTrainedModel):
 
 
 class TSPulseLinearHead(nn.Module):
-    """Linear head for Classification and Regression.
+    """Linear head for Classification.
 
     Args:
         config (`PatchTSMixerConfig`, *required*):
@@ -3372,7 +3372,7 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         )
 
 
-class TSPulseDecoderWithClassificationOrRegressionHead(TSPulsePreTrainedModel):
+class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
     """
     Decoder + Head
 
@@ -3508,7 +3508,7 @@ class TSPulseDecoderWithClassificationOrRegressionHead(TSPulsePreTrainedModel):
         return new_config
 
     @replace_return_docstrings(
-        output_type=TSPulseDecoderWithClassificationOrRegressionHeadOutput,
+        output_type=TSPulseDecoderWithClassificationHeadOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -3519,7 +3519,7 @@ class TSPulseDecoderWithClassificationOrRegressionHead(TSPulsePreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
-    ) -> TSPulseDecoderWithClassificationOrRegressionHeadOutput:
+    ) -> TSPulseDecoderWithClassificationHeadOutput:
         r"""
         Args:
             decoder_input `torch.Tensor` of shape `(batch_size x emb_size)`): The input tensor from backbone.
@@ -3638,7 +3638,7 @@ class TSPulseDecoderWithClassificationOrRegressionHead(TSPulsePreTrainedModel):
                 ]
             )
 
-        return TSPulseDecoderWithClassificationOrRegressionHeadOutput(
+        return TSPulseDecoderWithClassificationHeadOutput(
             prediction_outputs=prediction_outputs,
             decoder_hidden_state=decoder_output,
             hidden_states=decoder_hidden_states,

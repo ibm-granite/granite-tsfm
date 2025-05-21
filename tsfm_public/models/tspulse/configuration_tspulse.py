@@ -89,13 +89,13 @@ class TSPulseConfig(PretrainedConfig):
         decoder_d_model_layerwise_scale (`List[float]`, *optional*):
             List of d_model expansion per layer in decoder.  Recommended to set to None
         num_targets (`int`, *optional*, defaults to 3):
-            Refers to the number of targets in regression tasks and number of labels in a class for a classification task.
+            Refers to the number of labels in a class for a classification task.
         output_range (`List[int]`, *optional*):
             Output range to set. Recommended to set to None
         head_aggregation (`str`, *optional*):
-            Aggregation strategy for the classification/regression head. Recommended to set to None.
+            Aggregation strategy for the classification head. Recommended to set to None.
         head_aggregation_dim (`str`, *optional*, defaults to `"patch"`):
-            Aggregation dimension for the classification/regression head. `"patch"` or `"channel"`.
+            Aggregation dimension for the classification head. `"patch"` or `"channel"`.
         init_linear (`str`, *optional*, defaults to `"pytorch"`):
             Strategy for linear layer initialization. <todo>
         init_embed (`str`, *optional*, defaults to `"pytorch"`):
@@ -478,7 +478,7 @@ class TSPulseConfig(PretrainedConfig):
                 self.num_channels_layerwise_scale = None
                 self.decoder_num_channels_layerwise_scale = None
 
-        if task in ["classification", "regression", "classification_or_regression"]:
+        if task in ["classification"]:
             if not self._check_one_or_none(self.num_channels_layerwise_scale):
                 logger.warning("Channel Compression is not allowed in encoder for classification. Setting it to None")
                 self.num_channels_layerwise_scale = None
