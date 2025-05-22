@@ -4,16 +4,15 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from torch import nn as nn
 from torch.utils.data import DataLoader
+from transformers.data.data_collator import default_data_collator
 
 # First Party
-from transformers import PreTrainedModel
-from transformers.data.data_collator import default_data_collator
+from transformers.modeling_utils import PreTrainedModel
 from transformers.pipelines.base import GenericTensor, build_pipeline_init_args
 from transformers.trainer_utils import RemoveColumnsCollator
-from transformers.utils import add_end_docstrings
+from transformers.utils.doc import add_end_docstrings
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from tsfm_public.models.tspulse.utils.ad_helpers import boundary_adjusted_scores, compute_tspulse_score
@@ -30,7 +29,7 @@ from .time_series_forecasting_pipeline import TimeSeriesPipeline
 class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
     def __init__(
         self,
-        model: Union[PreTrainedModel],
+        model: PreTrainedModel,
         *args,
         prediction_mode: str = "forecast",
         aggr_function: str = "max",
@@ -73,12 +72,12 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         super().__init__(model, *args, **kwargs)
         self.__context_memory = {}
         if aggr_function.lower() == "min":
-            aggr_function = np.min
+            aggr_function_ = np.min
         elif aggr_function.lower() == "mean":
-            aggr_function = np.mean
+            aggr_function_ = np.mean
         else:
-            aggr_function = np.max
-        self.aggr_function = aggr_function
+            aggr_function_ = np.max
+        self.aggr_function = aggr_function_
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
@@ -211,9 +210,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             accumulator[k] = score
 
         score = self.aggr_function(
-            np.vstack(
-                [MinMaxScaler_().fit_transform(score_.reshape(-1, 1)).ravel() for _, score_ in accumulator.items()]
-            ),
+            np.vstack([score_.ravel() for _, score_ in accumulator.items()]),
             axis=0,
         )
 
@@ -243,7 +240,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
     def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
-        smoothing_window_size = postprocess_parameters.get("smoothing_window_size")
+        smoothing_window_size = int(postprocess_parameters.get("smoothing_window_size", 1))
         if smoothing_window_size > 1:
             for k in model_outputs:
                 model_outputs[k] = np.convolve(
