@@ -9,7 +9,9 @@ from pathlib import Path
 import numpy as np
 
 from tsfm_public.toolkit.conformal import (
+    NonconformityScores,
     PostHocGaussian,
+    PostHocProbabilisticMethod,
     PostHocProbabilisticProcessor,
     WeightedConformalForecasterWrapper,
 )
@@ -33,7 +35,6 @@ def test_posthoc_probabilistic_processor():
     # Parameters
     window_size = 10
     quantiles = [0.1, 0.5, 0.9]
-    nonconformity_score = "absolute_error"
 
     # Data
     n_samples = 30
@@ -48,11 +49,11 @@ def test_posthoc_probabilistic_processor():
     y_test_pred = y_pred[-10:]
     # y_test_gt = y_gt[-10:]
 
-    for method in ["gaussian", "conformal"]:
-        if method == "conformal":
-            nonconformity_score_list = ["absolute_error", "error"]
+    for method in [PostHocProbabilisticMethod.GAUSSIAN.value, PostHocProbabilisticMethod.CONFORMAL.value]:
+        if method == PostHocProbabilisticMethod.CONFORMAL.value:
+            nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value, NonconformityScores.ERROR.value]
         else:
-            nonconformity_score_list = ["absolute_error"]
+            nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value]
         for nonconformity_score in nonconformity_score_list:
             # print(method,nonconformity_score )
             p = PostHocProbabilisticProcessor(
@@ -60,7 +61,6 @@ def test_posthoc_probabilistic_processor():
             )
             p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)
             y_test_prob_pred = p.predict(y_test_pred)
-            # print(y_test_prob_pred)
 
             ### ASSERTIONS ###
 
@@ -93,14 +93,14 @@ def test_posthoc_probabilistic_processor():
             )
 
             ## Check based on method
-            if method == "gaussian":
+            if method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 assert isinstance(
                     p.model, PostHocGaussian
                 ), "model is not an instance of PostHocGaussian for method {} nonconformity score {}".format(
                     method, nonconformity_score
                 )
 
-            if method == "conformal":
+            if method == PostHocProbabilisticMethod.CONFORMAL.value:
                 assert isinstance(
                     p.model, WeightedConformalForecasterWrapper
                 ), "model is not an instance of WeightedConformalForecasterWrapper for method {} nonconformity score {}".format(

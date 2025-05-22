@@ -60,180 +60,6 @@ Post-Hoc Probabilistic Wrapper Classes
 """
 
 
-class PosthocProbabilisticWrapperBase:
-    def __init__(
-        self,
-        window_size: Optional[int] = None,
-        quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        **kwargs,
-    ):
-        self.window_size = window_size
-        self.quantiles = quantiles
-        self.critical_size = 1
-
-    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray, **kwargs):
-        """Fit posthoc probabilistic wrapper.
-        Input:
-        y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
-        """
-        return self
-
-    def predict(self, y_test_pred: np.ndarray, quantiles=[], **kwargs):
-        """Predic posthoc probabilistic wrapper.
-        Input:
-        y_test_pred: nsamples x forecast_horizon x number_features
-        Output:
-        y_test_prob_pred: nsamples x forecast_horizon x number_features x len(quantiles)
-        """
-        pass
-
-
-class PostHocGaussian(PosthocProbabilisticWrapperBase):
-    def __init__(self, window_size=None, quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]):
-        super().__init__(window_size=window_size, quantiles=quantiles)
-        self.variance = None
-
-        """
-        PostHoc Probabilistic Gaussian Wrapper.
-
-        Transforms the point forecasts of a multivariate model into probabilistic forecasts under the assumption of independent Gaussian residuals.
-
-        Args:
-            window_size (int, optional): Maximum number of past residuals to consider when estimating variance. If None (default), all available past residuals are used.
-            quantiles (List[float]): List of target quantiles to compute. Each value must lie in the open interval (0, 1).
-        """
-
-    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray):
-        """
-        Fit the PostHoc Probabilistic Gaussian Wrapper.
-
-        Args:
-            y_cal_gt (np.ndarray): Ground truth values used for calibration.  Shape: (n_samples, forecast_horizon, num_features).
-            y_cal_pred (np.ndarray): Model predictions corresponding to the ground truth. Shape: (n_samples, forecast_horizon, num_features).
-        """
-
-        if self.window_size is None:
-            window_size = y_cal_gt.shape[0]
-        else:
-            window_size = self.window_size
-        assert (
-            len(y_cal_pred.shape) == 3
-        ), " y_cal_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
-        assert (
-            len(y_cal_gt.shape) == 3
-        ), " y_cal_gt should have 3 dimensions : nsamples x forecast_horizon x number_features"
-
-        self.variance = np.sum((y_cal_gt[-window_size:] - y_cal_pred[-window_size:]) ** 2, axis=0) / (
-            len(y_cal_pred[-window_size:]) - 1
-        )  # dimension should be
-
-    def predict(self, y_test_pred: np.ndarray, quantiles=[]):
-        """
-        Predict using the PostHoc Probabilistic Gaussian Wrapper.
-
-        Args:
-            y_test_pred (np.ndarray): Model point predictions. Shape: (n_samples, forecast_horizon, num_features).
-
-        Returns:
-            np.ndarray: Quantile estimates for each prediction. Shape: (n_samples, forecast_horizon, num_features, len(quantiles)).
-        """
-
-        if len(quantiles) == 0:
-            quantiles = self.quantiles
-        assert self.variance is not None, "Method needs to be fitted"
-        assert (
-            len(y_test_pred.shape) == 3
-        ), " y_test_pred should have 3 dimensions: nsamples x forecast_horizon x number_features"
-        std_devs = np.sqrt(self.variance)[..., None]  # Standard deviation for each distribution
-        quantiles = norm.ppf(quantiles) * std_devs  # Compute quantiles
-        y_test_prob_pred = y_test_pred[..., np.newaxis] + quantiles[np.newaxis, ...]
-        return y_test_prob_pred
-
-
-# class PostHocConformalWrapper(PosthocProbabilisticWrapperBase):
-#     def __init__(
-#         self,
-#         window_size: Optional[int] = None,
-#         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-#         params: Dict[str, Any] = {},
-#     ):
-#         if "window_size" in params.keys():
-#             window_size = params["window_size"]
-#         super().__init__(window_size=window_size, quantiles=quantiles)
-#         params["window_size"] = window_size
-#         params["false_alarm"] = np.min(quantiles) * 2
-#         if "nonconformity_score" in params.keys():
-#             if params["nonconformity_score"] in ["error"]:
-#                 params["false_alarm"] = np.min(quantiles)
-#         self.critical_size = np.ceil(1 / params["false_alarm"])
-
-#         self.model = WeightedConformalForecasterWrapper(**params)
-
-#     def fit(self, y_cal_pred, y_cal_gt):
-#         """Fit posthoc probabilistic wrapper.
-#         Input:
-#         y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
-#         y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
-#         """
-#         if self.window_size is None:
-#             window_size = y_cal_gt.shape[0]
-#         else:
-#             window_size = self.window_size
-#         assert (
-#             len(y_cal_pred.shape) == 3
-#         ), " y_cal_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
-#         assert (
-#             len(y_cal_gt.shape) == 3
-#         ), " y_cal_gt should have 3 dimensions : nsamples x forecast_horizon x number_features"
-
-#         self.model.fit(
-#             y_cal_pred=y_cal_pred,  ## ttm predicted values
-#             y_cal_gt=y_cal_gt,
-#         )  ## ttm corresponding gt values
-
-#     def predict(self, y_test_pred, quantiles=[]):
-#         """Predict posthoc probabilistic wrapper.
-#         Input:
-#         y_test_pred: nsamples x forecast_horizon x number_features
-#         Output:
-#         y_test_prob_pred: nsamples x forecast_horizon x number_features x len(quantiles)
-#         """
-#         if len(quantiles) == 0:
-#             quantiles = self.quantiles
-
-#         assert (
-#             len(y_test_pred.shape) == 3
-#         ), " y_test_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
-
-#         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
-#         ix_q = 0
-#         for q in quantiles:
-#             if self.model.nonconformity_score in [
-#                 NonconformityScores.ABSOLUTE_ERROR.value,
-#                 NonconformityScores.ERROR.value,
-#             ]:
-#                 if q < 0.5:
-#                     q_pi_error_rate = q * 2
-#                     output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-#                     y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_low"]
-#                 elif q > 0.5:
-#                     q_pi_error_rate = (1 - q) * 2
-#                     output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-#                     y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-#                 else:
-#                     if self.model.nonconformity_score in ["error"]:
-#                         q_pi_error_rate = 0.5
-#                         output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-#                         y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-#                     else:
-#                         y_test_prob_pred[..., ix_q] = y_test_pred
-
-#             ix_q += 1
-
-#         return y_test_prob_pred
-
-
 class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
     """Entry point for posthoc probabilistic approaches
 
@@ -545,6 +371,351 @@ def conformal_set(
         return {"y_low": y_pred - score_threshold, "y_high": y_pred + score_threshold}
     if nonconformity_score == NonconformityScores.ERROR.value:
         return {"y_low": score_threshold[0] + y_pred, "y_high": score_threshold[1] + y_pred}
+
+
+class PostHocGaussian:
+    def __init__(self, window_size=None, quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]):
+        self.window_size = window_size
+        self.quantiles = quantiles
+        self.critical_size = 1
+        self.variance = None
+
+        """
+        PostHoc Probabilistic Gaussian Wrapper.
+
+        Transforms the point forecasts of a multivariate model into probabilistic forecasts under the assumption of independent Gaussian residuals.
+
+        Args:
+            window_size (int, optional): Maximum number of past residuals to consider when estimating variance. If None (default), all available past residuals are used.
+            quantiles (List[float]): List of target quantiles to compute. Each value must lie in the open interval (0, 1).
+        """
+
+    def fit(self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray):
+        """
+        Fit the PostHoc Probabilistic Gaussian Wrapper.
+
+        Args:
+            y_cal_gt (np.ndarray): Ground truth values used for calibration.  Shape: (n_samples, forecast_horizon, num_features).
+            y_cal_pred (np.ndarray): Model predictions corresponding to the ground truth. Shape: (n_samples, forecast_horizon, num_features).
+        """
+
+        if self.window_size is None:
+            window_size = y_cal_gt.shape[0]
+        else:
+            window_size = self.window_size
+        assert (
+            len(y_cal_pred.shape) == 3
+        ), " y_cal_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
+        assert (
+            len(y_cal_gt.shape) == 3
+        ), " y_cal_gt should have 3 dimensions : nsamples x forecast_horizon x number_features"
+
+        self.variance = np.sum((y_cal_gt[-window_size:] - y_cal_pred[-window_size:]) ** 2, axis=0) / (
+            len(y_cal_pred[-window_size:]) - 1
+        )  # dimension should be
+
+    def predict(self, y_test_pred: np.ndarray, quantiles=[]):
+        """
+        Predict using the PostHoc Probabilistic Gaussian Wrapper.
+
+        Args:
+            y_test_pred (np.ndarray): Model point predictions. Shape: (n_samples, forecast_horizon, num_features).
+
+        Returns:
+            np.ndarray: Quantile estimates for each prediction. Shape: (n_samples, forecast_horizon, num_features, len(quantiles)).
+        """
+
+        if len(quantiles) == 0:
+            quantiles = self.quantiles
+        assert self.variance is not None, "Method needs to be fitted"
+        assert (
+            len(y_test_pred.shape) == 3
+        ), " y_test_pred should have 3 dimensions: nsamples x forecast_horizon x number_features"
+        std_devs = np.sqrt(self.variance)[..., None]  # Standard deviation for each distribution
+        quantiles = norm.ppf(quantiles) * std_devs  # Compute quantiles
+        y_test_prob_pred = y_test_pred[..., np.newaxis] + quantiles[np.newaxis, ...]
+        return y_test_prob_pred
+
+
+class WeightedConformalForecasterWrapper:
+    def __init__(
+        self,
+        nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
+        false_alarm: float = 0.05,
+        weighting: str = Weighting.UNIFORM.value,
+        weighting_params: Dict[str, Any] = {},
+        threshold_function: str = ThresholdFunction.WEIGHTING.value,
+        window_size: Optional[int] = None,
+    ):
+        self.nonconformity_score = nonconformity_score
+        # self.nonconformity_score_func = nonconformity_score_functions
+
+        self.quantile = 1 - false_alarm
+        self.false_alarm = false_alarm
+
+        self.weighting = weighting
+        self.weighting_params = weighting_params
+        self.window_size = window_size
+        self.online_size = 1
+        self.threshold_function = threshold_function
+        self.weights_adaptive = []
+        self.univariate_wrappers = {}
+
+        """
+        Weighted Split Conformal Forecasting Wrapper Class.
+
+        Args:
+            nonconformity_score (str): Type of nonconformity score to use, as defined in the `NonconformityScores` enum.
+            false_alarm (float): Desired false alarm (error) rate for the prediction intervals.
+            weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum.
+            weighting_params (dict): Parameters for the selected weighting strategy, if applicable.
+            threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum.
+            window_size (int, optional): Maximum number of past nonconformity scores to use for calibration. Default is None (use all available scores).
+        """
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this object.
+        """
+
+        output = {
+            "nonconformity_score": self.nonconformity_score,
+            "false_alarm": self.false_alarm,
+            "weighting": self.weighting,
+            "weighting_params": self.weighting_params,
+            "window_size": self.window_size,
+            "threshold_function": self.threshold_function,
+            "weights_adaptive": self.weights_adaptive,
+            "univariate_wrappers": {json.dumps(k): v.to_dict() for k, v in self.univariate_wrappers.items()},
+        }
+
+        return output
+
+    @classmethod
+    def from_dict(cls, params: Dict[str, Any], **kwargs) -> "WeightedConformalForecasterWrapper":
+        """
+        Instantiates a type of [`~WeightedConformalForecasterWrapper`] from a Python dictionary of
+        parameters.
+
+        Args:
+            dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the object.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the object.
+
+        Returns:
+            [`~WeightedConformalForecasterWrapper`]: The WeightedcCnformalForecaster object instantiated from those
+            parameters.
+        """
+
+        params_copy = params.copy()
+
+        save_attrs = ["weights_adaptive", "univariate_wrappers"]
+        copy_attrs = ["weights_adaptive"]
+
+        save_attrs_dict = {}
+        for attr in save_attrs:
+            save_attrs_dict[attr] = params_copy.pop(attr)
+
+        obj = cls(**params_copy, **kwargs)
+
+        for attr_name, attr_value in save_attrs_dict.items():
+            if attr_name in copy_attrs:
+                setattr(obj, attr_name, attr_value)
+
+        univariate_wrappers = {}
+        for k, v in save_attrs_dict["univariate_wrappers"].items():
+            k_decoded = tuple(json.loads(k))
+            univariate_wrappers[k_decoded] = WeightedConformalWrapper.from_dict(v)
+
+        obj.univariate_wrappers = univariate_wrappers
+
+        return obj
+
+    def fit(
+        self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray, X_cal: np.ndarray = None, cal_timestamps: np.ndarray = None
+    ):
+        """
+        Fit the Weighted Split Conformal Forecasting method.
+
+        Args:
+            y_cal_gt (np.ndarray): Ground truth values. Shape: (num_samples, forecast_length, num_features).
+            y_cal_pred (np.ndarray): Forecasted values from the time series model. Shape: (num_samples, forecast_length, num_features).
+            X_cal (np.ndarray, optional): Input covariates for input-dependent conformal methods. Shape: (num_samples, num_covariates).
+            cal_timestamps (np.ndarray, optional): Timestamps associated with each forecasted value. Shape: (num_samples, forecast_length).
+        """
+
+        if self.window_size is None:
+            self.window_size = y_cal_pred.shape[0]
+
+        window_critical_size = int(np.ceil(1 / self.false_alarm))
+        if (self.window_size < window_critical_size) and (y_cal_pred.shape[0] >= window_critical_size):
+            self.window_size = window_critical_size
+        assert (
+            self.window_size >= window_critical_size
+        ), "Not enough calibration points for the desired error rate. For an error rate of {} we need at least {} calibration points".format(
+            self.false_alarm, window_critical_size
+        )
+
+        self.univariate_wrappers = {}
+        for ix_f in range(y_cal_pred.shape[2]):
+            cal_weights = None
+
+            """
+            Weights Optimization
+            """
+            # Copy the dictionary
+            weighting_params = self.weighting_params.copy()
+            if "optimization" in self.weighting_params.keys():
+                if self.weighting_params["optimization"] == WeightingOptimization.WASS1.value:  # "wass1":
+                    weighting_params.pop("optimization", None)
+                    """
+                    Fitting Weights
+                    1. compute non-conformity scores.3
+                    2. Initialize Wass1 weight adapter
+                    """
+                    critical_efficient_size = int(np.ceil(1 / self.false_alarm))
+                    cal_scores = nonconformity_score_functions(
+                        y_cal_gt[:, :, ix_f],
+                        y_cal_pred[:, :, ix_f],
+                        X=X_cal,
+                        nonconformity_score=self.nonconformity_score,
+                    )
+
+                    stride = 1
+                    n_batch_update = int((critical_efficient_size + 2))
+                    n_updates = 100
+                    n_cal_optimization = (n_updates - 1) * stride + n_batch_update
+                    n_cal_init = np.maximum(int(critical_efficient_size) * 2, cal_scores.shape[0] - n_cal_optimization)
+                    lr = 0.001
+
+                    if cal_scores.shape[0] >= n_cal_init + n_batch_update:
+                        awcsw = AdaptiveWeightedConformalScoreWrapper(
+                            false_alarm=self.false_alarm,
+                            window_size=self.window_size,
+                            weighting=Weighting.UNIFORM.value,
+                            weighting_params={
+                                "n_batch_update": n_batch_update,
+                                "conformal_weights_update": False,
+                                "stride": stride,
+                                "lr": lr,
+                            },
+                        )
+
+                        # Need to call these because of side effects
+                        _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
+                        _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
+                        cal_weights = awcsw.cal_weights
+
+            for ix_h in range(y_cal_pred.shape[1]):
+                cal_timestamps_i = None
+                if cal_timestamps is not None:
+                    cal_timestamps_i = cal_timestamps[:, ix_h, ix_f]
+                self.univariate_wrappers[ix_h, ix_f] = WeightedConformalWrapper(
+                    nonconformity_score=self.nonconformity_score,
+                    false_alarm=self.false_alarm,
+                    weighting=self.weighting,
+                    weighting_params=weighting_params,
+                    threshold_function=self.threshold_function,
+                    window_size=self.window_size,
+                    online_size=self.online_size,
+                )
+                self.univariate_wrappers[ix_h, ix_f].fit(
+                    y_cal_gt[:, ix_h, ix_f], y_cal_pred[:, ix_h, ix_f], X_cal=X_cal, cal_timestamps=cal_timestamps_i
+                )
+                if cal_weights is not None:
+                    self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
+
+    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
+        """
+        Update the nonconformity scores and threshold function.
+
+        Args:
+            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
+            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
+        """
+
+        for ix_h in range(y_pred.shape[1]):
+            for ix_f in range(y_pred.shape[2]):
+                timestamps_i = None
+                if timestamps is not None:
+                    timestamps_i = timestamps[:, ix_h, ix_f]
+
+                y_gt_i = y_gt[:, ix_h, ix_f]
+
+                _ = self.univariate_wrappers[ix_h, ix_f].predict(
+                    y_pred[:, ix_h, ix_f], y_gt=y_gt_i, X=X, timestamps=timestamps_i, update=True
+                )
+
+    def predict(
+        self,
+        y_pred: np.ndarray,
+        y_gt: np.ndarray = None,
+        X: np.ndarray = None,
+        timestamps: np.ndarray = None,
+        false_alarm: float = None,
+        update: bool = False,
+    ):
+        """
+        Generate prediction intervals and, if ground truth (`y_gt`) is provided, optionally return outlier flags and nonconformity p-values.
+
+        If `update` is enabled, the method calls `predict_batch` with the `update=True` flag every `self.online_size` samples to update the nonconformity scores.
+
+        Args:
+            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            y_gt (np.ndarray, optional): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            X (np.ndarray, optional): Input covariates. Shape: (n_samples, n_features).
+            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (num_samples, forecast_length ).
+            false_alarm (float, optional): Desired error rate in [0, 1]. If None, defaults to `self.false_alarm`.
+            update (bool, optional): Whether to update the nonconformity scores using `y_gt` if provided. Default is False.
+
+        Returns:
+            dict: A dictionary containing:
+                - prediction intervals for each forecast step and feature (always).
+                - and optionally, outlier flags and nonconformity p-values if `y_gt` is provided.
+        """
+
+        output = {}
+        if self.nonconformity_score in [s.value for s in NonconformityScores]:  #'absolute_error':
+            output["prediction_interval"] = {"y_low": np.zeros_like(y_pred), "y_high": np.zeros_like(y_pred)}
+
+        if y_gt is not None:
+            output["outliers"] = np.zeros_like(y_pred)
+            output["outliers_scores"] = np.zeros_like(y_pred)
+
+        for ix_h in range(y_pred.shape[1]):
+            for ix_f in range(y_pred.shape[2]):
+                timestamps_i = None
+                if timestamps is not None:
+                    timestamps_i = timestamps[:, ix_h, ix_f]
+
+                y_gt_i = None
+                if y_gt is not None:
+                    y_gt_i = y_gt[:, ix_h, ix_f]
+
+                output_i = self.univariate_wrappers[ix_h, ix_f].predict(
+                    y_pred[:, ix_h, ix_f],
+                    y_gt=y_gt_i,
+                    X=X,
+                    timestamps=timestamps_i,
+                    false_alarm=false_alarm,
+                    update=update,
+                )
+
+                if self.nonconformity_score in [s.value for s in NonconformityScores]:  # 'absolute_error':
+                    output["prediction_interval"]["y_low"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_low"]
+                    output["prediction_interval"]["y_high"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_high"]
+
+                if y_gt is not None:
+                    output["outliers"][:, ix_h, ix_f] = output_i["outliers"]
+                    output["outliers_scores"][:, ix_h, ix_f] = output_i["outliers_scores"]
+
+        return output
 
 
 class WeightedConformalWrapper:
@@ -1032,287 +1203,6 @@ class WeightedConformalWrapper:
             cal_weights = self.get_weights()
             if self.threshold_function == ThresholdFunction.WEIGHTING.value:
                 self.score_threshold = self.score_threshold_func(cal_weights, false_alarm=self.false_alarm)
-
-
-class WeightedConformalForecasterWrapper:
-    def __init__(
-        self,
-        nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
-        false_alarm: float = 0.05,
-        weighting: str = Weighting.UNIFORM.value,
-        weighting_params: Dict[str, Any] = {},
-        threshold_function: str = ThresholdFunction.WEIGHTING.value,
-        window_size: Optional[int] = None,
-    ):
-        self.nonconformity_score = nonconformity_score
-        # self.nonconformity_score_func = nonconformity_score_functions
-
-        self.quantile = 1 - false_alarm
-        self.false_alarm = false_alarm
-
-        self.weighting = weighting
-        self.weighting_params = weighting_params
-        self.window_size = window_size
-        self.online_size = 1
-        self.threshold_function = threshold_function
-        self.weights_adaptive = []
-        self.univariate_wrappers = {}
-
-        """
-        Weighted Split Conformal Forecasting Wrapper Class.
-
-        Args:
-            nonconformity_score (str): Type of nonconformity score to use, as defined in the `NonconformityScores` enum.
-            false_alarm (float): Desired false alarm (error) rate for the prediction intervals.
-            weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum.
-            weighting_params (dict): Parameters for the selected weighting strategy, if applicable.
-            threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum.
-            window_size (int, optional): Maximum number of past nonconformity scores to use for calibration. Default is None (use all available scores).
-        """
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this object.
-        """
-
-        output = {
-            "nonconformity_score": self.nonconformity_score,
-            "false_alarm": self.false_alarm,
-            "weighting": self.weighting,
-            "weighting_params": self.weighting_params,
-            "window_size": self.window_size,
-            "threshold_function": self.threshold_function,
-            "weights_adaptive": self.weights_adaptive,
-            "univariate_wrappers": {json.dumps(k): v.to_dict() for k, v in self.univariate_wrappers.items()},
-        }
-
-        return output
-
-    @classmethod
-    def from_dict(cls, params: Dict[str, Any], **kwargs) -> "WeightedConformalForecasterWrapper":
-        """
-        Instantiates a type of [`~WeightedConformalForecasterWrapper`] from a Python dictionary of
-        parameters.
-
-        Args:
-            dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the object.
-            kwargs (`Dict[str, Any]`):
-                Additional parameters from which to initialize the object.
-
-        Returns:
-            [`~WeightedConformalForecasterWrapper`]: The WeightedcCnformalForecaster object instantiated from those
-            parameters.
-        """
-
-        params_copy = params.copy()
-
-        save_attrs = ["weights_adaptive", "univariate_wrappers"]
-        copy_attrs = ["weights_adaptive"]
-
-        save_attrs_dict = {}
-        for attr in save_attrs:
-            save_attrs_dict[attr] = params_copy.pop(attr)
-
-        obj = cls(**params_copy, **kwargs)
-
-        for attr_name, attr_value in save_attrs_dict.items():
-            if attr_name in copy_attrs:
-                setattr(obj, attr_name, attr_value)
-
-        univariate_wrappers = {}
-        for k, v in save_attrs_dict["univariate_wrappers"].items():
-            k_decoded = tuple(json.loads(k))
-            univariate_wrappers[k_decoded] = WeightedConformalWrapper.from_dict(v)
-
-        obj.univariate_wrappers = univariate_wrappers
-
-        return obj
-
-    def fit(
-        self, y_cal_gt: np.ndarray, y_cal_pred: np.ndarray, X_cal: np.ndarray = None, cal_timestamps: np.ndarray = None
-    ):
-        """
-        Fit the Weighted Split Conformal Forecasting method.
-
-        Args:
-            y_cal_gt (np.ndarray): Ground truth values. Shape: (num_samples, forecast_length, num_features).
-            y_cal_pred (np.ndarray): Forecasted values from the time series model. Shape: (num_samples, forecast_length, num_features).
-            X_cal (np.ndarray, optional): Input covariates for input-dependent conformal methods. Shape: (num_samples, num_covariates).
-            cal_timestamps (np.ndarray, optional): Timestamps associated with each forecasted value. Shape: (num_samples, forecast_length).
-        """
-
-        if self.window_size is None:
-            self.window_size = y_cal_pred.shape[0]
-
-        window_critical_size = int(np.ceil(1 / self.false_alarm))
-        if (self.window_size < window_critical_size) and (y_cal_pred.shape[0] >= window_critical_size):
-            self.window_size = window_critical_size
-        assert (
-            self.window_size >= window_critical_size
-        ), "Not enough calibration points for the desired error rate. For an error rate of {} we need at least {} calibration points".format(
-            self.false_alarm, window_critical_size
-        )
-
-        self.univariate_wrappers = {}
-        for ix_f in range(y_cal_pred.shape[2]):
-            cal_weights = None
-
-            """
-            Weights Optimization
-            """
-            # Copy the dictionary
-            weighting_params = self.weighting_params.copy()
-            if "optimization" in self.weighting_params.keys():
-                if self.weighting_params["optimization"] == WeightingOptimization.WASS1.value:  # "wass1":
-                    weighting_params.pop("optimization", None)
-                    """
-                    Fitting Weights
-                    1. compute non-conformity scores.3
-                    2. Initialize Wass1 weight adapter
-                    """
-                    critical_efficient_size = int(np.ceil(1 / self.false_alarm))
-                    cal_scores = nonconformity_score_functions(
-                        y_cal_gt[:, :, ix_f],
-                        y_cal_pred[:, :, ix_f],
-                        X=X_cal,
-                        nonconformity_score=self.nonconformity_score,
-                    )
-
-                    stride = 1
-                    n_batch_update = int((critical_efficient_size + 2))
-                    n_updates = 100
-                    n_cal_optimization = (n_updates - 1) * stride + n_batch_update
-                    n_cal_init = np.maximum(int(critical_efficient_size) * 2, cal_scores.shape[0] - n_cal_optimization)
-                    lr = 0.001
-
-                    if cal_scores.shape[0] >= n_cal_init + n_batch_update:
-                        awcsw = AdaptiveWeightedConformalScoreWrapper(
-                            false_alarm=self.false_alarm,
-                            window_size=self.window_size,
-                            weighting=Weighting.UNIFORM.value,
-                            weighting_params={
-                                "n_batch_update": n_batch_update,
-                                "conformal_weights_update": False,
-                                "stride": stride,
-                                "lr": lr,
-                            },
-                        )
-
-                        # Need to call these because of side effects
-                        _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
-                        _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
-                        cal_weights = awcsw.cal_weights
-
-            for ix_h in range(y_cal_pred.shape[1]):
-                cal_timestamps_i = None
-                if cal_timestamps is not None:
-                    cal_timestamps_i = cal_timestamps[:, ix_h, ix_f]
-                self.univariate_wrappers[ix_h, ix_f] = WeightedConformalWrapper(
-                    nonconformity_score=self.nonconformity_score,
-                    false_alarm=self.false_alarm,
-                    weighting=self.weighting,
-                    weighting_params=weighting_params,
-                    threshold_function=self.threshold_function,
-                    window_size=self.window_size,
-                    online_size=self.online_size,
-                )
-                self.univariate_wrappers[ix_h, ix_f].fit(
-                    y_cal_gt[:, ix_h, ix_f], y_cal_pred[:, ix_h, ix_f], X_cal=X_cal, cal_timestamps=cal_timestamps_i
-                )
-                if cal_weights is not None:
-                    self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
-
-    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
-        """
-        Update the nonconformity scores and threshold function.
-
-        Args:
-            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
-            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
-            X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
-            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
-        """
-
-        for ix_h in range(y_pred.shape[1]):
-            for ix_f in range(y_pred.shape[2]):
-                timestamps_i = None
-                if timestamps is not None:
-                    timestamps_i = timestamps[:, ix_h, ix_f]
-
-                y_gt_i = y_gt[:, ix_h, ix_f]
-
-                _ = self.univariate_wrappers[ix_h, ix_f].predict(
-                    y_pred[:, ix_h, ix_f], y_gt=y_gt_i, X=X, timestamps=timestamps_i, update=True
-                )
-
-    def predict(
-        self,
-        y_pred: np.ndarray,
-        y_gt: np.ndarray = None,
-        X: np.ndarray = None,
-        timestamps: np.ndarray = None,
-        false_alarm: float = None,
-        update: bool = False,
-    ):
-        """
-        Generate prediction intervals and, if ground truth (`y_gt`) is provided, optionally return outlier flags and nonconformity p-values.
-
-        If `update` is enabled, the method calls `predict_batch` with the `update=True` flag every `self.online_size` samples to update the nonconformity scores.
-
-        Args:
-            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
-            y_gt (np.ndarray, optional): Ground truth values. Shape: (n_samples, forecast_length, num_features).
-            X (np.ndarray, optional): Input covariates. Shape: (n_samples, n_features).
-            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (num_samples, forecast_length ).
-            false_alarm (float, optional): Desired error rate in [0, 1]. If None, defaults to `self.false_alarm`.
-            update (bool, optional): Whether to update the nonconformity scores using `y_gt` if provided. Default is False.
-
-        Returns:
-            dict: A dictionary containing:
-                - prediction intervals for each forecast step and feature (always).
-                - and optionally, outlier flags and nonconformity p-values if `y_gt` is provided.
-        """
-
-        output = {}
-        if self.nonconformity_score in [s.value for s in NonconformityScores]:  #'absolute_error':
-            output["prediction_interval"] = {"y_low": np.zeros_like(y_pred), "y_high": np.zeros_like(y_pred)}
-
-        if y_gt is not None:
-            output["outliers"] = np.zeros_like(y_pred)
-            output["outliers_scores"] = np.zeros_like(y_pred)
-
-        for ix_h in range(y_pred.shape[1]):
-            for ix_f in range(y_pred.shape[2]):
-                timestamps_i = None
-                if timestamps is not None:
-                    timestamps_i = timestamps[:, ix_h, ix_f]
-
-                y_gt_i = None
-                if y_gt is not None:
-                    y_gt_i = y_gt[:, ix_h, ix_f]
-
-                output_i = self.univariate_wrappers[ix_h, ix_f].predict(
-                    y_pred[:, ix_h, ix_f],
-                    y_gt=y_gt_i,
-                    X=X,
-                    timestamps=timestamps_i,
-                    false_alarm=false_alarm,
-                    update=update,
-                )
-
-                if self.nonconformity_score in [s.value for s in NonconformityScores]:  # 'absolute_error':
-                    output["prediction_interval"]["y_low"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_low"]
-                    output["prediction_interval"]["y_high"][:, ix_h, ix_f] = output_i["prediction_interval"]["y_high"]
-
-                if y_gt is not None:
-                    output["outliers"][:, ix_h, ix_f] = output_i["outliers"]
-                    output["outliers_scores"][:, ix_h, ix_f] = output_i["outliers_scores"]
-
-        return output
 
 
 def weighted_conformal_quantile(
