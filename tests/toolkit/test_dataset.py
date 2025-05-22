@@ -39,26 +39,6 @@ def ts_data():
 
 
 @pytest.fixture(scope="module")
-def ts_data_nested():
-    series_length = 20
-    series_set_1 = [pd.Series(np.arange(series_length) / (i + 1)) for i in range(15)]
-
-    series_set_2 = [np.sin(s) for s in series_set_1]
-
-    df = pd.DataFrame(
-        {
-            "time_int": range(15),
-            "id": ["A", "B", "C"] * 5,
-            "val": series_set_1,
-            "val2": series_set_2,
-            "label": [s.iloc[-1] > 0.5 for s in series_set_2],
-        }
-    )
-    df["time_date"] = df["time_int"] * timedelta(days=1) + datetime(2020, 1, 1)
-    return df
-
-
-@pytest.fixture(scope="module")
 def ts_data_with_categorical():
     return pd.DataFrame(
         {
@@ -505,7 +485,7 @@ def test_classification_dataset_full_series(ts_data_nested):
         data,
         timestamp_column="time_date",
         input_columns=["val", "val2"],
-        label_column=["label"],
+        label_column="label_encoded",
         id_columns=[
             "id",
         ],
