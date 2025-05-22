@@ -132,8 +132,10 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                     false_alarm=self.false_alarm,
                     nonconformity_score=self.nonconformity_score,
                 )
-            if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+            elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
+            else:
+                raise ValueError(f"Invalid method provided {self.method}")
 
         kwargs["processor_class"] = self.__class__.__name__
         super().__init__(**kwargs)
@@ -205,7 +207,13 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         """
         model = feature_extractor_dict.get("model", None)
         if model is not None:
-            feature_extractor_dict["model"] = WeightedConformalForecasterWrapper.from_dict(model)
+            method = feature_extractor_dict.get("method", None)
+            if method == PostHocProbabilisticMethod.CONFORMAL.value:
+                feature_extractor_dict["model"] = WeightedConformalForecasterWrapper.from_dict(model)
+            elif method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                feature_extractor_dict["model"] = PostHocGaussian.from_dict(model)
+            else:
+                raise ValueError(f"Unknown method provided: {method}")
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -435,6 +443,47 @@ class PostHocGaussian:
         quantiles = norm.ppf(quantiles) * std_devs  # Compute quantiles
         y_test_prob_pred = y_test_pred[..., np.newaxis] + quantiles[np.newaxis, ...]
         return y_test_prob_pred
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this object.
+        """
+
+        output = {
+            "window_size": self.window_size,
+            "quantiles": self.quantiles,
+            "critical_size": self.critical_size,
+            "variance": self.variance,
+        }
+
+        return output
+
+    @classmethod
+    def from_dict(cls, params: Dict[str, Any], **kwargs) -> "PostHocGaussian":
+        """
+        Instantiates a type of [`~PostHocGaussian`] from a Python dictionary of
+        parameters.
+
+        Args:
+            dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the object.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the object.
+
+        Returns:
+            [`~PostHocGaussian`]: The PostHocGaussian object instantiated from those
+            parameters.
+        """
+
+        variance = params.pop("variance", None)
+        critical_size = params.pop("critical_size", 1)
+        obj = cls(**params)
+        obj.variance = variance
+        obj.critical_size = critical_size
+        return obj
 
 
 class WeightedConformalForecasterWrapper:

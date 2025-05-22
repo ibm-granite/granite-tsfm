@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tsfm_public.toolkit.conformal import (
     NonconformityScores,
@@ -17,14 +18,19 @@ from tsfm_public.toolkit.conformal import (
 )
 
 
-def test_conformal_save_pretrained():
+@pytest.mark.parametrize(
+    "method", [PostHocProbabilisticMethod.CONFORMAL.value, PostHocProbabilisticMethod.GAUSSIAN.value]
+)
+def test_conformal_save_pretrained(method):
     # initial test to check that we save the ProbabbilisticProcessor as intended
-    p = PostHocProbabilisticProcessor()
+    p = PostHocProbabilisticProcessor(method=method)
 
     with tempfile.TemporaryDirectory() as d:
         p.save_pretrained(d)
-        # p_new = PostHocProbabilisticProcessor.from_pretrained(d)
+        p_new = PostHocProbabilisticProcessor.from_pretrained(d)
         assert Path(d).joinpath(PostHocProbabilisticProcessor.PROCESSOR_NAME).exists()
+
+        assert p_new.method == method
 
         # to do: add checks that p and p_new are equivalent
 
