@@ -40,4 +40,5 @@
   "search.useGlobalIgnoreFiles": true,
   "search.useParentIgnoreFiles": true,
   "files.autoSave": "afterDelay",
+  "python.analysis.typeCheckingMode": "standard",
 }
