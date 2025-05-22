@@ -85,6 +85,9 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         if label_column is None:
             raise ValueError("`label_column` must be specified")
 
+        if isinstance(label_column, list):
+            raise ValueError(f"`label_column` should not be a list, received: {label_column}")
+
         self.id_columns = id_columns
         self.timestamp_column = timestamp_column
         self.label_column = label_column
