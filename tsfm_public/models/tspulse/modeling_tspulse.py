@@ -1219,6 +1219,9 @@ class TSPulseFFTMasker(nn.Module):
             # Apply masking to selected samples only
             mask[batch_mask] = mask[batch_mask].scatter(1, topk_indices[batch_mask], False)
 
+        else:
+            raise Exception("Invalid fft_mask_strategy")
+
         # Replicate the mask for the imaginary part
         full_mask = torch.cat([mask, mask], dim=1)  # Apply the same mask to the second half (imaginary part)
 
@@ -2666,6 +2669,9 @@ class TSPulseMasking(nn.Module):
         """
         B, T, C = tensor.shape
         device = tensor.device
+
+        if self.mask_token is None:
+            self.mask_token = torch.full((patch_length,), 0).to(tensor.device)  # set to default zero
 
         if past_observed_mask is None:
             mask = torch.zeros_like(tensor, dtype=torch.bool, device=device)
