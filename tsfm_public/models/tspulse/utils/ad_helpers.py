@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from typing import Dict
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from torch import nn as nn
 
@@ -8,7 +9,12 @@ from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from .helpers import patchwise_stitched_reconstruction
 
 
-def compute_tspulse_score(model: TSPulseForReconstruction, payload: dict, mode: str, aggr_win_size: int, **kwargs):
+def compute_tspulse_score(model: TSPulseForReconstruction, 
+                          payload: dict, 
+                          mode: str, 
+                          aggr_win_size: int, 
+                          **kwargs,
+                          ) -> Dict[str, np.ndarray]:
     use_forecast = "forecast" in mode
     use_ts_from_fft = "fft" in mode
     use_ts = "time" in mode
@@ -73,12 +79,12 @@ def compute_tspulse_score(model: TSPulseForReconstruction, payload: dict, mode: 
     return scores
 
 
-def boundary_adjusted_scores(
+def boundary_adjusted_tspulse_scores(
     key: str,
     x: np.ndarray,
     context_length: int,
     aggr_win_size: int,
-):
+) -> np.ndarray:
     if key == "forecast":
         start_pad_len = context_length
         end_pad_len = 0

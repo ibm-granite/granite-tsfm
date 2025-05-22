@@ -15,7 +15,8 @@ from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils.doc import add_end_docstrings
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.models.tspulse.utils.ad_helpers import boundary_adjusted_scores, compute_tspulse_score
+from tsfm_public.models.tspulse.utils.ad_helpers import (boundary_adjusted_tspulse_scores, 
+                                                         compute_tspulse_score)
 
 from .dataset import ForecastDFDataset
 
@@ -206,21 +207,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         for k in accumulator:
             score = np.concatenate(accumulator[k], axis=0)
             if self.model_type == "tspulse":
-                score = boundary_adjusted_scores(k, score, context_length, aggr_win_size)
+                score = boundary_adjusted_tspulse_scores(k, score, context_length, aggr_win_size)
             accumulator[k] = score
 
-        score = self.aggr_function(
-            np.vstack([score_.ravel() for _, score_ in accumulator.items()]),
-            axis=0,
-        )
-
-        model_outputs = defaultdict(list)
-        # without shuffling in the dataloader above, we assume that order is preserved
-        # otherwise we need to incorporate sequence id somewhere and do a proper join
-        model_outputs["prediction_outputs"] = score
-
         # call postprocess
-        outputs = self.postprocess(model_outputs, **postprocess_params)
+        outputs = self.postprocess(accumulator, **postprocess_params)
 
         return outputs
 
@@ -234,12 +225,20 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
+        model_outputs = {}
         if self.model_type == "tspulse":
             model_outputs = compute_tspulse_score(self.model, model_inputs, **kwargs)
         return model_outputs
 
-    def postprocess(self, model_outputs, **postprocess_parameters):
+    def postprocess(self, 
+                    model_outputs, 
+                    **postprocess_parameters):
         result = self.__context_memory["data"].copy()
+        score = self.aggr_function(
+            np.vstack([score_.ravel() for _, score_ in model_outputs.items()]),
+            axis=0,
+        )
+        model_outputs = {"prediction_outputs": score}
         smoothing_window_size = int(postprocess_parameters.get("smoothing_window_size", 1))
         if smoothing_window_size > 1:
             for k in model_outputs:
