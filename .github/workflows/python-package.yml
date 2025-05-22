@@ -36,4 +36,4 @@ jobs:
         make quality
     - name: Test with pytest
       run: |
-        pytest --cov=tsfm_public --cov-fail-under=70 --cov-report term-missing tests
+        pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests
