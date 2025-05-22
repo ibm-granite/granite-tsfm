@@ -71,8 +71,10 @@ def test_static_categorical(ts_data_nested):
         tsp.categorical_vocab_size_list
 
     tsp.train(df)
-
     assert tsp.categorical_vocab_size_list == [4]
+
+    df_prep = tsp.preprocess(df)
+    assert df_prep["cat"].dtype == "float64"
 
 
 def test_helpers():
