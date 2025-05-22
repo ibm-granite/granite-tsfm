@@ -54,6 +54,40 @@ def ts_data_runs():
     return df
 
 
+@pytest.fixture(scope="module")
+def ts_data_nested():
+    series_length = 20
+    series_set_1 = [pd.Series(np.arange(series_length) / (i + 1)) for i in range(15)]
+
+    series_set_2 = [np.sin(np.pi * s) for s in series_set_1]
+
+    df = pd.DataFrame(
+        {
+            "time_int": range(15),
+            "id": ["A", "B", "C"] * 5,
+            "val": series_set_1,
+            "val2": series_set_2,
+            "label": [s.iloc[-1] for s in series_set_2],
+        }
+    )
+
+    def label_fun(x):
+        if x > 0.75:
+            return "blue"
+        if x > 0:
+            return "red"
+        if x < -0.7:
+            return "green"
+        else:
+            return "yellow"
+
+    df.label = df.label.apply(label_fun)
+    df["label_encoded"] = pd.Categorical(df.label).codes
+
+    df["time_date"] = df["time_int"] * timedelta(days=1) + datetime(2020, 1, 1)
+    return df
+
+
 @pytest.fixture(scope="package")
 def etth_data_base():
     timestamp_column = "date"

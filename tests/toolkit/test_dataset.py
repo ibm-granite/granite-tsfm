@@ -439,6 +439,7 @@ def test_clasification_df_dataset(ts_data):
         label_column=["label"],
         id_columns=["id", "id2"],
         context_length=4,
+        full_series=False,
     )
 
     # check length
@@ -471,9 +472,28 @@ def test_clasification_df_dataset(ts_data):
         id_columns=["id", "id2"],
         context_length=4,
         enable_padding=False,
+        full_series=False,
     )
 
     assert len(ds) == 7
+
+
+def test_classification_dataset_full_series(ts_data_nested):
+    data = ts_data_nested.copy()
+
+    ds = ClassificationDFDataset(
+        data,
+        timestamp_column="time_date",
+        input_columns=["val", "val2"],
+        label_column="label_encoded",
+        id_columns=[
+            "id",
+        ],
+        context_length=32,
+    )
+
+    assert len(ds.datasets) == 3
+    assert ds[0]["past_values"].numpy().shape == (32, 2)
 
 
 def test_datetime_handling(ts_data):
