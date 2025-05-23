@@ -1,20 +1,33 @@
+from collections import OrderedDict
+
 import numpy as np
 import torch
-from typing import Dict
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from torch import nn as nn
+from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 
 from .helpers import patchwise_stitched_reconstruction
 
 
-def compute_tspulse_score(model: TSPulseForReconstruction, 
-                          payload: dict, 
-                          mode: str, 
-                          aggr_win_size: int, 
-                          **kwargs,
-                          ) -> Dict[str, np.ndarray]:
+def is_valid_tspulse_mode(mode_str: str) -> bool:
+    supported_modes = ["time", "fft", "forecast"]
+
+    valid_mode = False
+    for mode_type in supported_modes:
+        if mode_type in mode_str:
+            valid_mode = True
+    return valid_mode
+
+
+def compute_tspulse_score(
+    model: TSPulseForReconstruction,
+    payload: dict,
+    mode: str,
+    aggr_win_size: int,
+    **kwargs,
+) -> ModelOutput:
     use_forecast = "forecast" in mode
     use_ts_from_fft = "fft" in mode
     use_ts = "time" in mode
@@ -26,12 +39,10 @@ def compute_tspulse_score(model: TSPulseForReconstruction,
 
     batch_x = payload["past_values"]
 
-    if use_forecast:
-        batch_future_values = payload["future_values"]
-
     # Get TSPulse zeroshot output with stitched masked reconstruction
     keys_to_stitch = ["reconstruction_outputs", "reconstructed_ts_from_fft"]
 
+    model_forward_output = {}
     if use_forecast:
         model_forward_output = model(past_values=batch_x)
 
@@ -47,25 +58,12 @@ def compute_tspulse_score(model: TSPulseForReconstruction,
             reconstruct_end=reconstruct_end,
             debug=False,
         )
+        if isinstance(stitched_dict, tuple):
+            stitched_dict = stitched_dict[0]
 
     # Get desired output from TSPulse outputs
     # output shape: [batch_size, window_size, n_channels]
-    scores = {}
-
-    if use_ts_from_fft:
-        # time reconstruction from fft
-        output = stitched_dict["reconstructed_ts_from_fft"]
-        pointwise_score = anomaly_criterion(
-            batch_x[:, reconstruct_start:reconstruct_end, :],
-            output[:, reconstruct_start:reconstruct_end, :],
-        )
-        scores["fft"] = torch.mean(pointwise_score, dim=[1, 2]).detach().cpu().numpy()
-
-    if use_forecast:
-        # forecast output
-        output = model_forward_output.forecast_output
-        pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
-        scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2]).detach().cpu().numpy()
+    scores = OrderedDict()
 
     if use_ts:
         # time reconstruction
@@ -74,9 +72,25 @@ def compute_tspulse_score(model: TSPulseForReconstruction,
             batch_x[:, reconstruct_start:reconstruct_end, :],
             output[:, reconstruct_start:reconstruct_end, :],
         )
-        scores["time"] = torch.mean(pointwise_score, dim=[1, 2]).detach().cpu().numpy()
+        scores["time"] = torch.mean(pointwise_score, dim=[1, 2])
 
-    return scores
+    if use_ts_from_fft:
+        # time reconstruction from fft
+        output = stitched_dict["reconstructed_ts_from_fft"]
+        pointwise_score = anomaly_criterion(
+            batch_x[:, reconstruct_start:reconstruct_end, :],
+            output[:, reconstruct_start:reconstruct_end, :],
+        )
+        scores["fft"] = torch.mean(pointwise_score, dim=[1, 2])
+
+    if use_forecast:
+        # forecast output
+        batch_future_values = payload["future_values"]
+        output = model_forward_output["forecast_output"]
+        pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
+        scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
+
+    return ModelOutput(scores)
 
 
 def boundary_adjusted_tspulse_scores(
@@ -93,5 +107,3 @@ def boundary_adjusted_tspulse_scores(
         end_pad_len = aggr_win_size // 2
     score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
     return MinMaxScaler_().fit_transform(score.reshape(-1, 1))
-
-

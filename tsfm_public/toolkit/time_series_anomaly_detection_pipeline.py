@@ -1,9 +1,10 @@
 import inspect
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
+import torch
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -13,10 +14,14 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.pipelines.base import GenericTensor, build_pipeline_init_args
 from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils.doc import add_end_docstrings
+from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.models.tspulse.utils.ad_helpers import (boundary_adjusted_tspulse_scores, 
-                                                         compute_tspulse_score)
+from tsfm_public.models.tspulse.utils.ad_helpers import (
+    boundary_adjusted_tspulse_scores,
+    compute_tspulse_score,
+    is_valid_tspulse_mode,
+)
 
 from .dataset import ForecastDFDataset
 
@@ -56,12 +61,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if (model_type == "tspulse") and (prediction_mode is None):
             prediction_mode = "time"
         else:
-            prediction_mode = "time"
+            prediction_mode = "forecast"
 
         known_mode = False
-        for mode_str in ["time", "fft", "forecast"]:
-            if mode_str in prediction_mode:
-                known_mode = True
+        if model_type == "tspulse":
+            known_mode = is_valid_tspulse_mode(prediction_mode)
 
         if not known_mode:
             raise ValueError(
@@ -145,29 +149,31 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
-    def preprocess(self, time_series, **kwargs) -> Dict[str, Union[GenericTensor, List[Any]]]:
+    def preprocess(self, input_, **kwargs) -> Dict[str, Union[GenericTensor, List[Any]]]:
         """Preprocess step
         Load the data, if not already loaded, and then generate a pytorch dataset.
         """
         # use the feature extractor here
-        if isinstance(time_series, str):
-            timestamp_column = kwargs.get("timestamp_column")
+        if isinstance(input_, str):
+            timestamp_column: str = kwargs.get("timestamp_column", "")
+            if not isinstance(timestamp_column, str) or (timestamp_column == ""):
+                raise ValueError("Error: timestamp column must be specified!")
 
-            time_series = pd.read_csv(
-                time_series,
+            input_ = pd.read_csv(
+                input_,
                 parse_dates=[timestamp_column],
             )
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
-            time_series,
+            input_,
             **kwargs,
         )
-        self.__context_memory["data"] = time_series
-        return dataset
+        self.__context_memory["data"] = input_
+        return {"dataset": dataset}
 
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
-        dataset = self.preprocess(inputs, **preprocess_params)
+        dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
 
@@ -204,18 +210,19 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         context_length = self.model.config.context_length
         aggr_win_size = forward_params.get("aggr_win_size")
+        accumulator_ = OrderedDict()
         for k in accumulator:
-            score = np.concatenate(accumulator[k], axis=0)
+            score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
             if self.model_type == "tspulse":
                 score = boundary_adjusted_tspulse_scores(k, score, context_length, aggr_win_size)
-            accumulator[k] = score
+            accumulator_[k] = score
 
         # call postprocess
-        outputs = self.postprocess(accumulator, **postprocess_params)
+        outputs = self.postprocess(ModelOutput(accumulator_), **postprocess_params)
 
         return outputs
 
-    def _forward(self, model_inputs, **kwargs):
+    def _forward(self, input_tensors, **kwargs):
         """Forward step
         Responsible for taking pre-processed dictionary of tensors and passing it to
         the model. Aligns model parameters with the proper input parameters. Only passes
@@ -225,21 +232,24 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-        model_outputs = {}
+        model_outputs = ModelOutput(OrderedDict())
         if self.model_type == "tspulse":
-            model_outputs = compute_tspulse_score(self.model, model_inputs, **kwargs)
+            model_outputs = compute_tspulse_score(self.model, input_tensors, **kwargs)
         return model_outputs
 
-    def postprocess(self, 
-                    model_outputs, 
-                    **postprocess_parameters):
+    def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
         score = self.aggr_function(
             np.vstack([score_.ravel() for _, score_ in model_outputs.items()]),
             axis=0,
         )
         model_outputs = {"prediction_outputs": score}
-        smoothing_window_size = int(postprocess_parameters.get("smoothing_window_size", 1))
+        smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+        if not isinstance(smoothing_window_size, int):
+            try:
+                smoothing_window_size = int(smoothing_window_size)
+            except ValueError:
+                smoothing_window_size = 1
         if smoothing_window_size > 1:
             for k in model_outputs:
                 model_outputs[k] = np.convolve(
