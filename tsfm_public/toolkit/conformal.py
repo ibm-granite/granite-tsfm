@@ -81,6 +81,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         nonconformity_score: str = NonconformityScores.ABSOLUTE_ERROR.value,
         method: str = PostHocProbabilisticMethod.CONFORMAL.value,
+        weighting: str = Weighting.UNIFORM.value,
+        weighting_params: Dict[str, Any] = {},
+        threshold_function: str = ThresholdFunction.WEIGHTING.value,
         **kwargs,
     ):
         """
@@ -91,7 +94,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             quantiles (List[float]): List of target quantiles to compute, with values in the open interval (0, 1).
             nonconformity_score (str, optional): Name of the nonconformity score to use, as defined in the `NonconformityScores` enum. Applicable only if the method is conformal.
             method (str): Name of the post-hoc probabilistic method to use, as defined in the `PostHocProbabilisticMethod` enum.
-
+            weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum. Only applicable if method = "conformal".
+            weighting_params (dict): Parameters for the selected weighting strategy, if applicable. Only applicable if method = "conformal".
+            threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum. Only applicable if method = "conformal".
         """
         # if "window_size" in params.keys():
         #     window_size = params["window_size"]
@@ -131,6 +136,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                     window_size=self.window_size,
                     false_alarm=self.false_alarm,
                     nonconformity_score=self.nonconformity_score,
+                    weighting=weighting,
+                    weighting_params=weighting_params,
+                    threshold_function=threshold_function,
                 )
             elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
