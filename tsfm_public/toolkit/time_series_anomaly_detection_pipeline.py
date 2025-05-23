@@ -33,12 +33,18 @@ from .time_series_forecasting_pipeline import TimeSeriesPipeline
     build_pipeline_init_args(has_tokenizer=False, has_feature_extractor=True, has_image_processor=False)
 )
 class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
+    """Time Series Anomaly Detection using HF time series models. This pipeline consumes a `pandas.DataFrame`
+    containing the time series data and produces a new `pandas.DataFrame` with anomaly scores.
+    """
+
     def __init__(
         self,
         model: PreTrainedModel,
         *args,
         prediction_mode: str = "forecast",
         aggr_function: str = "max",
+        aggr_win_size: int = 32,
+        smoothing_window_size: int = 1,
         **kwargs,
     ):
         kwargs["context_length"] = model.config.context_length
@@ -47,8 +53,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if "batch_size" not in kwargs:
             kwargs["batch_size"] = 128
 
-        kwargs["aggr_win_size"] = kwargs.get("aggr_win_size", 32)
-        kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", 1)
+        kwargs["aggr_win_size"] = aggr_win_size
+        kwargs["smoothing_window_size"] = smoothing_window_size
 
         model_type = None
         if isinstance(model, TSPulseForReconstruction):
@@ -88,7 +94,15 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
     @property
-    def model_type(self):
+    def model_type(self) -> str:
+        """Returns corresponding short name of the associated model class.
+
+        Raises:
+            ValueError: unsupported model type.
+
+        Returns:
+            str: short name of the model associated with the pipeline
+        """
         if isinstance(self.model, TSPulseForReconstruction):
             return "tspulse"
         # elif isinstance(self.model, TinyTimeMixerForPrediction):
@@ -96,6 +110,12 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         raise ValueError(f"Error: unsupported model type {self.model.__class__}!")
 
     def _sanitize_parameters(self, **kwargs):
+        """Assigns parameters to the different steps of the process. If context_length and prediction_length
+        are not provided they are taken from the model config.
+
+        For expected parameters see the call method below.
+        """
+
         preprocess_kwargs = {}
         postprocess_kwargs = {}
 
@@ -172,7 +192,18 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.__context_memory["data"] = input_
         return {"dataset": dataset}
 
-    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
+    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> pd.DataFrame:
+        """Replaces base `run_single` method which does batching during inference. This is needed to support
+        large inference requests.
+
+        Args:
+            inputs (str | pd.DataFrame): data input
+            preprocess_params (dict): required parameters for data preprocessing
+            forward_params (dict): required parameters for model evaluation
+            postprocess_params (dict): required parameters for output post processing
+        Returns:
+            pd.DataFrame: pipeline output
+        """
         dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
@@ -244,7 +275,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             axis=0,
         )
         model_outputs = {"prediction_outputs": score}
-        smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+        smoothing_window_size = postprocess_parameters.get("smoothing_window_size")
         if not isinstance(smoothing_window_size, int):
             try:
                 smoothing_window_size = int(smoothing_window_size)
