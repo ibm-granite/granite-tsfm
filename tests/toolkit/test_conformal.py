@@ -178,7 +178,7 @@ def test_posthoc_probabilistic_processor_online_update():
     2. Run Methods with updates
     """
     nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value]
-    method_list = [PostHocProbabilisticMethod.CONFORMAL.value]
+    method_list = [PostHocProbabilisticMethod.CONFORMAL.value, PostHocProbabilisticMethod.GAUSSIAN.value]
     for method in method_list:
         for nonconformity_score in nonconformity_score_list:
             p = PostHocProbabilisticProcessor(
@@ -269,5 +269,5 @@ def test_posthoc_probabilistic_processor_online_update():
 
 
 # if __name__ == '__main__':
-#     test_posthoc_probabilistic_processor()
+# test_posthoc_probabilistic_processor()
 # test_posthoc_probabilistic_processor_online_update()
