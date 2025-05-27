@@ -295,6 +295,19 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
 
         return y_test_prob_pred
 
+    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
+        """
+        Update the probabilistic post hoc model
+
+        Args:
+            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
+            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
+        """
+        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+            self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
+
 
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     """
@@ -696,7 +709,7 @@ class WeightedConformalForecasterWrapper:
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
-
+        # print(y_pred.shape, y_gt.shape)
         for ix_h in range(y_pred.shape[1]):
             for ix_f in range(y_pred.shape[2]):
                 timestamps_i = None
@@ -1168,7 +1181,7 @@ class WeightedConformalWrapper:
             update = self.online
 
         n_samples = y_pred.shape[0]
-        n_batches = np.ceil(n_samples / self.online_size)
+        n_batches = int(np.ceil(n_samples / self.online_size))
 
         if (y_gt is not None) and update:
             """
