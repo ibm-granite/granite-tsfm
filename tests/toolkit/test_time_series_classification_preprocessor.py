@@ -8,6 +8,8 @@ import pytest
 
 from tsfm_public.toolkit.time_series_classification_preprocessor import (
     TimeSeriesClassificationPreprocessor,
+    nest_transform,
+    unnest_transform,
 )
 
 
@@ -91,3 +93,15 @@ def test_helpers():
     assert tsp.num_input_channels == 2
     assert tsp.exogenous_channel_indices == []
     assert tsp.categorical_vocab_size_list is None
+
+
+@pytest.skip
+def test_unnest_nest(ts_data_nested):
+    df = ts_data_nested.copy()
+
+    u = unnest_transform(df, columns=["val", "val2"])
+    n = nest_transform(u, columns=["val", "val2"])
+
+    for i in range(df.shape[0]):
+        assert np.all(df["val"].iloc[i] == n["val"].iloc[i])
+        assert np.all(df["val2"].iloc[i] == n["val2"].iloc[i])

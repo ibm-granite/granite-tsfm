@@ -343,12 +343,13 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
 
 def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     # create a row_id column
+    order_preserved_columns = [c for c in df.columns if c in columns]
     series_lengths = df[columns[0]].apply(len).to_list()
-    unnested = [[f"{i}"] * series_lengths[i] for i in range(len(df))]
+    unnested = [[i] * series_lengths[i] for i in df.index]  # range(len(df))]
     # flatten
     unnested = [np.asarray(list(itertools.chain.from_iterable(unnested)))]
 
-    for c in columns:
+    for c in order_preserved_columns:
         unnested.append(np.concatenate([d.values for d in df[c].to_list()]))
 
     unnested = pd.DataFrame(
@@ -357,7 +358,7 @@ def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
                 [
                     NESTED_ID_COLUMN,
                 ]
-                + columns,
+                + order_preserved_columns,
                 unnested,
             )
         ),
@@ -366,10 +367,17 @@ def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
 
 
 def nest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    order_preserved_columns = [c for c in df.columns if c in columns]
+    if NESTED_ID_COLUMN not in df.columns:
+        raise ValueError(
+            f"nest_transformation requires that the dataset have an existing nested id column named {NESTED_ID_COLUMN}"
+        )
     groups = df.groupby(NESTED_ID_COLUMN)
     rows = []
+    index = []
     for name, g in groups:
-        rows.append([pd.Series(g[c]) for c in columns])
+        rows.append([pd.Series(g[c]) for c in order_preserved_columns])
+        index.append(name)
 
-    nested = pd.DataFrame(rows, columns=columns)
+    nested = pd.DataFrame(rows, columns=order_preserved_columns, index=index)
     return nested
