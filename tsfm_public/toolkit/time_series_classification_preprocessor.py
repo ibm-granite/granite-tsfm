@@ -367,6 +367,21 @@ def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
 
 
 def nest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """Nest a dataframe by first splitting the data by group and creating series for each group.
+    The new dataframe has these series as row entries. Original order of the columns in the dataframe
+    are preserved.
+
+    Args:
+        df (pd.DataFrame): Original dataframe, must contain an id column resulting from the unnest_transformation.
+        columns (List[str]): Columns for which to create nested series.
+
+    Raises:
+        ValueError: Raised when the dataframe does not contain and id column referenced by NESTED_ID_COLUMN
+
+    Returns:
+        pd.DataFrame: Resulting dataframe, but with nested series entries.
+    """
+
     order_preserved_columns = [c for c in df.columns if c in columns]
     if NESTED_ID_COLUMN not in df.columns:
         raise ValueError(
@@ -376,7 +391,7 @@ def nest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     rows = []
     index = []
     for name, g in groups:
-        rows.append([pd.Series(g[c]) for c in order_preserved_columns])
+        rows.append([pd.Series(g[c].values) for c in order_preserved_columns])
         index.append(name)
 
     nested = pd.DataFrame(rows, columns=order_preserved_columns, index=index)

@@ -95,13 +95,16 @@ def test_helpers():
     assert tsp.categorical_vocab_size_list is None
 
 
-@pytest.skip
 def test_unnest_nest(ts_data_nested):
     df = ts_data_nested.copy()
 
     u = unnest_transform(df, columns=["val", "val2"])
     n = nest_transform(u, columns=["val", "val2"])
 
+    # check length
+    assert df.shape[0] == n.shape[0]
+
+    # check all nested rows
     for i in range(df.shape[0]):
         assert np.all(df["val"].iloc[i] == n["val"].iloc[i])
         assert np.all(df["val2"].iloc[i] == n["val2"].iloc[i])
