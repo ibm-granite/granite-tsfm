@@ -5,7 +5,7 @@
 import enum
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -309,6 +309,74 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
         if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
             self.model.update(y_gt=y_gt, y_pred=y_pred)
+
+    def outlier_score(
+        self,
+        y_gt: np.ndarray,
+        y_pred: np.ndarray,
+        X: np.ndarray = None,
+        timestamps: np.ndarray = None,
+        aggregation: Union[str, int] = "mean",
+        significance: float = 0.01,
+        aggregation_axis: Union[int, Tuple[int, ...]] = 1,
+    ):
+        """
+        PROTOTYPE: METHOD TO GET NORMALIZED OUTLIER CONFORMAL SCORE (P-VALUE) BASED ON FORECASTED PREDICTION ERRORS
+
+        Args:
+            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
+            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
+            aggregation (str, int, or None, optional):
+                Determines how to aggregate the outlier scores across dimensions.
+                - If a string (e.g., 'mean', 'max', 'min', 'median'), applies the specified aggregation function over the axes provided in `aggregation_axis`.
+                - If an integer, selects the outlier scores corresponding to that specific forecast horizon index.
+                - If None, returns outlier scores for all dimensions independently without aggregation.
+
+            aggregation_axis (tuple of int or in, optional):
+                Specifies the axes over which to aggregate when `aggregation` is a string.
+        Returns:
+            output_array (np.ndarray): The resulting array after aggregation. Its shape depends on the chosen aggregation strategy, but the last dimension is always 2, representing the outlier score (p-value) and the outlier label.
+        """
+        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+            if self.model.nonconformity_score in [
+                NonconformityScores.ABSOLUTE_ERROR.value,
+            ]:
+                output = self.model.predict(
+                    y_pred=y_pred, y_gt=y_gt, X=X, timestamps=timestamps, false_alarm=significance
+                )
+                outliers_scores = output["outliers_scores"]
+
+                """
+                Aggregation
+                """
+                if aggregation is None:
+                    outliers = output["outliers"]
+
+                elif isinstance(aggregation, int):
+                    outliers_scores = outliers_scores[:, aggregation, :]
+                    outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
+
+                elif isinstance(aggregation, str):
+                    if aggregation_axis is None:
+                        raise ValueError("aggregation_axis must be specified when aggregation is a string")
+                    if aggregation == "mean":
+                        outliers_scores = np.mean(outliers_scores, axis=aggregation_axis)
+                    elif aggregation == "median":
+                        outliers_scores = np.median(outliers_scores, axis=aggregation_axis)
+                    elif aggregation == "max":
+                        outliers_scores = np.max(outliers_scores, axis=aggregation_axis)
+                    elif aggregation == "min":
+                        outliers_scores = np.min(outliers_scores, axis=aggregation_axis)
+                    else:
+                        raise ValueError(f"Unsupported aggregation method: {aggregation}")
+                    outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
+                else:
+                    raise TypeError("aggregation must be either an int or a supported aggregation string")
+
+                output_array = np.stack([outliers_scores, outliers], axis=-1)
+                return output_array
 
 
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
@@ -1158,7 +1226,8 @@ class WeightedConformalWrapper:
                     np.append(cal_weights, np.array([1]), axis=0),
                     score,
                 )
-                test_ad_scores.append(1 - ad_score)
+                # test_ad_scores.append(1 - ad_score)
+                test_ad_scores.append(ad_score)  # p-value (significance)
 
             # Update
             if update:
