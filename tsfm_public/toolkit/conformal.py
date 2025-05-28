@@ -295,6 +295,21 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
 
         return y_test_prob_pred
 
+    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
+        """
+        Update the probabilistic post hoc model
+
+        Args:
+            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
+            timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
+        """
+        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+            self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
+        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+            self.model.update(y_gt=y_gt, y_pred=y_pred)
+
 
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     """
@@ -395,6 +410,7 @@ class PostHocGaussian:
         self.quantiles = quantiles
         self.critical_size = 1
         self.variance = None
+        self.errors = None  # stores the errors, needed for the online updates
 
         """
         PostHoc Probabilistic Gaussian Wrapper.
@@ -426,9 +442,21 @@ class PostHocGaussian:
             len(y_cal_gt.shape) == 3
         ), " y_cal_gt should have 3 dimensions : nsamples x forecast_horizon x number_features"
 
-        self.variance = np.sum((y_cal_gt[-window_size:] - y_cal_pred[-window_size:]) ** 2, axis=0) / (
-            len(y_cal_pred[-window_size:]) - 1
-        )  # dimension should be
+        self.errors = y_cal_gt[-window_size:] - y_cal_pred[-window_size:]
+        self.variance = np.sum(self.errors**2, axis=0) / (len(self.errors) - 1)  # dimension should be
+
+    def update(self, y_gt: np.ndarray, y_pred: np.ndarray):
+        """
+        Update the PostHoc Probabilistic Gaussian Wrapper.
+
+        Args:
+            y_cal_gt (np.ndarray): Ground truth values used for calibration.  Shape: (n_samples, forecast_horizon, num_features).
+            y_cal_pred (np.ndarray): Model predictions corresponding to the ground truth. Shape: (n_samples, forecast_horizon, num_features).
+        """
+        errors = y_gt - y_pred
+        self.errors = np.concatenate([self.errors, errors], axis=0)
+        self.errors = self.errors[-self.window_size :]
+        self.variance = np.sum(self.errors**2, axis=0) / (len(self.errors) - 1)
 
     def predict(self, y_test_pred: np.ndarray, quantiles=[]):
         """
@@ -696,7 +724,7 @@ class WeightedConformalForecasterWrapper:
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
-
+        # print(y_pred.shape, y_gt.shape)
         for ix_h in range(y_pred.shape[1]):
             for ix_f in range(y_pred.shape[2]):
                 timestamps_i = None
@@ -1168,7 +1196,7 @@ class WeightedConformalWrapper:
             update = self.online
 
         n_samples = y_pred.shape[0]
-        n_batches = np.ceil(n_samples / self.online_size)
+        n_batches = int(np.ceil(n_samples / self.online_size))
 
         if (y_gt is not None) and update:
             """
