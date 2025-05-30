@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .util import is_nested_dataframe, join_list_without_repeat
+from .util import check_nested_lengths, is_nested_dataframe, join_list_without_repeat
 
 
 LOGGER = logging.getLogger(__file__)
@@ -1098,7 +1098,8 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
         enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
-            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset. Only applies
+            when full_series==False.
         full_series (bool, optional): If True, each series is used when creating a single entry in the classification dataset. In this case
             the series is interpolated to match the desired context_length. No padding is done. If False, each series is windowed acording to
             the provided context_length. Defaults to False.
@@ -1134,6 +1135,7 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                     "The provided data does not appear to contain row entries which contain a full time series."
                 )
 
+            check_nested_lengths(data, columns=input_columns)
             if enable_padding:
                 enable_padding = False
 
@@ -1151,7 +1153,6 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                 stride=stride,
                 fill_value=fill_value,
                 enable_padding=enable_padding,
-                # full_series=full_series,
             )
 
         else:
@@ -1169,10 +1170,10 @@ class ClassificationDFDataset(BaseConcatDFDataset):
                 stride=stride,
                 fill_value=fill_value,
                 enable_padding=enable_padding,
-                # full_series=full_series,
             )
 
         self.n_inp = 2
+        self.full_series = full_series
 
 
 def np_to_torch(data: np.array, float_type=np.float32):
@@ -1359,6 +1360,12 @@ def impute_forward_fill(miss_seq: np.ndarray, fill_value: float) -> np.ndarray:
 
 
 class _WindowedSeriesClassificationDFDataset(BaseDFDataset):
+    """Standard windowed classification dataset.
+
+    Windows of size context_length are extracted from the input time series. The labels are chosen from the label_column
+    at the index of the end of the window.
+    """
+
     def __init__(
         self,
         data_df: pd.DataFrame,
@@ -1395,6 +1402,7 @@ class _WindowedSeriesClassificationDFDataset(BaseDFDataset):
             stride=stride,
             fill_value=fill_value,
             zero_padding=enable_padding,
+            full_series=False,
         )
 
     def __getitem__(self, index):
@@ -1425,19 +1433,10 @@ class _WindowedSeriesClassificationDFDataset(BaseDFDataset):
 
 
 class _FullSeriesClassificationDFDataset(BaseDFDataset):
-    """
-    This will be the inner dataset, split by the id columns
+    """Full series classification dataset.
 
-    This is for the case where the user provides complete segments that
-    they want classification for
-
-    Outer dataset will handle some things
-
-    note that these are not exposed:
-    prediction_length
-    drop_cols
-
-
+    Works with nested input dataframes (i.e., dataframes which contain pd.Series as entries). In this case, each series
+    is interpolated to the desired context_length.
     """
 
     def __init__(
@@ -1463,7 +1462,6 @@ class _FullSeriesClassificationDFDataset(BaseDFDataset):
         x_cols = input_columns
         y_cols = label_column
 
-        # to do check that the parent init doesn't mangle
         super().__init__(
             data_df=data_df,
             id_columns=id_columns,
@@ -1478,16 +1476,14 @@ class _FullSeriesClassificationDFDataset(BaseDFDataset):
             fill_value=fill_value,
             zero_padding=enable_padding,
             full_series=True,
-            # something here to turn off the padding warning in the parent
         )
 
         # after init
         # self.X should contain the data including all inputs (i.e. input columns)
-        # assume X is in the weird format where X has series entries in some places
+        # X is in the nexted format where X has series entries in some places
 
     def __len__(self):
         return len(self.X) // self.stride
-        # return max((len(self.X) - self.context_length - self.prediction_length) // self.stride + 1, 0)
 
     def __getitem__(self, index):
         index = self._check_index(index)

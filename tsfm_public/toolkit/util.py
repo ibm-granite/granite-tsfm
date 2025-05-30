@@ -1346,3 +1346,22 @@ def is_nested_dataframe(df: pd.DataFrame, column: str) -> bool:
         bool: True if the column contains pandas series, False otherwise.
     """
     return isinstance(df.iloc[0][column], pd.Series)
+
+
+def check_nested_lengths(df: pd.DataFrame, columns: List[str]):
+    """Check that each row contains series of the same length
+
+    Args:
+        df (pd.DataFrame): Input dataframe, assumed to contain nested series.
+        columns (List[str]): The columns of the dataframe to consider.
+
+    Raises:
+        ValueError: Raised if the dataframe does not contain rows where each series is
+        not equal length.
+    """
+    if len(columns) == 1:
+        return
+
+    l = df[columns].map(len).values
+    if not np.all(np.isclose(l, np.tile(l[:, :1], (1, l.shape[1])))):
+        raise ValueError("Input dataframe contains rows with series that are not equal length.")

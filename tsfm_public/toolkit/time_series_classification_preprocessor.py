@@ -14,7 +14,7 @@ from .time_series_preprocessor import (
     TimeSeriesProcessorBase,
     TimeSeriesTask,
 )
-from .util import is_nested_dataframe, join_list_without_repeat
+from .util import check_nested_lengths, is_nested_dataframe, join_list_without_repeat
 
 
 NESTED_ID_COLUMN = "__nested_series_id"
@@ -38,8 +38,6 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         scaling_id_columns: Optional[List[str]] = None,
         encode_categorical: bool = True,
         time_series_task: str = TimeSeriesTask.CLASSIFICATION.value,
-        freq: Optional[Union[int, str]] = None,
-        scale_categorical_columns: bool = True,
         **kwargs,
     ):
         """Multi-time series aware data preprocessor. Provides functions for scaling data and facilitates downstream
@@ -62,13 +60,6 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
                 Defaults to None. This should be a subset of the id_columns.
             encode_categorical (bool, optional): If True any categorical columns will be encoded using ordinal encoding. Defaults to True.
             time_series_task (str, optional): Reserved for future use. Defaults to TimeSeriesTask.FORECASTING.value.
-            TO BE REMOVED frequency_mapping (Dict[str, int], optional): A mapping which maps frequency strings to numerical values (integers). Defaults to DEFAULT_FREQUENCY_MAPPING.
-            TO BE REMOVED freq (Optional[Union[int, str]], optional): A frequency indicator for the given `timestamp_column`. See
-                https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#period-aliases for a description of the
-                allowed values. If not provided, we will attempt to infer it from the data. If not provided, frequency will be
-                inferred from `timestamp_column`. Defaults to None.
-            scale_categorical_columns (bool, optional): If True, the oridinal representations of categorical columns are scaled during preprocessing.
-                Defaults to True.
 
         Raises:
             ValueError: Raised if `id_columns` is not a list.
@@ -99,7 +90,7 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         self.scaling = scaling
         self.encode_categorical = encode_categorical
         self.time_series_task = time_series_task
-        # self.scale_outputs = scale_outputs
+
         self.scaler_type = scaler_type
 
         # check subset
@@ -112,9 +103,6 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
 
         self.scaler_dict = {}
         self.categorical_encoder = None
-        # self.frequency_mapping = frequency_mapping
-        self.freq = freq
-        self.scale_categorical_columns = scale_categorical_columns
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -148,6 +136,11 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
             raise ValueError(
                 "A column name should appear only once in `input_columns` and `static_categorical_columns`."
             )
+
+    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
+        super()._check_dataset(dataset)
+
+        check_nested_lengths(dataset, self.input_columns)
 
     def _get_real_valued_dynamic_channels(
         self,
@@ -214,13 +207,6 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
                     # one scaler for this group, but requires wrangling for training
                     unnested = unnest_transform(df, columns=columns_to_scale)
                     self.scaler_dict[name].fit(unnested[columns_to_scale])
-                # elif self._is_nested and per_series:
-                #     # unique scaler per row (time series)
-                #     # do we actually need to train this?
-                #     for i, r in df.iterrows():
-                #         name_extended = (name if isinstance(name, Tuple) else tuple(name)) + (i,)
-                #         self.scaler_dict[name_extended] = scaler_class()
-                #         self.scaler_dict[name_extended].fit(g[columns_to_scale])
                 else:
                     self.scaler_dict[name] = scaler_class()
                     # one scaler per group
@@ -254,9 +240,7 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
 
         if self.encode_categorical:
             self._train_categorical_encoder(df)
-            if self.scale_categorical_columns:
-                # process now so we can learn the scaling factors
-                df = self._process_encoding(df.copy())
+            df = self._process_encoding(df.copy())
 
         if self.scaling:
             self._train_scaler(df)
@@ -342,6 +326,19 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
 
 
 def unnest_transform(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """Unnest a dataframe that contains nested series.
+
+    Args:
+        df (pd.DataFrame): Original dataframe, should contain entries which are pd.Series.
+        columns (List[str]): Columns which shoudl be unnested series.
+
+    Raises:
+        ValueError: Raised when the dataframe does not contain and id column referenced by NESTED_ID_COLUMN
+
+    Returns:
+        pd.DataFrame: Resulting dataframe, but with nested series entries.
+    """
+
     # create a row_id column
     order_preserved_columns = [c for c in df.columns if c in columns]
     series_lengths = df[columns[0]].apply(len).to_list()
