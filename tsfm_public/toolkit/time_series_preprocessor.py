@@ -7,7 +7,7 @@ import datetime
 import enum
 import json
 import logging
-from collections import defaultdict
+from collections import Counter
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
@@ -511,20 +511,20 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
             ValueError: Raised when a given column appears in multiple column specifiers.
         """
 
-        counter = defaultdict(int)
-
-        for c in (
-            self.target_columns
-            + self.observable_columns
-            + self.control_columns
-            + self.conditional_columns
-            + self.static_categorical_columns
-        ):
-            counter[c] += 1
-
-        if max(counter.values()) > 1:
+        dups = [
+            k
+            for k, v in Counter(
+                self.target_columns
+                + self.observable_columns
+                + self.control_columns
+                + self.conditional_columns
+                + self.static_categorical_columns
+            ).items()
+            if v > 1
+        ]
+        if dups:
             raise ValueError(
-                "A column name should appear only once in `target_columns`, `observable_colums`, `control_columns`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`."
+                f"A column name should appear only once in `target_columns`, `observable_colums`, `control_columns`, `conditional_columns`, `categorical_columns`, and `static_categorical_columns`. Duplicates {dups}"
             )
 
         for c in self.categorical_columns:
