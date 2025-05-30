@@ -1,5 +1,6 @@
 import inspect
 from collections import OrderedDict, defaultdict
+from enum import Enum
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -16,17 +17,22 @@ from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils.doc import add_end_docstrings
 from transformers.utils.generic import ModelOutput
 
+from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import TinyTimeMixerForPrediction
+from tsfm_public.models.tinytimemixer.utils.ad_helpers import TinyTimeMixerADUtility
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.models.tspulse.utils.ad_helpers import (
-    boundary_adjusted_tspulse_scores,
-    compute_tspulse_score,
-    is_valid_tspulse_mode,
-)
+from tsfm_public.models.tspulse.utils.ad_helpers import TSPulseADUtility
 
 from .dataset import ForecastDFDataset
 
 # Third Party
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
+
+
+class AnomalyPredictionModes(Enum):
+    PREDICTIVE = "forecast"
+    PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
+    PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
+    PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
 
 
 @add_end_docstrings(
@@ -41,10 +47,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self,
         model: PreTrainedModel,
         *args,
-        prediction_mode: str = "forecast",
+        prediction_mode: str = AnomalyPredictionModes.PREDICTIVE.value,
         aggr_function: str = "max",
         aggr_win_size: int = 32,
-        smoothing_window_size: int = 1,
+        smoothing_window_size: int = 8,
         **kwargs,
     ):
         kwargs["context_length"] = model.config.context_length
@@ -56,23 +62,15 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["aggr_win_size"] = aggr_win_size
         kwargs["smoothing_window_size"] = smoothing_window_size
 
-        model_type = None
+        model_processor = None
         if isinstance(model, TSPulseForReconstruction):
-            model_type = "tspulse"
-        # elif isinstance(model, TinyTimeMixerForPrediction):
-        #    model_type = 'ttm'
+            model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size)
+        elif isinstance(model, TinyTimeMixerForPrediction):
+            model_processor = TinyTimeMixerADUtility(model=model, mode=prediction_mode)
         else:
             raise ValueError(f"Error: does not support {self.model.__class__} object!")
 
-        if (model_type == "tspulse") and (prediction_mode is None):
-            prediction_mode = "time"
-        else:
-            prediction_mode = "forecast"
-
-        known_mode = False
-        if model_type == "tspulse":
-            known_mode = is_valid_tspulse_mode(prediction_mode)
-
+        known_mode = model_processor.is_valid_mode(prediction_mode)
         if not known_mode:
             raise ValueError(
                 f"Error: unknown operation mode {prediction_mode}, atleast (forecast/time/fft) must be specified! "
@@ -81,6 +79,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["prediction_mode"] = prediction_mode
 
         super().__init__(model, *args, **kwargs)
+
+        self._model_processor = model_processor
+
         self.__context_memory = {}
         if aggr_function.lower() == "min":
             aggr_function_ = np.min
@@ -105,8 +106,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         """
         if isinstance(self.model, TSPulseForReconstruction):
             return "tspulse"
-        # elif isinstance(self.model, TinyTimeMixerForPrediction):
-        #    return 'ttm'
+        elif isinstance(self.model, TinyTimeMixerForPrediction):
+            return "ttm"
         raise ValueError(f"Error: unsupported model type {self.model.__class__}!")
 
     def _sanitize_parameters(self, **kwargs):
@@ -138,10 +139,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if c in kwargs:
                 postprocess_kwargs[c] = kwargs[c]
 
-        if self.model_type == "tspulse":
-            preprocess_kwargs["prediction_length"] = 1
+        preprocess_kwargs["prediction_length"] = 1
 
         mode = kwargs.get("prediction_mode", "time" if self.model_type == "tspulse" else "forecast")
+        device = kwargs.get("device", self.model.device)
         aggr_win_size = kwargs.get("aggr_win_size", 32)
         postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", 1)
 
@@ -162,6 +163,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         forward_kwargs = {
             "mode": mode,
+            "device": device,
             "aggr_win_size": aggr_win_size,
             "batch_size": batch_size,
             "num_workers": num_workers,
@@ -219,14 +221,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         batch_size = forward_params.get("batch_size")
         num_workers = forward_params.get("num_workers")
         aggr_win_size = forward_params.get("aggr_win_size")
+        device = forward_params.get("device")
         dataloader = DataLoader(
             dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=remove_columns_collator, shuffle=False
         )
 
         it = iter(dataloader)
         accumulator = defaultdict(list)
-
-        device = self.model.device
 
         while (batch := next(it, None)) is not None:
             batch_x = batch["past_values"]
@@ -239,13 +240,12 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             for key in scores:
                 accumulator[key].append(scores[key])
 
-        context_length = self.model.config.context_length
         aggr_win_size = forward_params.get("aggr_win_size")
         accumulator_ = OrderedDict()
+
         for k in accumulator:
             score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
-            if self.model_type == "tspulse":
-                score = boundary_adjusted_tspulse_scores(k, score, context_length, aggr_win_size)
+            score = self._model_processor.boundary_adjusted_scores(k, score, aggr_win_size=aggr_win_size)
             accumulator_[k] = score
 
         # call postprocess
@@ -263,10 +263,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-        model_outputs = ModelOutput(OrderedDict())
-        if self.model_type == "tspulse":
-            model_outputs = compute_tspulse_score(self.model, input_tensors, **kwargs)
-        return model_outputs
+        return self._model_processor.compute_score(input_tensors, **kwargs)
 
     def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
@@ -274,13 +271,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             np.vstack([score_.ravel() for _, score_ in model_outputs.items()]),
             axis=0,
         )
-        model_outputs = {"prediction_outputs": score}
-        smoothing_window_size = postprocess_parameters.get("smoothing_window_size")
+        model_outputs = {"anomaly_score": score}
+        smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
         if not isinstance(smoothing_window_size, int):
             try:
                 smoothing_window_size = int(smoothing_window_size)
             except ValueError:
                 smoothing_window_size = 1
+
         if smoothing_window_size > 1:
             for k in model_outputs:
                 model_outputs[k] = np.convolve(
