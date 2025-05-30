@@ -77,10 +77,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             )
 
         kwargs["prediction_mode"] = prediction_mode
+        self._model_processor = model_processor
+        self._smoothing_window_size = smoothing_window_size
 
         super().__init__(model, *args, **kwargs)
-
-        self._model_processor = model_processor
 
         self.__context_memory = {}
         if aggr_function.lower() == "min":
@@ -116,7 +116,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         For expected parameters see the call method below.
         """
-
         preprocess_kwargs = {}
         postprocess_kwargs = {}
 
@@ -144,7 +143,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         mode = kwargs.get("prediction_mode", "time" if self.model_type == "tspulse" else "forecast")
         device = kwargs.get("device", self.model.device)
         aggr_win_size = kwargs.get("aggr_win_size", 32)
-        postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", 1)
+        postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", self._smoothing_window_size)
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
