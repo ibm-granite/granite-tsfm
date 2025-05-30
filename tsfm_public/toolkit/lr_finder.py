@@ -378,7 +378,7 @@ def optimal_lr_finder(
 
     # device is valid, now set appropriately
     if device == "cuda":
-        device = torch.cuda.current_device()
+        device = torch.device(f"cuda:{torch.cuda.current_device()}")
     else:
         device = torch.device(device)
 

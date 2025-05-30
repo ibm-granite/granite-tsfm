@@ -13,8 +13,8 @@ from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from datasets import Dataset
-from deprecated import deprecated
 from pandas.tseries.frequencies import to_offset
+from sklearn.preprocessing import LabelEncoder as LabelEncoder_
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
@@ -99,6 +99,12 @@ class OrdinalEncoder(OrdinalEncoder_, SKLearnFeatureExtractionBase):
     """
 
 
+class LabelEncoder(LabelEncoder_, SKLearnFeatureExtractionBase):
+    """Simple wrapper class to adapt LabelEncoder to work with the HF
+    serialization approach.
+    """
+
+
 class TimeSeriesTask(enum.Enum):
     """`Enum` for the different kinds of time series datasets we need to create."""
 
@@ -115,7 +121,275 @@ class ScalerType(enum.Enum):
     STANDARD = "standard"
 
 
-class TimeSeriesPreprocessor(BaseProcessor):
+class TimeSeriesProcessorBase(BaseProcessor):
+    PROCESSOR_NAME = "preprocessor_config.json"
+
+    # HF serialization support methods
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this feature extractor instance.
+        """
+        output = super().to_dict()
+
+        for k, v in output["scaler_dict"].items():
+            output["scaler_dict"][k] = v.to_dict()
+
+        if "target_scaler_dict" in output:
+            for k, v in output["target_scaler_dict"].items():
+                output["target_scaler_dict"][k] = v.to_dict()
+            input_scaler_dict = self.target_scaler_dict
+        else:
+            input_scaler_dict = self.scaler_dict
+
+        # get type information; assume homogeneous types
+        if self.scaling_id_columns and self.scaling:
+            akey = next(iter(input_scaler_dict.keys()))
+            if isinstance(akey, Tuple):
+                key_types = [type(k) for k in akey]
+            else:
+                key_types = [type(akey)]
+        else:
+            key_types = []
+
+        output["scaling_id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
+
+        if self.categorical_encoder:
+            output["categorical_encoder"] = output["categorical_encoder"].to_dict()
+
+        if "label_encoder" in output:
+            output["label_encoder"] = output["label_encoder"].to_dict()
+
+        return output
+
+    def to_json_string(self) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
+        """
+        dictionary = self.to_dict()
+
+        def serialize_np_scalar(value):
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.floating):
+                return float(value)
+            return value
+
+        def recursive_check_ndarray(dictionary):
+            key_map = {}
+            for key, value in dictionary.items():
+                if isinstance(key, tuple):
+                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
+                    key_map[key] = new_key
+
+                if key == "dtype":
+                    # to do: ensure deserializable
+                    dictionary[key] = value.__name__
+                elif isinstance(value, np.ndarray):
+                    dictionary[key] = value.tolist()
+                elif isinstance(value, (np.integer, np.floating)):
+                    dictionary[key] = serialize_np_scalar(value)
+                elif isinstance(value, list):
+                    dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
+                elif isinstance(value, dict):
+                    dictionary[key] = recursive_check_ndarray(value)
+
+            for key, new_key in key_map.items():
+                dictionary[new_key] = dictionary.pop(key)
+
+            return dictionary
+
+        dictionary = recursive_check_ndarray(dictionary)
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        _processor_class = dictionary.pop("_processor_class", None)
+        if _processor_class is not None:
+            dictionary["processor_class"] = _processor_class
+
+        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
+
+    @classmethod
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "PreTrainedFeatureExtractor":
+        """
+        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
+        parameters.
+
+        Args:
+            feature_extractor_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the feature extractor object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                [`~feature_extraction_utils.FeatureExtractionMixin.to_dict`] method.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the feature extractor object.
+
+        Returns:
+            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
+            parameters.
+        """
+
+        scaler_type = feature_extractor_dict.get("scaler_type", None)
+
+        scaler_class = cls._get_scaler_class(scaler_type)
+        id_types = feature_extractor_dict.get("scaling_id_columns_types", None)
+
+        def deserialize_key(key, key_types=None):
+            if not key_types:
+                return key
+
+            key = json.loads(key)
+            if isinstance(key, (Tuple, List)):
+                return tuple([STRING_TO_TYPE[k_type](k_item) for k_item, k_type in zip(key, key_types)])
+            else:
+                return STRING_TO_TYPE[key_types[0]](key)
+
+        scaler_params = feature_extractor_dict.get("scaler_dict", None)
+        if scaler_params is not None:
+            scaler_params_copy = {}
+            for k, v in scaler_params.items():
+                scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
+            feature_extractor_dict["scaler_dict"] = scaler_params_copy
+
+        target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
+        if target_scaler_params is not None:
+            target_scaler_params_copy = {}
+            for k, v in target_scaler_params.items():
+                target_scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
+            feature_extractor_dict["target_scaler_dict"] = target_scaler_params_copy
+
+        return super().from_dict(feature_extractor_dict, **kwargs)
+
+    # support methods
+    @classmethod
+    def _get_scaler_class(cls, scaler_type):
+        if scaler_type == ScalerType.MINMAX.value:
+            return MinMaxScaler
+
+        if scaler_type == ScalerType.STANDARD.value:
+            return StandardScaler
+
+        raise ValueError(f"Unknown scaler type {scaler_type} specified.")
+
+    def _standardize_dataframe(
+        self,
+        dataset: Union[Dataset, pd.DataFrame],
+    ) -> pd.DataFrame:
+        """For given supported inputs, appropriately converts to a pandas dataframe. Adds an ID column
+        if needed.
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Input dataset
+
+        Returns:
+            pd.DataFrame: Converted dataframe with ID column.
+        """
+        if isinstance(dataset, Dataset):
+            df = dataset.to_pandas()
+        else:
+            df = dataset.copy()
+
+        # add id column when there are no id or scaling_id columns
+        # or when scaling_id_columns == []
+        if not self.id_columns or self.scaling_id_columns == []:
+            df[INTERNAL_ID_COLUMN] = INTERNAL_ID_VALUE
+
+        return df
+
+    def _clean_up_dataframe(self, df: pd.DataFrame) -> None:
+        """Removes columns added during internal processing of the provided dataframe.
+
+        Currently, the following checks are done:
+         - Remove INTERNAL_ID_COLUMN if present
+
+        Args:
+            df (pd.DataFrame): Input pandas dataframe
+
+        Returns:
+            pd.DataFrame: Cleaned up dataframe
+        """
+
+        if not self.id_columns:
+            if INTERNAL_ID_COLUMN in df.columns:
+                df.drop(columns=INTERNAL_ID_COLUMN, inplace=True)
+
+    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
+        """Basic checks for input dataset.
+
+        Args:
+            dataset (Union[Dataset, pd.DataFrame]): Input time series data.
+
+        Raises:
+            ValueError: Raised if the dataset is empty.
+        """
+        if dataset is None or len(dataset) == 0:
+            raise ValueError("Input dataset must not be null or zero length.")
+
+        if self.id_columns:
+            dtypes = dataset.dtypes
+            for id in self.id_columns:
+                if not (pd.api.types.is_string_dtype(dtypes[id]) or pd.api.types.is_integer_dtype(dtypes[id])):
+                    raise ValueError(f"Data for identifier column {id} must be a string or integer type.")
+
+    def _get_groups(
+        self,
+        dataset: pd.DataFrame,
+    ) -> Generator[Tuple[Any, pd.DataFrame], None, None]:
+        """Get groups of the time series dataset (multi-time series) based on the ID columns for scaling.
+        Note that this is used for scaling purposes only.
+
+        Args:
+            dataset (pd.DataFrame): Input dataset
+
+        Yields:
+            Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
+        """
+        if self.scaling_id_columns is not None and len(self.scaling_id_columns) > 0:
+            group_by_columns = (
+                self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
+            )
+        else:
+            group_by_columns = INTERNAL_ID_COLUMN
+
+        grps = dataset.groupby(by=group_by_columns)
+        for name, g in grps:
+            # g = g.sort_values(by=self.timestamp_column)
+            yield name, g
+
+    # training methods
+    def _train_categorical_encoder(self, df: pd.DataFrame):
+        cols_to_encode = self._get_columns_to_encode()
+
+        if cols_to_encode:
+            self.categorical_encoder = OrdinalEncoder()
+            self.categorical_encoder.fit(df[cols_to_encode])
+
+    # processing methods
+    def _process_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Uses the trained categorical encoder to transform the categorical columns in the input dataframe.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+
+        Raises:
+            RuntimeError: Raised when the encoder has not been trained.
+
+        Returns:
+            pd.DataFrame: The dataframe with the columns properly encoded.
+        """
+        cols_to_encode = self._get_columns_to_encode()
+        if self.encode_categorical and cols_to_encode:
+            if not self.categorical_encoder:
+                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
+            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
+        return df
+
+
+class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
     """A preprocessor for supporting time series modeling tasks"""
 
     PROCESSOR_NAME = "preprocessor_config.json"
@@ -261,138 +535,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
                     "Each specified categorical column must also be included in one of 'conditional_columns', 'control_columns', or 'observable_columns'."
                 )
 
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this feature extractor instance.
-        """
-        output = super().to_dict()
-
-        for k, v in output["scaler_dict"].items():
-            output["scaler_dict"][k] = v.to_dict()
-
-        for k, v in output["target_scaler_dict"].items():
-            output["target_scaler_dict"][k] = v.to_dict()
-
-        # get type information; assume homogeneous types
-        if self.scaling_id_columns and self.scaling:
-            akey = next(iter(self.target_scaler_dict.keys()))
-            if isinstance(akey, Tuple):
-                key_types = [type(k) for k in akey]
-            else:
-                key_types = [type(akey)]
-        else:
-            key_types = []
-
-        output["scaling_id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
-
-        if self.categorical_encoder:
-            output["categorical_encoder"] = output["categorical_encoder"].to_dict()
-
-        return output
-
-    def to_json_string(self) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
-        """
-        dictionary = self.to_dict()
-
-        def serialize_np_scalar(value):
-            if isinstance(value, np.integer):
-                return int(value)
-            if isinstance(value, np.floating):
-                return float(value)
-            return value
-
-        def recursive_check_ndarray(dictionary):
-            key_map = {}
-            for key, value in dictionary.items():
-                if isinstance(key, tuple):
-                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
-                    key_map[key] = new_key
-
-                if key == "dtype":
-                    # to do: ensure deserializable
-                    dictionary[key] = value.__name__
-                elif isinstance(value, np.ndarray):
-                    dictionary[key] = value.tolist()
-                elif isinstance(value, (np.integer, np.floating)):
-                    dictionary[key] = serialize_np_scalar(value)
-                elif isinstance(value, list):
-                    dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
-                elif isinstance(value, dict):
-                    dictionary[key] = recursive_check_ndarray(value)
-
-            for key, new_key in key_map.items():
-                dictionary[new_key] = dictionary.pop(key)
-
-            return dictionary
-
-        dictionary = recursive_check_ndarray(dictionary)
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
-
-        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
-
-    @classmethod
-    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "PreTrainedFeatureExtractor":
-        """
-        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
-        parameters.
-
-        Args:
-            feature_extractor_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the feature extractor object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the
-                [`~feature_extraction_utils.FeatureExtractionMixin.to_dict`] method.
-            kwargs (`Dict[str, Any]`):
-                Additional parameters from which to initialize the feature extractor object.
-
-        Returns:
-            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
-            parameters.
-        """
-
-        scaler_type = feature_extractor_dict.get("scaler_type", None)
-
-        scaler_class = cls._get_scaler_class(scaler_type)
-        id_types = feature_extractor_dict.get("scaling_id_columns_types", None)
-
-        def deserialize_key(key, key_types=None):
-            if not key_types:
-                return key
-
-            key = json.loads(key)
-            if isinstance(key, (Tuple, List)):
-                return tuple([STRING_TO_TYPE[k_type](k_item) for k_item, k_type in zip(key, key_types)])
-            else:
-                return STRING_TO_TYPE[key_types[0]](key)
-
-        scaler_params = feature_extractor_dict.get("scaler_dict", None)
-        if scaler_params is not None:
-            scaler_params_copy = {}
-            for k, v in scaler_params.items():
-                scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
-            feature_extractor_dict["scaler_dict"] = scaler_params_copy
-
-        target_scaler_params = feature_extractor_dict.get("target_scaler_dict", None)
-        if target_scaler_params is not None:
-            target_scaler_params_copy = {}
-            for k, v in target_scaler_params.items():
-                target_scaler_params_copy[deserialize_key(k, key_types=id_types)] = scaler_class.from_dict(v)
-            feature_extractor_dict["target_scaler_dict"] = target_scaler_params_copy
-
-        return super().from_dict(feature_extractor_dict, **kwargs)
-
     @classmethod
     def _get_scaler_class(cls, scaler_type):
         if scaler_type == ScalerType.MINMAX.value:
@@ -445,31 +587,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
             if INTERNAL_ID_COLUMN in df.columns:
                 df.drop(columns=INTERNAL_ID_COLUMN, inplace=True)
 
-    def _get_groups(
-        self,
-        dataset: pd.DataFrame,
-    ) -> Generator[Tuple[Any, pd.DataFrame], None, None]:
-        """Get groups of the time series dataset (multi-time series) based on the ID columns for scaling.
-        Note that this is used for scaling purposes only.
-
-        Args:
-            dataset (pd.DataFrame): Input dataset
-
-        Yields:
-            Generator[Any, pd.DataFrame]: Group name and resulting pandas dataframe for the group.
-        """
-        if self.scaling_id_columns is not None and len(self.scaling_id_columns) > 0:
-            group_by_columns = (
-                self.scaling_id_columns if len(self.scaling_id_columns) > 1 else self.scaling_id_columns[0]
-            )
-        else:
-            group_by_columns = INTERNAL_ID_COLUMN
-
-        grps = dataset.groupby(by=group_by_columns)
-        for name, g in grps:
-            # g = g.sort_values(by=self.timestamp_column)
-            yield name, g
-
     def _get_other_columns_to_scale(
         self,
     ) -> List[str]:
@@ -516,13 +633,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
 
                 self.target_scaler_dict[name] = scaler_class()
                 self.target_scaler_dict[name].fit(g[self.target_columns])
-
-    def _train_categorical_encoder(self, df: pd.DataFrame):
-        cols_to_encode = self._get_columns_to_encode()
-
-        if cols_to_encode:
-            self.categorical_encoder = OrdinalEncoder()
-            self.categorical_encoder.fit(df[cols_to_encode])
 
     def get_frequency_token(self, token_name: str):
         token = self.frequency_mapping.get(token_name, None)
@@ -611,24 +721,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
                 sizes.append(len(cats))
 
         return sizes
-
-    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
-        """Basic checks for input dataset.
-
-        Args:
-            dataset (Union[Dataset, pd.DataFrame]): Input time series data.
-
-        Raises:
-            ValueError: Raised if the dataset is empty.
-        """
-        if dataset is None or len(dataset) == 0:
-            raise ValueError("Input dataset must not be null or zero length.")
-
-        if self.id_columns:
-            dtypes = dataset.dtypes
-            for id in self.id_columns:
-                if not (pd.api.types.is_string_dtype(dtypes[id]) or pd.api.types.is_integer_dtype(dtypes[id])):
-                    raise ValueError(f"Data for identifier column {id} must be a string or integer type.")
 
     def _set_targets(self, dataset: pd.DataFrame) -> None:
         if self.target_columns == []:
@@ -750,14 +842,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
         self._clean_up_dataframe(df_inv)
         return df_inv
 
-    def _process_encoding(self, df: pd.DataFrame):
-        cols_to_encode = self._get_columns_to_encode()
-        if self.encode_categorical and cols_to_encode:
-            if not self.categorical_encoder:
-                raise RuntimeError("Attempt to encode categorical columns, but the encoder has not been trained yet.")
-            df[cols_to_encode] = self.categorical_encoder.transform(df[cols_to_encode])
-        return df
-
     def preprocess(
         self,
         dataset: Union[Dataset, pd.DataFrame],
@@ -810,55 +894,6 @@ class TimeSeriesPreprocessor(BaseProcessor):
 
         self._clean_up_dataframe(df)
         return df
-
-    @deprecated(version="0.1.1", reason="Please use the standalone function `get_datasets()`.")
-    def get_datasets(
-        self,
-        dataset: Union[Dataset, pd.DataFrame],
-        split_config: Dict[str, Union[List[Union[int, float]], float]],
-        fewshot_fraction: Optional[float] = None,
-        fewshot_location: str = FractionLocation.LAST.value,
-        use_frequency_token: bool = False,
-    ) -> Tuple[Any]:
-        """Creates the preprocessed pytorch datasets needed for training and evaluation
-        using the HuggingFace trainer
-
-        Args:
-            dataset (Union[Dataset, pd.DataFrame]): Loaded pandas dataframe
-                split_config (Dict[str, Union[List[Union[int, float]], float]]): Dictionary of dictionaries containing
-                split parameters. Two configurations are possible:
-                1. Specify train/valid/test indices or relative fractions
-                    {
-                        train: [0, 50],
-                        valid: [50, 70],
-                        test:  [70, 100]
-                    }
-                end value is not inclusive
-                2. Specify train/test fractions:
-                    {
-                        train: 0.7
-                        test: 0.2
-                    }
-                    A valid split should not be specified directly; the above implies valid = 0.1
-
-            fewshot_fraction (float, optional): When non-null, return this percent of the original training
-                dataset. This is done to support fewshot fine-tuning.
-            fewshot_location (str): Determines where the fewshot data is chosen. Valid options are "first" and "last"
-                as described in the enum FewshotLocation. Default is to choose the fewshot data at the end
-                of the training dataset (i.e., "last").
-
-        Returns:
-            Tuple of pytorch datasets, including: train, validation, test.
-        """
-
-        return get_datasets(
-            self,
-            dataset,
-            split_config=split_config,
-            fewshot_fraction=fewshot_fraction,
-            fewshot_location=fewshot_location,
-            use_frequency_token=use_frequency_token,
-        )
 
 
 def prepare_data_splits(
