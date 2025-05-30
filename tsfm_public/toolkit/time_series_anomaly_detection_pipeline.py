@@ -77,6 +77,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             )
 
         kwargs["prediction_mode"] = prediction_mode
+        self._prediction_mode = prediction_mode
         self._model_processor = model_processor
         self._smoothing_window_size = smoothing_window_size
 
@@ -140,7 +141,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         preprocess_kwargs["prediction_length"] = 1
 
-        mode = kwargs.get("prediction_mode", "time" if self.model_type == "tspulse" else "forecast")
+        mode = kwargs.get("prediction_mode", self._prediction_mode)
         device = kwargs.get("device", self.model.device)
         aggr_win_size = kwargs.get("aggr_win_size", 32)
         postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", self._smoothing_window_size)

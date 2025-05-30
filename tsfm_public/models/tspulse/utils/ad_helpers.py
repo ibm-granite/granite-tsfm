@@ -40,7 +40,7 @@ class TSPulseADUtility(TSADHelperUtility):
     ) -> ModelOutput:
         mode = kwargs.get("mode", self._mode)
         use_forecast = "forecast" in mode
-        use_ts_from_fft = "fft" in mode
+        use_fft = "fft" in mode
         use_ts = "time" in mode
         aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
         anomaly_criterion = nn.MSELoss(reduce=False)
@@ -58,7 +58,7 @@ class TSPulseADUtility(TSADHelperUtility):
             model_forward_output = self._model(past_values=batch_x)
 
         stitched_dict = {}
-        if use_ts or use_ts_from_fft:
+        if use_ts or use_fft:
             stitched_dict = patchwise_stitched_reconstruction(
                 model=self._model,
                 past_values=batch_x,
@@ -85,7 +85,7 @@ class TSPulseADUtility(TSADHelperUtility):
             )
             scores["time"] = torch.mean(pointwise_score, dim=[1, 2])
 
-        if use_ts_from_fft:
+        if use_fft:
             # time reconstruction from fft
             output = stitched_dict["reconstructed_ts_from_fft"]
             pointwise_score = anomaly_criterion(
