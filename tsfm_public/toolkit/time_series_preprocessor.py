@@ -7,6 +7,7 @@ import datetime
 import enum
 import json
 import logging
+import os
 from collections import Counter
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
@@ -341,7 +342,7 @@ class TimeSeriesPreprocessor(BaseProcessor):
         if _processor_class is not None:
             dictionary["processor_class"] = _processor_class
 
-        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
+        return json.dumps(dictionary, indent=2, sort_keys=True) + os.linesep
 
     @classmethod
     def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "PreTrainedFeatureExtractor":
