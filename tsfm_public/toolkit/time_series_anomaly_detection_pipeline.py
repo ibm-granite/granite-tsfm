@@ -35,6 +35,18 @@ class AnomalyPredictionModes(Enum):
     PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
 
 
+def score_smoothing(
+    x: np.ndarray,
+    smoothing_window_size: int,
+) -> np.ndarray:
+    if smoothing_window_size < 2:
+        return x
+    elif x.ndim == 1:
+        return np.convolve(x, np.ones(smoothing_window_size) / smoothing_window_size, mode="same")
+    else:
+        return np.array([score_smoothing(x[..., i], smoothing_window_size) for i in range(x.shape[-1])]).T
+
+
 @add_end_docstrings(
     build_pipeline_init_args(has_tokenizer=False, has_feature_extractor=True, has_image_processor=False)
 )
@@ -267,11 +279,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
     def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
-        score = self.aggr_function(
-            np.vstack([score_.ravel() for _, score_ in model_outputs.items()]),
-            axis=0,
-        )
-        model_outputs = {"anomaly_score": score}
+
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
         if not isinstance(smoothing_window_size, int):
             try:
@@ -279,11 +287,15 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             except ValueError:
                 smoothing_window_size = 1
 
-        if smoothing_window_size > 1:
-            for k in model_outputs:
-                model_outputs[k] = np.convolve(
-                    model_outputs[k], np.ones(smoothing_window_size) / smoothing_window_size, mode="same"
-                )
+        model_outputs_ = {}
+        for k in model_outputs:
+            model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+
+        score = self.aggr_function(
+            np.vstack([score_.ravel() for _, score_ in model_outputs_.items()]),
+            axis=0,
+        )
+        model_outputs = {"anomaly_score": score}
 
         for k in model_outputs:
             result[k] = model_outputs[k]
