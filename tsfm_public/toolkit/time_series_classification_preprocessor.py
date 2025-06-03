@@ -137,10 +137,11 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
                 "A column name should appear only once in `input_columns` and `static_categorical_columns`."
             )
 
-    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
+    def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame], check_nested: bool = True):
         super()._check_dataset(dataset)
 
-        check_nested_lengths(dataset, self.input_columns)
+        if check_nested:
+            check_nested_lengths(dataset, self.input_columns)
 
     def _get_real_valued_dynamic_channels(
         self,
@@ -309,7 +310,7 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         self._clean_up_dataframe(df)
         return df
 
-    def inverse_transform_labels(self, dataset: pd.DataFrame) -> pd.DataFrame:
+    def inverse_transform_labels(self, dataset: pd.DataFrame, suffix: Optional[str] = None) -> pd.DataFrame:
         """Inverse transform the labels back to their original values.
 
         Args:
@@ -318,9 +319,14 @@ class TimeSeriesClassificationPreprocessor(TimeSeriesProcessorBase):
         Returns:
             pd.DataFrame: Dataframe with original values in the label_column
         """
-        self._check_dataset(dataset)
+        self._check_dataset(dataset, check_nested=False)
         df = self._standardize_dataframe(dataset)
-        df[self.label_column] = self.label_encoder.inverse_transform(df[self.label_column])
+
+        col_to_transform = self.label_column
+        if suffix is not None:
+            col_to_transform = f"{self.label_column}{suffix}"
+
+        df[col_to_transform] = self.label_encoder.inverse_transform(df[col_to_transform])
         self._clean_up_dataframe(df)
         return df
 
