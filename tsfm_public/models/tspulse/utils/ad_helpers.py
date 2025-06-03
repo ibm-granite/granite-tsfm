@@ -23,8 +23,8 @@ class TSPulseADUtility(TSADHelperUtility):
         self._model = model
         self._mode = mode
         self._aggr_win_size = aggr_win_size
-        self._least_significant_scale = kwargs.get('least_significant_scale', 1e-2)
-        self._least_significant_score = kwargs.get('least_significant_score', 0.2)
+        self._least_significant_scale = kwargs.get("least_significant_scale", 1e-2)
+        self._least_significant_score = kwargs.get("least_significant_score", 0.2)
 
     def is_valid_mode(self, mode_str: str) -> bool:
         supported_modes = ["time", "fft", "forecast"]
@@ -58,7 +58,7 @@ class TSPulseADUtility(TSADHelperUtility):
 
         model_forward_output = {}
         if use_forecast:
-            model_forward_output = self._model(past_values=batch_x)
+            model_forward_output = self._model(**payload)
 
         stitched_dict = {}
         if use_ts or use_fft:
@@ -79,7 +79,7 @@ class TSPulseADUtility(TSADHelperUtility):
         # output shape: [batch_size, window_size, n_channels]
         scores = OrderedDict()
 
-        reduction_axis = [1] if expand_score else [1, 2] 
+        reduction_axis = [1] if expand_score else [1, 2]
         if use_ts:
             # time reconstruction
             output = stitched_dict["reconstruction_outputs"]
@@ -126,24 +126,24 @@ class TSPulseADUtility(TSADHelperUtility):
         else:
             start_pad_len = context_length - aggr_win_size // 2
             end_pad_len = aggr_win_size // 2
-        
+
         score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
         if score.ndim == 1:
             score = score.reshape(-1, 1)
-        
-        min_score = 0. 
-        if 'reference' in kwargs:
-            reference_data = np.asarray(kwargs.get('reference'))
-            min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True)**2
+
+        min_score = 0.0
+        if "reference" in kwargs:
+            reference_data = np.asarray(kwargs.get("reference"))
+            min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
-                min_score = np.nanmax(min_score, axis=-1) 
+                min_score = np.nanmax(min_score, axis=-1)
             if key == "forecast":
                 min_score = min_score / np.sqrt(2)
             else:
-                min_score = min_score * (1 + 1/np.sqrt(self._aggr_win_size))
-        
+                min_score = min_score * (1 + 1 / np.sqrt(self._aggr_win_size))
+
         score_ = score.copy()
-        score_[np.where(score > min_score)] *= 1/self._least_significant_score
+        score_[np.where(score > min_score)] *= 1 / self._least_significant_score
         scale = 1 if np.any(score > min_score) else self._least_significant_scale
         score = MinMaxScaler_().fit_transform(score_) * scale
-        return score 
+        return score
