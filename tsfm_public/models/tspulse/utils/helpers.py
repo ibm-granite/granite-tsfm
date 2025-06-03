@@ -199,3 +199,44 @@ class PatchMaskingDatasetWrapper(Dataset):
             **item,
             "past_observed_mask": past_observed_mask,
         }
+
+
+def get_embeddings(model, past_values, past_observed_mask=None, mode="register"):
+    """
+    Obtain embeddings from TSPulse model.
+
+    Args:
+        model: A TSPulse model object with a callable interface that accepts `past_values` and `past_observed_mask`.
+        past_values (torch.Tensor): Input tensor of shape [B, L, C], where
+                                    B = batch size,
+                                    L = sequence length,
+                                    C = number of input channels.
+        past_observed_mask (torch.Tensor): Mask tensor of the same shape as `past_values`, indicating observed (1.0) vs. missing (0.0) values.
+        mode (str): Specifies the type of embeddings to extract. One of:
+            - "time": Extracts time-domain embeddings.
+            - "fft": Extracts frequency-domain (FFT) embeddings.
+            - "register": Extracts register token embeddings.
+            - "full": Returns the full embedding without slicing.
+
+    Returns:
+        embeddings (torch.Tensor): Tensor of shape [B, C, D], where D depends on the selected mode.
+    """
+    d_model = model.config.d_model
+    num_patches = model.config.num_patches
+    reg_tokens = model.config.patch_register_tokens
+    time_emb_size = fft_emb_size = d_model * num_patches // 2
+    reg_emb_size = reg_tokens * d_model
+
+    embeddings = model(past_values, past_observed_mask=past_observed_mask)
+    embeddings = embeddings["decoder_hidden_state"]  # [B, C, D]
+
+    if mode == "time":
+        return embeddings[:, :, :time_emb_size]
+    elif mode == "fft":
+        return embeddings[:, :, time_emb_size : (time_emb_size + fft_emb_size)]
+    elif mode == "register":
+        return embeddings[:, :, -reg_emb_size:]
+    elif mode == "full":
+        return embeddings
+    else:
+        raise ValueError("Invalid mode.")
