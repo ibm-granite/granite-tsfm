@@ -964,9 +964,9 @@ def get_datasets(
 
     rng = np.random.default_rng(seed=seed)
 
-    if not ts_preprocessor.context_length:
+    if ts_preprocessor.context_length is None:
         raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null context_length")
-    if not ts_preprocessor.prediction_length:
+    if ts_preprocessor.prediction_length is None:
         raise ValueError("TimeSeriesPreprocessor must be instantiated with non-null prediction_length")
 
     data = ts_preprocessor._standardize_dataframe(dataset)
