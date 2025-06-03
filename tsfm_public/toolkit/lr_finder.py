@@ -4,6 +4,7 @@
 
 import inspect
 import os
+import tempfile
 import uuid
 from cmath import inf
 from pathlib import Path
@@ -187,7 +188,7 @@ class LRFinder:
 
         # save model to load back after fitting
         uid = uuid.uuid4().hex
-        self.temp_path = self.save("current_{}".format(uid), "temp", with_opt=False)
+        self.temp_path = self.save(f"current_{uid}", tempfile.gettempdir(), with_opt=False)
         # set base_lr for the optimizer
         self.set_lr(self.start_lr)
 
