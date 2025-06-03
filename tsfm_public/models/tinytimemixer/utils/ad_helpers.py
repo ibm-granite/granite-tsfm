@@ -54,7 +54,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
 
         return ModelOutput(scores)
 
-    def boundary_adjusted_scores(
+    def adjust_boundary(
         self,
         key: str,
         x: ScoreListType,

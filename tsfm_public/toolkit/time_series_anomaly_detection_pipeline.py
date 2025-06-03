@@ -218,7 +218,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             input_,
             **kwargs,
         )
+        target_columns = kwargs.get('target_columns', [])
         self.__context_memory["data"] = input_
+        self.__context_memory["target_columns"] = target_columns
         return {"dataset": dataset}
 
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> pd.DataFrame:
@@ -270,7 +272,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         for k in accumulator:
             # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
             score = accumulator[k]
-            score = self._model_processor.boundary_adjusted_scores(k, score, aggr_win_size=aggr_win_size)
+            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size)
             accumulator_[k] = score
 
         # call postprocess
