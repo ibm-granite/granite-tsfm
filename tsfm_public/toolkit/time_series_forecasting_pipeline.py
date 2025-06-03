@@ -52,7 +52,7 @@ class TimeSeriesPipeline(Pipeline):
             _type_: _description_
         """
         # our preprocess returns a dataset
-        dataset = self.preprocess(inputs, **preprocess_params)
+        dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
 
         batch_size = forward_params["batch_size"]
         num_workers = forward_params["num_workers"]
@@ -401,7 +401,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        return dataset
+        return {"dataset": dataset}
 
     def _forward(self, model_inputs, **kwargs):
         """Forward step
