@@ -1,7 +1,13 @@
 from abc import ABCMeta, abstractmethod
+from typing import List, Union
 
 import numpy as np
+import torch
 from transformers.utils.generic import ModelOutput
+
+
+ScoreType = Union[np.ndarray, torch.Tensor]
+ScoreListType = Union[ScoreType, List[ScoreType]]
 
 
 class TSADHelperUtility:
@@ -23,7 +29,7 @@ class TSADHelperUtility:
     def adjust_boundary(
         self,
         key: str,
-        x: np.ndarray,
+        x: ScoreListType,
         **kwargs,
     ) -> np.ndarray:
         raise NotImplementedError

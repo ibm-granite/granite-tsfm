@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-import torch
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -29,6 +28,8 @@ class AnomalyPredictionModes(Enum):
     PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
     PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
     PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
+    TIME_IMPUTATION = "time"
+    TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
 
 
 def score_smoothing(
@@ -162,10 +163,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if c in kwargs:
                 postprocess_kwargs[c] = kwargs[c]
 
-        preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
+        if self.model_type == "tspulse":
+            preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
 
         mode = kwargs.get("prediction_mode", self._prediction_mode)
-        device = kwargs.get("device", self.model.device)  # may not need
         aggr_win_size = kwargs.get("aggr_win_size", 32)
         postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", self._smoothing_window_size)
 
@@ -186,7 +187,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         forward_kwargs = {
             "mode": mode,
-            "device": device,
             "aggr_win_size": aggr_win_size,
             "batch_size": batch_size,
             "num_workers": num_workers,
@@ -248,7 +248,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         batch_size = forward_params.get("batch_size")
         num_workers = forward_params.get("num_workers")
         aggr_win_size = forward_params.get("aggr_win_size")
-        device = forward_params.get("device")
         dataloader = DataLoader(
             dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=remove_columns_collator, shuffle=False
         )
@@ -257,11 +256,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         accumulator = defaultdict(list)
 
         while (batch := next(it, None)) is not None:
-            batch_x = batch["past_values"]
-            batch_y = batch["future_values"]
-            # Move to device
-            batch_x = batch_x.to(device).float()
-            batch_y = batch_y.to(device).float()
+            batch_x = batch["past_values"].float()
+            batch_y = batch["future_values"].float()
+
             model_input = {"past_values": batch_x, "future_values": batch_y}
             scores = self.forward(model_input, **forward_params)
             for key in scores:
@@ -271,7 +268,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         accumulator_ = OrderedDict()
 
         for k in accumulator:
-            score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
+            # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
+            score = accumulator[k]
             score = self._model_processor.boundary_adjusted_scores(k, score, aggr_win_size=aggr_win_size)
             accumulator_[k] = score
 

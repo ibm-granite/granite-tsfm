@@ -7,7 +7,7 @@ from torch import nn as nn
 from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.toolkit.ad_helpers import TSADHelperUtility
+from tsfm_public.toolkit.ad_helpers import ScoreListType, TSADHelperUtility
 
 from .helpers import patchwise_stitched_reconstruction
 
@@ -106,11 +106,16 @@ class TSPulseADUtility(TSADHelperUtility):
     def boundary_adjusted_scores(
         self,
         key: str,
-        x: np.ndarray,
+        x: ScoreListType,
         **kwargs,
     ) -> np.ndarray:
         context_length = kwargs.get("context_length", self._model.config.context_length)
         aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
+        if isinstance(x, (list, tuple)):
+            if (len(x) > 0) and isinstance(x[0], torch.Tensor):
+                x = torch.cat(x, axis=0).detach().cpu().numpy()
+            else:
+                x = np.concatenate(x, axis=0).astype(float)
         if key == "forecast":
             start_pad_len = context_length
             end_pad_len = 0
