@@ -17,12 +17,14 @@ class TSPulseADUtility(TSADHelperUtility):
         if mode is None:
             mode = "forecast+fft+time"
 
-        super(TSPulseADUtility, self).__init__(**kwargs)
+        super(TSPulseADUtility, self).__init__()
         if not self.is_valid_mode(mode):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         self._model = model
         self._mode = mode
         self._aggr_win_size = aggr_win_size
+        self._least_significant_scale = kwargs.get('least_significant_scale', 1e-2)
+        self._least_significant_score = kwargs.get('least_significant_score', 0.2)
 
     def is_valid_mode(self, mode_str: str) -> bool:
         supported_modes = ["time", "fft", "forecast"]
@@ -39,6 +41,7 @@ class TSPulseADUtility(TSADHelperUtility):
         **kwargs,
     ) -> ModelOutput:
         mode = kwargs.get("mode", self._mode)
+        expand_score = kwargs.get("expand_score", False)
         use_forecast = "forecast" in mode
         use_fft = "fft" in mode
         use_ts = "time" in mode
@@ -76,6 +79,7 @@ class TSPulseADUtility(TSADHelperUtility):
         # output shape: [batch_size, window_size, n_channels]
         scores = OrderedDict()
 
+        reduction_axis = [1] if expand_score else [1, 2] 
         if use_ts:
             # time reconstruction
             output = stitched_dict["reconstruction_outputs"]
@@ -83,7 +87,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            scores["time"] = torch.mean(pointwise_score, dim=[1, 2])
+            scores["time"] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_fft:
             # time reconstruction from fft
@@ -92,14 +96,14 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            scores["fft"] = torch.mean(pointwise_score, dim=[1, 2])
+            scores["fft"] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_forecast:
             # forecast output
             batch_future_values = payload["future_values"]
             output = model_forward_output["forecast_output"]
             pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
-            scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
+            scores["forecast"] = torch.mean(pointwise_score, dim=reduction_axis)
 
         return ModelOutput(scores)
 
@@ -122,5 +126,24 @@ class TSPulseADUtility(TSADHelperUtility):
         else:
             start_pad_len = context_length - aggr_win_size // 2
             end_pad_len = aggr_win_size // 2
+        
         score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
-        return MinMaxScaler_().fit_transform(score.reshape(-1, 1))
+        if score.ndim == 1:
+            score = score.reshape(-1, 1)
+        
+        min_score = 0. 
+        if 'reference' in kwargs:
+            reference_data = np.asarray(kwargs.get('reference'))
+            min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True)**2
+            if min_score.shape[-1] != score.shape[-1]:
+                min_score = np.nanmax(min_score, axis=-1) 
+            if key == "forecast":
+                min_score = min_score / np.sqrt(2)
+            else:
+                min_score = min_score * (1 + 1/np.sqrt(self._aggr_win_size))
+        
+        score_ = score.copy()
+        score_[np.where(score > min_score)] *= 1/self._least_significant_score
+        scale = 1 if np.any(score > min_score) else self._least_significant_scale
+        score = MinMaxScaler_().fit_transform(score_) * scale
+        return score 

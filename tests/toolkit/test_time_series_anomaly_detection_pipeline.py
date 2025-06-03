@@ -66,6 +66,11 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
     assert result.shape[0] == dataset.shape[0]
     assert "anomaly_score" in result
 
+    result = tspipe(dataset, expand_score=True)
+    assert result.shape[0] == dataset.shape[0]
+    assert all([f"{tgt}_anomaly_score" in result for tgt in target_variables])
+
+    
 
 def test_tsad_tinytimemixture_pipeline_defaults(example_dataset):
     target_variables, dataset = example_dataset
@@ -84,3 +89,7 @@ def test_tsad_tinytimemixture_pipeline_defaults(example_dataset):
     result = tspipe(dataset)
     assert result.shape[0] == dataset.shape[0]
     assert "anomaly_score" in result
+
+    result = tspipe(dataset, expand_score=True)
+    assert result.shape[0] == dataset.shape[0]
+    assert all([f"{tgt}_anomaly_score" in result for tgt in target_variables])

@@ -62,6 +62,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         smoothing_window_size: int = 8,
         **kwargs,
     ):
+        model_processor = None
+        if isinstance(model, TSPulseForReconstruction):
+            model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size, **kwargs)
+        elif isinstance(model, TinyTimeMixerForPrediction):
+            model_processor = TinyTimeMixerADUtility(model=model, mode=prediction_mode, **kwargs)
+        else:
+            raise ValueError(f"Error: does not support {self.model.__class__} object!")
+
         kwargs["context_length"] = model.config.context_length
         kwargs["prediction_length"] = model.config.prediction_length
 
@@ -71,18 +79,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["aggr_win_size"] = aggr_win_size
         kwargs["smoothing_window_size"] = smoothing_window_size
 
-        model_processor = None
-        if isinstance(model, TSPulseForReconstruction):
-            model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size)
-        elif isinstance(model, TinyTimeMixerForPrediction):
-            model_processor = TinyTimeMixerADUtility(model=model, mode=prediction_mode)
-        else:
-            raise ValueError(f"Error: does not support {self.model.__class__} object!")
-
         known_mode = model_processor.is_valid_mode(prediction_mode)
         if not known_mode:
             raise ValueError(
-                f"Error: unknown operation mode {prediction_mode}, atleast (forecast/time/fft) must be specified! "
+                f"Error: incompatible operation mode {prediction_mode}!"
             )
 
         # *** TTM
@@ -102,6 +102,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["prediction_mode"] = prediction_mode
         self._prediction_mode = prediction_mode
         self._model_processor = model_processor
+        self._aggr_win_size = aggr_win_size
         self._smoothing_window_size = smoothing_window_size
 
         super().__init__(model, *args, **kwargs)
@@ -167,9 +168,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
 
         mode = kwargs.get("prediction_mode", self._prediction_mode)
-        aggr_win_size = kwargs.get("aggr_win_size", 32)
-        postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", self._smoothing_window_size)
-
+        aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
+        expand_score = kwargs.get("expand_score", False)
+        
+        smoothing_window_size = kwargs.get("smoothing_window_size", self._smoothing_window_size)
+        
+        postprocess_kwargs.update(smoothing_window_size=smoothing_window_size, 
+                                  expand_score=expand_score)
+        
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
         if batch_size is None:
@@ -190,6 +196,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "aggr_win_size": aggr_win_size,
             "batch_size": batch_size,
             "num_workers": num_workers,
+            "expand_score": expand_score
         }
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
@@ -218,7 +225,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             input_,
             **kwargs,
         )
-        target_columns = kwargs.get('target_columns', [])
+        target_columns = kwargs.get("target_columns", [])
         self.__context_memory["data"] = input_
         self.__context_memory["target_columns"] = target_columns
         return {"dataset": dataset}
@@ -269,10 +276,18 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         aggr_win_size = forward_params.get("aggr_win_size")
         accumulator_ = OrderedDict()
 
+        extra_kwargs = {}
+        if 'data' in self.__context_memory:
+            data = self.__context_memory['data']
+            target_columns = self.__context_memory.get('target_columns', [])
+            if len(target_columns) > 0:
+                data = data[target_columns]
+            extra_kwargs['reference'] = data.values
+            
         for k in accumulator:
-            # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
+            # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy() 
             score = accumulator[k]
-            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size)
+            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size, **extra_kwargs)
             accumulator_[k] = score
 
         # call postprocess
@@ -294,7 +309,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
     def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
-
+        expand_score = postprocess_parameters.get('expand_score', False)
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
         if not isinstance(smoothing_window_size, int):
             try:
@@ -307,10 +322,20 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
 
         score = self.aggr_function(
-            np.vstack([score_.ravel() for _, score_ in model_outputs_.items()]),
+            np.stack([score_ for _, score_ in model_outputs_.items()], axis=0),
             axis=0,
         )
-        model_outputs = {"anomaly_score": score}
+        target_columns = self.__context_memory["target_columns"]
+        expand_score = (len(target_columns) > 1) and expand_score
+        
+        model_outputs = {}
+        if expand_score:
+            if len(target_columns) != score.shape[-1]:
+                raise RuntimeError(f"Error: inconsistent state, with target columns {target_columns}")
+            for i, col_name in enumerate(target_columns):
+                model_outputs[f"{col_name}_anomaly_score"] = score[..., i]            
+        else:
+            model_outputs.update(anomaly_score=score.ravel())
 
         for k in model_outputs:
             result[k] = model_outputs[k]
