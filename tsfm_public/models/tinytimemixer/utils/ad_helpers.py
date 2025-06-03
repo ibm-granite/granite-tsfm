@@ -8,10 +8,17 @@ from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import TinyTimeMixerForPrediction
 from tsfm_public.toolkit.ad_helpers import ScoreListType, TSADHelperUtility
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 
 
 class TinyTimeMixerADUtility(TSADHelperUtility):
-    def __init__(self, model: TinyTimeMixerForPrediction, mode: str, **kwargs):
+    def __init__(
+        self,
+        model: TinyTimeMixerForPrediction,
+        posthoc_probabilistic_processor: PostHocProbabilisticProcessor,
+        mode: str,
+        **kwargs,
+    ):
         if mode is None:
             mode = "forecast"
         super(TinyTimeMixerADUtility, self).__init__(**kwargs)
@@ -19,6 +26,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         self._model = model
         self._mode = mode
+        self._posthoc_processor = posthoc_probabilistic_processor
 
     def is_valid_mode(
         self,
@@ -38,19 +46,26 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
     ) -> ModelOutput:
         mode = kwargs.get("mode", self._mode)
         use_forecast = "forecast" in mode
-        anomaly_criterion = nn.MSELoss(reduce=False)
-        batch_x = payload["past_values"]
+        # anomaly_criterion = nn.MSELoss(reduce=False)
+        # batch_x = payload["past_values"]
 
         model_forward_output = {}
-        model_forward_output = self._model(past_values=batch_x)
+        model_forward_output = self._model(**payload)
 
         scores = OrderedDict()
         if use_forecast:
             # forecast output
             batch_future_values = payload["future_values"]
             future_predictions = model_forward_output["prediction_outputs"]
-            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
-            scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
+
+            # for now assume calibration in normalized space, so no inverse is needed here
+
+            scores["forecast"] = self.posthoc_processor.outlier_score(
+                y_gt=batch_future_values, y_pred=future_predictions
+            )
+            # batch size x forecast_horizon x number features
+            # pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
+            # scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
 
         return ModelOutput(scores)
 
@@ -60,6 +75,18 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         x: ScoreListType,
         **kwargs,
     ) -> np.ndarray:
+        """_summary_
+
+        Take list of scores (bs x prediction_length x num_features)
+
+        Args:
+            key (str): _description_
+            x (ScoreListType): _description_
+
+        Returns:
+            np.ndarray: _description_
+        """
+
         start_pad_len = self._model.config.context_length
         end_pad_len = self._model.config.prediction_length - 1
         if isinstance(x, (list, tuple)):
@@ -67,5 +94,9 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
             else:
                 x = np.concatenate(x, axis=0).astype(float)
+
+        # call self._posthoc_processor.aggregate_method
+        # time aggregation
+        # dataframe length x number features
         score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
         return MinMaxScaler_().fit_transform(score.reshape(-1, 1))

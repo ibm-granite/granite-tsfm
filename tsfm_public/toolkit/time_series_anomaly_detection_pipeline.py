@@ -211,14 +211,16 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # For any forecasting based methods
         if self.feature_extractor:
-            input_ = self.feature_extractor.preprocess(input_)
+            input_prep = self.feature_extractor.preprocess(input_)
+        else:
+            input_prep = input_
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
-            input_,
+            input_prep,
             **kwargs,
         )
-        target_columns = kwargs.get('target_columns', [])
+        target_columns = kwargs.get("target_columns", [])
         self.__context_memory["data"] = input_
         self.__context_memory["target_columns"] = target_columns
         return {"dataset": dataset}
@@ -258,11 +260,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         accumulator = defaultdict(list)
 
         while (batch := next(it, None)) is not None:
-            batch_x = batch["past_values"].float()
-            batch_y = batch["future_values"].float()
+            # batch_x = batch["past_values"].float()
+            # batch_y = batch["future_values"].float()
 
-            model_input = {"past_values": batch_x, "future_values": batch_y}
-            scores = self.forward(model_input, **forward_params)
+            # model_input = {"past_values": batch_x, "future_values": batch_y}
+            scores = self.forward(batch, **forward_params)
             for key in scores:
                 accumulator[key].append(scores[key])
 
@@ -273,7 +275,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
             score = accumulator[k]
             score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size)
+            # score: length of input dataframe x # scores (forecast horizon)
             accumulator_[k] = score
+        # else:
+        #     # for conformal we need only the stacked scores
+        #     for k in accumulator:
+        #         # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
+        #         accumulator_[k] = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
 
         # call postprocess
         outputs = self.postprocess(ModelOutput(accumulator_), **postprocess_params)
@@ -295,21 +303,26 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
     def postprocess(self, model_outputs, **postprocess_parameters):
         result = self.__context_memory["data"].copy()
 
-        smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
-        if not isinstance(smoothing_window_size, int):
-            try:
-                smoothing_window_size = int(smoothing_window_size)
-            except ValueError:
-                smoothing_window_size = 1
+        if False:
+            smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+            if not isinstance(smoothing_window_size, int):
+                try:
+                    smoothing_window_size = int(smoothing_window_size)
+                except ValueError:
+                    smoothing_window_size = 1
 
-        model_outputs_ = {}
-        for k in model_outputs:
-            model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+            model_outputs_ = {}
+            for k in model_outputs:
+                model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+        else:
+            # for conformal
+            model_outputs_ = model_outputs
 
         score = self.aggr_function(
             np.vstack([score_.ravel() for _, score_ in model_outputs_.items()]),
             axis=0,
         )
+        # score: dataset length x 1
         model_outputs = {"anomaly_score": score}
 
         for k in model_outputs:
