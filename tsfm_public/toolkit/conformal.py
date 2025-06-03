@@ -974,7 +974,10 @@ class WeightedConformalWrapper:
         obj = cls(**params_copy, **kwargs)
 
         for attr_name, attr_value in save_attrs_dict.items():
-            setattr(obj, attr_name, attr_value)
+            if isinstance(attr_value, list):
+                setattr(obj, attr_name, np.asarray(attr_value))
+            else:
+                setattr(obj, attr_name, attr_value)
 
         return obj
 
