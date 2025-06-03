@@ -906,9 +906,9 @@ class TSPulseFunctionalTests(unittest.TestCase):
                 else:
                     # Check that patch indices were covered in order: always LTR
                     expected = list(range(num_patches))
-                    assert mask_positions == expected, (
-                        f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
-                    )
+                    assert (
+                        mask_positions == expected
+                    ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
                     assert pv_count == num_patches, f"Expected {num_patches} reps, got {pv_count}"
                     prev_pv = past_values
                     pv_count = 1
@@ -936,13 +936,13 @@ class TSPulseFunctionalTests(unittest.TestCase):
                 # Validate expected masked length
                 expected_masked_len = min(patch_length, T - start)
                 actual_masked_len = (mask[start : start + expected_masked_len].any(dim=1)).sum().item()
-                assert actual_masked_len == expected_masked_len, (
-                    f"Expected {expected_masked_len} rows masked, got {actual_masked_len}"
-                )
+                assert (
+                    actual_masked_len == expected_masked_len
+                ), f"Expected {expected_masked_len} rows masked, got {actual_masked_len}"
 
             # Final flush for last group
             expected = list(range(num_patches))
-            assert mask_positions == expected, (
-                f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
-            )
+            assert (
+                mask_positions == expected
+            ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
             assert pv_count == num_patches, f"Expected {num_patches} reps at end, got {pv_count}"
