@@ -9,8 +9,6 @@ import torch
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
-
-# First Party
 from transformers.modeling_utils import PreTrainedModel
 from transformers.pipelines.base import GenericTensor, build_pipeline_init_args
 from transformers.trainer_utils import RemoveColumnsCollator
@@ -23,8 +21,6 @@ from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from tsfm_public.models.tspulse.utils.ad_helpers import TSPulseADUtility
 
 from .dataset import ForecastDFDataset
-
-# Third Party
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
 
 
@@ -88,6 +84,20 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
                 f"Error: unknown operation mode {prediction_mode}, atleast (forecast/time/fft) must be specified! "
             )
 
+        # *** TTM
+        # check if we need to use the frequency token, get token if needed
+        use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
+
+        # needed for TTM support
+        if use_frequency_token and "feature_extractor" in kwargs:
+            freq = getattr(kwargs["feature_extractor"], "freq", None)
+            kwargs["frequency_token"] = (
+                kwargs["feature_extractor"].get_frequency_token(freq) if freq is not None else None
+            )
+        else:
+            kwargs["frequency_token"] = None
+        # *** END TTM
+
         kwargs["prediction_mode"] = prediction_mode
         self._prediction_mode = prediction_mode
         self._model_processor = model_processor
@@ -137,6 +147,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "prediction_length",
             "timestamp_column",
             "target_columns",
+            "frequency_token",  # TTM Specific
         ]
         postprocess_params = [
             "timestamp_column",
@@ -151,10 +162,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if c in kwargs:
                 postprocess_kwargs[c] = kwargs[c]
 
-        preprocess_kwargs["prediction_length"] = 1
+        preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
 
         mode = kwargs.get("prediction_mode", self._prediction_mode)
-        device = kwargs.get("device", self.model.device)
+        device = kwargs.get("device", self.model.device)  # may not need
         aggr_win_size = kwargs.get("aggr_win_size", 32)
         postprocess_kwargs["smoothing_window_size"] = kwargs.get("smoothing_window_size", self._smoothing_window_size)
 
@@ -197,6 +208,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
                 input_,
                 parse_dates=[timestamp_column],
             )
+
+        # For any forecasting based methods
+        if self.feature_extractor:
+            input_ = self.feature_extractor.preprocess(input_)
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
