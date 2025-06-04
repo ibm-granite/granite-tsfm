@@ -20,6 +20,7 @@ image: boilerplate
 	-f Dockerfile.gpu .
 
 clone_models:
+	rm -rf mytest-tsfm || true
 	git lfs install || true
 	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
