@@ -1334,3 +1334,34 @@ def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
         data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
 
     return data_payload
+
+
+def is_nested_dataframe(df: pd.DataFrame, column: str) -> bool:
+    """Checks if a dataframe contains cell entries which are series.
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        column (str): A column to check in the input dataframe.
+    Returns:
+        bool: True if the column contains pandas series, False otherwise.
+    """
+    return isinstance(df.iloc[0][column], pd.Series)
+
+
+def check_nested_lengths(df: pd.DataFrame, columns: List[str]):
+    """Check that each row contains series of the same length
+
+    Args:
+        df (pd.DataFrame): Input dataframe, assumed to contain nested series.
+        columns (List[str]): The columns of the dataframe to consider.
+
+    Raises:
+        ValueError: Raised if the dataframe does not contain rows where each series is
+        not equal length.
+    """
+    if len(columns) == 1:
+        return
+
+    l = df[columns].map(len).values
+    if not np.all(np.isclose(l, np.tile(l[:, :1], (1, l.shape[1])))):
+        raise ValueError("Input dataframe contains rows with series that are not equal length.")
