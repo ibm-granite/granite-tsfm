@@ -1,36 +1,43 @@
-import os
-import torch
-import transformers
-import math
-from torch.utils.data import DataLoader, random_split, Subset
-import numpy as np
-import tempfile
 import csv
 import json
+import math
+import os
+import tempfile
+import warnings
+
+import numpy as np
+import torch
+import transformers
+from sklearn.model_selection import StratifiedKFold
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
+from torch.utils.data import DataLoader, Subset, random_split
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
-from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.data.data_collator import default_data_collator
-from sklearn.model_selection import StratifiedKFold
-import warnings
-warnings.filterwarnings("ignore")
+from transformers.trainer_utils import RemoveColumnsCollator
 
 from tsfm_public.models.tspulse import TSPulseForClassification
 from tsfm_public.toolkit.dataset import ClassificationDFDataset
+from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 from tsfm_public.toolkit.time_series_classification_preprocessor import TimeSeriesClassificationPreprocessor
 from tsfm_public.toolkit.util import convert_tsfile_to_dataframe
-from tsfm_public.toolkit.lr_finder import optimal_lr_finder
+
+
+warnings.filterwarnings("ignore")
 
 REQUIRED_TORCH_VERSION = "2.4.0+cu121"
 REQUIRED_TRANSFORMERS_VERSION = "4.44.0"
 
 if torch.__version__ != REQUIRED_TORCH_VERSION:
-    print('torch.__version__ : ', torch.__version__)
-    raise RuntimeError(f"Torch version mismatch: Please use {REQUIRED_TORCH_VERSION} for reproducibility of classification scores.")
+    print("torch.__version__ : ", torch.__version__)
+    raise RuntimeError(
+        f"Torch version mismatch: Please use {REQUIRED_TORCH_VERSION} for reproducibility of classification scores."
+    )
 
 if transformers.__version__ != REQUIRED_TRANSFORMERS_VERSION:
-    raise RuntimeError(f"Transformers version mismatch: Please use {REQUIRED_TRANSFORMERS_VERSION} for reproducibility of classification scores.")
+    raise RuntimeError(
+        f"Transformers version mismatch: Please use {REQUIRED_TRANSFORMERS_VERSION} for reproducibility of classification scores."
+    )
 
 OUT_DIR = "tspulse_finetuned_models/"
 
@@ -74,21 +81,21 @@ for dataset_name in dset:
     seed = 42
     set_seed(seed)
     path = f"/datasets/{dataset_name}/{dataset_name}_TRAIN.ts"
-    
-    df_base = convert_tsfile_to_dataframe(    
+
+    df_base = convert_tsfile_to_dataframe(
         path,
         return_separate_X_and_y=False,
     )
     label_column = "class_vals"
-    input_columns = [f"dim_{i}" for i in range(df_base.shape[1]-1)]
-    
+    input_columns = [f"dim_{i}" for i in range(df_base.shape[1] - 1)]
+
     tsp = TimeSeriesClassificationPreprocessor(
         input_columns=input_columns,
         label_column=label_column,
         scaling=True,
     )
-    
-    tsp.train(df_base)   
+
+    tsp.train(df_base)
 
     df_prep = tsp.preprocess(df_base)
     base_dataset = ClassificationDFDataset(
@@ -103,27 +110,26 @@ for dataset_name in dset:
         enable_padding=False,
         full_series=True,
     )
-    
-    
+
     path = f"/datasets/{dataset_name}/{dataset_name}_TEST.ts"
-    
+
     df_test = convert_tsfile_to_dataframe(
         path,
         return_separate_X_and_y=False,
     )
     label_column = "class_vals"
-    input_columns = [f"dim_{i}" for i in range(df_test.shape[1]-1)]
-    
+    input_columns = [f"dim_{i}" for i in range(df_test.shape[1] - 1)]
+
     tsp = TimeSeriesClassificationPreprocessor(
         input_columns=input_columns,
         label_column=label_column,
         scaling=True,
     )
-    
+
     tsp.train(df_test)
 
     df_prep = tsp.preprocess(df_test)
-    
+
     test_dataset = ClassificationDFDataset(
         df_prep,
         id_columns=[],
@@ -136,10 +142,10 @@ for dataset_name in dset:
         enable_padding=False,
         full_series=True,
     )
-    
-    
-    if dataset_name == 'DuckDuckGeese':
+
+    if dataset_name == "DuckDuckGeese":
         data_dict = clf_params[dataset_name]["DATA_PARAMS"]
+
         def k_fold_cv(skf, dataset, kth_fold):
             y = []
             for idx in range(len(dataset)):
@@ -151,8 +157,8 @@ for dataset_name in dset:
                     val_dataset = Subset(dataset, val_indices)
             return train_dataset, val_dataset
 
-        skf = StratifiedKFold(n_splits=data_dict['num_folds'], shuffle=True)
-        train_dataset, valid_dataset = k_fold_cv(skf, base_dataset, data_dict['kth_fold'])
+        skf = StratifiedKFold(n_splits=data_dict["num_folds"], shuffle=True)
+        train_dataset, valid_dataset = k_fold_cv(skf, base_dataset, data_dict["kth_fold"])
     else:
         dataset_size = len(base_dataset)
         print(dataset_size)
@@ -160,15 +166,14 @@ for dataset_name in dset:
         val_size = int(split_valid_ratio * dataset_size)  # 10% valid split
         train_size = dataset_size - val_size
         train_dataset, valid_dataset = random_split(base_dataset, [train_size, val_size])
-    
-    
+
     config_dict = clf_params[dataset_name]["MODEL_PARAMS"]
     config_dict["loss"] = "cross_entropy"
     config_dict["ignore_mismatched_sizes"] = True
-    
+
     config_dict["num_input_channels"] = tsp.num_input_channels
-    config_dict["num_targets"] = df_base['class_vals'].nunique() 
-    
+    config_dict["num_targets"] = df_base["class_vals"].nunique()
+
     model_path = "../../model-binaries/tspulse_classification/tspulse_model"
     model = TSPulseForClassification.from_pretrained(model_path, **config_dict)
     model = model.to("cuda").float()
@@ -176,23 +181,23 @@ for dataset_name in dset:
     # Freezing Backbone except patch embedding layer....
     for param in model.backbone.parameters():
         param.requires_grad = False
-    
+
     for param in model.backbone.time_encoding.parameters():
         param.requires_grad = True
     for param in model.backbone.fft_encoding.parameters():
         param.requires_grad = True
-    
+
     temp_dir = tempfile.mkdtemp()
-    
+
     suggested_lr = None
-    
+
     train_dict = clf_params[dataset_name]["TRAINING_PARAMS"]
     EPOCHS = train_dict["num_train_epochs"]
     BATCH_SIZE = train_dict["per_device_train_batch_size"]
     eval_accumulation_steps = train_dict["eval_accumulation_steps"]
     NUM_WORKERS = 1
     NUM_GPUS = 1
-    
+
     set_seed(42)
     if suggested_lr is None:
         lr, model = optimal_lr_finder(
@@ -201,7 +206,7 @@ for dataset_name in dset:
             batch_size=BATCH_SIZE,
         )
         suggested_lr = lr
-    print('Suggested LR : ', suggested_lr)
+    print("Suggested LR : ", suggested_lr)
     finetune_args = TrainingArguments(
         output_dir=temp_dir,
         overwrite_output_dir=True,
@@ -222,7 +227,7 @@ for dataset_name in dset:
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
     )
-    
+
     # Create the early stopping callback
     early_stopping_callback = EarlyStoppingCallback(
         early_stopping_patience=clf_params[dataset_name]["EARYL_STOPPING_PARAMS"][
@@ -230,7 +235,7 @@ for dataset_name in dset:
         ],  # Number of epochs with no improvement after which to stop
         early_stopping_threshold=0.0001,  # Minimum improvement required to consider as improvement
     )
-    
+
     # Optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=suggested_lr)
     scheduler = OneCycleLR(
@@ -239,7 +244,7 @@ for dataset_name in dset:
         epochs=EPOCHS,
         steps_per_epoch=math.ceil(len(train_dataset) / (BATCH_SIZE * NUM_GPUS)),
     )
-    
+
     finetune_trainer = Trainer(
         model=model,
         args=finetune_args,
@@ -248,10 +253,10 @@ for dataset_name in dset:
         callbacks=[early_stopping_callback],
         optimizers=(optimizer, scheduler),
     )
-    
+
     # Fine tune
     finetune_trainer.train()
-    
+
     predictions_dict = finetune_trainer.predict(test_dataset)
     preds_np = predictions_dict.predictions[0]
 
@@ -262,7 +267,7 @@ for dataset_name in dset:
         description=None,
         model_name="temp",
     )
-    
+
     test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=remove_columns_collator)
     target_list = []
     for batch in test_dataloader:
@@ -272,14 +277,13 @@ for dataset_name in dset:
     test_accuracy = np.mean(targets_np == np.argmax(preds_np, axis=1))
     print("test_accuracy : ", test_accuracy)
 
-
-    output_file = 'tspulse_uea_classification_accuracies.csv'
+    output_file = "tspulse_uea_classification_accuracies.csv"
 
     if not os.path.exists(output_file):
-        with open(output_file, mode='w', newline='') as file:
+        with open(output_file, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(['Dataset', 'Accuracy'])
+            writer.writerow(["Dataset", "Accuracy"])
 
-    with open(output_file, mode='a', newline='') as file:
+    with open(output_file, mode="a", newline="") as file:
         writer = csv.writer(file)
         writer.writerow([dataset_name, test_accuracy])
