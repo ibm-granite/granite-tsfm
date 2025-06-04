@@ -27,7 +27,7 @@ Create a seperate conda environment having the `specific versions` of the requir
 conda create --name tspulse_classification python=3.11.0
 conda activate tspulse_classification
 
-pip install git+https://github.com/ibm-granite/granite-tsfm.git@main
+pip install git+https://github.com/ibm-granite/granite-tsfm.git@v0.2.27
 pip install -r ../requirements.txt
 ```
 
