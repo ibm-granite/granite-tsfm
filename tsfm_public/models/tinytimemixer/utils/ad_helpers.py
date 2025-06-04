@@ -48,12 +48,12 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         mode_str: str,
     ) -> bool:
         """Validates compatibility of the specified mode string."""
-        supported_modes = ["forecast"]
-        valid_mode = False
+        supported_modes = ["forecast", "meandev"]
+        valid_mode = 0
         for mode_type in supported_modes:
             if mode_type in mode_str:
-                valid_mode = True
-        return valid_mode
+                valid_mode += 1
+        return valid_mode == 1
 
     def compute_score(
         self,
@@ -72,6 +72,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         """
         mode = kwargs.get("mode", self._mode)
         use_forecast = "forecast" in mode
+        use_meandev = "meandev" in mode
         anomaly_criterion = nn.MSELoss(reduce=False)
 
         model_forward_output = {}
@@ -85,6 +86,11 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             future_predictions = model_forward_output["prediction_outputs"]
             pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
             scores["forecast"] = torch.mean(pointwise_score, dim=reduction_axis)
+        if use_meandev:
+            batch_future_values = payload["future_values"]
+            future_predictions = model_forward_output["prediction_outputs"]
+            deviation = batch_future_values - future_predictions
+            scores["meandev"] = deviation
 
         return ModelOutput(scores)
 
@@ -105,13 +111,28 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         Returns:
             np.ndarray: combined score
         """
-        start_pad_len = self._model.config.context_length
-        end_pad_len = self._model.config.prediction_length - 1
         if isinstance(x, (list, tuple)):
             if (len(x) > 0) and isinstance(x[0], torch.Tensor):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
             else:
                 x = np.concatenate(x, axis=0).astype(float)
+        elif isinstance(x, torch.Tensor):
+            x = x.detach().cpu().numpy()
+
+        if key == "meandev":
+            n_batches = x.shape[0]
+            n_obs = x.shape[1]
+            total_length = n_batches + n_obs - 1
+            data_dim = (total_length, x.shape[2]) if x.ndim == 3 else total_length
+            counters = np.zeros(data_dim)
+            predictions = np.zeros(data_dim)
+            for i in range(n_batches):
+                predictions[i : (i + n_obs)] += x[i]
+                counters[i : (i + n_obs)] += 1
+            x = (predictions / np.maximum(counters, 1)) ** 2
+
+        start_pad_len = self._model.config.context_length
+        end_pad_len = 0 if key == "meandev" else self._model.config.prediction_length - 1
         score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
         if score.ndim == 1:
             score = score.reshape(-1, 1)
@@ -122,7 +143,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
-            min_score = min_score / np.sqrt(2)
+            if key == "forecast":
+                min_score = min_score / np.sqrt(2)
         score_ = score.copy()
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score
         scale = 1 if np.any(score > min_score) else self._least_significant_scale

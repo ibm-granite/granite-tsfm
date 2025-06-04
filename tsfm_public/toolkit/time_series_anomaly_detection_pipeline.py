@@ -26,6 +26,7 @@ from .time_series_forecasting_pipeline import TimeSeriesPipeline
 class AnomalyPredictionModes(Enum):
     """Enum type for time series foundation model based anomaly detection modes."""
 
+    MEAN_DEVIATION = "meandev"
     PREDICTIVE = "forecast"
     TIME_IMPUTATION = "time"
     FREQUENCY_IMPUTATION = "fft"
