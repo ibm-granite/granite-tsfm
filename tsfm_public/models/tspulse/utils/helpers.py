@@ -1,9 +1,12 @@
 # Copyright contributors to the TSFM project
 #
 import math
+from typing import Literal, Optional, Union
 
 import torch
 from torch.utils.data import Dataset
+
+from ..modeling_tspulse import TSPulseForClassification, TSPulseForReconstruction
 
 
 def patchwise_stitched_reconstruction(
@@ -201,9 +204,15 @@ class PatchMaskingDatasetWrapper(Dataset):
         }
 
 
-def get_embeddings(model, past_values, past_observed_mask=None, mode="register"):
+def get_embeddings(
+    model: Union[TSPulseForReconstruction, TSPulseForClassification],
+    past_values: torch.Tensor,
+    past_observed_mask: Optional[torch.Tensor] = None,
+    component: Literal["backbone", "decoder"] = "decoder",
+    mode: Literal["time", "fft", "register", "full"] = "register",
+) -> torch.Tensor:
     """
-    Obtain embeddings from TSPulse model.
+    Obtain embeddings from a TSPulse model.
 
     Args:
         model: A TSPulse model object with a callable interface that accepts `past_values` and `past_observed_mask`.
@@ -211,7 +220,8 @@ def get_embeddings(model, past_values, past_observed_mask=None, mode="register")
                                     B = batch size,
                                     L = sequence length,
                                     C = number of input channels.
-        past_observed_mask (torch.Tensor): Mask tensor of the same shape as `past_values`, indicating observed (1.0) vs. missing (0.0) values.
+        past_observed_mask (Optional[torch.Tensor]): Mask tensor of the same shape as `past_values`, indicating observed (1.0) vs. missing (0.0) values.
+        component (str): Component to use to get the embedding. Allowed values are "backbone" and "decoder".
         mode (str): Specifies the type of embeddings to extract. One of:
             - "time": Extracts time-domain embeddings.
             - "fft": Extracts frequency-domain (FFT) embeddings.
@@ -228,7 +238,12 @@ def get_embeddings(model, past_values, past_observed_mask=None, mode="register")
     reg_emb_size = reg_tokens * d_model
 
     embeddings = model(past_values, past_observed_mask=past_observed_mask)
-    embeddings = embeddings["decoder_hidden_state"]  # [B, C, D]
+    if component == "backbone":
+        embeddings = embeddings["backbone_hidden_state"]  # [B, C, D]
+    elif component == "decoder":
+        embeddings = embeddings["decoder_hidden_state"]  # [B, C, D]
+    else:
+        raise ValueError(f"Invalid component: {component}. Choose 'backbone' or 'decoder'.")
 
     if mode == "time":
         return embeddings[:, :, :time_emb_size]
@@ -239,4 +254,4 @@ def get_embeddings(model, past_values, past_observed_mask=None, mode="register")
     elif mode == "full":
         return embeddings
     else:
-        raise ValueError("Invalid mode.")
+        raise ValueError(f"Invalid mode: {mode}. Choose from 'time', 'fft', 'register', 'full'.")
