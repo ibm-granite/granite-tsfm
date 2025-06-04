@@ -18,6 +18,7 @@ from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import TinyTimeMixe
 from tsfm_public.models.tinytimemixer.utils.ad_helpers import TinyTimeMixerADUtility
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from tsfm_public.models.tspulse.utils.ad_helpers import TSPulseADUtility
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 
 from .dataset import ForecastDFDataset
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
@@ -60,6 +61,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         aggr_function: str = "max",
         aggr_win_size: int = 32,
         smoothing_window_size: int = 8,
+        posthoc_probabilistic_processor: PostHocProbabilisticProcessor = None,
         **kwargs,
     ):
         kwargs["context_length"] = model.config.context_length
@@ -75,7 +77,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if isinstance(model, TSPulseForReconstruction):
             model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size)
         elif isinstance(model, TinyTimeMixerForPrediction):
-            model_processor = TinyTimeMixerADUtility(model=model, mode=prediction_mode)
+            model_processor = TinyTimeMixerADUtility(
+                model=model, mode=prediction_mode, posthoc_probabilistic_processor=posthoc_probabilistic_processor
+            )
         else:
             raise ValueError(f"Error: does not support {self.model.__class__} object!")
 

@@ -15,8 +15,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
     def __init__(
         self,
         model: TinyTimeMixerForPrediction,
-        posthoc_probabilistic_processor: PostHocProbabilisticProcessor,
         mode: str,
+        posthoc_probabilistic_processor: PostHocProbabilisticProcessor = None,
         **kwargs,
     ):
         if mode is None:
@@ -46,7 +46,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
     ) -> ModelOutput:
         mode = kwargs.get("mode", self._mode)
         use_forecast = "forecast" in mode
-        # anomaly_criterion = nn.MSELoss(reduce=False)
+
+        anomaly_criterion = nn.MSELoss(reduce=False)
         # batch_x = payload["past_values"]
 
         model_forward_output = {}
@@ -60,12 +61,18 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
 
             # for now assume calibration in normalized space, so no inverse is needed here
 
-            scores["forecast"] = self.posthoc_processor.outlier_score(
-                y_gt=batch_future_values, y_pred=future_predictions
-            )
-            # batch size x forecast_horizon x number features
-            # pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
-            # scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
+            ## If the posthoc probabilistic processor is available
+            if self.posthoc_processor is not None:
+                scores["forecast"] = self.posthoc_processor.outlier_score(
+                    y_gt=batch_future_values,
+                    y_pred=future_predictions,
+                )
+            else:  ## Use default score
+                # batch size x forecast_horizon x number features
+                pointwise_score = anomaly_criterion(
+                    batch_future_values[:, 0, :], future_predictions[:, 0, :]
+                ).unsqueeze(1)
+                scores["forecast"] = torch.mean(pointwise_score, dim=[1, 2])
 
         return ModelOutput(scores)
 
@@ -94,9 +101,13 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
             else:
                 x = np.concatenate(x, axis=0).astype(float)
-
-        # call self._posthoc_processor.aggregate_method
-        # time aggregation
-        # dataframe length x number features
-        score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
-        return MinMaxScaler_().fit_transform(score.reshape(-1, 1))
+        if self.posthoc_processor is not None:
+            x = self.posthoc_processor.forecast_horizon_aggregation(x)
+            score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)  # (?)
+            return score
+        else:
+            # call self._posthoc_processor.aggregate_method
+            # time aggregation
+            # dataframe length x number features
+            score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
+            return MinMaxScaler_().fit_transform(score.reshape(-1, 1))
