@@ -313,7 +313,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         y_pred: np.ndarray,
         X: np.ndarray = None,
         timestamps: np.ndarray = None,
-        aggregation: Union[str, int] = "mean",
+        aggregation: Union[str, int] = None,
         significance: float = 0.01,
         aggregation_axis: Union[int, Tuple[int, ...]] = 1,
     ) -> np.ndarray:
@@ -331,7 +331,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                 - If an integer, selects the outlier scores corresponding to that specific forecast horizon index.
                 - If None, returns outlier scores for all dimensions independently without aggregation.
 
-            aggregation_axis (tuple of int or in, optional):
+            aggregation_axis (tuple of int, optional):
                 Specifies the axes over which to aggregate when `aggregation` is a string.
         Returns:
             output_array (np.ndarray): The resulting array after aggregation. Its shape depends on the chosen aggregation strategy, but the last dimension is always 2, representing the outlier score (p-value) and the outlier label.
@@ -352,30 +352,101 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                     outliers = output["outliers"]
 
                 elif isinstance(aggregation, int):
-                    outliers_scores = outliers_scores[:, aggregation, :]
+                    outliers_scores = self.forecast_horizon_aggregation(outliers_scores,aggregation=aggregation)
+                    # outliers_scores = outliers_scores[:, aggregation, :]
                     outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
 
                 elif isinstance(aggregation, str):
                     if aggregation_axis is None:
                         raise ValueError("aggregation_axis must be specified when aggregation is a string")
-                    if aggregation == "mean":
-                        outliers_scores = np.mean(outliers_scores, axis=aggregation_axis)
-                    elif aggregation == "median":
-                        outliers_scores = np.median(outliers_scores, axis=aggregation_axis)
-                    elif aggregation == "max":
-                        outliers_scores = np.max(outliers_scores, axis=aggregation_axis)
-                    elif aggregation == "min":
-                        outliers_scores = np.min(outliers_scores, axis=aggregation_axis)
-                    else:
-                        raise ValueError(f"Unsupported aggregation method: {aggregation}")
+                    
+                    if isinstance(aggregation_axis, int):
+                        aggregation_axis = (aggregation_axis,)
+
+                    if 1 in aggregation_axis:
+                        aggregation_axis = tuple(x for x in aggregation_axis if x != 1)
+                        outliers_scores = self.forecast_horizon_aggregation(outliers_scores,aggregation=aggregation)
+                        if aggregation_axis:
+                            outliers_scores = outliers_scores[:,np.newaxis,:]
+                    
+
+                    if aggregation_axis:
+                        if aggregation == "mean":
+                            outliers_scores = np.mean(outliers_scores, axis=aggregation_axis)
+                        elif aggregation == "median":
+                            outliers_scores = np.median(outliers_scores, axis=aggregation_axis)
+                        elif aggregation == "max":
+                            outliers_scores = np.max(outliers_scores, axis=aggregation_axis)
+                        elif aggregation == "min":
+                            outliers_scores = np.min(outliers_scores, axis=aggregation_axis)
+                        else:
+                            raise ValueError(f"Unsupported aggregation method: {aggregation}")
                     outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
                 else:
                     raise TypeError("aggregation must be either an int or a supported aggregation string")
 
-                output_array = np.stack([outliers_scores, outliers], axis=-1)
-                return output_array
+                if outlier_label:
+                    return np.stack([outliers_scores, outliers], axis=-1)
+                else:
+                    return outliers_scores
+
+    def forecast_horizon_aggregation(self,
+                                     outliers_scores: np.ndarray,
+                                     aggregation: Union[str, int] = "mean"):
+        
+        # print('AGGREGATION!!')
+        if isinstance(aggregation, int):
+            return outliers_scores[:, aggregation, :]
+
+        elif isinstance(aggregation, str):
+            
+            N, H, F = outliers_scores.shape
+
+            # we want to align predictions/forecasts for each timestamp (observation)
+            aligned = np.full((N, H, F), np.nan)  # nan for padding initial items for which we have less than horizon H predictions.
+            # print('outliers_scores',outliers_scores[0:10,...])
+            for h in range(H):
+                # shift each row of forecast horizon h by h steps into the future.
+                aligned[h:N, h, :] = outliers_scores[:N - h, h, :] #item i should have a values for [i,j,:] for j \in [0, min(i,H)]
+            # print('aligned',aligned[0:10,...])
+            # aggregation but ignore nans
+            if aggregation == 'mean':
+                return np.nanmean(aligned, axis=1)
+            elif aggregation == 'median':
+                return np.nanmedian(aligned, axis=1)
+            elif aggregation == 'max':
+                return np.nanmax(aligned, axis=1)
+            elif aggregation == 'min':
+                return np.nanmin(aligned, axis=1)
+            else:
+                raise ValueError(f"Unsupported aggregation method: {aggregation}")
+        else:
+            raise TypeError("aggregation must be either an int or a supported aggregation string")
 
 
+            # N, H, F = outliers_scores.shape
+            # aligned = []
+
+            # for t in range(N - H + 1):
+            #     # collect diagona meaning that first item is outliers_scores[0,H-1,:], outliers_scores[1,H-1 - 1,:],..., outliers_scores[H-1,0,:]
+            #     # then aligned_slice[i] = \{outliers_scores[i + h,H-1 - h,:] \}^{H-1}_{h=0} with i=0 to N - H + 1 
+            #     aligned_slice = np.array([outliers_scores[t + h, H - 1 - h, :] for h in range(H)])
+            #     aligned.append(aligned_slice)
+
+            # aligned = np.stack(aligned, axis=0)  # Shape: (N - H + 1, H, F)
+
+            # if aggregation == 'mean':
+            #     return aligned.mean(axis=1)
+            # elif aggregation == 'median':
+            #     return np.median(aligned, axis=1)
+            # elif aggregation == 'max':
+            #     return aligned.max(axis=1)
+            # elif aggregation == 'min':
+            #     return aligned.min(axis=1)
+            # else:
+            #     raise TypeError("aggregation must be either an int or a supported aggregation string")
+        
+        
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     """
     Compute the absolute error between `y` and `y_pred`. If the inputs are multi-dimensional, the average is computed over the last dimension.
