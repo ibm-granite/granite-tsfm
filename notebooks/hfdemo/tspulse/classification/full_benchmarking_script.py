@@ -73,7 +73,7 @@ dset = [
 for dataset_name in dset:
     seed = 42
     set_seed(seed)
-    path = f"/dccstor/tsfm23/datasets/UEA_Multivariate_ts/{dataset_name}/{dataset_name}_TRAIN.ts"
+    path = f"/datasets/{dataset_name}/{dataset_name}_TRAIN.ts"
     
     df_base = convert_tsfile_to_dataframe(    
         path,
@@ -105,7 +105,7 @@ for dataset_name in dset:
     )
     
     
-    path = f"/dccstor/tsfm23/datasets/UEA_Multivariate_ts/{dataset_name}/{dataset_name}_TEST.ts"
+    path = f"/datasets/{dataset_name}/{dataset_name}_TEST.ts"
     
     df_test = convert_tsfile_to_dataframe(
         path,
@@ -169,8 +169,7 @@ for dataset_name in dset:
     config_dict["num_input_channels"] = tsp.num_input_channels
     config_dict["num_targets"] = df_base['class_vals'].nunique() 
     
-    # model_path = "../../model-binaries/tspulse_classification/tspulse_model"
-    model_path = "/dccstor/tsfm23/vj_share/models/tspulse_neurips/models/vela/apr_20_block_mask/fft_mix_learn_mask_with_registers_v20_scaled_consistent/tspulse_consistent_masking_var_hybrid_e20_scaled_p16_sign_w20-20250418-0024-1/models/tspulse_model"
+    model_path = "../../model-binaries/tspulse_classification/tspulse_model"
     model = TSPulseForClassification.from_pretrained(model_path, **config_dict)
     model = model.to("cuda").float()
 
