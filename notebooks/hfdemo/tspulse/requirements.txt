@@ -1,5 +1,4 @@
 pandas>=2.2.0
-sktime
 scikit-learn
 torch==2.4.0
 transformers==4.44.0
