@@ -1,0 +1,15 @@
+pandas>=2.2.0
+sktime
+scikit-learn
+torch==2.4.0
+transformers==4.44.0
+accelerate>=0.26.0
+tensorboardX==2.6.2.2
+urllib3>=1.26.19       
+numpy<3
+jupyter
+ipywidgets
+matplotlib
+ruff==0.5.7
+faiss-cpu
+statsmodels
