@@ -316,6 +316,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         aggregation: Union[str, int] = None,
         significance: float = 0.01,
         aggregation_axis: Union[int, Tuple[int, ...]] = 1,
+        outlier_label: bool = True,
     ) -> np.ndarray:
         """
         PROTOTYPE: METHOD TO GET NORMALIZED OUTLIER CONFORMAL SCORE (P-VALUE) BASED ON FORECASTED PREDICTION ERRORS
@@ -352,24 +353,25 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                     outliers = output["outliers"]
 
                 elif isinstance(aggregation, int):
-                    outliers_scores = self.forecast_horizon_aggregation(outliers_scores,aggregation=aggregation)
+                    outliers_scores = self.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
                     # outliers_scores = outliers_scores[:, aggregation, :]
                     outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
 
                 elif isinstance(aggregation, str):
                     if aggregation_axis is None:
                         raise ValueError("aggregation_axis must be specified when aggregation is a string")
-                    
+
                     if isinstance(aggregation_axis, int):
                         aggregation_axis = (aggregation_axis,)
 
+                    ### If aggregation across forecast horizon (axis = 1) was selected
                     if 1 in aggregation_axis:
                         aggregation_axis = tuple(x for x in aggregation_axis if x != 1)
-                        outliers_scores = self.forecast_horizon_aggregation(outliers_scores,aggregation=aggregation)
+                        outliers_scores = self.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
                         if aggregation_axis:
-                            outliers_scores = outliers_scores[:,np.newaxis,:]
-                    
+                            outliers_scores = outliers_scores[:, np.newaxis, :]
 
+                    ### If aggreagtion axis for other dimension != 1 were selected
                     if aggregation_axis:
                         if aggregation == "mean":
                             outliers_scores = np.mean(outliers_scores, axis=aggregation_axis)
@@ -390,46 +392,45 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                 else:
                     return outliers_scores
 
-    def forecast_horizon_aggregation(self,
-                                     outliers_scores: np.ndarray,
-                                     aggregation: Union[str, int] = "mean"):
-        
+    def forecast_horizon_aggregation(self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"):
         # print('AGGREGATION!!')
         if isinstance(aggregation, int):
             return outliers_scores[:, aggregation, :]
 
         elif isinstance(aggregation, str):
-            
             N, H, F = outliers_scores.shape
 
             # we want to align predictions/forecasts for each timestamp (observation)
-            aligned = np.full((N, H, F), np.nan)  # nan for padding initial items for which we have less than horizon H predictions.
+            aligned = np.full(
+                (N, H, F), np.nan
+            )  # nan for padding initial items for which we have less than horizon H predictions.
             # print('outliers_scores',outliers_scores[0:10,...])
             for h in range(H):
                 # shift each row of forecast horizon h by h steps into the future.
-                aligned[h:N, h, :] = outliers_scores[:N - h, h, :] #item i should have a values for [i,j,:] for j \in [0, min(i,H)]
+                aligned[h:N, h, :] = outliers_scores[
+                    : N - h, h, :
+                ]  # item i should have a values for [i,j,:] for j \in [0, min(i,H)]
             # print('aligned',aligned[0:10,...])
             # aggregation but ignore nans
-            if aggregation == 'mean':
+            if aggregation == "mean":
                 return np.nanmean(aligned, axis=1)
-            elif aggregation == 'median':
+            elif aggregation == "median":
                 return np.nanmedian(aligned, axis=1)
-            elif aggregation == 'max':
+            elif aggregation == "max":
                 return np.nanmax(aligned, axis=1)
-            elif aggregation == 'min':
+            elif aggregation == "min":
                 return np.nanmin(aligned, axis=1)
             else:
                 raise ValueError(f"Unsupported aggregation method: {aggregation}")
         else:
             raise TypeError("aggregation must be either an int or a supported aggregation string")
 
-
             # N, H, F = outliers_scores.shape
             # aligned = []
 
             # for t in range(N - H + 1):
             #     # collect diagona meaning that first item is outliers_scores[0,H-1,:], outliers_scores[1,H-1 - 1,:],..., outliers_scores[H-1,0,:]
-            #     # then aligned_slice[i] = \{outliers_scores[i + h,H-1 - h,:] \}^{H-1}_{h=0} with i=0 to N - H + 1 
+            #     # then aligned_slice[i] = \{outliers_scores[i + h,H-1 - h,:] \}^{H-1}_{h=0} with i=0 to N - H + 1
             #     aligned_slice = np.array([outliers_scores[t + h, H - 1 - h, :] for h in range(H)])
             #     aligned.append(aligned_slice)
 
@@ -445,8 +446,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             #     return aligned.min(axis=1)
             # else:
             #     raise TypeError("aggregation must be either an int or a supported aggregation string")
-        
-        
+
+
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     """
     Compute the absolute error between `y` and `y_pred`. If the inputs are multi-dimensional, the average is computed over the last dimension.
