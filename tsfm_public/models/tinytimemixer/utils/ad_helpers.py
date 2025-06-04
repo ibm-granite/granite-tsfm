@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Optional
 
 import numpy as np
 import torch
@@ -11,7 +12,27 @@ from tsfm_public.toolkit.ad_helpers import ScoreListType, TSADHelperUtility
 
 
 class TinyTimeMixerADUtility(TSADHelperUtility):
-    def __init__(self, model: TinyTimeMixerForPrediction, mode: str, **kwargs):
+    """Implements TSAD Helper Utility for TSPulse model"""
+
+    def __init__(
+        self,
+        model: TinyTimeMixerForPrediction,
+        mode: str,
+        least_significant_scale: float = 1e-2,
+        least_significant_score: float = 0.2,
+        **kwargs,
+    ):
+        """Initializer
+
+        Args:
+            model (TinyTimeMixerForPrediction): model instance
+            mode (str): mode string specifies scoring logic
+            least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
+            least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
+
+        Raises:
+            ValueError: unsupported scoring mode
+        """
         if mode is None:
             mode = "forecast"
         super(TinyTimeMixerADUtility, self).__init__()
@@ -19,13 +40,14 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         self._model = model
         self._mode = mode
-        self._least_significant_scale = kwargs.get("least_significant_scale", 1e-2)
-        self._least_significant_score = kwargs.get("least_significant_score", 0.2)
+        self._least_significant_scale = least_significant_scale
+        self._least_significant_score = least_significant_score
 
     def is_valid_mode(
         self,
         mode_str: str,
     ) -> bool:
+        """Validates compatibility of the specified mode string."""
         supported_modes = ["forecast"]
         valid_mode = False
         for mode_type in supported_modes:
@@ -36,9 +58,18 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
     def compute_score(
         self,
         payload: dict,
+        expand_score: bool = False,
         **kwargs,
     ) -> ModelOutput:
-        expand_score = kwargs.get("expand_score", False)
+        """Produces required model output for anomaly scoring
+
+        Args:
+            payload (dict): data batch
+            expand_score (bool, optional): compute score for each stream for multivariate data. Defaults to False.
+
+        Returns:
+            ModelOutput: model output
+        """
         mode = kwargs.get("mode", self._mode)
         use_forecast = "forecast" in mode
         anomaly_criterion = nn.MSELoss(reduce=False)
@@ -61,8 +92,19 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         self,
         key: str,
         x: ScoreListType,
+        reference: Optional[np.ndarray] = None,
         **kwargs,
     ) -> np.ndarray:
+        """Combines model outputs with boundary adjustment
+
+        Args:
+            key (str): key associated with model output
+            x (ScoreListType): model outputs across all batches combined
+            reference (Optional[np.ndarray], optional): reference data for score scale adjustment. Defaults to None.
+
+        Returns:
+            np.ndarray: combined score
+        """
         start_pad_len = self._model.config.context_length
         end_pad_len = self._model.config.prediction_length - 1
         if isinstance(x, (list, tuple)):
@@ -75,8 +117,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             score = score.reshape(-1, 1)
 
         min_score = 0.0
-        if "reference" in kwargs:
-            reference_data = np.asarray(kwargs.get("reference"))
+        if reference is not None:
+            reference_data = np.asarray(reference)
             min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)

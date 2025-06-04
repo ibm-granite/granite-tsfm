@@ -24,18 +24,28 @@ from .time_series_forecasting_pipeline import TimeSeriesPipeline
 
 
 class AnomalyPredictionModes(Enum):
+    """Enum type for time series foundation model based anomaly detection modes."""
+
     PREDICTIVE = "forecast"
+    TIME_IMPUTATION = "time"
+    FREQUENCY_IMPUTATION = "fft"
+    TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
     PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
     PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
     PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
-    TIME_IMPUTATION = "time"
-    TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
 
 
 def score_smoothing(
     x: np.ndarray,
     smoothing_window_size: int,
 ) -> np.ndarray:
+    """Utility function for moving average smoothing of N-dimensional dataset.
+    Smoothing is applied along axis=0.
+
+    Args:
+        x   (np.ndarray): numpy array of arbitrary dimension
+        smoothing_window_size (int): parameter specifies moving window size used for smoothing
+    """
     if smoothing_window_size < 2:
         return x
     elif x.ndim == 1:
@@ -62,6 +72,20 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         smoothing_window_size: int = 8,
         **kwargs,
     ):
+        """Huggingface pipeline for time series anomaly detection using time series foundation models.
+
+        Args:
+            model (PreTrainedModel): time series foundation model instance
+            prediction_mode (str, optional): specify appropriate mode for anomaly scoring. Defaults to AnomalyPredictionModes.PREDICTIVE.value.
+            aggr_function (str, optional): aggregation function for merging scores using different mode, supported values are (max/min/mean). Defaults to "max".
+            aggr_win_size (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
+            smoothing_window_size (int, optional): window size for post processing of the generated scores. Defaults to 8.
+
+        Raises:
+            ValueError: unsupported model
+            ValueError: invalid prediction_mode
+            ValueError: no pytorch support
+        """
         model_processor = None
         if isinstance(model, TSPulseForReconstruction):
             model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size, **kwargs)
@@ -301,6 +325,17 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         return self._model_processor.compute_score(input_tensors, **kwargs)
 
     def postprocess(self, model_outputs, **postprocess_parameters):
+        """Overrides the postprocess of the base class. Applies post-processing logic on the model outputs.
+
+        Args:
+            model_outputs (dict): dictionary containing model outputs.
+
+        Raises:
+            RuntimeError: __description__
+
+        Returns:
+            pd.DataFrame: pandas dataframe with anomaly score attached
+        """
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)

@@ -53,7 +53,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyPredictionModes.PREDICTIVE_WITH_IMPUTATION.value,
+        prediction_mode=AnomalyPredictionModes.TIME_IMPUTATION.value,
         timestamp_column="timestamp",
         target_columns=target_variables,
         aggr_win_size=32,

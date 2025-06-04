@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import Optional
 
 import numpy as np
 import torch
@@ -13,7 +14,29 @@ from .helpers import patchwise_stitched_reconstruction
 
 
 class TSPulseADUtility(TSADHelperUtility):
-    def __init__(self, model: TSPulseForReconstruction, mode: str, aggr_win_size: int, **kwargs):
+    """Implements TSAD Helper Utility for TSPulse model"""
+
+    def __init__(
+        self,
+        model: TSPulseForReconstruction,
+        mode: str,
+        aggr_win_size: int,
+        least_significant_scale: float = 1e-2,
+        least_significant_score: float = 0.2,
+        **kwargs,
+    ):
+        """Initializer
+
+        Args:
+            model (TSPulseForReconstruction): model instance.
+            mode (str): mode string specifies scoring logic.
+            aggr_win_size (int): parameter for imputation based scoring.
+            least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
+            least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
+
+        Raises:
+            ValueError: unsupported scoring mode
+        """
         if mode is None:
             mode = "forecast+fft+time"
 
@@ -23,10 +46,11 @@ class TSPulseADUtility(TSADHelperUtility):
         self._model = model
         self._mode = mode
         self._aggr_win_size = aggr_win_size
-        self._least_significant_scale = kwargs.get("least_significant_scale", 1e-2)
-        self._least_significant_score = kwargs.get("least_significant_score", 0.2)
+        self._least_significant_scale = least_significant_scale
+        self._least_significant_score = least_significant_score
 
     def is_valid_mode(self, mode_str: str) -> bool:
+        """Validates compatibility of the specified mode string."""
         supported_modes = ["time", "fft", "forecast"]
 
         valid_mode = False
@@ -38,14 +62,23 @@ class TSPulseADUtility(TSADHelperUtility):
     def compute_score(
         self,
         payload: dict,
+        expand_score: bool = False,
         **kwargs,
     ) -> ModelOutput:
+        """Produces required model output for anomaly scoring
+
+        Args:
+            payload (dict): data batch.
+            expand_score (bool): compute score for each stream for multivariate data. Defaults to False.
+
+        Returns:
+            ModelOutput: model output
+        """
         mode = kwargs.get("mode", self._mode)
-        expand_score = kwargs.get("expand_score", False)
         use_forecast = "forecast" in mode
         use_fft = "fft" in mode
         use_ts = "time" in mode
-        aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
+        aggr_win_size = self._aggr_win_size
         anomaly_criterion = nn.MSELoss(reduce=False)
 
         reconstruct_start = self._model.config.context_length - aggr_win_size
@@ -111,10 +144,21 @@ class TSPulseADUtility(TSADHelperUtility):
         self,
         key: str,
         x: ScoreListType,
+        reference: Optional[np.ndarray] = None,
         **kwargs,
     ) -> np.ndarray:
-        context_length = kwargs.get("context_length", self._model.config.context_length)
-        aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
+        """Combines model outputs with boundary adjustment.
+
+        Args:
+            key (str): key associated with model output.
+            x (ScoreListType): model outputs across all batches combined.
+            reference (np.ndarray, optional): reference data for score scale adjustment. Defaults to None.
+
+        Returns:
+            np.ndarray: combined score
+        """
+        context_length = self._model.config.context_length
+        aggr_win_size = self._aggr_win_size
         if isinstance(x, (list, tuple)):
             if (len(x) > 0) and isinstance(x[0], torch.Tensor):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
@@ -132,8 +176,8 @@ class TSPulseADUtility(TSADHelperUtility):
             score = score.reshape(-1, 1)
 
         min_score = 0.0
-        if "reference" in kwargs:
-            reference_data = np.asarray(kwargs.get("reference"))
+        if reference is not None:
+            reference_data = np.asarray(reference)
             min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
