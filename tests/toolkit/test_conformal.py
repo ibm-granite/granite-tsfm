@@ -266,3 +266,120 @@ def test_posthoc_probabilistic_processor_online_update():
             ), "Mean coverage error of online method should smaller that offline for method {} nonconformity score {}".format(
                 method, nonconformity_score
             )
+
+
+def test_posthoc_probabilistic_processor_outlier_score():
+    """
+    1. Generate Synthetic Data
+    """
+    np.random.seed(42)
+    n = 250
+    alarm_rate = 0.01
+    window_size_min = int(np.ceil(1 / alarm_rate))
+    size = int((n - window_size_min) * alarm_rate)
+
+    t = np.linspace(0, 1, n)
+    trend = 3 * t + 2 * t**2 - t**3
+    baseline = 0.5 * np.sin(2 * np.pi * 5 * t)
+    sigma = 0.2
+    noise = np.random.normal(0, sigma, size=n)
+
+    # Generate Signal
+    signal = trend + baseline + noise
+
+    # Inject only point anomalies
+    anomaly_indices = np.random.choice(np.arange(window_size_min, n), size=size, replace=False)
+    anomaly_magnitudes = 1.5
+    anomaly_signs = np.random.choice([-1, 1], size=size)
+    signal[anomaly_indices] += anomaly_magnitudes * anomaly_signs
+
+    # Labels
+    labels = np.zeros(n)
+    labels[anomaly_indices] = 1
+
+    # Naive Forecaster
+    horizon = 1
+    n_forecast = len(signal) - horizon
+
+    # Create naive predictions
+    y_pred_naive = np.tile(signal[:n_forecast], (horizon, 1)).T  # (n_forecast, horizon)
+    y_pred_naive = y_pred_naive[..., np.newaxis]  # added feature dimension
+
+    # Ground truth for evaluation
+    y_true = np.array([signal[t + 1 : t + 1 + horizon] for t in range(n_forecast)])  # (n_forecast, horizon)
+    y_true = y_true[..., np.newaxis]  # added feature dimension
+
+    # Cal/Test Splits
+    window_size = window_size_min
+    y_cal_gt = y_true[0:window_size]
+    y_cal_pred = y_pred_naive[0:window_size]
+    y_test_pred = y_pred_naive[window_size:]
+    y_test_gt = y_true[window_size:]
+
+    quantiles = [alarm_rate / 2, 1 - alarm_rate / 2]
+
+    """
+    2. Run Method outlier score
+    """
+    nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value]
+    method_list = [PostHocProbabilisticMethod.CONFORMAL.value]
+    for method in method_list:
+        for nonconformity_score in nonconformity_score_list:
+            p = PostHocProbabilisticProcessor(
+                window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+            )
+
+            ### 2. Fit
+            p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)
+
+            ### 3. Outlier
+            output_outlier = p.outlier_score(
+                y_pred=y_test_pred, y_gt=y_test_gt, significance=alarm_rate, aggregation=0
+            )
+
+            labels_test = labels[-output_outlier.shape[0] :]
+            labels_prediction_test = output_outlier[..., 1].flatten()
+            p_value_scores_test = output_outlier[..., 0].flatten()
+
+            ### ASSERTIONS ###
+
+            ## Prediction Output check
+            assert isinstance(
+                output_outlier, np.ndarray
+            ), "Unexpected output type from outlier_score(), it should be np array for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+            assert output_outlier.shape == (
+                y_test_pred.shape[0],
+                y_test_pred.shape[2],
+                2,
+            ), "Unexpected output shape from predict() for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+            ### Expected Behaviour of an outlier approach ###
+
+            # highest p-value for predicted outliers is below the alarm rate
+            assert (
+                np.max(p_value_scores_test[labels_prediction_test == 1]) <= alarm_rate
+            ), "Max p value among predicted outliers exceeds alarm rate for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+            # false positive rate is below the alarm rate
+            assert (
+                np.mean(labels_prediction_test[labels_test == 0]) <= alarm_rate
+            ), "False positive rate exceeds alarm rate for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+            # true positive rate is at least (1 - alarm_rate)
+            assert (
+                np.mean(labels_prediction_test[labels_test == 1]) >= 1 - alarm_rate
+            ), "True positive rate is lower than expectedfor method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+
+# if __name__ == "__main__":
+#     test_posthoc_probabilistic_processor_outlier_score()
