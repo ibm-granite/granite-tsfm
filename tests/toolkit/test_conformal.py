@@ -266,8 +266,3 @@ def test_posthoc_probabilistic_processor_online_update():
             ), "Mean coverage error of online method should smaller that offline for method {} nonconformity score {}".format(
                 method, nonconformity_score
             )
-
-
-# if __name__ == '__main__':
-# test_posthoc_probabilistic_processor()
-# test_posthoc_probabilistic_processor_online_update()

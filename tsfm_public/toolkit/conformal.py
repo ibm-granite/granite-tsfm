@@ -98,14 +98,6 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             weighting_params (dict): Parameters for the selected weighting strategy, if applicable. Only applicable if method = "conformal".
             threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum. Only applicable if method = "conformal".
         """
-        # if "window_size" in params.keys():
-        #     window_size = params["window_size"]
-        # super().__init__(window_size=window_size, quantiles=quantiles)
-        # params["window_size"] = window_size
-        # params["false_alarm"] = np.min(quantiles) * 2
-        # if "nonconformity_score" in params.keys():
-        #     if params["nonconformity_score"] in ["error"]:
-        #         params["false_alarm"] = np.min(quantiles)
 
         self.window_size = window_size
         self.quantiles = quantiles
@@ -225,7 +217,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def train(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray):
+    def train(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
         Input:
         y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
@@ -250,6 +242,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             y_cal_pred=y_cal_pred,  # ttm predicted values
             # ttm corresponding gt values
         )
+        return self
 
     def predict(self, y_test_pred: np.ndarray, quantiles: List[float] = []) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
@@ -295,7 +288,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
 
         return y_test_prob_pred
 
-    def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
+    def update(
+        self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None
+    ) -> "PostHocProbabilisticProcessor":
         """
         Update the probabilistic post hoc model
 
@@ -310,6 +305,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
             self.model.update(y_gt=y_gt, y_pred=y_pred)
 
+        return self
+
     def outlier_score(
         self,
         y_gt: np.ndarray,
@@ -319,7 +316,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         aggregation: Union[str, int] = "mean",
         significance: float = 0.01,
         aggregation_axis: Union[int, Tuple[int, ...]] = 1,
-    ):
+    ) -> np.ndarray:
         """
         PROTOTYPE: METHOD TO GET NORMALIZED OUTLIER CONFORMAL SCORE (P-VALUE) BASED ON FORECASTED PREDICTION ERRORS
 
@@ -813,7 +810,7 @@ class WeightedConformalForecasterWrapper:
         timestamps: np.ndarray = None,
         false_alarm: float = None,
         update: bool = False,
-    ):
+    ) -> Dict[str, np.ndarray]:
         """
         Generate prediction intervals and, if ground truth (`y_gt`) is provided, optionally return outlier flags and nonconformity p-values.
 
@@ -1035,8 +1032,8 @@ class WeightedConformalWrapper:
         y_pred: Optional[np.ndarray] = None,
         X: Optional[np.ndarray] = None,
         timestamps: Optional[np.ndarray] = None,
-        false_alarm=None,
-    ):
+        false_alarm: Optional[float] = None,
+    ) -> np.ndarray:
         """
         Return the nonconformity calibration weights.
 
@@ -1070,8 +1067,14 @@ class WeightedConformalWrapper:
                     return decay_param ** (self.window_size - np.arange(self.window_size))
 
     def score_threshold_func(
-        self, cal_weights, cal_scores=None, y_pred=None, X=None, timestamps=None, false_alarm=None
-    ):
+        self,
+        cal_weights,
+        cal_scores: Optional[np.ndarray] = None,
+        y_pred: Optional[np.ndarray] = None,
+        X: Optional[np.ndarray] = None,
+        timestamps: Optional[np.ndarray] = None,
+        false_alarm: Optional[float] = None,
+    ) -> Union[float, List[float]]:
         """
         Compute the nonconformity score threshold corresponding to the desired false alarm (error) rate.
 
@@ -1172,7 +1175,15 @@ class WeightedConformalWrapper:
 
             return score_threshold
 
-    def predict_batch(self, y_pred, y_gt=None, X=None, timestamps=None, false_alarm=None, update=None):
+    def predict_batch(
+        self,
+        y_pred: np.ndarray,
+        y_gt: Optional[np.ndarray] = None,
+        X: Optional[np.ndarray] = None,
+        timestamps: Optional[np.ndarray] = None,
+        false_alarm: Optional[float] = None,
+        update: Optional[bool] = None,
+    ) -> Dict[str, np.ndarray]:
         """
         Generate prediction intervals for a batch of data and, if ground truth (`y_gt`) is provided, optionally return outliers and nonconformity p-values.
 
@@ -1241,7 +1252,15 @@ class WeightedConformalWrapper:
         output["prediction_interval"] = prediction_interval
         return output
 
-    def predict(self, y_pred, y_gt=None, X=None, timestamps=None, false_alarm=None, update=None):
+    def predict(
+        self,
+        y_pred,
+        y_gt: Optional[np.ndarray] = None,
+        X: Optional[np.ndarray] = None,
+        timestamps: Optional[np.ndarray] = None,
+        false_alarm: Optional[float] = None,
+        update: Optional[bool] = None,
+    ) -> Dict[str, np.ndarray]:
         """
         Generate prediction intervals and, if ground truth (`y_gt`) is provided, optionally return outlier flags and nonconformity p-values.
 
@@ -1306,7 +1325,13 @@ class WeightedConformalWrapper:
 
         return output
 
-    def predict_interval(self, y_pred, X=None, timestamps=None, false_alarm=None):
+    def predict_interval(
+        self,
+        y_pred: np.ndarray,
+        X: Optional[np.ndarray] = None,
+        timestamps: Optional[np.ndarray] = None,
+        false_alarm: Optional[float] = None,
+    ) -> Dict[str, np.ndarray]:
         """
         Generate prediction intervals. (no update)
 
@@ -1336,7 +1361,7 @@ class WeightedConformalWrapper:
 
         return prediction_interval
 
-    def update(self, scores, X=None, timestamps=None):
+    def update(self, scores: np.ndarray, X: Optional[np.ndarray] = None, timestamps: Optional[np.ndarray] = None):
         """
         Update the nonconformity scores and threshold function.
 
@@ -1780,7 +1805,7 @@ def w1_distance_from_betas(beta: torch.Tensor) -> torch.Tensor:
     return val.sum()
 
 
-def get_w1_distance(test_scores, observed_scores, weights=None, conformal_weights=True):
+def get_w1_distance(test_scores, observed_scores, weights=None, conformal_weights=True) -> float:
     """
     Compute the 1-Wasserstein distance (W1) between the empirical distribution of weighted conformal p-values and the uniform distribution on [0, 1].
 
