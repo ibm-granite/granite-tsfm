@@ -462,6 +462,26 @@ def test_get_datasets(ts_data):
     assert len(train) == int(full_train_size * 0.2)
 
 
+def test__validate_columns(ts_data):
+    # should work
+    TimeSeriesPreprocessor(
+        id_columns=["id"],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=13,
+    ).train(ts_data)
+
+    # should not work
+    with pytest.raises(ValueError):
+        TimeSeriesPreprocessor(
+            id_columns=["id"],
+            target_columns=["value1", "value2"],
+            control_columns=["value1"],
+            prediction_length=5,
+            context_length=13,
+        ).train(ts_data)
+
+
 def test_get_datasets_padding(ts_data):
     tsp = TimeSeriesPreprocessor(
         id_columns=["id"],

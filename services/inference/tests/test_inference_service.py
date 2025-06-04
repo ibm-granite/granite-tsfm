@@ -1,7 +1,8 @@
 # Copyright contributors to the TSFM project
 #
+import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,8 @@ import requests
 from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 from tsfm_public.toolkit.util import encode_data, select_by_index
 
+
+DUMPPAYLOADS = int(os.getenv("TSFM_TESTS_DUMP_PAYLOADS", "0")) == 1
 
 model_param_map = {
     "ttm-r1": {"context_length": 512, "prediction_length": 96},
@@ -70,15 +73,15 @@ def ts_data(ts_data_base, request):
     }
 
 
-def get_inference_response(
-    msg: Dict[str, Any],
-) -> pd.DataFrame:
+def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, None]] = None) -> pd.DataFrame:
     URL = (
         "http://127.0.0.1:8000/v1/inference/forecasting"
         if os.environ.get("TSFM_FORECASTING_ENDPOINT", None) is None
         else os.environ.get("TSFM_FORECASTING_ENDPOINT")
     )
     headers = {}
+    if dumpfile:
+        json.dump(msg, fp=open(dumpfile, "w"), indent=4)
     req = requests.post(URL, json=msg, headers=headers)
 
     #
@@ -429,6 +432,8 @@ def test_future_data_forecast_inference(ts_data):
         freq="1h",
     )
     future_data = future_data.fillna(0)
+    # target data not used for future data (but no harm in keeping it)
+    future_data.drop("OT", axis=1, inplace=True)
 
     prediction_length = 30
 
@@ -440,14 +445,16 @@ def test_future_data_forecast_inference(ts_data):
         "schema": {
             "timestamp_column": params["timestamp_column"],
             "id_columns": params["id_columns"],
-            "target_columns": target_columns,
-            "control_columns": [c for c in params["target_columns"] if c not in target_columns],
-            "freq": "1h",
+            # "target_columns": target_columns,
+            # "control_columns": [c for c in params["target_columns"] if c not in target_columns],
+            # "freq": "1h",
         },
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
-    out = get_inference_response(msg)
+    out = get_inference_response(
+        msg, dumpfile="/tmp/test_future_data_forecast_inference.json" if DUMPPAYLOADS else None
+    )
     assert (
         "Future data should have time series of length that is at least the specified prediction length." in out.text
     )
