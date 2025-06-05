@@ -108,10 +108,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["aggr_win_size"] = aggr_win_size
         kwargs["smoothing_window_size"] = smoothing_window_size
 
-        # validation happens elsewhere???
-        # known_mode = model_processor.is_valid_mode(prediction_mode)
-        # if not known_mode:
-        #    raise ValueError(f"Error: incompatible operation mode {prediction_mode}!")
+        known_mode = model_processor.is_valid_mode(prediction_mode)
+        if not known_mode:
+            raise ValueError(f"Error: incompatible operation mode {prediction_mode}!")
 
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)

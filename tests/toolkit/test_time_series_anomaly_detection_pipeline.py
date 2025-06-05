@@ -34,7 +34,16 @@ def example_dataset():
     return target_variables, df
 
 
-def test_tsad_tspulse_pipeline_defaults(example_dataset):
+@pytest.mark.parametrize(
+    "method",
+    [
+        AnomalyScoreMethods.TIME_IMPUTATION.value,
+        AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+        AnomalyScoreMethods.PREDICTIVE.value,
+        f"{AnomalyScoreMethods.TIME_IMPUTATION.value}+{AnomalyScoreMethods.FREQUENCY_IMPUTATION.value}+{AnomalyScoreMethods.PREDICTIVE.value}",
+    ],
+)
+def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
     target_variables, dataset = example_dataset
     params = {}
     params.update(
@@ -59,7 +68,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyScoreMethods.TIME_IMPUTATION.value,
+        prediction_mode=method,
         timestamp_column="timestamp",
         target_columns=target_variables,
         aggr_win_size=32,
@@ -78,7 +87,15 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
         assert f"{tgt}_anomaly_score" in result
 
 
-def test_tsad_tinytimemixer_pipeline_defaults_md(example_dataset):
+@pytest.mark.parametrize(
+    "method",
+    [
+        AnomalyScoreMethods.PREDICTIVE.value,
+        AnomalyScoreMethods.MEAN_DEVIATION.value,
+        f"{AnomalyScoreMethods.MEAN_DEVIATION.value}+{AnomalyScoreMethods.PREDICTIVE.value}",
+    ],
+)
+def test_tsad_tinytimemixer_pipeline_defaults(example_dataset, method):
     target_variables, dataset = example_dataset
     model = TinyTimeMixerForPrediction(
         TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
@@ -86,7 +103,7 @@ def test_tsad_tinytimemixer_pipeline_defaults_md(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyScoreMethods.MEAN_DEVIATION.value,
+        prediction_mode=method,
         timestamp_column="timestamp",
         target_columns=["X1", "X2"],
     )
@@ -102,31 +119,14 @@ def test_tsad_tinytimemixer_pipeline_defaults_md(example_dataset):
         assert f"{tgt}_anomaly_score" in result
 
 
-def test_tsad_tinytimemixer_pipeline_defaults(example_dataset):
-    target_variables, dataset = example_dataset
-    model = TinyTimeMixerForPrediction(
-        TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
-    )
-
-    tspipe = TimeSeriesAnomalyDetectionPipeline(
-        model,
-        prediction_mode=AnomalyScoreMethods.PREDICTIVE.value,
-        timestamp_column="timestamp",
-        target_columns=["X1", "X2"],
-    )
-    assert tspipe._preprocess_params["prediction_length"] == model.config.prediction_length
-    assert tspipe._preprocess_params["context_length"] == model.config.context_length
-    result = tspipe(dataset)
-    assert result.shape[0] == dataset.shape[0]
-    assert "anomaly_score" in result
-
-    result = tspipe(dataset, expand_score=True)
-    assert result.shape[0] == dataset.shape[0]
-    for tgt in target_variables:
-        assert f"{tgt}_anomaly_score" in result
-
-
-def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset):
+@pytest.mark.parametrize(
+    "method",
+    [
+        AnomalyScoreMethods.PROBABILISTIC.value,
+        f"{AnomalyScoreMethods.PROBABILISTIC.value}${AnomalyScoreMethods.MEAN_DEVIATION.value}",
+    ],
+)
+def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset, method):
     target_variables, dataset = example_dataset
     model = TinyTimeMixerForPrediction(
         TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
@@ -159,7 +159,7 @@ def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyScoreMethods.PROBABILISTIC.value,
+        prediction_mode=method,
         probabilistic_processor=prob_proc,
         timestamp_column="timestamp",
         target_columns=["X1", "X2"],
@@ -172,6 +172,15 @@ def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset):
     assert "anomaly_score" in result
 
     result = tspipe(dataset, expand_score=True)
+    assert result.shape[0] == dataset.shape[0]
+    for tgt in target_variables:
+        assert f"{tgt}_anomaly_score" in result
+
+    result = tspipe(
+        dataset,
+        prediction_mode=f"{AnomalyScoreMethods.PROBABILISTIC.value}+{AnomalyScoreMethods.MEAN_DEVIATION.value}",
+        expand_score=True,
+    )
     assert result.shape[0] == dataset.shape[0]
     for tgt in target_variables:
         assert f"{tgt}_anomaly_score" in result

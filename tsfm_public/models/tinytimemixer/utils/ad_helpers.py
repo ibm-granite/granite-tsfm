@@ -60,13 +60,10 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             AnomalyScoreMethods.MEAN_DEVIATION.value,
             AnomalyScoreMethods.PROBABILISTIC.value,
         ]
-        valid_mode = 0
         for mode_type in supported_modes:
             if mode_type in mode_str:
-                valid_mode += 1
-
-        # is it really valid to select only one mode?
-        return valid_mode == 1
+                return True
+        return False
 
     def compute_score(
         self,
@@ -114,7 +111,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 outlier_label=False,
             )
             scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
-                outlier_score if expand_score else np.max(outlier_score, axis=2)
+                outlier_score if expand_score else np.mean(outlier_score, axis=2)
             )
 
         return ModelOutput(scores)
