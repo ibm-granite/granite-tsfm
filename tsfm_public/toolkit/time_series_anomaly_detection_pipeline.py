@@ -1,5 +1,5 @@
 import inspect
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -163,7 +163,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "target_columns",
             "frequency_token",
         ]
-        postprocess_params = ["timestamp_column", "target_columns", "smoothing_window_size", "expand_score"]
+        postprocess_params = [
+            "timestamp_column",
+            "target_columns",
+            "aggr_win_size",
+            "smoothing_window_size",
+            "expand_score",
+        ]
 
         for c in preprocess_params:
             if c in kwargs:
@@ -196,7 +202,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "num_workers": num_workers,
         }
 
-        for p in ["mode", "aggr_window_size", "expand_score"]:
+        for p in ["mode", "aggr_win_size", "expand_score"]:
             if p in kwargs:
                 forward_kwargs[p] = kwargs[p]
 
@@ -259,7 +265,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         batch_size = forward_params.get("batch_size")
         num_workers = forward_params.get("num_workers")
-        aggr_win_size = forward_params.get("aggr_win_size")
         dataloader = DataLoader(
             dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=remove_columns_collator, shuffle=False
         )
@@ -272,25 +277,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             for key in scores:
                 accumulator[key].append(scores[key])
 
-        aggr_win_size = forward_params.get("aggr_win_size")
-        accumulator_ = OrderedDict()
-
-        extra_kwargs = {}
-        if "data" in self.__context_memory:
-            data = self.__context_memory["data"]
-            target_columns = preprocess_params.get("target_columns", [])
-            if len(target_columns) > 0:
-                data = data[target_columns]
-            extra_kwargs["reference"] = data.values
-
-        for k in accumulator:
-            # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
-            score = accumulator[k]
-            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size, **extra_kwargs)
-            accumulator_[k] = score
-
         # call postprocess
-        outputs = self.postprocess(ModelOutput(accumulator_), **postprocess_params)
+        outputs = self.postprocess(ModelOutput(accumulator), **postprocess_params)
 
         return outputs
 
@@ -321,23 +309,36 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+        target_columns = postprocess_parameters.get("target_columns")
+        aggr_win_size = postprocess_parameters.get("aggr_win_size")
+
         if not isinstance(smoothing_window_size, int):
             try:
                 smoothing_window_size = int(smoothing_window_size)
             except ValueError:
                 smoothing_window_size = 1
 
+        # adjust scoring and smooth
+        extra_kwargs = {}
+        if "data" in self.__context_memory:
+            data = self.__context_memory["data"]
+            if len(target_columns) > 0:
+                data = data[target_columns]
+            extra_kwargs["reference"] = data.values
+
         model_outputs_ = {}
         for k in model_outputs:
-            model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+            score = model_outputs[k]
+            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size, **extra_kwargs)
+            model_outputs_[k] = score_smoothing(score, smoothing_window_size=smoothing_window_size)
 
+        # aggregate scores and expand
         score = self.aggr_function(
             np.stack([score_ for _, score_ in model_outputs_.items()], axis=0),
             axis=0,
         )
-        target_columns = postprocess_parameters["target_columns"]
-        expand_score = (len(target_columns) > 1) and expand_score
 
+        expand_score = (len(target_columns) > 1) and expand_score
         model_outputs = {}
         if expand_score:
             if len(target_columns) != score.shape[-1]:
@@ -347,6 +348,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         else:
             model_outputs.update(anomaly_score=score.ravel())
 
+        # populate dataframe
         for k in model_outputs:
             result[k] = model_outputs[k]
         self.__context_memory = {}
