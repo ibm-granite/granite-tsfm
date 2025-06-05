@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
+import torch
+from sklearn.preprocessing import StandardScaler
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -133,11 +135,15 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.__context_memory = {}
         if aggr_function.lower() == "min":
             aggr_function_ = np.min
+            select_function_ = np.argmin
         elif aggr_function.lower() == "mean":
             aggr_function_ = np.mean
+            select_function_ = None
         else:
             aggr_function_ = np.max
+            select_function_ = np.argmax
         self.aggr_function = aggr_function_
+        self.select_function = select_function_
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
@@ -193,10 +199,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         mode = kwargs.get("prediction_mode", self._prediction_mode)
         aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
         expand_score = kwargs.get("expand_score", False)
+        report_mode = kwargs.get("report_mode", False)
 
         smoothing_window_size = kwargs.get("smoothing_window_size", self._smoothing_window_size)
 
-        postprocess_kwargs.update(smoothing_window_size=smoothing_window_size, expand_score=expand_score)
+        postprocess_kwargs.update(
+            smoothing_window_size=smoothing_window_size, expand_score=expand_score, report_mode=report_mode
+        )
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
@@ -242,6 +251,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if self.feature_extractor:
             input_ = self.feature_extractor.preprocess(input_)
 
+        # Fixing stride to 1
+        kwargs["stride"] = 1
+
+        if self.model_type == "tspulse":
+            target_columns = kwargs.get("target_columns", [])
+            if len(target_columns) > 0:
+                input_[target_columns] = StandardScaler().fit_transform(input_[target_columns].values)
+
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
             input_,
@@ -286,10 +303,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         it = iter(dataloader)
         accumulator = defaultdict(list)
 
-        while (batch := next(it, None)) is not None:
-            scores = self.forward(batch, **forward_params)
-            for key in scores:
-                accumulator[key].append(scores[key])
+        with torch.no_grad():
+            while (batch := next(it, None)) is not None:
+                scores = self.forward(batch, **forward_params)
+                for key in scores:
+                    accumulator[key].append(scores[key])
 
         aggr_win_size = forward_params.get("aggr_win_size")
         accumulator_ = OrderedDict()
@@ -340,20 +358,25 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+        report_mode = postprocess_parameters.get("report_mode", False)
         if not isinstance(smoothing_window_size, int):
             try:
                 smoothing_window_size = int(smoothing_window_size)
             except ValueError:
                 smoothing_window_size = 1
 
-        model_outputs_ = {}
+        model_outputs_ = OrderedDict()
         for k in model_outputs:
             model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
 
-        score = self.aggr_function(
-            np.stack([score_ for _, score_ in model_outputs_.items()], axis=0),
-            axis=0,
-        )
+        score = np.stack([score_ for _, score_ in model_outputs_.items()], axis=0)
+        mode_selected = None
+        if report_mode and (self.select_function is not None):
+            keys = [key for key, _ in model_outputs_.items()]
+            sel_index = self.select_function(score, axis=0)
+            mode_selected = np.asarray([keys[z] for z in sel_index.ravel()]).reshape(sel_index.shape)
+
+        score = self.aggr_function(score, axis=0)
         target_columns = self.__context_memory["target_columns"]
         expand_score = (len(target_columns) > 1) and expand_score
 
@@ -363,8 +386,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
                 raise RuntimeError(f"Error: inconsistent state, with target columns {target_columns}")
             for i, col_name in enumerate(target_columns):
                 model_outputs[f"{col_name}_anomaly_score"] = score[..., i]
+
+            if mode_selected is not None:
+                for i, col_name in enumerate(target_columns):
+                    model_outputs[f"{col_name}_selected_mode"] = mode_selected[..., i]
         else:
             model_outputs.update(anomaly_score=score.ravel())
+            if mode_selected is not None:
+                model_outputs.update(selected_mode=mode_selected.ravel())
 
         for k in model_outputs:
             result[k] = model_outputs[k]
