@@ -10,9 +10,15 @@ import pytest
 from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
 from tsfm_public.models.tspulse import TSPulseConfig, TSPulseForReconstruction
 from tsfm_public.toolkit.ad_helpers import AnomalyScoreMethods
+from tsfm_public.toolkit.conformal import (
+    NonconformityScores,
+    PostHocProbabilisticMethod,
+    PostHocProbabilisticProcessor,
+)
 from tsfm_public.toolkit.time_series_anomaly_detection_pipeline import (
     TimeSeriesAnomalyDetectionPipeline,
 )
+from tsfm_public.toolkit.time_series_forecasting_pipeline import TimeSeriesForecastingPipeline
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +78,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
         assert f"{tgt}_anomaly_score" in result
 
 
-def test_tsad_tinytimemixture_pipeline_defaults(example_dataset):
+def test_tsad_tinytimemixer_pipeline_defaults(example_dataset):
     target_variables, dataset = example_dataset
     model = TinyTimeMixerForPrediction(
         TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
@@ -83,6 +89,56 @@ def test_tsad_tinytimemixture_pipeline_defaults(example_dataset):
         prediction_mode=AnomalyScoreMethods.PREDICTIVE.value,
         timestamp_column="timestamp",
         target_columns=["X1", "X2"],
+    )
+    assert tspipe._preprocess_params["prediction_length"] == model.config.prediction_length
+    assert tspipe._preprocess_params["context_length"] == model.config.context_length
+    result = tspipe(dataset)
+    assert result.shape[0] == dataset.shape[0]
+    assert "anomaly_score" in result
+
+    result = tspipe(dataset, expand_score=True)
+    assert result.shape[0] == dataset.shape[0]
+    for tgt in target_variables:
+        assert f"{tgt}_anomaly_score" in result
+
+
+def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset):
+    target_variables, dataset = example_dataset
+    model = TinyTimeMixerForPrediction(
+        TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
+    )
+
+    prob_proc = PostHocProbabilisticProcessor(
+        window_size=200,
+        quantiles=[0.25, 0.75],
+        nonconformity_score=NonconformityScores.ABSOLUTE_ERROR.value,
+        method=PostHocProbabilisticMethod.CONFORMAL.value,
+    )
+
+    fpipe = TimeSeriesForecastingPipeline(
+        model, timestamp_column="timestamp", id_columns=[], target_columns=target_variables, device="cpu"
+    )
+    forecasts = fpipe(dataset)
+
+    prediction_length = 60
+    prediction_columns = [f"{c}_prediction" for c in target_variables]
+    ground_truth_columns = target_variables
+    y = forecasts[prediction_columns].values
+    predictions = np.array([np.stack(z) for z in y]).transpose(0, 2, 1)
+    predictions = predictions[:-prediction_length, ...]
+    x = forecasts[ground_truth_columns].values
+    ground_truth = np.array([np.stack(z) for z in x]).transpose(0, 2, 1)
+    ground_truth = ground_truth[:-prediction_length, ...]
+
+    prob_proc.train(y_cal_gt=ground_truth, y_cal_pred=predictions)
+
+    tspipe = TimeSeriesAnomalyDetectionPipeline(
+        model,
+        prediction_mode=AnomalyScoreMethods.PROBABILISTIC.value,
+        probabilistic_processor=prob_proc,
+        timestamp_column="timestamp",
+        target_columns=["X1", "X2"],
+        device="cpu",
     )
     assert tspipe._preprocess_params["prediction_length"] == model.config.prediction_length
     assert tspipe._preprocess_params["context_length"] == model.config.context_length
