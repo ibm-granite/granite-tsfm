@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Union
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.preprocessing import StandardScaler
 from torch import nn as nn
 from torch.utils.data import DataLoader
 from transformers.data.data_collator import default_data_collator
@@ -253,11 +252,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # Fixing stride to 1
         kwargs["stride"] = 1
-
-        if self.model_type == "tspulse":
-            target_columns = kwargs.get("target_columns", [])
-            if len(target_columns) > 0:
-                input_[target_columns] = StandardScaler().fit_transform(input_[target_columns].values)
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
