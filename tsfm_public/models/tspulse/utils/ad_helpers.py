@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Helper class for anomaly detection support"""
+
 from collections import OrderedDict
 from typing import Optional
 

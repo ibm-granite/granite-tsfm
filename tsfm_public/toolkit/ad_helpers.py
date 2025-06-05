@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Helper class for anomaly detection support"""
+
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from typing import List, Union
