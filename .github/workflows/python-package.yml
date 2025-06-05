@@ -2,6 +2,8 @@
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
 name: Python package
+permissions:
+  contents: read
 
 on:
   push:
@@ -36,4 +38,4 @@ jobs:
         make quality
     - name: Test with pytest
       run: |
-        pytest --cov=tsfm_public --cov-fail-under=73 --cov-report term-missing tests
+        pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests
