@@ -21,7 +21,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         mode: str,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
-        posthoc_probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
+        probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         """Initializer
@@ -44,7 +44,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         self._mode = mode
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
-        self._posthoc_processor = posthoc_probabilistic_processor
+        self._probabilistic_processor = probabilistic_processor
 
     def is_valid_mode(
         self,
@@ -100,7 +100,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             deviation = batch_future_values - future_predictions
             scores[AnomalyScoreMethods.MEAN_DEVIATION.value] = deviation
         if use_probabilistic:
-            scores[AnomalyScoreMethods.PROBABILISTIC.value] = self._posthoc_processor.outlier_score(
+            scores[AnomalyScoreMethods.PROBABILISTIC.value] = self._probabilistic_processor.outlier_score(
                 y_gt=batch_future_values,
                 y_pred=future_predictions,
             )
@@ -138,7 +138,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         )
 
         if key == AnomalyScoreMethods.PROBABILISTIC.value:
-            x = self.posthoc_processor.forecast_horizon_aggregation(x)
+            x = self._probabilistic_processor.forecast_horizon_aggregation(x)
             score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)  # (?)
             return score
 
