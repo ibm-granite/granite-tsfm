@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .util import join_list_without_repeat
+from .util import check_nested_lengths, is_nested_dataframe, join_list_without_repeat
 
 
 LOGGER = logging.getLogger(__file__)
@@ -57,6 +57,7 @@ class BaseDFDataset(torch.utils.data.Dataset):
         zero_padding: bool = True,
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
+        full_series=False,
     ):
         super().__init__()
         if not isinstance(x_cols, list):
@@ -101,12 +102,14 @@ class BaseDFDataset(torch.utils.data.Dataset):
             data_df = data_df.sort_values(timestamp_column, ignore_index=True)
 
         # pad zero to the data_df if the len is shorter than seq_len+pred_len
-        if zero_padding:
-            data_df = self.pad_zero(data_df)
-        elif len(data_df) < self.context_length + self.prediction_length:
-            LOGGER.warning(
-                f"Padding is disabled and input data is shorter than required length. Received {len(data_df)} time point, but require at least {self.context_length + self.prediction_length} time points."
-            )
+        # currently no padding when in full_series mode
+        if not full_series:
+            if zero_padding:
+                data_df = self.pad_zero(data_df)
+            elif len(data_df) < self.context_length + self.prediction_length:
+                LOGGER.warning(
+                    f"Padding is disabled and input data is shorter than required length. Received {len(data_df)} time point, but require at least {self.context_length + self.prediction_length} time points."
+                )
 
         if timestamp_column in list(data_df.columns):
             self.timestamps = data_df[timestamp_column].to_list()  # .values coerces timestamps
@@ -1095,7 +1098,11 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         stride (int, optional): Stride at which windows are produced. Defaults to 1.
         fill_value (Union[float, int], optional): Value used to fill any missing values. Defaults to 0.0.
         enable_padding (bool, optional): If True, windows of context_length+prediction_length which are too short are padded with zeros. Defaults to True.
-            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset.
+            If False, a warning is issued when the input data does not contain sufficient records to create a non-empty dataset. Only applies
+            when full_series==False.
+        full_series (bool, optional): If True, each series is used when creating a single entry in the classification dataset. In this case
+            the series is interpolated to match the desired context_length. No padding is done. If False, each series is windowed acording to
+            the provided context_length. Defaults to False.
 
 
     The resulting dataset returns records (dictionaries) containing:
@@ -1120,89 +1127,53 @@ class ClassificationDFDataset(BaseConcatDFDataset):
         stride: int = 1,
         fill_value: Union[float, int] = 0.0,
         enable_padding: bool = True,
+        full_series: bool = True,
     ):
-        super().__init__(
-            data_df=data,
-            id_columns=id_columns,
-            timestamp_column=timestamp_column,
-            num_workers=num_workers,
-            context_length=context_length,
-            prediction_length=0,
-            cls=self.BaseClassificationDFDataset,
-            input_columns=input_columns,
-            label_column=label_column,
-            static_categorical_columns=static_categorical_columns,
-            stride=stride,
-            fill_value=fill_value,
-            enable_padding=enable_padding,
-        )
+        if full_series:
+            if not is_nested_dataframe(data, column=input_columns[0]):
+                raise ValueError(
+                    "The provided data does not appear to contain row entries which contain a full time series."
+                )
 
-        self.n_inp = 2
-
-    class BaseClassificationDFDataset(BaseDFDataset):
-        def __init__(
-            self,
-            data_df: pd.DataFrame,
-            group_id: Optional[Union[List[int], List[str]]] = None,
-            context_length: int = 1,
-            prediction_length: int = 0,
-            drop_cols: list = [],
-            id_columns: List[str] = [],
-            timestamp_column: Optional[str] = None,
-            label_column: str = "label",
-            input_columns: List[str] = [],
-            static_categorical_columns: List[str] = [],
-            stride: int = 1,
-            fill_value: Union[float, int] = 0.0,
-            enable_padding: bool = True,
-        ):
-            self.label_column = label_column
-            self.input_columns = input_columns
-            self.static_categorical_columns = static_categorical_columns
-
-            x_cols = input_columns
-            y_cols = label_column
+            check_nested_lengths(data, columns=input_columns)
+            if enable_padding:
+                enable_padding = False
 
             super().__init__(
-                data_df=data_df,
+                data_df=data,
                 id_columns=id_columns,
                 timestamp_column=timestamp_column,
-                x_cols=x_cols,
-                y_cols=y_cols,
+                num_workers=num_workers,
                 context_length=context_length,
-                prediction_length=prediction_length,
-                group_id=group_id,
-                drop_cols=drop_cols,
+                prediction_length=0,
+                cls=_FullSeriesClassificationDFDataset,
+                input_columns=input_columns,
+                label_column=label_column,
+                static_categorical_columns=static_categorical_columns,
                 stride=stride,
                 fill_value=fill_value,
-                zero_padding=enable_padding,
+                enable_padding=enable_padding,
             )
 
-        def __getitem__(self, index):
-            # seq_x: batch_size x seq_len x num_x_cols
-            index = self._check_index(index)
+        else:
+            super().__init__(
+                data_df=data,
+                id_columns=id_columns,
+                timestamp_column=timestamp_column,
+                num_workers=num_workers,
+                context_length=context_length,
+                prediction_length=0,
+                cls=_WindowedSeriesClassificationDFDataset,
+                input_columns=input_columns,
+                label_column=label_column,
+                static_categorical_columns=static_categorical_columns,
+                stride=stride,
+                fill_value=fill_value,
+                enable_padding=enable_padding,
+            )
 
-            time_id = index * self.stride
-            seq_x = self.X.iloc[time_id : time_id + self.context_length].values
-            # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
-            seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
-
-            ret = {
-                "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
-                "target_values": torch.tensor(np.nan_to_num(seq_y, nan=self.fill_value), dtype=torch.int64),
-                "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
-            }
-            if self.datetime_col:
-                ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
-
-            if self.group_id:
-                ret["id"] = self.group_id
-
-            if self.static_categorical_columns:
-                categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
-                ret["static_categorical_values"] = np_to_torch(categorical_values)
-
-            return ret
+        self.n_inp = 2
+        self.full_series = full_series
 
 
 def np_to_torch(data: np.array, float_type=np.float32):
@@ -1386,6 +1357,176 @@ def impute_forward_fill(miss_seq: np.ndarray, fill_value: float) -> np.ndarray:
     # fill any remaining nan
     seq_x_imputed = np.nan_to_num(seq_x_imputed, nan=fill_value)
     return seq_x_imputed
+
+
+class _WindowedSeriesClassificationDFDataset(BaseDFDataset):
+    """Standard windowed classification dataset.
+
+    Windows of size context_length are extracted from the input time series. The labels are chosen from the label_column
+    at the index of the end of the window.
+    """
+
+    def __init__(
+        self,
+        data_df: pd.DataFrame,
+        group_id: Optional[Union[List[int], List[str]]] = None,
+        context_length: int = 1,
+        prediction_length: int = 0,
+        drop_cols: list = [],
+        id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        label_column: str = "label",
+        input_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
+        stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
+    ):
+        self.label_column = label_column
+        self.input_columns = input_columns
+        self.static_categorical_columns = static_categorical_columns
+
+        x_cols = input_columns
+        y_cols = label_column
+
+        super().__init__(
+            data_df=data_df,
+            id_columns=id_columns,
+            timestamp_column=timestamp_column,
+            x_cols=x_cols,
+            y_cols=y_cols,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            group_id=group_id,
+            drop_cols=drop_cols,
+            stride=stride,
+            fill_value=fill_value,
+            zero_padding=enable_padding,
+            full_series=False,
+        )
+
+    def __getitem__(self, index):
+        # seq_x: batch_size x seq_len x num_x_cols
+        index = self._check_index(index)
+
+        time_id = index * self.stride
+        seq_x = self.X.iloc[time_id : time_id + self.context_length].values
+        # seq_y = self.y[time_id + self.context_length - 1 : time_id + self.context_length].values.ravel()
+        seq_y = self.y.iloc[time_id + self.context_length - 1].values[0]
+
+        ret = {
+            "past_values": np_to_torch(np.nan_to_num(seq_x, nan=self.fill_value)),
+            "target_values": torch.tensor(np.nan_to_num(seq_y, nan=self.fill_value), dtype=torch.int64),
+            "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
+        }
+        if self.datetime_col:
+            ret["timestamp"] = self.timestamps[time_id + self.context_length - 1]
+
+        if self.group_id:
+            ret["id"] = self.group_id
+
+        if self.static_categorical_columns:
+            categorical_values = self.data_df[self.static_categorical_columns].values[0, :]
+            ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+        return ret
+
+
+class _FullSeriesClassificationDFDataset(BaseDFDataset):
+    """Full series classification dataset.
+
+    Works with nested input dataframes (i.e., dataframes which contain pd.Series as entries). In this case, each series
+    is interpolated to the desired context_length.
+    """
+
+    def __init__(
+        self,
+        data_df: pd.DataFrame,
+        group_id: Optional[Union[List[int], List[str]]] = None,
+        context_length: int = 1,
+        prediction_length: int = 0,
+        drop_cols: list = [],
+        id_columns: List[str] = [],
+        timestamp_column: Optional[str] = None,
+        label_column: str = "label",
+        input_columns: List[str] = [],
+        static_categorical_columns: List[str] = [],
+        stride: int = 1,
+        fill_value: Union[float, int] = 0.0,
+        enable_padding: bool = True,
+    ):
+        self.label_column = label_column
+        self.input_columns = input_columns
+        self.static_categorical_columns = static_categorical_columns
+
+        x_cols = input_columns
+        y_cols = label_column
+
+        super().__init__(
+            data_df=data_df,
+            id_columns=id_columns,
+            timestamp_column=timestamp_column,
+            x_cols=x_cols,
+            y_cols=y_cols,
+            context_length=context_length,
+            prediction_length=prediction_length,
+            group_id=group_id,
+            drop_cols=drop_cols,
+            stride=stride,
+            fill_value=fill_value,
+            zero_padding=enable_padding,
+            full_series=True,
+        )
+
+        # after init
+        # self.X should contain the data including all inputs (i.e. input columns)
+        # X is in the nexted format where X has series entries in some places
+
+    def __len__(self):
+        return len(self.X) // self.stride
+
+    def __getitem__(self, index):
+        index = self._check_index(index)
+
+        ind = index * self.stride
+
+        # each row has entries which are series
+        # assume also that static categorical are static for each row (not necessarily across rows)
+
+        # first convert rows of series to full tensor: len x features
+        # assumes consistent length
+        X = np.asarray([s.to_list() for s in self.X.iloc[ind].values])
+        X = np_to_torch(np.nan_to_num(X, nan=self.fill_value))
+        y = np_to_torch(self.y.iloc[ind].values)
+
+        X = X.unsqueeze(dim=0)  # transpose(1, 0). c l --->  1 c l
+        X = torch.nn.functional.interpolate(
+            X, self.context_length, mode="linear"
+        )  # need a 3D tensor of shape B C L    # 1 c l ---> 1 c context_points
+        X = X.squeeze(dim=0).transpose(0, 1)  # 1 c cp ---> cp c
+
+        y = torch.squeeze(y)
+
+        ret = {
+            "past_values": X,
+            "target_values": y,
+            # omit or we could do: "past_observed_mask": np_to_torch(np.ones(X.shape)),
+        }
+
+        if self.datetime_col:
+            if isinstance(self.timestamps[ind], pd.Series):
+                ret["timestamp"] = self.timestamps[ind].iloc[-1]
+            else:
+                ret["timestamp"] = self.timestamps[ind]
+
+        # concatenate the row to the id
+        ret["id"] = self.group_id + (ind,) if self.group_id else (ind,)
+
+        if self.static_categorical_columns:
+            categorical_values = self.data_df[self.static_categorical_columns].iloc[ind].values
+            ret["static_categorical_values"] = np_to_torch(categorical_values)
+
+        return ret
 
 
 if __name__ == "__main__":
