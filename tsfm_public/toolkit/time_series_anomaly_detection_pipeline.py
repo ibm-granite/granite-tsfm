@@ -1,5 +1,10 @@
+# Copyright contributors to the TSFM project
+#
+"""Hugging Face Pipeline for Time Series Anomaly Detection"""
+
 import inspect
 from collections import defaultdict
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -22,6 +27,14 @@ from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 from .ad_helpers import AnomalyScoreMethods
 from .dataset import ForecastDFDataset
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
+
+
+class AggregationFunction(Enum):
+    """Enum type aggregation functions used when combining anomaly scores."""
+
+    MIN = "min"
+    MAX = "max"
+    MEAN = "mean"
 
 
 def score_smoothing(
@@ -56,7 +69,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         model: PreTrainedModel,
         *args,
         prediction_mode: str = AnomalyScoreMethods.PREDICTIVE.value,
-        aggr_function: str = "max",
+        aggr_function: str = AggregationFunction.MAX.value,
         aggr_win_size: int = 32,
         smoothing_window_size: int = 8,
         probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
@@ -120,12 +133,16 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         super().__init__(model, *args, **kwargs)
 
         self.__context_memory = {}
-        if aggr_function.lower() == "min":
+        if aggr_function.lower() == AggregationFunction.MIN.value:
             aggr_function_ = np.min
-        elif aggr_function.lower() == "mean":
+        elif aggr_function.lower() == AggregationFunction.MEAN.value:
             aggr_function_ = np.mean
-        else:
+        elif aggr_function.lower() == AggregationFunction.MAX.value:
             aggr_function_ = np.max
+        else:
+            raise ValueError(
+                f"Unsupported aggregation function provided {aggr_function_}, expected one of {[c.value for c in AggregationFunction]}"
+            )
         self.aggr_function = aggr_function_
 
         if self.framework == "tf":
