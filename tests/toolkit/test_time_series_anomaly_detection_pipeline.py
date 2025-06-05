@@ -78,6 +78,30 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
         assert f"{tgt}_anomaly_score" in result
 
 
+def test_tsad_tinytimemixer_pipeline_defaults_md(example_dataset):
+    target_variables, dataset = example_dataset
+    model = TinyTimeMixerForPrediction(
+        TinyTimeMixerConfig(context_length=120, prediction_length=60, num_input_channels=len(target_variables))
+    )
+
+    tspipe = TimeSeriesAnomalyDetectionPipeline(
+        model,
+        prediction_mode=AnomalyScoreMethods.MEAN_DEVIATION.value,
+        timestamp_column="timestamp",
+        target_columns=["X1", "X2"],
+    )
+    assert tspipe._preprocess_params["prediction_length"] == model.config.prediction_length
+    assert tspipe._preprocess_params["context_length"] == model.config.context_length
+    result = tspipe(dataset)
+    assert result.shape[0] == dataset.shape[0]
+    assert "anomaly_score" in result
+
+    result = tspipe(dataset, expand_score=True)
+    assert result.shape[0] == dataset.shape[0]
+    for tgt in target_variables:
+        assert f"{tgt}_anomaly_score" in result
+
+
 def test_tsad_tinytimemixer_pipeline_defaults(example_dataset):
     target_variables, dataset = example_dataset
     model = TinyTimeMixerForPrediction(
@@ -113,6 +137,7 @@ def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset):
         quantiles=[0.25, 0.75],
         nonconformity_score=NonconformityScores.ABSOLUTE_ERROR.value,
         method=PostHocProbabilisticMethod.CONFORMAL.value,
+        smoothing_window_size=None,
     )
 
     fpipe = TimeSeriesForecastingPipeline(
