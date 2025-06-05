@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Helper class for anomaly detection support"""
+
 from collections import OrderedDict
 from typing import Optional
 
@@ -87,7 +91,6 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
 
         model_forward_output = {}
         model_forward_output = self._model(**payload)
-        reduction_axis = [1] if expand_score else [1, 2]
 
         scores = OrderedDict()
         batch_future_values = payload["future_values"]
@@ -95,14 +98,23 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         if use_forecast:
             # forecast output
             pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
+            reduction_axis = [1] if expand_score else [1, 2]
             scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
         if use_meandev:
             deviation = batch_future_values - future_predictions
-            scores[AnomalyScoreMethods.MEAN_DEVIATION.value] = deviation
+            # if we are not expanding, we take mean across variate dimension
+            # time axis is preserved for later adjustment
+            scores[AnomalyScoreMethods.MEAN_DEVIATION.value] = (
+                deviation if expand_score else torch.mean(deviation, dim=[2])
+            )
         if use_probabilistic:
-            scores[AnomalyScoreMethods.PROBABILISTIC.value] = self._probabilistic_processor.outlier_score(
-                y_gt=batch_future_values,
-                y_pred=future_predictions,
+            outlier_score = self._probabilistic_processor.outlier_score(
+                y_gt=batch_future_values.detach().cpu().numpy(),
+                y_pred=future_predictions.detach().cpu().numpy(),
+                outlier_label=False,
+            )
+            scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
+                outlier_score if expand_score else np.max(outlier_score, axis=2)
             )
 
         return ModelOutput(scores)
@@ -138,6 +150,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         )
 
         if key == AnomalyScoreMethods.PROBABILISTIC.value:
+            if len(x.shape) == 2:
+                x = np.expand_dims(x, -1)
             x = self._probabilistic_processor.forecast_horizon_aggregation(x)
             score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)  # (?)
             return score
