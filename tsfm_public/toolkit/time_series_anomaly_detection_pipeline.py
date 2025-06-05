@@ -361,7 +361,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         model_outputs_ = OrderedDict()
         for k in model_outputs:
-            model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+            if k == AnomalyPredictionModes.PREDICTIVE.value:  # Skip Smoothing For 1 Lookahead forecast
+                model_outputs_[k] = model_outputs[k]
+            else:
+                model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
 
         score = np.stack([score_ for _, score_ in model_outputs_.items()], axis=0)
         mode_selected = None
