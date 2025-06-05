@@ -1,0 +1,814 @@
+{
+  "ArticularyWordRecognition": {
+    "DATA_PARAMS": {
+      "data": "ArticularyWordRecognition",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "AtrialFibrillation": {
+    "DATA_PARAMS": {
+      "data": "AtrialFibrillation",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "BasicMotions": {
+    "DATA_PARAMS": {
+      "data": "BasicMotions",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "CharacterTrajectories": {
+    "DATA_PARAMS": {
+      "data": "CharacterTrajectories",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "Cricket": {
+    "DATA_PARAMS": {
+      "data": "Cricket",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "DuckDuckGeese": {
+    "DATA_PARAMS": {
+      "data": "DuckDuckGeese",
+      "valid_split_strat": "K-fold",
+      "kth_fold": 4,
+      "num_folds": 5,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": null,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "common_channel",
+      "head_aggregation_dim": "channel",
+      "head_aggregation": "avg_pool"
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 8,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": 16.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 50
+    }
+  },
+  "ERing": {
+    "DATA_PARAMS": {
+      "data": "ERing",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "Epilepsy": {
+    "DATA_PARAMS": {
+      "data": "Epilepsy",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "EthanolConcentration": {
+    "DATA_PARAMS": {
+      "data": "EthanolConcentration",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "FaceDetection": {
+    "DATA_PARAMS": {
+      "data": "FaceDetection",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 8,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 16.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "FingerMovements": {
+    "DATA_PARAMS": {
+      "data": "FingerMovements",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "HandMovementDirection": {
+    "DATA_PARAMS": {
+      "data": "HandMovementDirection",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "Handwriting": {
+    "DATA_PARAMS": {
+      "data": "Handwriting",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "Heartbeat": {
+    "DATA_PARAMS": {
+      "data": "Heartbeat",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 8,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 16.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "InsectWingbeat": {
+    "DATA_PARAMS": {
+      "data": "InsectWingbeat",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 20,
+      "eval_accumulation_steps": 16.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 5
+    }
+  },
+  "JapaneseVowels": {
+    "DATA_PARAMS": {
+      "data": "JapaneseVowels",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "LSST": {
+    "DATA_PARAMS": {
+      "data": "LSST",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "Libras": {
+    "DATA_PARAMS": {
+      "data": "Libras",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "MotorImagery": {
+    "DATA_PARAMS": {
+      "data": "MotorImagery",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 8,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 16.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "NATOPS": {
+    "DATA_PARAMS": {
+      "data": "NATOPS",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "PEMS-SF": {
+    "DATA_PARAMS": {
+      "data": "PEMS-SF",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 8,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "PenDigits": {
+    "DATA_PARAMS": {
+      "data": "PenDigits",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "PhonemeSpectra": {
+    "DATA_PARAMS": {
+      "data": "PhonemeSpectra",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "RacketSports": {
+    "DATA_PARAMS": {
+      "data": "RacketSports",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "SelfRegulationSCP1": {
+    "DATA_PARAMS": {
+      "data": "SelfRegulationSCP1",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "SelfRegulationSCP2": {
+    "DATA_PARAMS": {
+      "data": "SelfRegulationSCP2",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "SpokenArabicDigits": {
+    "DATA_PARAMS": {
+      "data": "SpokenArabicDigits",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": null,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 64,
+      "num_train_epochs": 100,
+      "eval_accumulation_steps": 128.0
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 20
+    }
+  },
+  "StandWalkJump": {
+    "DATA_PARAMS": {
+      "data": "StandWalkJump",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "softmax",
+      "channel_virtual_expand_scale": 1,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 1,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  },
+  "UWaveGestureLibrary": {
+    "DATA_PARAMS": {
+      "data": "UWaveGestureLibrary",
+      "valid_split_strat": null,
+      "kth_fold": null,
+      "num_folds": null,
+      "split_valid_ratio": 0.1
+    },
+    "MODEL_PARAMS": {
+      "head_gated_attention_activation": "sigmoid",
+      "channel_virtual_expand_scale": 2,
+      "mask_ratio": 0.3,
+      "head_reduce_d_model": 2,
+      "disable_mask_in_classification_eval": true,
+      "fft_time_consistent_masking": true,
+      "decoder_mode": "mix_channel",
+      "head_aggregation_dim": "patch",
+      "head_aggregation": null
+    },
+    "TRAINING_PARAMS": {
+      "per_device_train_batch_size": 32,
+      "num_train_epochs": 200,
+      "eval_accumulation_steps": null
+    },
+    "EARYL_STOPPING_PARAMS": {
+      "early_stopping_patience": 100
+    }
+  }
+}
