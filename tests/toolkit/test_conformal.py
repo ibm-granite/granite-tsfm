@@ -8,8 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
 from tsfm_public.toolkit.conformal import (
+    AdaptiveWeightedConformalScoreWrapper,
     NonconformityScores,
     PostHocGaussian,
     PostHocProbabilisticMethod,
@@ -332,54 +334,141 @@ def test_posthoc_probabilistic_processor_outlier_score():
             ### 2. Fit
             p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)
 
-            ### 3. Outlier
-            output_outlier = p.outlier_score(
-                y_pred=y_test_pred, y_gt=y_test_gt, significance=alarm_rate, aggregation=0
-            )
+            for aggregation in [0, "mean", "median"]:
+                # print('AGGREGATION ', aggregation)
+                ### 3. Outlier
+                output_outlier = p.outlier_score(
+                    y_pred=y_test_pred, y_gt=y_test_gt, significance=alarm_rate, aggregation=aggregation
+                )
 
-            labels_test = labels[-output_outlier.shape[0] :]
-            labels_prediction_test = output_outlier[..., 1].flatten()
-            p_value_scores_test = output_outlier[..., 0].flatten()
+                labels_test = labels[-output_outlier.shape[0] :]
+                labels_prediction_test = output_outlier[..., 1].flatten()
+                p_value_scores_test = output_outlier[..., 0].flatten()
 
-            ### ASSERTIONS ###
+                ### ASSERTIONS ###
 
-            ## Prediction Output check
-            assert isinstance(
-                output_outlier, np.ndarray
-            ), "Unexpected output type from outlier_score(), it should be np array for method {} nonconformity score {}".format(
-                method, nonconformity_score
-            )
-            assert output_outlier.shape == (
-                y_test_pred.shape[0],
-                y_test_pred.shape[2],
-                2,
-            ), "Unexpected output shape from predict() for method {} nonconformity score {}".format(
-                method, nonconformity_score
-            )
+                ## Prediction Output check
+                assert isinstance(
+                    output_outlier, np.ndarray
+                ), "Unexpected output type from outlier_score(), it should be np array for method {} nonconformity score {} on aggregation {}".format(
+                    method, nonconformity_score, aggregation
+                )
+                assert (
+                    output_outlier.shape
+                    == (
+                        y_test_pred.shape[0],
+                        y_test_pred.shape[2],
+                        2,
+                    )
+                ), "Unexpected output shape from predict() for method {} nonconformity score {} on aggregation {}".format(
+                    method, nonconformity_score, aggregation
+                )
 
-            ### Expected Behaviour of an outlier approach ###
+                ### Expected Behaviour of an outlier approach ###
 
-            # highest p-value for predicted outliers is below the alarm rate
-            assert (
-                np.max(p_value_scores_test[labels_prediction_test == 1]) <= alarm_rate
-            ), "Max p value among predicted outliers exceeds alarm rate for method {} nonconformity score {}".format(
-                method, nonconformity_score
-            )
+                # highest p-value for predicted outliers is below the alarm rate
+                assert (
+                    np.max(p_value_scores_test[labels_prediction_test == 1]) <= alarm_rate
+                ), "Max p value among predicted outliers exceeds alarm rate for method {} nonconformity score {} on aggregation {}".format(
+                    method, nonconformity_score, aggregation
+                )
 
-            # false positive rate is below the alarm rate
-            assert (
-                np.mean(labels_prediction_test[labels_test == 0]) <= alarm_rate
-            ), "False positive rate exceeds alarm rate for method {} nonconformity score {}".format(
-                method, nonconformity_score
-            )
+                # false positive rate is below the alarm rate
+                assert (
+                    np.mean(labels_prediction_test[labels_test == 0]) <= alarm_rate
+                ), "False positive rate exceeds alarm rate for method {} nonconformity score {} on aggregation {}".format(
+                    method, nonconformity_score, aggregation
+                )
 
-            # true positive rate is at least (1 - alarm_rate)
-            assert (
-                np.mean(labels_prediction_test[labels_test == 1]) >= 1 - alarm_rate
-            ), "True positive rate is lower than expectedfor method {} nonconformity score {}".format(
-                method, nonconformity_score
-            )
+                # true positive rate is at least (1 - alarm_rate)
+                assert (
+                    np.mean(labels_prediction_test[labels_test == 1]) >= 1 - alarm_rate
+                ), "True positive rate is lower than expectedfor method {} nonconformity score {} on aggregation {}".format(
+                    method, nonconformity_score, aggregation
+                )
+
+
+def test_adaptive_conformal_wrapper():
+    np.random.seed(42)
+    torch.manual_seed(42)
+
+    n_samples = 100
+    std_dev = 0.05
+    window_size = n_samples + 0
+    false_alarm = 0.1
+    window_size_critical = np.ceil(1 / false_alarm)
+
+    """
+    1. Synthetic Data Generation (scores)
+    """
+    error_drift = np.random.normal(0, std_dev, n_samples)
+    error_scores = np.abs(error_drift)
+
+    ### Test/Cal
+    error_scores_cal = error_scores[0 : int(window_size_critical)]
+    error_scores_test = error_scores[int(window_size_critical) :]
+
+    """
+    2. Initialization
+    """
+    n_batch_update = int(np.ceil(1 / false_alarm - 1) + 1)
+    weighting_params = {
+        "lr": 0.05,
+        "n_batch_update": n_batch_update,
+        "stride": n_batch_update,
+        "epochs": 1,
+        "conformal_weights_update": False,
+    }
+
+    TSAD_class = AdaptiveWeightedConformalScoreWrapper(
+        false_alarm=false_alarm, window_size=window_size, weighting_params=weighting_params
+    )
+
+    ## Assertions Initialization
+    assert (
+        TSAD_class.false_alarm == false_alarm
+    ), f"Expected false_alarm={false_alarm}, but got {TSAD_class.false_alarm}"
+    assert (
+        TSAD_class.window_size == window_size
+    ), f"Expected window_size={window_size}, but got {TSAD_class.window_size}"
+    for key in weighting_params.keys():
+        assert key in TSAD_class.weighting_params, f"Key '{key}' not found in TSAD_class.weighting_params"
+        assert (
+            TSAD_class.weighting_params[key] == weighting_params[key]
+        ), f"Mismatch for key '{key}' in TSAD_class.weighting_params : expected {weighting_params[key]}, got {TSAD_class.weighting_params[key]}"
+
+    """
+    3. Fit (its essentially init with calibration)
+    """
+    beta_cal = TSAD_class.fit(error_scores_cal)
+
+    ## Assertions Fit
+    assert (
+        TSAD_class.weights_parameters.shape[0] == window_size
+    ), f"Expected weights_parameters of length {window_size}, got {TSAD_class.weights_parameters.shape[0]}"
+    assert (
+        TSAD_class.weights_parameters.sum().item() == error_scores_cal.shape[0]
+    ), f"Expected weights sum = {error_scores_cal.shape[0]}, got {TSAD_class.weights_parameters.sum().item()}"
+    assert (
+        TSAD_class.cal_scores.shape[0] == error_scores_cal.shape[0]
+    ), f"Expected cal_scores.shape[0] = {error_scores_cal.shape[0]}, got {TSAD_class.cal_scores.shape[0]}"
+    assert (
+        beta_cal.shape[0] == error_scores_cal.shape[0]
+    ), f"Expected beta_cal.shape[0] = {error_scores_cal.shape[0]}, got {beta_cal.shape[0]}"
+
+    """
+    4. Predict With the adaptive update of the weights
+    """
+    beta_test = TSAD_class.predict(error_scores_test)
+    assert (
+        beta_test.shape[0] == error_scores_test.shape[0]
+    ), f"Expected beta_test.shape[0] = {error_scores_test.shape[0]}, got {beta_test.shape[0]}"
+    # all scores come from the same distribution so weight norm should increase (all past values should be weighted)
+    assert (
+        TSAD_class.weights_parameters.sum().item() >= error_scores_cal.shape[0]
+    ), f"Expected weights sum >= {error_scores_cal.shape[0]}, got {TSAD_class.weights_parameters.sum().item()}"
 
 
 # if __name__ == "__main__":
-#     test_posthoc_probabilistic_processor_outlier_score()
+    # test_posthoc_probabilistic_processor_outlier_score()
+    # test_adaptive_conformal_wrapper()

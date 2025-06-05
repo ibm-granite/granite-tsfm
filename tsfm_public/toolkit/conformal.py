@@ -1753,14 +1753,15 @@ class AdaptiveWeightedConformalScoreWrapper:
                 self.weights_parameters.data = project_l1_box_torch(
                     self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
                 )
-                LOGGER.info(
-                    "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
-                        loss.item(),
-                        self.weights_parameters.data.sum(),
-                        self.weights_parameters.data.min(),
-                        self.weights_parameters.data.max(),
+                if verbose:
+                    LOGGER.info(
+                        "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
+                            loss.item(),
+                            self.weights_parameters.data.sum(),
+                            self.weights_parameters.data.min(),
+                            self.weights_parameters.data.max(),
+                        )
                     )
-                )
 
                 self.weights_average = self.weights_average + self.weights_parameters.clone().detach()
                 self.weights_average_count += 1
