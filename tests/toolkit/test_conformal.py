@@ -470,5 +470,5 @@ def test_adaptive_conformal_wrapper():
 
 
 # if __name__ == "__main__":
-    # test_posthoc_probabilistic_processor_outlier_score()
-    # test_adaptive_conformal_wrapper()
+# test_posthoc_probabilistic_processor_outlier_score()
+# test_adaptive_conformal_wrapper()
