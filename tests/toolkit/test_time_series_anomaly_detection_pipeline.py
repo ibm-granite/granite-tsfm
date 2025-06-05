@@ -9,8 +9,8 @@ import pytest
 
 from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
 from tsfm_public.models.tspulse import TSPulseConfig, TSPulseForReconstruction
+from tsfm_public.toolkit.ad_helpers import AnomalyScoreMethods
 from tsfm_public.toolkit.time_series_anomaly_detection_pipeline import (
-    AnomalyPredictionModes,
     TimeSeriesAnomalyDetectionPipeline,
 )
 
@@ -53,7 +53,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyPredictionModes.TIME_IMPUTATION.value,
+        prediction_mode=AnomalyScoreMethods.TIME_IMPUTATION.value,
         timestamp_column="timestamp",
         target_columns=target_variables,
         aggr_win_size=32,
@@ -80,7 +80,7 @@ def test_tsad_tinytimemixture_pipeline_defaults(example_dataset):
 
     tspipe = TimeSeriesAnomalyDetectionPipeline(
         model,
-        prediction_mode=AnomalyPredictionModes.PREDICTIVE.value,
+        prediction_mode=AnomalyScoreMethods.PREDICTIVE.value,
         timestamp_column="timestamp",
         target_columns=["X1", "X2"],
     )

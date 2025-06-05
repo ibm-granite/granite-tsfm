@@ -1,7 +1,6 @@
 import inspect
 from collections import OrderedDict, defaultdict
-from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -18,22 +17,11 @@ from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import TinyTimeMixe
 from tsfm_public.models.tinytimemixer.utils.ad_helpers import TinyTimeMixerADUtility
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from tsfm_public.models.tspulse.utils.ad_helpers import TSPulseADUtility
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 
+from .ad_helpers import AnomalyScoreMethods
 from .dataset import ForecastDFDataset
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
-
-
-class AnomalyPredictionModes(Enum):
-    """Enum type for time series foundation model based anomaly detection modes."""
-
-    MEAN_DEVIATION = "meandev"
-    PREDICTIVE = "forecast"
-    TIME_IMPUTATION = "time"
-    FREQUENCY_IMPUTATION = "fft"
-    TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
-    PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
-    PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
-    PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
 
 
 def score_smoothing(
@@ -67,10 +55,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self,
         model: PreTrainedModel,
         *args,
-        prediction_mode: str = AnomalyPredictionModes.PREDICTIVE.value,
+        prediction_mode: str = AnomalyScoreMethods.PREDICTIVE.value,
         aggr_function: str = "max",
         aggr_win_size: int = 32,
         smoothing_window_size: int = 8,
+        probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         """Huggingface pipeline for time series anomaly detection using time series foundation models.
@@ -91,7 +80,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if isinstance(model, TSPulseForReconstruction):
             model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size, **kwargs)
         elif isinstance(model, TinyTimeMixerForPrediction):
-            model_processor = TinyTimeMixerADUtility(model=model, mode=prediction_mode, **kwargs)
+            model_processor = TinyTimeMixerADUtility(
+                model=model, mode=prediction_mode, probabilistic_processor=probabilistic_processor, **kwargs
+            )
         else:
             raise ValueError(f"Error: does not support {self.model.__class__} object!")
 
@@ -104,11 +95,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         kwargs["aggr_win_size"] = aggr_win_size
         kwargs["smoothing_window_size"] = smoothing_window_size
 
-        known_mode = model_processor.is_valid_mode(prediction_mode)
-        if not known_mode:
-            raise ValueError(f"Error: incompatible operation mode {prediction_mode}!")
+        # validation happens elsewhere???
+        # known_mode = model_processor.is_valid_mode(prediction_mode)
+        # if not known_mode:
+        #    raise ValueError(f"Error: incompatible operation mode {prediction_mode}!")
 
-        # *** TTM
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
 
@@ -120,13 +111,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             )
         else:
             kwargs["frequency_token"] = None
-        # *** END TTM
 
-        kwargs["prediction_mode"] = prediction_mode
-        self._prediction_mode = prediction_mode
+        kwargs["mode"] = prediction_mode
+
         self._model_processor = model_processor
-        self._aggr_win_size = aggr_win_size
-        self._smoothing_window_size = smoothing_window_size
+        # possibly save the posthoc_processor too?
 
         super().__init__(model, *args, **kwargs)
 
@@ -172,12 +161,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "prediction_length",
             "timestamp_column",
             "target_columns",
-            "frequency_token",  # TTM Specific
+            "frequency_token",
         ]
-        postprocess_params = [
-            "timestamp_column",
-            "target_columns",
-        ]
+        postprocess_params = ["timestamp_column", "target_columns", "smoothing_window_size", "expand_score"]
 
         for c in preprocess_params:
             if c in kwargs:
@@ -189,14 +175,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         if self.model_type == "tspulse":
             preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
-
-        mode = kwargs.get("prediction_mode", self._prediction_mode)
-        aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
-        expand_score = kwargs.get("expand_score", False)
-
-        smoothing_window_size = kwargs.get("smoothing_window_size", self._smoothing_window_size)
-
-        postprocess_kwargs.update(smoothing_window_size=smoothing_window_size, expand_score=expand_score)
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
@@ -214,12 +192,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
                 num_workers = self._num_workers
 
         forward_kwargs = {
-            "mode": mode,
-            "aggr_win_size": aggr_win_size,
             "batch_size": batch_size,
             "num_workers": num_workers,
-            "expand_score": expand_score,
         }
+
+        for p in ["mode", "aggr_window_size", "expand_score"]:
+            if p in kwargs:
+                forward_kwargs[p] = kwargs[p]
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
@@ -240,16 +219,18 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # For any forecasting based methods
         if self.feature_extractor:
-            input_ = self.feature_extractor.preprocess(input_)
+            input_prep = self.feature_extractor.preprocess(input_)
+        else:
+            input_prep = input_
+
+        # possibly calibrate posthoc_processor if calibration data is passed (not enabled yet)
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
-            input_,
+            input_prep,
             **kwargs,
         )
-        target_columns = kwargs.get("target_columns", [])
         self.__context_memory["data"] = input_
-        self.__context_memory["target_columns"] = target_columns
         return {"dataset": dataset}
 
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> pd.DataFrame:
@@ -297,7 +278,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         extra_kwargs = {}
         if "data" in self.__context_memory:
             data = self.__context_memory["data"]
-            target_columns = self.__context_memory.get("target_columns", [])
+            target_columns = preprocess_params.get("target_columns", [])
             if len(target_columns) > 0:
                 data = data[target_columns]
             extra_kwargs["reference"] = data.values
@@ -354,7 +335,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             np.stack([score_ for _, score_ in model_outputs_.items()], axis=0),
             axis=0,
         )
-        target_columns = self.__context_memory["target_columns"]
+        target_columns = postprocess_parameters["target_columns"]
         expand_score = (len(target_columns) > 1) and expand_score
 
         model_outputs = {}

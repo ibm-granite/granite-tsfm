@@ -8,7 +8,8 @@ from torch import nn as nn
 from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tinytimemixer.modeling_tinytimemixer import TinyTimeMixerForPrediction
-from tsfm_public.toolkit.ad_helpers import ScoreListType, TSADHelperUtility
+from tsfm_public.toolkit.ad_helpers import AnomalyScoreMethods, ScoreListType, TSADHelperUtility
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 
 
 class TinyTimeMixerADUtility(TSADHelperUtility):
@@ -20,6 +21,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         mode: str,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
+        posthoc_probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         """Initializer
@@ -42,17 +44,24 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         self._mode = mode
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
+        self._posthoc_processor = posthoc_probabilistic_processor
 
     def is_valid_mode(
         self,
         mode_str: str,
     ) -> bool:
         """Validates compatibility of the specified mode string."""
-        supported_modes = ["forecast", "meandev"]
+        supported_modes = [
+            AnomalyScoreMethods.PREDICTIVE.value,
+            AnomalyScoreMethods.MEAN_DEVIATION.value,
+            AnomalyScoreMethods.PROBABILISTIC.value,
+        ]
         valid_mode = 0
         for mode_type in supported_modes:
             if mode_type in mode_str:
                 valid_mode += 1
+
+        # is it really valid to select only one mode?
         return valid_mode == 1
 
     def compute_score(
@@ -71,8 +80,9 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
-        use_forecast = "forecast" in mode
-        use_meandev = "meandev" in mode
+        use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
+        use_meandev = AnomalyScoreMethods.MEAN_DEVIATION.value in mode
+        use_probabilistic = AnomalyScoreMethods.PROBABILISTIC.value in mode
         anomaly_criterion = nn.MSELoss(reduce=False)
 
         model_forward_output = {}
@@ -80,17 +90,20 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         reduction_axis = [1] if expand_score else [1, 2]
 
         scores = OrderedDict()
+        batch_future_values = payload["future_values"]
+        future_predictions = model_forward_output["prediction_outputs"]
         if use_forecast:
             # forecast output
-            batch_future_values = payload["future_values"]
-            future_predictions = model_forward_output["prediction_outputs"]
             pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
-            scores["forecast"] = torch.mean(pointwise_score, dim=reduction_axis)
+            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
         if use_meandev:
-            batch_future_values = payload["future_values"]
-            future_predictions = model_forward_output["prediction_outputs"]
             deviation = batch_future_values - future_predictions
-            scores["meandev"] = deviation
+            scores[AnomalyScoreMethods.MEAN_DEVIATION.value] = deviation
+        if use_probabilistic:
+            scores[AnomalyScoreMethods.PROBABILISTIC.value] = self._posthoc_processor.outlier_score(
+                y_gt=batch_future_values,
+                y_pred=future_predictions,
+            )
 
         return ModelOutput(scores)
 
@@ -119,7 +132,17 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         elif isinstance(x, torch.Tensor):
             x = x.detach().cpu().numpy()
 
-        if key == "meandev":
+        start_pad_len = self._model.config.context_length
+        end_pad_len = (
+            0 if key == AnomalyScoreMethods.MEAN_DEVIATION.value else self._model.config.prediction_length - 1
+        )
+
+        if key == AnomalyScoreMethods.PROBABILISTIC.value:
+            x = self.posthoc_processor.forecast_horizon_aggregation(x)
+            score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)  # (?)
+            return score
+
+        if key == AnomalyScoreMethods.MEAN_DEVIATION.value:
             n_batches = x.shape[0]
             n_obs = x.shape[1]
             total_length = n_batches + n_obs - 1
@@ -131,8 +154,6 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 counters[i : (i + n_obs)] += 1
             x = (predictions / np.maximum(counters, 1)) ** 2
 
-        start_pad_len = self._model.config.context_length
-        end_pad_len = 0 if key == "meandev" else self._model.config.prediction_length - 1
         score = np.array([x[0]] * start_pad_len + list(x) + [x[-1]] * end_pad_len)
         if score.ndim == 1:
             score = score.reshape(-1, 1)
@@ -143,7 +164,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
-            if key == "forecast":
+            if key == AnomalyScoreMethods.PREDICTIVE.value:
                 min_score = min_score / np.sqrt(2)
         score_ = score.copy()
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score

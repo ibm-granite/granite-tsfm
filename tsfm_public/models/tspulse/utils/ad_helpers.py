@@ -8,7 +8,7 @@ from torch import nn as nn
 from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.toolkit.ad_helpers import ScoreListType, TSADHelperUtility
+from tsfm_public.toolkit.ad_helpers import AnomalyScoreMethods, ScoreListType, TSADHelperUtility
 
 from .helpers import patchwise_stitched_reconstruction
 
@@ -51,7 +51,11 @@ class TSPulseADUtility(TSADHelperUtility):
 
     def is_valid_mode(self, mode_str: str) -> bool:
         """Validates compatibility of the specified mode string."""
-        supported_modes = ["time", "fft", "forecast"]
+        supported_modes = [
+            AnomalyScoreMethods.PREDICTIVE.value,
+            AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+            AnomalyScoreMethods.TIME_IMPUTATION.value,
+        ]
 
         valid_mode = False
         for mode_type in supported_modes:
@@ -75,9 +79,9 @@ class TSPulseADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
-        use_forecast = "forecast" in mode
-        use_fft = "fft" in mode
-        use_ts = "time" in mode
+        use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
+        use_fft = AnomalyScoreMethods.FREQUENCY_IMPUTATION.value in mode
+        use_ts = AnomalyScoreMethods.TIME_IMPUTATION.value in mode
         aggr_win_size = self._aggr_win_size
         anomaly_criterion = nn.MSELoss(reduce=False)
 
@@ -120,7 +124,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            scores["time"] = torch.mean(pointwise_score, dim=reduction_axis)
+            scores[AnomalyScoreMethods.TIME_IMPUTATION.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_fft:
             # time reconstruction from fft
@@ -129,14 +133,14 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            scores["fft"] = torch.mean(pointwise_score, dim=reduction_axis)
+            scores[AnomalyScoreMethods.FREQUENCY_IMPUTATION.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_forecast:
             # forecast output
             batch_future_values = payload["future_values"]
             output = model_forward_output["forecast_output"]
             pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
-            scores["forecast"] = torch.mean(pointwise_score, dim=reduction_axis)
+            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         return ModelOutput(scores)
 
@@ -164,7 +168,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
             else:
                 x = np.concatenate(x, axis=0).astype(float)
-        if key == "forecast":
+        if key == AnomalyScoreMethods.PREDICTIVE.value:
             start_pad_len = context_length
             end_pad_len = 0
         else:
@@ -181,7 +185,7 @@ class TSPulseADUtility(TSADHelperUtility):
             min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
-            if key == "forecast":
+            if key == AnomalyScoreMethods.PREDICTIVE.value:
                 min_score = min_score / np.sqrt(2)
             else:
                 min_score = min_score * (1 + 1 / np.sqrt(self._aggr_win_size))

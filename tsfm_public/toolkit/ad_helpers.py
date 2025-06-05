@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 from typing import List, Union
 
 import numpy as np
@@ -8,6 +9,20 @@ from transformers.utils.generic import ModelOutput
 
 ScoreType = Union[np.ndarray, torch.Tensor]
 ScoreListType = Union[ScoreType, List[ScoreType]]
+
+
+class AnomalyScoreMethods(Enum):
+    """Enum type for time series foundation model based anomaly detection modes."""
+
+    MEAN_DEVIATION = "meandev"
+    PREDICTIVE = "forecast"
+    TIME_IMPUTATION = "time"
+    FREQUENCY_IMPUTATION = "fft"
+    PROBABILISTIC = "probabilistic"
+    # TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
+    # PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
+    # PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
+    # PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
 
 
 class TSADHelperUtility:
