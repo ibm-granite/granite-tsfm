@@ -5,8 +5,8 @@
 from collections import OrderedDict
 from typing import Any, Dict, List, Union
 
-import numpy as np
 import pandas as pd
+import torch
 from transformers import PreTrainedModel
 from transformers.pipelines.base import (
     GenericTensor,
@@ -16,7 +16,6 @@ from transformers.utils import add_end_docstrings, logging
 
 from .dataset import ForecastDFDataset
 from .time_series_forecasting_pipeline import TimeSeriesPipeline
-from .time_series_preprocessor import create_timestamps
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +69,9 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         super().__init__(model, *args, **kwargs)
 
         self.__context_memory = {}
+        # these control the shared run_single method
+        self._model_output_key = "reconstruction_outputs"
+        self._copy_dataset_keys = False
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
@@ -90,7 +92,6 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         postprocess_kwargs = {}
 
         preprocess_params = [
-            "prediction_length",
             "context_length",
             # "frequency_token",
             "id_columns",
@@ -221,13 +222,14 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
             time_series_prep,
+            prediction_length=0,
             **kwargs,
         )
 
         # save our series to make life easier
         self.__context_memory["data"] = time_series
 
-        return dataset
+        return {"dataset": dataset}
 
     def _forward(self, model_inputs, **kwargs):
         """Forward step
@@ -253,72 +255,20 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         rows in the dataframe. This should only be used when producing a single forecast (i.e., unexploded
         result is one row per ID).
         """
-        out = {}
 
-        model_output_key = "prediction_outputs"
-
-        # name the predictions of target columns
-        # outputs should only have size equal to target columns
-
-        # only allow adding ground truth when not exploding
-        add_known_ground_truth = kwargs["add_known_ground_truth"] if not kwargs["explode_forecasts"] else False
+        out = self.__context_memory["data"].copy()
 
         prediction_columns = []
+        # input is a list of tensors: bs x context_length x features
+        input = torch.cat(input, axis=0).detach().cpu().numpy()
         for i, c in enumerate(kwargs["target_columns"]):
-            prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
-            out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
-        # provide the ground truth values for the targets
-        # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
-        if add_known_ground_truth:
-            for i, c in enumerate(kwargs["target_columns"]):
-                ground_truth = input["future_values"][:, :, i].numpy()
-                missing = ~input["future_observed_mask"][:, :, i].numpy()
-                ground_truth[missing] = np.nan
-                out[c] = ground_truth.tolist()
-
-        if "timestamp_column" in kwargs:
-            out[kwargs["timestamp_column"]] = input["timestamp"]
-        # copy ids
-        for i, c in enumerate(kwargs["id_columns"]):
-            out[c] = [elem[i] for elem in input["id"]]
-        out = pd.DataFrame(out)
-
-        if kwargs["explode_forecasts"]:
-            # we made only one forecast per time series, explode results
-            # explode == expand the lists in the dataframe
-            out_explode = []
-            for _, row in out.iterrows():
-                l = len(row[prediction_columns[0]])
-                tmp = {}
-                if "timestamp_column" in kwargs:
-                    tmp[kwargs["timestamp_column"]] = create_timestamps(
-                        row[kwargs["timestamp_column"]], freq=kwargs["freq"], periods=l
-                    )  # expand timestamps
-                if "id_columns" in kwargs:
-                    for c in kwargs["id_columns"]:
-                        tmp[c] = row[c]
-                for p in prediction_columns:
-                    tmp[p] = row[p]
-
-                out_explode.append(pd.DataFrame(tmp))
-
-            out = pd.concat(out_explode)
-
-        # reorder columns
-        cols = out.columns.to_list()
-        cols_ordered = []
-        if "timestamp_column" in kwargs:
-            cols_ordered.append(kwargs["timestamp_column"])
-        if "id_columns" in kwargs:
-            cols_ordered.extend(kwargs["id_columns"])
-        cols_ordered.extend([c for c in cols if c not in cols_ordered])
-
-        out = out[cols_ordered]
+            prediction_columns.append(f"{c}_imputed")
+            out[prediction_columns[-1]] = [input[j, 0, i] for j in range(input.shape[0] - 1)] + input[
+                -1, :, i
+            ].tolist()
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out)
-            if add_known_ground_truth:
-                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+            out = self.feature_extractor.inverse_scale_targets(out, suffix="_imputed")
 
         return out
