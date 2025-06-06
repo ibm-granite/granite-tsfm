@@ -54,6 +54,7 @@ class TimeSeriesPipeline(Pipeline):
         # our preprocess returns a dataset
         dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
         model_output_key = getattr(self, "_model_output_key", None)
+        copy_dataset_keys = getattr(self, "_copy_dataset_keys", True)
 
         batch_size = forward_params["batch_size"]
         num_workers = forward_params["num_workers"]
@@ -84,7 +85,7 @@ class TimeSeriesPipeline(Pipeline):
                 model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
             accumulator.append(item[model_output_key])
 
-        if self._copy_dataset_keys:
+        if copy_dataset_keys:
             # collect all ouputs needed for post processing
             model_outputs = defaultdict(list)
             items = list(dataset[0].items())
@@ -404,7 +405,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        return dataset
+        return {"dataset": dataset}
 
     def _forward(self, model_inputs, **kwargs):
         """Forward step
