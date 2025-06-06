@@ -271,4 +271,5 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
             out = self.feature_extractor.inverse_scale_targets(out, suffix="_imputed")
 
+        self.__context_memory = {}
         return out
