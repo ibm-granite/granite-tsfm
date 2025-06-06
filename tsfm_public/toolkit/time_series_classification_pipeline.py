@@ -78,6 +78,8 @@ class TimeSeriesClassificationPipeline(TimeSeriesPipeline):
 
         super().__init__(model, *args, **kwargs)
 
+        self.__context_memory = {}
+
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
@@ -238,7 +240,6 @@ class TimeSeriesClassificationPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        self.__context_memory = {}
         self.__context_memory["data"] = time_series
 
         return {"dataset": dataset}
@@ -299,4 +300,5 @@ class TimeSeriesClassificationPipeline(TimeSeriesPipeline):
             out = self.feature_extractor.inverse_transform_labels(out)
             out = self.feature_extractor.inverse_transform_labels(out, suffix="_prediction")
 
+        self.__context_memory = {}
         return out
