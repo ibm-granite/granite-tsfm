@@ -257,13 +257,17 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         # Fixing stride to 1
         kwargs["stride"] = 1
 
+        # maintaining processed data reference
+        processed_input_ = self._model_processor.preprocess(input_, **kwargs)
+
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
-            self._model_processor.preprocess(input_, **kwargs),
+            processed_input_,
             **kwargs,
         )
         target_columns = kwargs.get("target_columns", [])
         self.__context_memory["data"] = input_
+        self.__context_memory["reference"] = processed_input_
         self.__context_memory["target_columns"] = target_columns
         return {"dataset": dataset}
 
@@ -311,8 +315,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         accumulator_ = OrderedDict()
 
         extra_kwargs = {}
-        if "data" in self.__context_memory:
-            data = self.__context_memory["data"]
+        if "reference" in self.__context_memory:
+            data = self.__context_memory["reference"]
             target_columns = self.__context_memory.get("target_columns", [])
             if len(target_columns) > 0:
                 data = data[target_columns]
