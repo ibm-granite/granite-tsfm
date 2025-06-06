@@ -113,9 +113,6 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
                 outlier_score if expand_score else np.mean(outlier_score, axis=2)
             )
-            if not expand_score:
-                deviation = torch.mean(deviation, dim=[2])
-            scores["meandev"] = deviation
 
         return ModelOutput(scores)
 

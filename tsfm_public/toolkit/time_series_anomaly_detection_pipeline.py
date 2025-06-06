@@ -309,23 +309,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
                 for key in scores:
                     accumulator[key].append(scores[key])
 
-        # aggr_win_size = forward_params.get("aggr_win_size")
-        # accumulator_ = OrderedDict()
-
-        # extra_kwargs = {}
-        # if "reference" in self.__context_memory:
-        #     data = self.__context_memory["reference"]
-        #     target_columns = self.__context_memory.get("target_columns", [])
-        #     if len(target_columns) > 0:
-        #         data = data[target_columns]
-        #     extra_kwargs["reference"] = data.values
-
-        # for k in accumulator:
-        #     # score = torch.cat(accumulator[k], axis=0).detach().cpu().numpy()
-        #     score = accumulator[k]
-        #     score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size, **extra_kwargs)
-        #     accumulator_[k] = score
-
         # call postprocess
         outputs = self.postprocess(ModelOutput(accumulator), **postprocess_params)
 
@@ -384,9 +367,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if not predictive_score_smoothing and (
                 k == AnomalyScoreMethods.PREDICTIVE.value
             ):  # Skip Smoothing For 1 Lookahead forecast
-                model_outputs_[k] = model_outputs[k]
+                model_outputs_[k] = score
             else:
-                model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)
+                model_outputs_[k] = score_smoothing(score, smoothing_window_size=smoothing_window_size)
 
         # aggregate scores and expand
         score = np.stack([score_ for _, score_ in model_outputs_.items()], axis=0)
