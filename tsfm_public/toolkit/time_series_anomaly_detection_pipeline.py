@@ -199,11 +199,15 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         aggr_win_size = kwargs.get("aggr_win_size", self._aggr_win_size)
         expand_score = kwargs.get("expand_score", False)
         report_mode = kwargs.get("report_mode", False)
+        predictive_score_smoothing = kwargs.get("predictive_score_smoothing", False)
 
         smoothing_window_size = kwargs.get("smoothing_window_size", self._smoothing_window_size)
 
         postprocess_kwargs.update(
-            smoothing_window_size=smoothing_window_size, expand_score=expand_score, report_mode=report_mode
+            smoothing_window_size=smoothing_window_size,
+            expand_score=expand_score,
+            report_mode=report_mode,
+            predictive_score_smoothing=predictive_score_smoothing,
         )
 
         # same logic as HF Pipeline
@@ -353,6 +357,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
         report_mode = postprocess_parameters.get("report_mode", False)
+        predictive_score_smoothing = postprocess_parameters.get("predictive_score_smoothing", False)
         if not isinstance(smoothing_window_size, int):
             try:
                 smoothing_window_size = int(smoothing_window_size)
@@ -361,7 +366,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         model_outputs_ = OrderedDict()
         for k in model_outputs:
-            if k == AnomalyPredictionModes.PREDICTIVE.value:  # Skip Smoothing For 1 Lookahead forecast
+            if not predictive_score_smoothing and (
+                k == AnomalyPredictionModes.PREDICTIVE.value
+            ):  # Skip Smoothing For 1 Lookahead forecast
                 model_outputs_[k] = model_outputs[k]
             else:
                 model_outputs_[k] = score_smoothing(model_outputs[k], smoothing_window_size=smoothing_window_size)

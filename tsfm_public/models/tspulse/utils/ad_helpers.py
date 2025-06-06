@@ -71,10 +71,11 @@ class TSPulseADUtility(TSADHelperUtility):
             DataFrame: processed dataframe
         """
         x = super().preprocess(x, **kwargs)
+        x_ = x.copy()
         target_columns = kwargs.get("target_columns", [])
         if len(target_columns) > 0:
-            x[target_columns] = StandardScaler_().fit_transform(x[target_columns].values)
-        return x
+            x_[target_columns] = StandardScaler_().fit_transform(x[target_columns].values)
+        return x_
 
     def compute_score(
         self,
