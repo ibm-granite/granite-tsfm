@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from tsfm_public import TSPulseForReconstruction
+from tsfm_public import TSPulseConfig, TSPulseForReconstruction
 from tsfm_public.toolkit.time_series_imputation_pipeline import TimeSeriesImputationPipeline
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 
@@ -17,8 +17,6 @@ def test_time_series_imputation_pipeline_defaults(etth_data):
     tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
     tsp.train(train_data)
 
-    model_path = "add your path here"
-
     # quick and dirty random missing
     n = 20
     rng = np.random.default_rng(seed=42)
@@ -29,12 +27,28 @@ def test_time_series_imputation_pipeline_defaults(etth_data):
     for i, s, c in zip(inds, sizes, cols):
         test_data.loc[i : i + s, params["target_columns"][c]] = np.nan
 
-    model = TSPulseForReconstruction.from_pretrained(
-        model_path,
+    conf = TSPulseConfig(
+        context_length=512,
+        d_model=24,
+        decoder_d_model=24,
+        num_patches=128,
+        patch_stride=8,
         fft_time_add_forecasting_pt_loss=False,
         num_input_channels=len(params["target_columns"]),
         mask_type="user",
+        patch_length=8,
+        mask_block_length=2,
+        mode="common_channel",
+        gated_attn=True,
+        use_positional_encoding=False,
+        self_attn=False,
+        head_aggregation="max_pool",
+        fuse_fft=True,
+        use_learnable_mask_token=True,
+        prediction_length=4,
+        channel_mix_init="identity",
     )
+    model = TSPulseForReconstruction(conf)
 
     pipe = TimeSeriesImputationPipeline(model, feature_extractor=tsp, device="cpu")
 
