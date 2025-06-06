@@ -255,7 +255,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # use forecasting dataset to do the preprocessing
         dataset = ForecastDFDataset(
-            input_,
+            self._model_processor.preprocess(input_, **kwargs),
             **kwargs,
         )
         target_columns = kwargs.get("target_columns", [])

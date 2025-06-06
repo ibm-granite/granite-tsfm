@@ -3,7 +3,9 @@ from typing import Optional
 
 import numpy as np
 import torch
+from pandas import DataFrame
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
+from sklearn.preprocessing import StandardScaler as StandardScaler_
 from torch import nn as nn
 from transformers.utils.generic import ModelOutput
 
@@ -58,6 +60,21 @@ class TSPulseADUtility(TSADHelperUtility):
             if mode_type in mode_str:
                 valid_mode = True
         return valid_mode
+
+    def preprocess(self, x: DataFrame, **kwargs) -> DataFrame:
+        """Performs standard normalization on the target columns before scoring.
+
+        Args:
+            x (DataFrame): input for scoring
+
+        Returns:
+            DataFrame: processed dataframe
+        """
+        x = super().preprocess(x, **kwargs)
+        target_columns = kwargs.get("target_columns", [])
+        if len(target_columns) > 0:
+            x[target_columns] = StandardScaler_().fit_transform(x[target_columns].values)
+        return x
 
     def compute_score(
         self,
