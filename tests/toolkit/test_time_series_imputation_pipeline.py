@@ -17,7 +17,7 @@ def test_time_series_imputation_pipeline_defaults(etth_data):
     tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
     tsp.train(train_data)
 
-    model_path = "/Users/wmgifford/Documents/IBM/Research/IOT/tmp/tspulse_submission/model-binaries/tspulse_hybrid_sign20/tspulse_model"
+    model_path = "add your path here"
 
     # quick and dirty random missing
     n = 20
