@@ -94,8 +94,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         future_predictions = model_forward_output["prediction_outputs"]
         if use_forecast:
             # forecast output
-            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
             reduction_axis = [1] if expand_score else [1, 2]
+            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], future_predictions[:, 0, :]).unsqueeze(1)
             scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
         if use_meandev:
             deviation = batch_future_values - future_predictions
@@ -113,6 +113,9 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
                 outlier_score if expand_score else np.mean(outlier_score, axis=2)
             )
+            if not expand_score:
+                deviation = torch.mean(deviation, dim=[2])
+            scores["meandev"] = deviation
 
         return ModelOutput(scores)
 

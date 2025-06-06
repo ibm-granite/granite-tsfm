@@ -7,6 +7,7 @@ from enum import Enum
 from typing import List, Union
 
 import numpy as np
+import pandas as pd
 import torch
 from transformers.utils.generic import ModelOutput
 
@@ -47,6 +48,17 @@ class TSADHelperUtility:
             bool: returns true if supported
         """
         raise NotImplementedError
+
+    def preprocess(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        """API to support model specific data preprocessing
+
+        Args:
+            x (pd.DataFrame): input to the pipeline
+
+        Returns:
+            pd.DataFrame: processed data frame
+        """
+        return x
 
     @abstractmethod
     def compute_score(
