@@ -54,11 +54,11 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
                 "id_columns",
                 "timestamp_column",
                 "target_columns",
-                "observable_columns",
-                "control_columns",
-                "conditional_columns",
-                "categorical_columns",
-                "static_categorical_columns",
+                # "observable_columns",
+                # "control_columns",
+                # "conditional_columns",
+                # "categorical_columns",
+                # "static_categorical_columns",
             ]:
                 if p not in kwargs:
                     kwargs[p] = getattr(kwargs["feature_extractor"], p)
@@ -93,16 +93,14 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
 
         preprocess_params = [
             "context_length",
-            # "frequency_token",
             "id_columns",
             "timestamp_column",
             "target_columns",
-            "observable_columns",
-            "control_columns",
-            "conditional_columns",
+            # "observable_columns",
+            # "control_columns",
+            # "conditional_columns",
             # "categorical_columns",
             # "static_categorical_columns",
-            "future_time_series",
             "impute_method",
         ]
         postprocess_params = [
@@ -111,15 +109,12 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             "id_columns",
             "timestamp_column",
             "target_columns",
-            "observable_columns",
-            "control_columns",
-            "conditional_columns",
+            # "observable_columns",
+            # "control_columns",
+            # "conditional_columns",
             # "categorical_columns",
             # "static_categorical_columns",
-            # "freq",
-            # "explode_forecasts",
             "inverse_scale_outputs",
-            # "add_known_ground_truth",
         ]
 
         for c in preprocess_params:
