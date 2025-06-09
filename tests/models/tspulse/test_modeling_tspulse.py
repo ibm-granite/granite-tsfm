@@ -17,7 +17,11 @@ from tsfm_public.models.tspulse import (
     TSPulseForClassification,
     TSPulseForReconstruction,
 )
-from tsfm_public.models.tspulse.utils.helpers import PatchMaskingDatasetWrapper, patchwise_stitched_reconstruction
+from tsfm_public.models.tspulse.utils.helpers import (
+    PatchMaskingDatasetWrapper,
+    get_embeddings,
+    patchwise_stitched_reconstruction,
+)
 
 
 TOLERANCE = 1e-4
@@ -906,9 +910,9 @@ class TSPulseFunctionalTests(unittest.TestCase):
                 else:
                     # Check that patch indices were covered in order: always LTR
                     expected = list(range(num_patches))
-                    assert (
-                        mask_positions == expected
-                    ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+                    assert mask_positions == expected, (
+                        f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+                    )
                     assert pv_count == num_patches, f"Expected {num_patches} reps, got {pv_count}"
                     prev_pv = past_values
                     pv_count = 1
@@ -936,13 +940,75 @@ class TSPulseFunctionalTests(unittest.TestCase):
                 # Validate expected masked length
                 expected_masked_len = min(patch_length, T - start)
                 actual_masked_len = (mask[start : start + expected_masked_len].any(dim=1)).sum().item()
-                assert (
-                    actual_masked_len == expected_masked_len
-                ), f"Expected {expected_masked_len} rows masked, got {actual_masked_len}"
+                assert actual_masked_len == expected_masked_len, (
+                    f"Expected {expected_masked_len} rows masked, got {actual_masked_len}"
+                )
 
             # Final flush for last group
             expected = list(range(num_patches))
-            assert (
-                mask_positions == expected
-            ), f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+            assert mask_positions == expected, (
+                f"Incorrect patch order for {window_position}: got {mask_positions}, expected {expected}"
+            )
             assert pv_count == num_patches, f"Expected {num_patches} reps at end, got {pv_count}"
+
+    def test_get_embeddings(self):
+        params = self.__class__.params.copy()
+        params.update(
+            context_length=512,
+            patch_length=8,
+            patch_stride=8,
+            d_model=24,
+            decoder_d_model=24,
+            patch_register_tokens=10,
+            num_input_channels=1,
+            mask_type="user",
+            d_model_layerwise_scale=[1, 1],
+            num_patches_layerwise_scale=[1, 1],
+        )
+        past_values = torch.randn((1, 512, 1))  # [B, T, C]
+
+        # num_patches=64*2 ((512-8)/8 + 1)=64, concat([time, fft]))
+        # backbone_d_model=decoder_d_model=24, time_num_patches=fft_num_patches=64
+        model = TSPulseForReconstruction(TSPulseConfig(**params))
+        component = "backbone"
+        assert get_embeddings(model, past_values, component=component, mode="time").shape[2] == 1536  # 64*24
+        assert get_embeddings(model, past_values, component=component, mode="fft").shape[2] == 1536
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 240  # 10*24
+        component = "decoder"
+        assert get_embeddings(model, past_values, component=component, mode="time").shape[2] == 1536
+        assert get_embeddings(model, past_values, component=component, mode="fft").shape[2] == 1536
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 240
+
+        params.update(
+            d_model_layerwise_scale=[1, 0.75],  # backbone_d_model_layerwise = [24, 18]
+        )
+        # backbone_d_model=18
+        model = TSPulseForReconstruction(TSPulseConfig(**params))
+        component = "backbone"
+        assert get_embeddings(model, past_values, component=component, mode="time").shape[2] == 1152  # 64*18
+        assert get_embeddings(model, past_values, component=component, mode="fft").shape[2] == 1152
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 180  # 10*18
+        # decoder_d_model=24, i.e., d_model_layerwise_scale does not affect decoder_d_model
+        component = "decoder"
+        assert get_embeddings(model, past_values, component=component, mode="time").shape[2] == 1536
+        assert get_embeddings(model, past_values, component=component, mode="fft").shape[2] == 1536
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 240
+
+        params.update(
+            num_patches_layerwise_scale=[1, 0.75],  # backbone_num_patches_layerwise = [128, 96]
+        )
+        # backbone_d_model=18, time_num_patches=48 (=96/2),
+        model = TSPulseForReconstruction(TSPulseConfig(**params))
+        component = "backbone"
+        assert get_embeddings(model, past_values, component=component, mode="time").shape[2] == 864  # 48*18
+        assert get_embeddings(model, past_values, component=component, mode="fft").shape[2] == 864
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 180
+
+        params.update(
+            d_model=8,
+            decoder_d_model=8,
+            patch_register_tokens=8,
+        )
+        model = TSPulseForReconstruction(TSPulseConfig(**params))
+        component = "decoder"
+        assert get_embeddings(model, past_values, component=component, mode="register").shape[2] == 64  # 8*8
