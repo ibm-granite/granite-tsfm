@@ -40,7 +40,11 @@ def example_dataset():
         AnomalyScoreMethods.TIME_IMPUTATION.value,
         AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
         AnomalyScoreMethods.PREDICTIVE.value,
-        f"{AnomalyScoreMethods.TIME_IMPUTATION.value}+{AnomalyScoreMethods.FREQUENCY_IMPUTATION.value}+{AnomalyScoreMethods.PREDICTIVE.value}",
+        [
+            AnomalyScoreMethods.TIME_IMPUTATION.value,
+            AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+            AnomalyScoreMethods.PREDICTIVE.value,
+        ],
     ],
 )
 def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
@@ -71,7 +75,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
         prediction_mode=method,
         timestamp_column="timestamp",
         target_columns=target_variables,
-        aggr_win_size=32,
+        aggregation_length=32,
     )
 
     assert tspipe._preprocess_params["prediction_length"] == 1
@@ -137,7 +141,7 @@ def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset, method):
         quantiles=[0.25, 0.75],
         nonconformity_score=NonconformityScores.ABSOLUTE_ERROR.value,
         method=PostHocProbabilisticMethod.CONFORMAL.value,
-        smoothing_window_size=None,
+        smoothing_length=None,
     )
 
     fpipe = TimeSeriesForecastingPipeline(

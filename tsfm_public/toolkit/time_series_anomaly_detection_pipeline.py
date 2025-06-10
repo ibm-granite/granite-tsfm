@@ -69,10 +69,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self,
         model: PreTrainedModel,
         *args,
-        prediction_mode: str = AnomalyScoreMethods.PREDICTIVE.value,
+        prediction_mode: Union[str, List[str]] = AnomalyScoreMethods.PREDICTIVE.value,
         aggr_function: str = AggregationFunction.MAX.value,
-        aggr_win_size: int = 32,
-        smoothing_window_size: int = 8,
+        aggregation_length: int = 32,
+        smoothing_length: int = 8,
         probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
@@ -82,17 +82,22 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             model (PreTrainedModel): time series foundation model instance
             prediction_mode (str, optional): specify appropriate mode for anomaly scoring. Defaults to AnomalyPredictionModes.PREDICTIVE.value.
             aggr_function (str, optional): aggregation function for merging scores using different mode, supported values are (max/min/mean). Defaults to "max".
-            aggr_win_size (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
-            smoothing_window_size (int, optional): window size for post processing of the generated scores. Defaults to 8.
+            aggregation_length (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
+            smoothing_length (int, optional): window size for post processing of the generated scores. Defaults to 8.
 
         Raises:
             ValueError: unsupported model
             ValueError: invalid prediction_mode
             ValueError: no pytorch support
         """
+        if isinstance(prediction_mode, (list, tuple)):
+            prediction_mode = "+".join([str(mode) for mode in prediction_mode])
+
         model_processor = None
         if isinstance(model, TSPulseForReconstruction):
-            model_processor = TSPulseADUtility(model, mode=prediction_mode, aggr_win_size=aggr_win_size, **kwargs)
+            model_processor = TSPulseADUtility(
+                model, mode=prediction_mode, aggregation_length=aggregation_length, **kwargs
+            )
         elif isinstance(model, TinyTimeMixerForPrediction):
             model_processor = TinyTimeMixerADUtility(
                 model=model, mode=prediction_mode, probabilistic_processor=probabilistic_processor, **kwargs
@@ -106,8 +111,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if "batch_size" not in kwargs:
             kwargs["batch_size"] = 128
 
-        kwargs["aggr_win_size"] = aggr_win_size
-        kwargs["smoothing_window_size"] = smoothing_window_size
+        kwargs["aggregation_length"] = aggregation_length
+        kwargs["smoothing_length"] = smoothing_length
 
         known_mode = model_processor.is_valid_mode(prediction_mode)
         if not known_mode:
@@ -187,8 +192,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         postprocess_params = [
             "timestamp_column",
             "target_columns",
-            "aggr_win_size",
-            "smoothing_window_size",
+            "aggregation_length",
+            "smoothing_length",
             "expand_score",
             "report_mode",
             "predictive_score_smoothing",
@@ -225,7 +230,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "num_workers": num_workers,
         }
 
-        for p in ["mode", "aggr_win_size", "expand_score"]:
+        for p in ["mode", "aggregation_length", "expand_score"]:
             if p in kwargs:
                 forward_kwargs[p] = kwargs[p]
 
@@ -340,9 +345,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         """
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
-        smoothing_window_size = postprocess_parameters.get("smoothing_window_size", 1)
+        smoothing_window_size = postprocess_parameters.get("smoothing_length", 1)
         target_columns = postprocess_parameters.get("target_columns")
-        aggr_win_size = postprocess_parameters.get("aggr_win_size")
 
         report_mode = postprocess_parameters.get("report_mode", False)
         predictive_score_smoothing = postprocess_parameters.get("predictive_score_smoothing", False)
@@ -363,7 +367,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         model_outputs_ = {}
         for k in model_outputs:
             score = model_outputs[k]
-            score = self._model_processor.adjust_boundary(k, score, aggr_win_size=aggr_win_size, **extra_kwargs)
+            score = self._model_processor.adjust_boundary(k, score, **extra_kwargs)
             if not predictive_score_smoothing and (
                 k == AnomalyScoreMethods.PREDICTIVE.value
             ):  # Skip Smoothing For 1 Lookahead forecast

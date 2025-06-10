@@ -26,7 +26,7 @@ class TSPulseADUtility(TSADHelperUtility):
         self,
         model: TSPulseForReconstruction,
         mode: str,
-        aggr_win_size: int,
+        aggregation_length: int,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
         **kwargs,
@@ -36,7 +36,7 @@ class TSPulseADUtility(TSADHelperUtility):
         Args:
             model (TSPulseForReconstruction): model instance.
             mode (str): mode string specifies scoring logic.
-            aggr_win_size (int): parameter for imputation based scoring.
+            aggregation_length (int): parameter for imputation based scoring.
             least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
             least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
 
@@ -51,7 +51,7 @@ class TSPulseADUtility(TSADHelperUtility):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         self._model = model
         self._mode = mode
-        self._aggr_win_size = aggr_win_size
+        self._aggr_win_size = aggregation_length
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
 
