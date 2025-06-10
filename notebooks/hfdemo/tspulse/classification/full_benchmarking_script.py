@@ -4,6 +4,7 @@ import math
 import os
 import tempfile
 import warnings
+from packaging import version
 
 import numpy as np
 import torch
@@ -34,9 +35,15 @@ if torch.__version__ != REQUIRED_TORCH_VERSION:
         f"Torch version mismatch: Please use {REQUIRED_TORCH_VERSION} for reproducibility of classification scores."
     )
 
-if transformers.__version__ != REQUIRED_TRANSFORMERS_VERSION:
+MIN_TRANSFORMERS_VERSION = "4.44.0"
+MAX_TRANSFORMERS_VERSION = "4.50.3"
+
+current_version = transformers.__version__
+
+if not (version.parse(MIN_TRANSFORMERS_VERSION) <= version.parse(current_version) <= version.parse(MAX_TRANSFORMERS_VERSION)):
     raise RuntimeError(
-        f"Transformers version mismatch: Please use {REQUIRED_TRANSFORMERS_VERSION} for reproducibility of classification scores."
+        f"Transformers version mismatch: Please use a version between {MIN_TRANSFORMERS_VERSION} and {MAX_TRANSFORMERS_VERSION} "
+        f"for reproducibility of classification scores. Found version: {current_version}"
     )
 
 OUT_DIR = "tspulse_finetuned_models/"
