@@ -231,19 +231,24 @@ def get_embeddings(
     Returns:
         embeddings (torch.Tensor): Tensor of shape [B, C, D], where D depends on the selected mode.
     """
-    d_model = model.config.d_model
-    num_patches = model.config.num_patches
-    reg_tokens = model.config.patch_register_tokens
-    time_emb_size = fft_emb_size = d_model * num_patches // 2
-    reg_emb_size = reg_tokens * d_model
 
+    num_reg_tokens = model.config.patch_register_tokens
     embeddings = model(past_values, past_observed_mask=past_observed_mask)
     if component == "backbone":
+        d_model = model.config.d_model_layerwise[-1]
+        num_patches = model.config.num_patches_layerwise[-1]
+
         embeddings = embeddings["backbone_hidden_state"]  # [B, C, D]
     elif component == "decoder":
+        d_model = model.config.decoder_d_model_layerwise[-1]
+        num_patches = model.config.decoder_num_patches_layerwise[-1]
+
         embeddings = embeddings["decoder_hidden_state"]  # [B, C, D]
     else:
         raise ValueError(f"Invalid component: {component}. Choose 'backbone' or 'decoder'.")
+
+    time_emb_size = fft_emb_size = (num_patches // 2) * d_model
+    reg_emb_size = num_reg_tokens * d_model
 
     if mode == "time":
         return embeddings[:, :, :time_emb_size]
