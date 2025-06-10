@@ -440,13 +440,13 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
             prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
-            out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
+            out[prediction_columns[-1]] = input[model_output_key][:, :, i].detach().cpu().numpy().tolist()
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if add_known_ground_truth:
             for i, c in enumerate(kwargs["target_columns"]):
-                ground_truth = input["future_values"][:, :, i].numpy()
-                missing = ~input["future_observed_mask"][:, :, i].numpy()
+                ground_truth = input["future_values"][:, :, i].detach().cpu().numpy()
+                missing = ~input["future_observed_mask"][:, :, i].detach().cpu().numpy()
                 ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
