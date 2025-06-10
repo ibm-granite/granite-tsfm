@@ -84,6 +84,12 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             aggr_function (str, optional): aggregation function for merging scores using different mode, supported values are (max/min/mean). Defaults to "max".
             aggregation_length (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
             smoothing_length (int, optional): window size for post processing of the generated scores. Defaults to 8.
+            probabilistic_processor (PostHocProbabilisticProcessor, optional): if prediction mode is "probabilistic", use the probabilistic processor to determine the p-values associated with the forecasts from the underlying model. Defaults to None.
+            expand_score (bool, optional):
+            report_mode (bool, optional):
+            predictive_score_smoothing (bool, optional):
+            least_significant_scale (float):
+            least_significant_score (float):
 
         Raises:
             ValueError: unsupported model
@@ -338,7 +344,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             model_outputs (dict): dictionary containing model outputs.
 
         Raises:
-            RuntimeError: __description__
+            RuntimeError: Returned if there is an inconsistency in the target columns and the resulting scores.
 
         Returns:
             pd.DataFrame: pandas dataframe with anomaly score attached

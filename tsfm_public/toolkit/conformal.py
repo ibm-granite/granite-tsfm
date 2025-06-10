@@ -60,16 +60,11 @@ Post-Hoc Probabilistic Wrapper Classes
 """
 
 
-class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
-    """Entry point for posthoc probabilistic approaches
+class PostHocProbabilisticProcessor(BaseProcessor):
+    """Entry point for posthoc probabilistic approaches for forecasting
 
-    We adopt HF FeatureExtractionMixin to create the processor and support serialization and deserialization
-
-    Currently focusses on the conformal approach
-    To do:
-     - Integrate the Gaussian approach above
-     - Full serialization support
-     - Better output, in dataframe format
+    We adopt HF FeatureExtractionMixin through the BaseProcessor class to create the processor and support
+    serialization and deserialization
 
     """
 
@@ -87,16 +82,23 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         **kwargs,
     ):
         """
-        PostHoc Probabilistic Processor. Turns the point estimates of a multivariate forecast model into probabilistic forecasts (quantile estimate of the target variable)
+        PostHoc Probabilistic Processor. Turns the point estimates of a multivariate forecast model into probabilistic
+        forecasts (quantile estimate of the target variable)
 
         Args:
-            window_size (int, optional): Maximum context window size for considering past residuals. If None (default), all previous provided observations are used.
+            window_size (int, optional): Maximum context window size for considering past residuals. If None
+                (default), all previous provided observations are used.
             quantiles (List[float]): List of target quantiles to compute, with values in the open interval (0, 1).
-            nonconformity_score (str, optional): Name of the nonconformity score to use, as defined in the `NonconformityScores` enum. Applicable only if the method is conformal.
-            method (str): Name of the post-hoc probabilistic method to use, as defined in the `PostHocProbabilisticMethod` enum.
-            weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum. Only applicable if method = "conformal".
-            weighting_params (dict): Parameters for the selected weighting strategy, if applicable. Only applicable if method = "conformal".
-            threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum. Only applicable if method = "conformal".
+            nonconformity_score (str, optional): Name of the nonconformity score to use, as defined in the
+                `NonconformityScores` enum. Applicable only if the method is conformal.
+            method (str): Name of the post-hoc probabilistic method to use, as defined in the
+                `PostHocProbabilisticMethod` enum.
+            weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum. Only
+                applicable if method = "conformal".
+            weighting_params (dict): Parameters for the selected weighting strategy, if applicable. Only applicable
+                if method = "conformal".
+            threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum.
+                Only applicable if method = "conformal".
         """
 
         self.window_size = window_size
@@ -119,8 +121,6 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
         ]:
             raise ValueError(f"Provided nonconformity_score {self.nonconformity_score } is not valid.")
 
-        # WMG
-        # check that these are the right parameters
         self.model = kwargs.pop("model", None)
         if self.model is None:
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
@@ -392,8 +392,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
                 else:
                     return outliers_scores
 
-    def forecast_horizon_aggregation(self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"):
-        # print('AGGREGATION!!')
+    def forecast_horizon_aggregation(
+        self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"
+    ) -> np.ndarray:
         if isinstance(aggregation, int):
             return outliers_scores[:, aggregation, :]
 
@@ -404,13 +405,11 @@ class PostHocProbabilisticProcessor(BaseProcessor):  # this is forecast specific
             aligned = np.full(
                 (N, H, F), np.nan
             )  # nan for padding initial items for which we have less than horizon H predictions.
-            # print('outliers_scores',outliers_scores[0:10,...])
             for h in range(H):
                 # shift each row of forecast horizon h by h steps into the future.
                 aligned[h:N, h, :] = outliers_scores[
                     : N - h, h, :
                 ]  # item i should have a values for [i,j,:] for j \in [0, min(i,H)]
-            # print('aligned',aligned[0:10,...])
             # aggregation but ignore nans
             if aggregation == "mean":
                 return np.nanmean(aligned, axis=1)

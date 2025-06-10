@@ -24,11 +24,6 @@ class AnomalyScoreMethods(Enum):
     TIME_IMPUTATION = "time"
     FREQUENCY_IMPUTATION = "fft"
     PROBABILISTIC = "probabilistic"
-    # TIME_AND_FREQUENCY_IMPUTATION = "time+fft"
-    # PREDICTIVE_WITH_TIME_IMPUTATION = "forecast+time"
-    # PREDICTIVE_WITH_FREQUENCY_IMPUTATION = "forecast+fft"
-    # PREDICTIVE_WITH_IMPUTATION = "forecast+time+fft"
-
 
 class TSADHelperUtility:
     """Abstract class for Anomaly detection pipeline.
