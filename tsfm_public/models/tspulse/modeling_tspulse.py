@@ -84,7 +84,7 @@ class TSPulseGatedAttention(nn.Module):
             self.attn_activation_layer = nn.Sigmoid()
 
     def _init_identity_weights(self):
-        print("Try identity init in Gated Attention.")
+        logging.info("Try identity init in Gated Attention.")
         nn.init.zeros_(self.attn_layer.weight)  # Zero weights to start with no influence
         nn.init.constant_(self.attn_layer.bias, 0)  # Bias to zero for neutral effect
 
@@ -293,7 +293,7 @@ class TSPulseChannelFeatureMixerBlock(nn.Module):
             )
 
     def _init_identity_weights(self):
-        print("Init identity weights for channel mixing")
+        logging.info("Init identity weights for channel mixing")
         # recursive_init_identity_modules(self)
         self.mlp._init_identity_weights()
         if self.config.gated_attn:
@@ -854,7 +854,7 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
         elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
-            print("Identity Init in Module: ", module.__class__.__name__)
+            logging.info("Identity Init in Module: ", module.__class__.__name__)
             module._init_identity_weights()
 
         elif isinstance(module, TSPulseBatchNorm):
@@ -867,7 +867,7 @@ class TSPulsePreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)  # Zero initialization for biases
 
         elif isinstance(module, nn.Linear):
-            print(f"Initializing Linear layers with method: {self.config.init_linear}")
+            logging.info(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
                 module.weight.data.normal_(mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
@@ -883,7 +883,7 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             else:
                 module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            print(f"Initializing Embedding layers with method: {self.config.init_embed}")
+            logging.info(f"Initializing Embedding layers with method: {self.config.init_embed}")
             if self.config.init_embed == "normal":
                 nn.init.normal_(module.weight)
             elif self.config.init_embed == "uniform":
