@@ -24,7 +24,7 @@ datasets
 Create a seperate conda environment having the `specific versions` of the `torch` and `transformers` libraries as mentioned in the `../tspulse_repro_requirements.txt`.
 
 ```bash
-conda create --name tspulse_classification python=3.12
+conda create --name tspulse_classification python=3.11.0
 conda activate tspulse_classification
 
 pip install git+https://github.com/ibm-granite/granite-tsfm.git@v0.2.28
