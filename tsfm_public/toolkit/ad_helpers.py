@@ -25,6 +25,7 @@ class AnomalyScoreMethods(Enum):
     FREQUENCY_IMPUTATION = "fft"
     PROBABILISTIC = "probabilistic"
 
+
 class TSADHelperUtility:
     """Abstract class for Anomaly detection pipeline.
     Model specific implementation. Implements three API calls required for integration to Anomaly Detection Pipeline.
