@@ -4,11 +4,11 @@ import math
 import os
 import tempfile
 import warnings
-from packaging import version
 
 import numpy as np
 import torch
 import transformers
+from packaging import version
 from sklearn.model_selection import StratifiedKFold
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
@@ -40,7 +40,11 @@ MAX_TRANSFORMERS_VERSION = "4.50.3"
 
 current_version = transformers.__version__
 
-if not (version.parse(MIN_TRANSFORMERS_VERSION) <= version.parse(current_version) <= version.parse(MAX_TRANSFORMERS_VERSION)):
+if not (
+    version.parse(MIN_TRANSFORMERS_VERSION)
+    <= version.parse(current_version)
+    <= version.parse(MAX_TRANSFORMERS_VERSION)
+):
     raise RuntimeError(
         f"Transformers version mismatch: Please use a version between {MIN_TRANSFORMERS_VERSION} and {MAX_TRANSFORMERS_VERSION} "
         f"for reproducibility of classification scores. Found version: {current_version}"
