@@ -85,11 +85,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             aggregation_length (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
             smoothing_length (int, optional): window size for post processing of the generated scores. Defaults to 8.
             probabilistic_processor (PostHocProbabilisticProcessor, optional): if prediction mode is "probabilistic", use the probabilistic processor to determine the p-values associated with the forecasts from the underlying model. Defaults to None.
-            expand_score (bool, optional):
-            report_mode (bool, optional):
-            predictive_score_smoothing (bool, optional):
-            least_significant_scale (float):
-            least_significant_score (float):
+            expand_score (bool, optional): if true report anomaly score for each target column separately. Defaults to False.
+            report_mode (bool, optional): if true reports which prediction mode is detects higher anomaly score for each observation. Defaults to False.
+            predictive_score_smoothing (bool, optional): if true smoothing is applied to the forecast score. Defaults to False.
+            least_significant_scale (float, optional): value between (0, 1). Model scores are function of data variance, this factor specifies a relative score threshold to data variance for marking anomaly. Defaults to 0.01.
+            least_significant_score (float, optional): minimum score for marking anomaly. Defaults to 0.2.
 
         Raises:
             ValueError: unsupported model
@@ -155,7 +155,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             select_function_ = np.argmax
         else:
             raise ValueError(
-                f"Unsupported aggregation function provided {aggr_function_}, expected one of {[c.value for c in AggregationFunction]}"
+                f"Unsupported aggregation function provided {aggr_function}, expected one of {[c.value for c in AggregationFunction]}"
             )
         self.aggr_function = aggr_function_
         self.select_function = select_function_

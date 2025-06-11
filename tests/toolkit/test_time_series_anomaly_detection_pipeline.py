@@ -90,6 +90,15 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
     for tgt in target_variables:
         assert f"{tgt}_anomaly_score" in result
 
+    result = tspipe(dataset, report_mode=True)
+    assert result.shape[0] == dataset.shape[0]
+    assert "selected_mode" in result
+
+    result = tspipe(dataset, expand_score=True, report_mode=True)
+    assert result.shape[0] == dataset.shape[0]
+    for tgt in target_variables:
+        assert f"{tgt}_selected_mode" in result
+
 
 @pytest.mark.parametrize(
     "method",
