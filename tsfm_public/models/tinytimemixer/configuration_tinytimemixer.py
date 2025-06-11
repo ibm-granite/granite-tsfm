@@ -216,6 +216,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         huber_delta: float = 1,
         # masked prediction,
         mask_value: int = 0,
+        differencing: bool = False,
+        diff_init_strategy: str = "learnable",
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -245,6 +247,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.norm_eps = norm_eps
 
         self.use_decoder = use_decoder
+
+        self.differencing = differencing
 
         self.adaptive_patching_levels = adaptive_patching_levels
         self.resolution_prefix_tuning = resolution_prefix_tuning
@@ -282,19 +286,34 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
         if not hasattr(self, "num_patches"):
             context_length = (
-                self.masked_context_length if self.masked_context_length is not None else self.context_length
+                self.masked_context_length
+                if self.masked_context_length is not None
+                else self.context_length
             )
-            self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+
+            if self.differencing:
+                context_length = context_length - 1
+
+            self.num_patches = (
+                max(context_length, self.patch_length) - self.patch_length
+            ) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
 
         if self.prediction_filter_length is not None:
-            if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
-                raise ValueError("prediction_filter_length should be positive and less than prediction_length")
+            if (
+                self.prediction_filter_length > self.prediction_length
+                or self.prediction_filter_length <= 0
+            ):
+                raise ValueError(
+                    "prediction_filter_length should be positive and less than prediction_length"
+                )
 
         if self.loss == "nll" and self.enable_forecast_channel_mixing:
-            raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
+            raise ValueError(
+                "Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True"
+            )
 
         if self.prediction_channel_indices is not None:
             self.prediction_channel_indices.sort()
@@ -302,8 +321,12 @@ class TinyTimeMixerConfig(PretrainedConfig):
         if self.exogenous_channel_indices is not None:
             self.exogenous_channel_indices.sort()
 
-        if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
+        if (
+            self.exogenous_channel_indices is not None
+            and self.prediction_channel_indices is None
+        ):
             self.prediction_channel_indices = list(
-                set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
+                set(range(self.num_input_channels))
+                - set(self.exogenous_channel_indices)
             )
             self.prediction_channel_indices.sort()

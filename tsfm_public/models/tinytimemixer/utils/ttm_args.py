@@ -72,8 +72,12 @@ def get_ttm_args():  # pragma: no cover
         default=None,
         help="Number of GPUs",
     )
-    parser.add_argument("--random_seed", "-rs", type=int, required=False, default=42, help="Random seed")
-    parser.add_argument("--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size")
+    parser.add_argument(
+        "--random_seed", "-rs", type=int, required=False, default=42, help="Random seed"
+    )
+    parser.add_argument(
+        "--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size"
+    )
     parser.add_argument(
         "--num_epochs",
         "-ne",
@@ -138,6 +142,14 @@ def get_ttm_args():  # pragma: no cover
         required=False,
         default=1,
         help="Whether to freeze the backbone during few-shot finetuning.",
+    )
+    parser.add_argument(
+        "--differencing",
+        "-diff",
+        type=int,
+        required=False,
+        default=0,
+        help="Whether to enable differencing layer or not",
     )
     parser.add_argument(
         "--enable_prefix_tuning",
