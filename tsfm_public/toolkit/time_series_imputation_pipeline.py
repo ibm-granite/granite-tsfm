@@ -6,6 +6,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Union
 
 import pandas as pd
+import numpy as np
 import torch
 from transformers import PreTrainedModel
 from transformers.pipelines.base import (
@@ -252,20 +253,31 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         result is one row per ID).
         """
 
-        out = self.__context_memory["data"].copy()
-
-        prediction_columns = []
+        out = self.__context_memory["data"].copy() # original dataframe
         # input is a list of tensors: bs x context_length x features
         input = torch.cat(input, axis=0).detach().cpu().numpy()
-        for i, c in enumerate(kwargs["target_columns"]):
-            prediction_columns.append(f"{c}_imputed")
-            out[prediction_columns[-1]] = [input[j, 0, i] for j in range(input.shape[0] - 1)] + input[
-                -1, :, i
-            ].tolist()
+
+        # stitching logic
+        n_batches = input.shape[0]
+        n_obs = input.shape[1]
+        total_length = n_batches + n_obs - 1
+        data_dim = (total_length, input.shape[2]) if input.ndim == 3 else total_length
+        counters = np.zeros(data_dim)
+        predictions = np.zeros(data_dim)
+        for i in range(n_batches):
+            predictions[i : (i + n_obs)] += input[i]
+            counters[i : (i + n_obs)] += 1
+        reconstructed_out = (predictions / np.maximum(counters, 1))  # this output is all reconstructions from the model
+
+        # need to select original values for non-missing points and use the reconstructed values only for missing points
+        reconstructed_df = pd.DataFrame(reconstructed_out, columns=out.columns[1:]) 
+        reconstructed_df.insert(0, out.columns[0], out.iloc[:, 0])
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out, suffix="_imputed")
+            reconstructed_df = self.feature_extractor.inverse_scale_targets(reconstructed_df)
+
+        out = out.where(~out.isna(), reconstructed_df)
 
         self.__context_memory = {}
         return out
