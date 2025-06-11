@@ -530,8 +530,54 @@ def test_forecast_horizon_aggregation():
             np.mean(np.abs(outliers_aggregated - expected_aggregation[aggregation])) == 0
         ), f"Expected forecast_horizon_aggregation for aggregation {aggregation} did not match the expected values"
 
+    ### Test 3
+    window_size = 20
+    quantiles = [0.1]
+    p = PostHocProbabilisticProcessor(
+        window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+    )
 
-# if __name__ == "__main__":
-#     # test_posthoc_probabilistic_processor_outlier_score()
-#     # test_adaptive_conformal_wrapper()
-#     test_forecast_horizon_aggregation()
+    y_cal_gt = np.linspace(0, 2, 21)[1:-1] - 1
+    y_cal_gt = y_cal_gt[:, np.newaxis, np.newaxis] * np.ones([1, 3, 4])
+    y_cal_pred = np.zeros_like(y_cal_gt)
+
+    ### 2. Fit
+    p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)
+
+    # N = 0 shouldn't be an outlier
+    # N=1 should be an outlier if considering h=1, but not h=0
+    # N=2 shouldn't be an outlier
+    # N=3 should be an outlier if considering h=2, but not h=1 or h=0
+
+    y_test_gt = np.array(
+        [
+            [0.7, 0.9, 0.8],  # not an outlier
+            [0.5, 0.7, 0.9],  # outlier for h=1 and h=2 (cause no pred of h=2 is available so using h=1)
+            [0.5, 0.7, 0.9],  # No outlier
+            [0.5, 1.0, 1.0],
+        ]
+    )[..., np.newaxis] * np.ones([1, 1, 4])  # outlier for h=2
+    y_test_pred = np.zeros_like(y_test_gt)
+    significance = 0.1
+
+    outlier_gt = {}
+    outlier_gt[0] = 0
+    outlier_gt[1] = 1 * y_test_gt.shape[-1]
+    outlier_gt[2] = 2 * y_test_gt.shape[-1]
+    outlier_gt["max"] = 0
+    outlier_gt["min"] = 2 * y_test_gt.shape[-1]
+
+    ### Outliers count
+    for aggregation in outlier_gt.keys():
+        output_outlier = p.outlier_score(
+            y_pred=y_test_pred, y_gt=y_test_gt, significance=significance, aggregation=aggregation
+        )
+        assert (
+            np.sum(output_outlier[..., 1]) == outlier_gt[aggregation]
+        ), f"Number of outliers for aggregation {aggregation} did not match the expected values"
+
+
+if __name__ == "__main__":
+    # test_posthoc_probabilistic_processor_outlier_score()
+    # test_adaptive_conformal_wrapper()
+    test_forecast_horizon_aggregation()
