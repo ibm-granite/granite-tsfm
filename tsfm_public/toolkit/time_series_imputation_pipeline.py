@@ -5,8 +5,8 @@
 from collections import OrderedDict
 from typing import Any, Dict, List, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import torch
 from transformers import PreTrainedModel
 from transformers.pipelines.base import (
@@ -253,7 +253,7 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         result is one row per ID).
         """
 
-        out = self.__context_memory["data"].copy() # original dataframe
+        out = self.__context_memory["data"].copy()  # original dataframe
         # input is a list of tensors: bs x context_length x features
         input = torch.cat(input, axis=0).detach().cpu().numpy()
 
@@ -267,10 +267,10 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         for i in range(n_batches):
             predictions[i : (i + n_obs)] += input[i]
             counters[i : (i + n_obs)] += 1
-        reconstructed_out = (predictions / np.maximum(counters, 1))  # this output is all reconstructions from the model
+        reconstructed_out = predictions / np.maximum(counters, 1)  # this output is all reconstructions from the model
 
         # need to select original values for non-missing points and use the reconstructed values only for missing points
-        reconstructed_df = pd.DataFrame(reconstructed_out, columns=out.columns[1:]) 
+        reconstructed_df = pd.DataFrame(reconstructed_out, columns=out.columns[1:])
         reconstructed_df.insert(0, out.columns[0], out.iloc[:, 0])
 
         # inverse scale if we have a feature extractor
