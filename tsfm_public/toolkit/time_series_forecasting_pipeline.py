@@ -153,8 +153,10 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
 
-        if ("feature_extractor" not in kwargs) and "freq" in kwargs:
-            raise ValueError("Passing `freq` without a `feature_extractor` is not supported")
+        if use_frequency_token and ("feature_extractor" not in kwargs) and "freq" in kwargs:
+            raise ValueError(
+                "Passing `freq` without a `feature_extractor` is not supported when the model requires a `frequency_token`."
+            )
 
         if use_frequency_token:
             if "feature_extractor" in kwargs:
