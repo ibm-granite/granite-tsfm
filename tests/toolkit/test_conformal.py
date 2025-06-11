@@ -469,6 +469,63 @@ def test_adaptive_conformal_wrapper():
     ), f"Expected weights sum >= {error_scores_cal.shape[0]}, got {TSAD_class.weights_parameters.sum().item()}"
 
 
+def test_forecast_horizon_aggregation():
+    nonconformity_score = NonconformityScores.ABSOLUTE_ERROR.value
+    method = PostHocProbabilisticMethod.CONFORMAL.value
+    window_size = 100
+    quantiles = [0.5]
+    p = PostHocProbabilisticProcessor(
+        window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+    )
+    ### Test 2
+    outliers_scores_p = np.array([[0.1, 0.01, 0.001], [0.1, 0.01, 0.005], [0.1, 0.05, 0.0001], [0.5, 0.01, 0.0001]])[
+        :, :, np.newaxis
+    ]  # feature 0
+    outliers_scores_ix = np.array([[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]])[:, :, np.newaxis]  # feature 1
+    outliers_scores = np.concatenate([outliers_scores_p, outliers_scores_ix], axis=-1)
+
+    expected_aggregation_ix = np.array([[1], [2], [3], [4]])
+    expected_aggregation = {}
+    expected_aggregation["min"] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.001], [0.005]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation["max"] = np.concatenate(
+        [np.array([[0.1], [0.1], [0.1], [0.5]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation["median"] = np.concatenate(
+        [
+            np.array(
+                [[0.1], [np.median([0.1, 0.01])], [np.median([0.1, 0.01, 0.001])], [np.median([0.5, 0.05, 0.005])]]
+            ),
+            expected_aggregation_ix,
+        ],
+        axis=-1,
+    )
+    expected_aggregation["mean"] = np.concatenate(
+        [
+            np.array([[0.1], [np.mean([0.1, 0.01])], [np.mean([0.1, 0.01, 0.001])], [np.mean([0.5, 0.05, 0.005])]]),
+            expected_aggregation_ix,
+        ],
+        axis=-1,
+    )
+    expected_aggregation[0] = np.concatenate(
+        [np.array([[0.1], [0.1], [0.1], [0.5]]), expected_aggregation_ix], axis=-1
+    )
+    for aggregation in ["min", "mean", "max", "median", 0]:
+        outliers_aggregated = p.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
+        # print(aggregation)
+        # print(outliers_aggregated)
+        # print(expected_aggregation[aggregation])
+        # print()
+        assert (
+            outliers_aggregated.shape == (outliers_scores.shape[0], outliers_scores.shape[-1])
+        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0],outliers_scores.shape[-1])}"
+        assert (
+            np.mean(np.abs(outliers_aggregated - expected_aggregation[aggregation])) == 0
+        ), f"Expected forecast_horizon_aggregation for aggregation {aggregation} did not match the expected values"
+
+
 # if __name__ == "__main__":
 # test_posthoc_probabilistic_processor_outlier_score()
 # test_adaptive_conformal_wrapper()
+# test_forecast_horizon_aggregation()
