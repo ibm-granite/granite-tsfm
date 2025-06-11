@@ -511,7 +511,13 @@ def test_forecast_horizon_aggregation():
     expected_aggregation[0] = np.concatenate(
         [np.array([[0.1], [0.1], [0.1], [0.5]]), expected_aggregation_ix], axis=-1
     )
-    for aggregation in ["min", "mean", "max", "median", 0]:
+    expected_aggregation[1] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.01], [0.05]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation[2] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.001], [0.005]]), expected_aggregation_ix], axis=-1
+    )
+    for aggregation in ["min", "mean", "max", "median", 0, 1, 2]:
         outliers_aggregated = p.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
         # print(aggregation)
         # print(outliers_aggregated)
@@ -526,6 +532,6 @@ def test_forecast_horizon_aggregation():
 
 
 # if __name__ == "__main__":
-# test_posthoc_probabilistic_processor_outlier_score()
-# test_adaptive_conformal_wrapper()
-# test_forecast_horizon_aggregation()
+#     # test_posthoc_probabilistic_processor_outlier_score()
+#     # test_adaptive_conformal_wrapper()
+#     test_forecast_horizon_aggregation()

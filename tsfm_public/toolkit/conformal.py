@@ -398,21 +398,24 @@ class PostHocProbabilisticProcessor(BaseProcessor):
     def forecast_horizon_aggregation(
         self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"
     ) -> np.ndarray:
-        if isinstance(aggregation, int):
-            return outliers_scores[:, aggregation, :]
+        N, H, F = outliers_scores.shape
+        # we want to align predictions/forecasts for each timestamp (observation)
+        aligned = np.full(
+            (N, H, F), np.nan
+        )  # nan for padding initial items for which we have less than horizon H predictions.
+        for h in range(H):
+            # shift each row of forecast horizon h by h steps into the future.
+            aligned[h:N, h, :] = outliers_scores[
+                : N - h, h, :
+            ]  # item i should have a values for [i,j,:] for j \in [0, min(i,H)]
+
+        if isinstance(aggregation, int):  ## choose a particular forecast horizon score
+            out = aligned[:, aggregation, :]
+            for h in range(aggregation + 1):  # aligned in an upper triangular NaNs matrix
+                out[h, :] = aligned[h, h, :]
+            return out
 
         elif isinstance(aggregation, str):
-            N, H, F = outliers_scores.shape
-
-            # we want to align predictions/forecasts for each timestamp (observation)
-            aligned = np.full(
-                (N, H, F), np.nan
-            )  # nan for padding initial items for which we have less than horizon H predictions.
-            for h in range(H):
-                # shift each row of forecast horizon h by h steps into the future.
-                aligned[h:N, h, :] = outliers_scores[
-                    : N - h, h, :
-                ]  # item i should have a values for [i,j,:] for j \in [0, min(i,H)]
             # aggregation but ignore nans
             if aggregation == "mean":
                 return np.nanmean(aligned, axis=1)
