@@ -174,6 +174,30 @@ def test_zero_shot_forecast_inference(ts_data):
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
     assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
 
+    # test different prediction length
+
+    test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
+
+    msg = {
+        "model_id": model_id_path,
+        "parameters": {
+            "prediction_length": params["prediction_length"] // 2,
+        },
+        "schema": {
+            "timestamp_column": params["timestamp_column"],
+            "id_columns": params["id_columns"],
+            "target_columns": params["target_columns"],
+        },
+        "data": encode_data(test_data_, params["timestamp_column"]),
+        "future_data": {},
+    }
+
+    df_out, counts = get_inference_response(msg)
+    assert len(df_out) == 1
+    assert df_out[0].shape[0] == prediction_length // 2
+    assert counts["input_data_points"] == context_length * len(params["target_columns"])
+    assert counts["output_data_points"] == (prediction_length // 2) * len(params["target_columns"])
+
     # test single, very short (length 2)
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
 
