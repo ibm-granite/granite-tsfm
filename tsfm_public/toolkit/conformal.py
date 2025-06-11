@@ -95,8 +95,11 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 `PostHocProbabilisticMethod` enum.
             weighting (str): Strategy for weighting nonconformity scores, as defined in the `Weighting` enum. Only
                 applicable if method = "conformal".
-            weighting_params (dict): Parameters for the selected weighting strategy, if applicable. Only applicable
+            weighting_params (dict,optional): Parameters for the selected weighting strategy, if applicable. Only applicable
                 if method = "conformal".
+                Supported keys include:
+                - 'optimization' (str, optional): Past nonconformity score weighting optimization method, as defined in the 'WeightingOptimization' enum.
+                - 'decay_param' (float, optional): Exponential decay factor used when 'optimization' is set to 'exponential_decay'.
             threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum.
                 Only applicable if method = "conformal".
         """
@@ -423,28 +426,6 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 raise ValueError(f"Unsupported aggregation method: {aggregation}")
         else:
             raise TypeError("aggregation must be either an int or a supported aggregation string")
-
-            # N, H, F = outliers_scores.shape
-            # aligned = []
-
-            # for t in range(N - H + 1):
-            #     # collect diagona meaning that first item is outliers_scores[0,H-1,:], outliers_scores[1,H-1 - 1,:],..., outliers_scores[H-1,0,:]
-            #     # then aligned_slice[i] = \{outliers_scores[i + h,H-1 - h,:] \}^{H-1}_{h=0} with i=0 to N - H + 1
-            #     aligned_slice = np.array([outliers_scores[t + h, H - 1 - h, :] for h in range(H)])
-            #     aligned.append(aligned_slice)
-
-            # aligned = np.stack(aligned, axis=0)  # Shape: (N - H + 1, H, F)
-
-            # if aggregation == 'mean':
-            #     return aligned.mean(axis=1)
-            # elif aggregation == 'median':
-            #     return np.median(aligned, axis=1)
-            # elif aggregation == 'max':
-            #     return aligned.max(axis=1)
-            # elif aggregation == 'min':
-            #     return aligned.min(axis=1)
-            # else:
-            #     raise TypeError("aggregation must be either an int or a supported aggregation string")
 
 
 def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
@@ -1568,9 +1549,15 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         Args:
             window_size (int, optional): Maximum number of past nonconformity scores to consider for calibration.
-            false_alarm (float): Desired false alarm (error) rate for the prediction intervals.
-            weighting (str): Weighting strategy for the nonconformity scores, as defined in the `Weighting` enum.
-            weighting_params (dict): Dictionary of parameters for the weighting method, if applicable.
+            false_alarm (float, optional): Desired false alarm (error) rate for the prediction intervals.
+            weighting (str, optional): Weighting strategy for the nonconformity scores, as defined in the `Weighting` enum.
+            weighting_params (dict, optional): Dictionary of parameters for the weighting method, if applicable.
+                Supported keys include:
+                - 'lr' (float, optional): Learning rate for weight optimization.
+                - 'n_batch_update' (int, optional): Number of consecutive observations used to compute the empirical CDF for the Wasserstein-1 distance loss.
+                - 'stride' (int, optional): Number of new observations between successive optimization updates.
+                - 'epochs' (int, optional): Number of optimization steps performed on the same data batch.
+                - 'conformal_weights_update' (bool, optional): Whether to include conformal correction when computing the Wasserstein-1 distance loss for optimization. (Recommended: False for most use cases.)
         """
 
         self.weighting = weighting
@@ -1598,7 +1585,7 @@ class AdaptiveWeightedConformalScoreWrapper:
         if "epochs" not in self.weighting_params.keys():
             self.weighting_params["epochs"] = int(1)
         if "conformal_weights_update" not in self.weighting_params.keys():
-            self.weighting_params["conformal_weights_update"] = True
+            self.weighting_params["conformal_weights_update"] = False
 
         self.weights_average = None
         self.weights_average_count = 0
@@ -1911,26 +1898,17 @@ def euclidean_proj_simplex_torch(vector: torch.Tensor, radius: int = 1) -> torch
     http://www.cs.berkeley.edu/~jduchi/projects/DuchiSiShCh08.pdf
     """
     assert radius > 0, "radius parameter must be strictly positive"
-    n = vector.shape[0]  # Ensure 1D tensor
-
-    # Check if we are already on the simplex
+    n = vector.shape[0]
+    # Check if vector is on the simplex
     if torch.isclose(vector.sum(), torch.tensor(radius)) and torch.all(vector >= 0):
         return vector
-
-    # Sort v in decreasing order
-    v_sorted, _ = torch.sort(vector, descending=True)
+    v_sorted, _ = torch.sort(vector, descending=True)  # Sort vector in decreasing order
     cum_vector = torch.cumsum(v_sorted, dim=0)
-
-    # Find rho
     rho = torch.nonzero(
         v_sorted * torch.arange(1, n + 1, dtype=vector.dtype, device=vector.device) > (cum_vector - radius)
-    )[-1]
-
-    # Compute theta
-    theta = (cum_vector[rho] - radius) / (rho + 1)
-
-    # Compute projection
-    w = torch.clamp(vector - theta, min=0)
+    )[-1]  # Find rho
+    theta = (cum_vector[rho] - radius) / (rho + 1)  # Compute theta
+    w = torch.clamp(vector - theta, min=0)  # Compute projection
     return w
 
 
