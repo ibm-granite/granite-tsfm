@@ -104,12 +104,8 @@ def test_imputation_pipeline_outputs_for_original_values(tspulse_model, etth_mis
 
     test_imputed = pipe(test_data)
 
-    imputed_columns = []
-    for c in params["target_columns"]:
-        imputed_columns.append(f"{c}_imputed")
-
     for col in params["target_columns"]:
         imp_col = f"{col}_imputed"
 
-        mask = test_imputed[col].notna()
-        assert (test_imputed.loc[mask, col] == test_imputed.loc[mask, imp_col]).all()
+        non_missing_loc = test_imputed[col].notna()
+        assert (test_imputed.loc[non_missing_loc, col] == test_imputed.loc[non_missing_loc, imp_col]).all()
