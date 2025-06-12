@@ -44,7 +44,13 @@ class TSPulseADUtility(TSADHelperUtility):
             ValueError: unsupported scoring mode
         """
         if mode is None:
-            mode = "forecast+fft+time"
+            mode = "+".join(
+                [
+                    AnomalyScoreMethods.PREDICTIVE.value,
+                    AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+                    AnomalyScoreMethods.TIME_IMPUTATION.value,
+                ]
+            )
 
         super(TSPulseADUtility, self).__init__()
         if not self.is_valid_mode(mode):
@@ -101,6 +107,8 @@ class TSPulseADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
+        if isinstance(mode, (list, tuple)):
+            mode = "+".join(mode)
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_fft = AnomalyScoreMethods.FREQUENCY_IMPUTATION.value in mode
         use_ts = AnomalyScoreMethods.TIME_IMPUTATION.value in mode

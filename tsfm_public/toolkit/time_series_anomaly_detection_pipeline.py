@@ -69,7 +69,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self,
         model: PreTrainedModel,
         *args,
-        prediction_mode: Union[str, List[str]] = AnomalyScoreMethods.PREDICTIVE.value,
+        prediction_mode: Optional[List[str]] = None,
         aggr_function: str = AggregationFunction.MAX.value,
         aggregation_length: int = 32,
         smoothing_length: int = 8,
@@ -96,6 +96,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             ValueError: invalid prediction_mode
             ValueError: no pytorch support
         """
+        if prediction_mode is None:
+            prediction_mode = [AnomalyScoreMethods.PREDICTIVE.value]
+
         if isinstance(prediction_mode, (list, tuple)):
             prediction_mode = "+".join([str(mode) for mode in prediction_mode])
 

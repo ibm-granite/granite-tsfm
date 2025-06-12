@@ -81,6 +81,8 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
+        if isinstance(mode, (list, tuple)):
+            mode = "+".join(mode)
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_meandev = AnomalyScoreMethods.MEAN_DEVIATION.value in mode
         use_probabilistic = AnomalyScoreMethods.PROBABILISTIC.value in mode
