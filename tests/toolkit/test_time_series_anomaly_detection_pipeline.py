@@ -37,12 +37,12 @@ def example_dataset():
 @pytest.mark.parametrize(
     "method",
     [
-        AnomalyScoreMethods.TIME_IMPUTATION.value,
-        AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+        AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
+        AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
         AnomalyScoreMethods.PREDICTIVE.value,
         [
-            AnomalyScoreMethods.TIME_IMPUTATION.value,
-            AnomalyScoreMethods.FREQUENCY_IMPUTATION.value,
+            AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
+            AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
             AnomalyScoreMethods.PREDICTIVE.value,
         ],
     ],

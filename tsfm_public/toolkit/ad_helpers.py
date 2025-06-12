@@ -21,8 +21,8 @@ class AnomalyScoreMethods(Enum):
 
     MEAN_DEVIATION = "meandev"
     PREDICTIVE = "forecast"
-    TIME_IMPUTATION = "time"
-    FREQUENCY_IMPUTATION = "fft"
+    TIME_RECONSTRUCTION = "time"
+    FREQUENCY_RECONSTRUCTION = "fft"
     PROBABILISTIC = "probabilistic"
 
 
