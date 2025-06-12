@@ -469,6 +469,115 @@ def test_adaptive_conformal_wrapper():
     ), f"Expected weights sum >= {error_scores_cal.shape[0]}, got {TSAD_class.weights_parameters.sum().item()}"
 
 
-# if __name__ == "__main__":
-# test_posthoc_probabilistic_processor_outlier_score()
-# test_adaptive_conformal_wrapper()
+def test_forecast_horizon_aggregation():
+    nonconformity_score = NonconformityScores.ABSOLUTE_ERROR.value
+    method = PostHocProbabilisticMethod.CONFORMAL.value
+    window_size = 100
+    quantiles = [0.5]
+    p = PostHocProbabilisticProcessor(
+        window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+    )
+    ### Test 2
+    outliers_scores_p = np.array([[0.1, 0.01, 0.001], [0.1, 0.01, 0.005], [0.1, 0.05, 0.0001], [0.5, 0.01, 0.0001]])[
+        :, :, np.newaxis
+    ]  # feature 0
+    outliers_scores_ix = np.array([[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]])[:, :, np.newaxis]  # feature 1
+    outliers_scores = np.concatenate([outliers_scores_p, outliers_scores_ix], axis=-1)
+
+    expected_aggregation_ix = np.array([[1], [2], [3], [4]])
+    expected_aggregation = {}
+    expected_aggregation["min"] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.001], [0.005]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation["max"] = np.concatenate(
+        [np.array([[0.1], [0.1], [0.1], [0.5]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation["median"] = np.concatenate(
+        [
+            np.array(
+                [[0.1], [np.median([0.1, 0.01])], [np.median([0.1, 0.01, 0.001])], [np.median([0.5, 0.05, 0.005])]]
+            ),
+            expected_aggregation_ix,
+        ],
+        axis=-1,
+    )
+    expected_aggregation["mean"] = np.concatenate(
+        [
+            np.array([[0.1], [np.mean([0.1, 0.01])], [np.mean([0.1, 0.01, 0.001])], [np.mean([0.5, 0.05, 0.005])]]),
+            expected_aggregation_ix,
+        ],
+        axis=-1,
+    )
+    expected_aggregation[0] = np.concatenate(
+        [np.array([[0.1], [0.1], [0.1], [0.5]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation[1] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.01], [0.05]]), expected_aggregation_ix], axis=-1
+    )
+    expected_aggregation[2] = np.concatenate(
+        [np.array([[0.1], [0.01], [0.001], [0.005]]), expected_aggregation_ix], axis=-1
+    )
+    for aggregation in ["min", "mean", "max", "median", 0, 1, 2]:
+        outliers_aggregated = p.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
+        # print(aggregation)
+        # print(outliers_aggregated)
+        # print(expected_aggregation[aggregation])
+        # print()
+        assert (
+            outliers_aggregated.shape == (outliers_scores.shape[0], outliers_scores.shape[-1])
+        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0],outliers_scores.shape[-1])}"
+        assert (
+            np.mean(np.abs(outliers_aggregated - expected_aggregation[aggregation])) == 0
+        ), f"Expected forecast_horizon_aggregation for aggregation {aggregation} did not match the expected values"
+
+    ### Test 3
+    window_size = 20
+    quantiles = [0.1]
+    p = PostHocProbabilisticProcessor(
+        window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+    )
+
+    y_cal_gt = np.linspace(0, 2, 21)[1:-1] - 1
+    y_cal_gt = y_cal_gt[:, np.newaxis, np.newaxis] * np.ones([1, 3, 4])
+    y_cal_pred = np.zeros_like(y_cal_gt)
+
+    ### 2. Fit
+    p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)
+
+    # N = 0 shouldn't be an outlier
+    # N=1 should be an outlier if considering h=1, but not h=0
+    # N=2 shouldn't be an outlier
+    # N=3 should be an outlier if considering h=2, but not h=1 or h=0
+
+    y_test_gt = np.array(
+        [
+            [0.7, 0.9, 0.8],  # not an outlier
+            [0.5, 0.7, 0.9],  # outlier for h=1 and h=2 (cause no pred of h=2 is available so using h=1)
+            [0.5, 0.7, 0.9],  # No outlier
+            [0.5, 1.0, 1.0],
+        ]
+    )[..., np.newaxis] * np.ones([1, 1, 4])  # outlier for h=2
+    y_test_pred = np.zeros_like(y_test_gt)
+    significance = 0.1
+
+    outlier_gt = {}
+    outlier_gt[0] = 0
+    outlier_gt[1] = 1 * y_test_gt.shape[-1]
+    outlier_gt[2] = 2 * y_test_gt.shape[-1]
+    outlier_gt["max"] = 0
+    outlier_gt["min"] = 2 * y_test_gt.shape[-1]
+
+    ### Outliers count
+    for aggregation in outlier_gt.keys():
+        output_outlier = p.outlier_score(
+            y_pred=y_test_pred, y_gt=y_test_gt, significance=significance, aggregation=aggregation
+        )
+        assert (
+            np.sum(output_outlier[..., 1]) == outlier_gt[aggregation]
+        ), f"Number of outliers for aggregation {aggregation} did not match the expected values"
+
+
+if __name__ == "__main__":
+    # test_posthoc_probabilistic_processor_outlier_score()
+    # test_adaptive_conformal_wrapper()
+    test_forecast_horizon_aggregation()
