@@ -1,4 +1,4 @@
-# This file was automatically generated on Wed May 21 10:13:11 AM EDT 2025, your edits will be replaced.
+# This file was automatically generated on Thu Jun 12 11:36:25 AM EDT 2025, your edits will be replaced.
 accelerate==1.7.0 ; python_version >= "3.10" and python_version < "3.13"
 aiohappyeyeballs==2.6.1 ; python_version >= "3.10" and python_version < "3.13"
 aiohttp==3.11.18 ; python_version >= "3.10" and python_version < "3.13"
@@ -19,7 +19,7 @@ fastapi==0.115.12 ; python_version >= "3.10" and python_version < "3.13"
 filelock==3.18.0 ; python_version >= "3.10" and python_version < "3.13"
 frozenlist==1.6.0 ; python_version >= "3.10" and python_version < "3.13"
 fsspec==2025.3.0 ; python_version >= "3.10" and python_version < "3.13"
-granite-tsfm==0.2.27 ; python_version >= "3.10" and python_version < "3.13"
+granite-tsfm==0.2.28 ; python_version >= "3.10" and python_version < "3.13"
 gunicorn==23.0.0 ; python_version >= "3.10" and python_version < "3.13"
 h11==0.16.0 ; python_version >= "3.10" and python_version < "3.13"
 huggingface-hub==0.31.4 ; python_version >= "3.10" and python_version < "3.13"
