@@ -81,7 +81,8 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         )
 
         cls.num_patches = (
-            max(cls.params["context_length"], cls.params["patch_length"]) - cls.params["patch_length"]
+            max(cls.params["context_length"], cls.params["patch_length"])
+            - cls.params["patch_length"]
         ) // cls.params["patch_stride"] + 1
 
         cls.num_masked_patches = (
@@ -174,13 +175,17 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             cls.params["num_input_channels"],
         )
 
-        cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["prediction_length"], 2)
+        cls.correct_sel_forecast_output = torch.rand(
+            batch_size, cls.params["prediction_length"], 2
+        )
 
     def test_patchmodel(self):
         config = TinyTimeMixerConfig(**self.__class__.params)
         mdl = TinyTimeMixerModel(config)
         output = mdl(self.__class__.data)
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.patch_input.shape, self.__class__.enc_data.shape)
 
     # def test_forecast_head(self):
@@ -240,10 +245,15 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             if config.prediction_filter_length is not None:
                 target_output = target_output[:, : config.prediction_filter_length, :]
 
-            if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
+            if (
+                "target_pred_length_filtered" in params
+                and params["target_pred_length_filtered"]
+            ):
                 target_input = target_input[:, : config.prediction_filter_length, :]
 
-            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
+            ref_samples = target_output.unsqueeze(1).expand(
+                -1, config.num_parallel_samples, -1, -1
+            )
 
         else:
             print("invalid task")
@@ -251,14 +261,18 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         if future_observed_mask == "int":
             future_observed_mask = self.generate_mask(shape=target_input.shape)
         elif future_observed_mask == "bool":
-            future_observed_mask = self.generate_mask(shape=target_input.shape, dtype=torch.bool)
+            future_observed_mask = self.generate_mask(
+                shape=target_input.shape, dtype=torch.bool
+            )
         else:
             future_observed_mask = None
 
         if past_observed_mask == "int":
             past_observed_mask = self.generate_mask(shape=input_data.shape)
         elif past_observed_mask == "bool":
-            past_observed_mask = self.generate_mask(shape=input_data.shape, dtype=torch.bool)
+            past_observed_mask = self.generate_mask(
+                shape=input_data.shape, dtype=torch.bool
+            )
         else:
             past_observed_mask = None
 
@@ -276,9 +290,15 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             dec_output = enc_output
 
         cat_samples = None
-        if "categorical_vocab_size_list" in params and params["categorical_vocab_size_list"]:
+        if (
+            "categorical_vocab_size_list" in params
+            and params["categorical_vocab_size_list"]
+        ):
             b = self.__class__.batch_size
-            cat_samples = [torch.randint(0, a, (b, 1)) for a in params["categorical_vocab_size_list"]]
+            cat_samples = [
+                torch.randint(0, a, (b, 1))
+                for a in params["categorical_vocab_size_list"]
+            ]
             # for i in cat_samples:
             #     print(i.shape,"jjj")
             cat_samples = torch.stack(cat_samples, dim=1).squeeze()
@@ -376,7 +396,9 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             target_pred_length_filtered=target_pred_length_filtered,
             target_channel_filtered=False,
         )
-        self.check_module(task="forecast", params=params, mask_prediction=mask_prediction)
+        self.check_module(
+            task="forecast", params=params, mask_prediction=mask_prediction
+        )
 
     def test_var0_mask(self):
         params = self.__class__.params.copy()
@@ -488,6 +510,8 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 [0, 2],
                 [True, False],
                 [True, False],
+                [True, False],
+                ["identity", "zero"],
             )
         )
     )
@@ -499,6 +523,8 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         decoder_adaptive_patching_levels,
         enable_forecast_channel_mixing,
         decoder_raw_residual,
+        free_channel_flow,
+        channel_mix_init,
     ):
         params = self.__class__.params.copy()
         params.update(
@@ -518,6 +544,8 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             fcm_prepend_past=True,
             categorical_vocab_size_list=categorical_vocab_size_list,
             target_channel_filtered=True,
+            free_channel_flow=free_channel_flow,
+            channel_mix_init=channel_mix_init,
         )
 
         self.check_module(task="forecast", params=params)
@@ -559,13 +587,22 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         if config.prediction_filter_length is not None:
             target_val = target_val[:, : config.prediction_filter_length, :]
 
-        if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
+        if (
+            "target_pred_length_filtered" in params
+            and params["target_pred_length_filtered"]
+        ):
             target_input = target_input[:, : config.prediction_filter_length, :]
 
         cat_samples = None
-        if "categorical_vocab_size_list" in params and params["categorical_vocab_size_list"]:
+        if (
+            "categorical_vocab_size_list" in params
+            and params["categorical_vocab_size_list"]
+        ):
             b = self.__class__.batch_size
-            cat_samples = [torch.randint(0, a, (b, 1)) for a in params["categorical_vocab_size_list"]]
+            cat_samples = [
+                torch.randint(0, a, (b, 1))
+                for a in params["categorical_vocab_size_list"]
+            ]
 
             cat_samples = torch.stack(cat_samples, dim=1).squeeze()
 
@@ -610,11 +647,15 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         if config.loss == "nll":
             samples = mdl.generate(self.__class__.data)
-            ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
+            ref_samples = target_val.unsqueeze(1).expand(
+                -1, params["num_parallel_samples"], -1, -1
+            )
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast_full(self):
-        self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)
+        self.check_module(
+            task="forecast", params=self.__class__.params, output_hidden_states=True
+        )
         # self.forecast_full_module(self.__class__.params, output_hidden_states = True)
 
     def test_forecast_full_2(self):
