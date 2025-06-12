@@ -193,8 +193,8 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             inverse_scale_outputs (bool): If true and a valid feature extractor is provided, the outputs will be inverse scaled.
 
             add_known_ground_truth (bool): If True add columns containing the ground truth data (possibly containing missing NaN values) to the imputed columns. Imputed columns will have a
-                suffix of "_imputed". These columns have original non-missing values from the ground truth and imputed (reconstructed) 
-                values from the model at the missing positions in the ground truth. Default True. If False, only columns containing 
+                suffix of "_imputed". These columns have original non-missing values from the ground truth and imputed (reconstructed)
+                values from the model at the missing positions in the ground truth. Default True. If False, only columns containing
                 imputed values in place of missing NaN values and original non-missing values intact are produced, no suffix is added.
 
         Return (pandas dataframe):
