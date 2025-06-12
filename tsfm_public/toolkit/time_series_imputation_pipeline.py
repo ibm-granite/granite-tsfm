@@ -45,9 +45,11 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         model: Union["PreTrainedModel"],
         *args,
         inverse_scale_outputs: bool = True,
+        add_known_ground_truth: bool = True,
         **kwargs,
     ):
         kwargs["inverse_scale_outputs"] = inverse_scale_outputs
+        kwargs["add_known_ground_truth"] = add_known_ground_truth
 
         # autopopulate from feature extractor and model
         if "feature_extractor" in kwargs:
@@ -116,6 +118,7 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             # "categorical_columns",
             # "static_categorical_columns",
             "inverse_scale_outputs",
+            "add_known_ground_truth",
         ]
 
         for c in preprocess_params:
@@ -189,6 +192,10 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
 
             inverse_scale_outputs (bool): If true and a valid feature extractor is provided, the outputs will be inverse scaled.
 
+            add_known_ground_truth (bool): If True add columns containing the ground truth data (possibly containing missing NaN values) to the imputed columns. Imputed columns will have a
+                suffix of "_imputed". These columns have original non-missing values from the ground truth and imputed (reconstructed) 
+                values from the model at the missing positions in the ground truth. Default True. If False, only columns containing 
+                imputed values in place of missing NaN values and original non-missing values intact are produced, no suffix is added.
 
         Return (pandas dataframe):
             A new pandas dataframe containing the imputed series. Each row will contain the id, timestamp, the original
@@ -269,15 +276,21 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             counters[i : (i + n_obs)] += 1
         reconstructed_out = predictions / np.maximum(counters, 1)  # this output is all reconstructions from the model
 
-        reconstructed_df = pd.DataFrame(reconstructed_out, columns=out.columns[1:])
-        reconstructed_df.insert(0, out.columns[0], out.iloc[:, 0])
+        reconstructed_df = pd.DataFrame(reconstructed_out, columns=kwargs["target_columns"])
 
         # inverse scale if we have a feature extractor
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
             reconstructed_df = self.feature_extractor.inverse_scale_targets(reconstructed_df)
 
         # need to select original values for non-missing points and use the reconstructed values only for missing points
-        out = out.where(~out.isna(), reconstructed_df)
+        imputed_output = out.where(~out.isna(), reconstructed_df)
+
+        if kwargs["add_known_ground_truth"]:
+            imputed_output = imputed_output[kwargs["target_columns"]]
+            imputed_output = imputed_output.add_suffix("_imputed")
+            out = pd.concat([out, imputed_output], axis=1)
+        else:
+            out = imputed_output
 
         self.__context_memory = {}
         return out
