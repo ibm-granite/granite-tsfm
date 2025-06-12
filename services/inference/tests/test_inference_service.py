@@ -168,7 +168,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out, counts = get_inference_response(msg)
+    df_out, counts = get_inference_response(msg, dumpfile="/tmp/test_zero_shot_forecast_inference.json")
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
