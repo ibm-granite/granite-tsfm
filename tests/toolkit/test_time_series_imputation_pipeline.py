@@ -1,32 +1,19 @@
 # Copyright contributors to the TSFM project
 #
 
-"""Tests the time series preprocessor and functions"""
+"""Tests the time series imputation preprocessor and functions"""
 
 import numpy as np
+import pytest
 
 from tsfm_public import TSPulseConfig, TSPulseForReconstruction
 from tsfm_public.toolkit.time_series_imputation_pipeline import TimeSeriesImputationPipeline
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor
 
 
-def test_time_series_imputation_pipeline_defaults(etth_data):
-    train_data, test_data, params = etth_data
-    test_data = test_data.copy()
-
-    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
-    tsp.train(train_data)
-
-    # quick and dirty random missing
-    n = 20
-    rng = np.random.default_rng(seed=42)
-    inds = rng.integers(test_data.index[0], test_data.index[-1], n)
-    sizes = rng.integers(1, 9, n)
-    cols = rng.integers(0, len(params["target_columns"]), n)
-
-    for i, s, c in zip(inds, sizes, cols):
-        test_data.loc[i : i + s, params["target_columns"][c]] = np.nan
-
+@pytest.fixture(scope="module")
+def tspulse_model(etth_data):
+    _, _, params = etth_data
     conf = TSPulseConfig(
         context_length=512,
         d_model=24,
@@ -49,8 +36,38 @@ def test_time_series_imputation_pipeline_defaults(etth_data):
         channel_mix_init="identity",
     )
     model = TSPulseForReconstruction(conf)
+    return model
 
-    pipe = TimeSeriesImputationPipeline(model, feature_extractor=tsp, device="cpu")
+
+@pytest.fixture(scope="module")
+def etth_missing_data(etth_data):
+    train_data, test_data, params = etth_data
+    test_data = test_data.copy()
+
+    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
+    tsp.train(train_data)
+
+    # quick and dirty random missing
+    n = 20
+    rng = np.random.default_rng(seed=42)
+    inds = rng.integers(test_data.index[0], test_data.index[-1], n)
+    sizes = rng.integers(1, 9, n)
+    cols = rng.integers(0, len(params["target_columns"]), n)
+
+    for i, s, c in zip(inds, sizes, cols):
+        test_data.loc[i : i + s, params["target_columns"][c]] = np.nan
+
+    return train_data, test_data, params
+
+
+def test_time_series_imputation_pipeline_defaults(tspulse_model, etth_missing_data):
+    train_data, test_data, params = etth_missing_data
+    test_data = test_data.copy()
+
+    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
+    tsp.train(train_data)
+
+    pipe = TimeSeriesImputationPipeline(tspulse_model, feature_extractor=tsp, device="cpu")
 
     test_imputed = pipe(test_data)
 
