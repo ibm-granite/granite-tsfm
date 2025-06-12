@@ -92,3 +92,24 @@ def test_imputation_pipeline_outputs_for_nan(tspulse_model, etth_missing_data):
         imputed_columns.append(f"{c}_imputed")
 
     assert not test_imputed[imputed_columns].isnull().values.any()
+
+def test_imputation_pipeline_outputs_for_original_values(tspulse_model, etth_missing_data):
+    train_data, test_data, params = etth_missing_data
+    test_data = test_data.copy()
+
+    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
+    tsp.train(train_data)
+
+    pipe = TimeSeriesImputationPipeline(tspulse_model, feature_extractor=tsp, device="cpu")
+
+    test_imputed = pipe(test_data)
+
+    imputed_columns = []
+    for c in params["target_columns"]:
+        imputed_columns.append(f"{c}_imputed")
+
+    for col in params["target_columns"]:
+        imp_col = f"{col}_imputed"
+
+        mask = test_imputed[col].notna()
+        assert (test_imputed.loc[mask, col] == test_imputed.loc[mask, imp_col]).all()
