@@ -269,7 +269,6 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             counters[i : (i + n_obs)] += 1
         reconstructed_out = predictions / np.maximum(counters, 1)  # this output is all reconstructions from the model
 
-        # need to select original values for non-missing points and use the reconstructed values only for missing points
         reconstructed_df = pd.DataFrame(reconstructed_out, columns=out.columns[1:])
         reconstructed_df.insert(0, out.columns[0], out.iloc[:, 0])
 
@@ -277,6 +276,7 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
             reconstructed_df = self.feature_extractor.inverse_scale_targets(reconstructed_df)
 
+        # need to select original values for non-missing points and use the reconstructed values only for missing points
         out = out.where(~out.isna(), reconstructed_df)
 
         self.__context_memory = {}
