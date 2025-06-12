@@ -74,3 +74,21 @@ def test_time_series_imputation_pipeline_defaults(tspulse_model, etth_missing_da
     assert test_imputed.shape[0] == test_data.shape[0]
     assert all(t in test_imputed.columns for t in params["target_columns"])
     assert all(f"{t}_imputed" in test_imputed.columns for t in params["target_columns"])
+
+
+def test_imputation_pipeline_outputs_for_nan(tspulse_model, etth_missing_data):
+    train_data, test_data, params = etth_missing_data
+    test_data = test_data.copy()
+
+    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
+    tsp.train(train_data)
+
+    pipe = TimeSeriesImputationPipeline(tspulse_model, feature_extractor=tsp, device="cpu")
+
+    test_imputed = pipe(test_data)
+
+    imputed_columns = []
+    for c in params["target_columns"]:
+        imputed_columns.append(f"{c}_imputed")
+
+    assert not test_imputed[imputed_columns].isnull().values.any()
