@@ -93,6 +93,7 @@ def test_imputation_pipeline_outputs_for_nan(tspulse_model, etth_missing_data):
 
     assert not test_imputed[imputed_columns].isnull().values.any()
 
+
 def test_imputation_pipeline_outputs_for_original_values(tspulse_model, etth_missing_data):
     train_data, test_data, params = etth_missing_data
     test_data = test_data.copy()
