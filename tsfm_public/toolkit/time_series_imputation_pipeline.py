@@ -283,6 +283,7 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             reconstructed_df = self.feature_extractor.inverse_scale_targets(reconstructed_df)
 
         # need to select original values for non-missing points and use the reconstructed values only for missing points
+        reconstructed_df.index = out.index
         imputed_output = out.where(~out.isna(), reconstructed_df)
 
         if kwargs["add_known_ground_truth"]:
