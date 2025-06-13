@@ -14,7 +14,11 @@ from torch import nn as nn
 from transformers.utils.generic import ModelOutput
 
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
-from tsfm_public.toolkit.ad_helpers import AnomalyScoreMethods, ScoreListType, TSADHelperUtility
+from tsfm_public.toolkit.ad_helpers import (
+    AnomalyScoreMethods,
+    ScoreListType,
+    TSADHelperUtility,
+)
 
 from .helpers import patchwise_stitched_reconstruction
 
@@ -124,7 +128,8 @@ class TSPulseADUtility(TSADHelperUtility):
 
         model_forward_output = {}
         if use_forecast:
-            model_forward_output = self._model(**payload)
+            # model_forward_output = self._model(**payload)
+            model_forward_output = self._model(batch_x)
 
         stitched_dict = {}
         if use_ts or use_fft:
