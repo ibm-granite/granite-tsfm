@@ -23,6 +23,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         self,
         model: TinyTimeMixerForPrediction,
         mode: str,
+        score_exponent: float = 1.0,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
         probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
@@ -33,6 +34,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         Args:
             model (TinyTimeMixerForPrediction): model instance
             mode (str): mode string specifies scoring logic
+            score_exponent(float, optional): parameter to sharpen the anomaly score. Defaults to 1.
             least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
             least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
 
@@ -46,6 +48,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         self._model = model
         self._mode = mode
+        self._score_exponent = score_exponent
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
         self._probabilistic_processor = probabilistic_processor
@@ -86,7 +89,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_meandev = AnomalyScoreMethods.MEAN_DEVIATION.value in mode
         use_probabilistic = AnomalyScoreMethods.PROBABILISTIC.value in mode
-        anomaly_criterion = nn.MSELoss(reduce=False)
+        anomaly_criterion = nn.MSELoss(reduction="none")
 
         model_forward_output = {}
         model_forward_output = self._model(**payload)
@@ -143,6 +146,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         elif isinstance(x, torch.Tensor):
             x = x.detach().cpu().numpy()
 
+        score_exponent = self._score_exponent
         start_pad_len = self._model.config.context_length
         end_pad_len = (
             0 if key == AnomalyScoreMethods.MEAN_DEVIATION.value else self._model.config.prediction_length - 1
@@ -182,5 +186,5 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
         score_ = score.copy()
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score
         scale = 1 if np.any(score > min_score) else self._least_significant_scale
-        score = MinMaxScaler_().fit_transform(score_) * scale
+        score = MinMaxScaler_().fit_transform(score_**score_exponent) * scale
         return score

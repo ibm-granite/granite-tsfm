@@ -80,7 +80,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         Args:
             model (PreTrainedModel): time series foundation model instance
-            prediction_mode (str, optional): specify appropriate mode for anomaly scoring. Defaults to AnomalyPredictionModes.PREDICTIVE.value.
+            prediction_mode (list, optional): specify appropriate mode(s) for anomaly scoring. Defaults to AnomalyPredictionModes.PREDICTIVE.value.
             aggr_function (str, optional): aggregation function for merging scores using different mode, supported values are (max/min/mean). Defaults to "max".
             aggregation_length (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
             smoothing_length (int, optional): window size for post processing of the generated scores. Defaults to 8.
@@ -88,6 +88,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             expand_score (bool, optional): if true report anomaly score for each target column separately. Defaults to False.
             report_mode (bool, optional): if true reports which prediction mode is detects higher anomaly score for each observation. Defaults to False.
             predictive_score_smoothing (bool, optional): if true smoothing is applied to the forecast score. Defaults to False.
+            score_exponent (float, optional): parameter to sharpen the anomaly score for better threshold based detection. Defaults to 1.
             least_significant_scale (float, optional): value between (0, 1). Model scores are function of data variance, this factor specifies a relative score threshold to data variance for marking anomaly. Defaults to 0.01.
             least_significant_score (float, optional): minimum score for marking anomaly. Defaults to 0.2.
 

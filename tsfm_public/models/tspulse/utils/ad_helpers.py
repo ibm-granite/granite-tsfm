@@ -27,6 +27,7 @@ class TSPulseADUtility(TSADHelperUtility):
         model: TSPulseForReconstruction,
         mode: str,
         aggregation_length: int,
+        score_exponent: float = 1.0,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
         **kwargs,
@@ -37,6 +38,7 @@ class TSPulseADUtility(TSADHelperUtility):
             model (TSPulseForReconstruction): model instance.
             mode (str): mode string specifies scoring logic.
             aggregation_length (int): parameter for imputation based scoring.
+            score_exponent (float, optional): parameter to sharpen the anomaly score. Defaults to 1.
             least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
             least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
 
@@ -58,6 +60,7 @@ class TSPulseADUtility(TSADHelperUtility):
         self._model = model
         self._mode = mode
         self._aggr_win_size = aggregation_length
+        self._score_exponent = score_exponent
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
 
@@ -113,7 +116,7 @@ class TSPulseADUtility(TSADHelperUtility):
         use_fft = AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value in mode
         use_ts = AnomalyScoreMethods.TIME_RECONSTRUCTION.value in mode
         aggr_win_size = self._aggr_win_size
-        anomaly_criterion = nn.MSELoss(reduce=False)
+        anomaly_criterion = nn.MSELoss(reduction="none")
 
         reconstruct_start = self._model.config.context_length - aggr_win_size
         reconstruct_end = self._model.config.context_length
@@ -195,6 +198,7 @@ class TSPulseADUtility(TSADHelperUtility):
         """
         context_length = self._model.config.context_length
         aggr_win_size = self._aggr_win_size
+        score_exponent = self._score_exponent
         if isinstance(x, (list, tuple)):
             if (len(x) > 0) and isinstance(x[0], torch.Tensor):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
@@ -214,16 +218,19 @@ class TSPulseADUtility(TSADHelperUtility):
         min_score = 0.0
         if reference is not None:
             reference_data = np.asarray(reference)
-            min_score = self._least_significant_scale * np.nanstd(reference_data, axis=0, keepdims=True) ** 2
+            min_score = (
+                self._least_significant_scale * np.nanstd(np.diff(reference_data, axis=0), axis=0, keepdims=True) ** 2
+            )
+
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
             if key == AnomalyScoreMethods.PREDICTIVE.value:
-                min_score = min_score / np.sqrt(2)
+                min_score = min_score * np.sqrt(2)
             else:
-                min_score = min_score * (1 + 1 / np.sqrt(self._aggr_win_size))
+                min_score = min_score * (1 + self._model.config.patch_length)
 
         score_ = score.copy()
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score
-        scale = 1 if np.any(score > min_score) else self._least_significant_scale
-        score = MinMaxScaler_().fit_transform(score_) * scale
+        scale = 1 if np.any(score > min_score) else self._least_significant_score
+        score = MinMaxScaler_().fit_transform(score_**score_exponent) * scale
         return score
