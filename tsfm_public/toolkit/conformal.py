@@ -79,6 +79,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         weighting: str = Weighting.UNIFORM.value,
         weighting_params: Dict[str, Any] = {},
         threshold_function: str = ThresholdFunction.WEIGHTING.value,
+        aggregation: Union[str, int] = "median",
+        aggregation_axis: Union[int, Tuple[int, ...]] = 1,
         **kwargs,
     ):
         """
@@ -102,6 +104,13 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 - 'decay_param' (float, optional): Exponential decay factor used when 'optimization' is set to 'exponential_decay'.
             threshold_function (str): Method for computing the threshold, as defined in the `ThresholdFunction` enum.
                 Only applicable if method = "conformal".
+            aggregation (str, int, or None, optional):
+                Determines how to aggregate the outlier scores across dimensions for the method outlier_score.
+                - If a string (e.g., 'mean', 'max', 'min', 'median'), applies the specified aggregation function over the axes provided in `aggregation_axis`.
+                - If an integer, selects the outlier scores corresponding to that specific forecast horizon index.
+                - If None, returns outlier scores for all dimensions independently without aggregation.
+            aggregation_axis (tuple of int, optional) to consider in outlier_score:
+                Specifies the axes over which to aggregate when `aggregation` is a string.
         """
 
         self.window_size = window_size
@@ -109,6 +118,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self.false_alarm = (np.min(quantiles) * 2).item()
         self.nonconformity_score = nonconformity_score
         self.method = method
+        self.aggregation = aggregation
+        self.aggregation_axis = aggregation_axis
 
         if self.nonconformity_score in [NonconformityScores.ERROR.value]:
             self.false_alarm = np.min(quantiles).item()
@@ -316,9 +327,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         y_pred: np.ndarray,
         X: np.ndarray = None,
         timestamps: np.ndarray = None,
-        aggregation: Union[str, int] = None,
+        aggregation: Union[str, int] = -1,
         significance: float = 0.01,
-        aggregation_axis: Union[int, Tuple[int, ...]] = 1,
+        aggregation_axis: Union[int, Tuple[int, ...]] = -1,
         outlier_label: bool = True,
     ) -> np.ndarray:
         """
@@ -334,6 +345,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 - If a string (e.g., 'mean', 'max', 'min', 'median'), applies the specified aggregation function over the axes provided in `aggregation_axis`.
                 - If an integer, selects the outlier scores corresponding to that specific forecast horizon index.
                 - If None, returns outlier scores for all dimensions independently without aggregation.
+                - If -1 sets default aggregation in self.aggreggation attribute
 
             aggregation_axis (tuple of int, optional):
                 Specifies the axes over which to aggregate when `aggregation` is a string.
@@ -352,6 +364,11 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 """
                 Aggregation
                 """
+                if aggregation == -1:
+                    aggregation = self.aggregation
+                if aggregation_axis == -1:
+                    aggregation_axis = self.aggregation_axis
+
                 if aggregation is None:
                     outliers = output["outliers"]
 
