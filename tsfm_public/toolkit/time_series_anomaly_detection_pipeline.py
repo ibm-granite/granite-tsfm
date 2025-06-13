@@ -69,7 +69,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self,
         model: PreTrainedModel,
         *args,
-        prediction_mode: Union[str, List[str]] = AnomalyScoreMethods.PREDICTIVE.value,
+        prediction_mode: Optional[List[str]] = None,
         aggr_function: str = AggregationFunction.MAX.value,
         aggregation_length: int = 32,
         smoothing_length: int = 8,
@@ -80,7 +80,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         Args:
             model (PreTrainedModel): time series foundation model instance
-            prediction_mode (str, optional): specify appropriate mode for anomaly scoring. Defaults to AnomalyPredictionModes.PREDICTIVE.value.
+            prediction_mode (list, optional): specify list of appropriate modes for anomaly scoring. Defaults to [AnomalyPredictionModes.PREDICTIVE.value].
             aggr_function (str, optional): aggregation function for merging scores using different mode, supported values are (max/min/mean). Defaults to "max".
             aggregation_length (int, optional): parameter required for imputation or window based scoring. Defaults to 32.
             smoothing_length (int, optional): window size for post processing of the generated scores. Defaults to 8.
@@ -96,8 +96,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             ValueError: invalid prediction_mode
             ValueError: no pytorch support
         """
-        if isinstance(prediction_mode, (list, tuple)):
-            prediction_mode = "+".join([str(mode) for mode in prediction_mode])
+        if prediction_mode is None:
+            prediction_mode = [AnomalyScoreMethods.PREDICTIVE.value]
+
+        if isinstance(prediction_mode, str):
+            prediction_mode = [prediction_mode]
 
         model_processor = None
         if isinstance(model, TSPulseForReconstruction):
