@@ -220,7 +220,6 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
             )
 
         if self.feature_extractor:
-            self.feature_extractor.train(time_series)
             time_series_prep = self.feature_extractor.preprocess(time_series)
 
         # use forecasting dataset to do the preprocessing
