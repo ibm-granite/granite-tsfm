@@ -240,6 +240,17 @@ def test_frequency_token(ttm_dummy_model, etth_data):
     )
     assert forecast_pipeline._preprocess_params["frequency_token"] == DEFAULT_FREQUENCY_MAPPING["h"]
 
+    with pytest.raises(ValueError):
+        forecast_pipeline = TimeSeriesForecastingPipeline(
+            model=model,
+            timestamp_column=timestamp_column,
+            id_columns=id_columns,
+            target_columns=target_columns,
+            freq="1h",
+            explode_forecasts=False,
+            inverse_scale_outputs=True,
+        )
+
 
 def test_prediction_filter_length(etth_data):
     pfl = 10
