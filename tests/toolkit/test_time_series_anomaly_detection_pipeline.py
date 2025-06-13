@@ -37,9 +37,9 @@ def example_dataset():
 @pytest.mark.parametrize(
     "method",
     [
-        AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
-        AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
-        AnomalyScoreMethods.PREDICTIVE.value,
+        [AnomalyScoreMethods.TIME_RECONSTRUCTION.value],
+        [AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value],
+        [AnomalyScoreMethods.PREDICTIVE.value],
         [
             AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
             AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
@@ -103,8 +103,8 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
 @pytest.mark.parametrize(
     "method",
     [
-        AnomalyScoreMethods.PREDICTIVE.value,
-        AnomalyScoreMethods.MEAN_DEVIATION.value,
+        [AnomalyScoreMethods.PREDICTIVE.value],
+        [AnomalyScoreMethods.MEAN_DEVIATION.value],
         [AnomalyScoreMethods.MEAN_DEVIATION.value, AnomalyScoreMethods.PREDICTIVE.value],
     ],
 )
@@ -135,7 +135,7 @@ def test_tsad_tinytimemixer_pipeline_defaults(example_dataset, method):
 @pytest.mark.parametrize(
     "method",
     [
-        AnomalyScoreMethods.PROBABILISTIC.value,
+        [AnomalyScoreMethods.PROBABILISTIC.value],
         [AnomalyScoreMethods.PROBABILISTIC.value, AnomalyScoreMethods.MEAN_DEVIATION.value],
     ],
 )
