@@ -105,7 +105,7 @@ def test_tsad_tspulse_pipeline_defaults(example_dataset, method):
     [
         AnomalyScoreMethods.PREDICTIVE.value,
         AnomalyScoreMethods.MEAN_DEVIATION.value,
-        f"{AnomalyScoreMethods.MEAN_DEVIATION.value}+{AnomalyScoreMethods.PREDICTIVE.value}",
+        [AnomalyScoreMethods.MEAN_DEVIATION.value, AnomalyScoreMethods.PREDICTIVE.value],
     ],
 )
 def test_tsad_tinytimemixer_pipeline_defaults(example_dataset, method):
@@ -136,7 +136,7 @@ def test_tsad_tinytimemixer_pipeline_defaults(example_dataset, method):
     "method",
     [
         AnomalyScoreMethods.PROBABILISTIC.value,
-        f"{AnomalyScoreMethods.PROBABILISTIC.value}${AnomalyScoreMethods.MEAN_DEVIATION.value}",
+        [AnomalyScoreMethods.PROBABILISTIC.value, AnomalyScoreMethods.MEAN_DEVIATION.value],
     ],
 )
 def test_tsad_tinytimemixer_pipeline_probabilistic(example_dataset, method):

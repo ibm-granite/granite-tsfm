@@ -3,7 +3,7 @@
 """Helper class for anomaly detection support"""
 
 from collections import OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -25,7 +25,7 @@ class TSPulseADUtility(TSADHelperUtility):
     def __init__(
         self,
         model: TSPulseForReconstruction,
-        mode: str,
+        mode: List[str],
         aggregation_length: int,
         score_exponent: float = 1.0,
         least_significant_scale: float = 1e-2,
@@ -36,7 +36,7 @@ class TSPulseADUtility(TSADHelperUtility):
 
         Args:
             model (TSPulseForReconstruction): model instance.
-            mode (str): mode string specifies scoring logic.
+            mode (list): mode string specifies scoring logic.
             aggregation_length (int): parameter for imputation based scoring.
             score_exponent (float, optional): parameter to sharpen the anomaly score. Defaults to 1.
             least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
@@ -46,13 +46,11 @@ class TSPulseADUtility(TSADHelperUtility):
             ValueError: unsupported scoring mode
         """
         if mode is None:
-            mode = "+".join(
-                [
-                    AnomalyScoreMethods.PREDICTIVE.value,
-                    AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
-                    AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
-                ]
-            )
+            mode = [
+                AnomalyScoreMethods.PREDICTIVE.value,
+                AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value,
+                AnomalyScoreMethods.TIME_RECONSTRUCTION.value,
+            ]
 
         super(TSPulseADUtility, self).__init__()
         if not self.is_valid_mode(mode):
@@ -64,7 +62,7 @@ class TSPulseADUtility(TSADHelperUtility):
         self._least_significant_scale = least_significant_scale
         self._least_significant_score = least_significant_score
 
-    def is_valid_mode(self, mode_str: str) -> bool:
+    def is_valid_mode(self, mode_str: List[str]) -> bool:
         """Validates compatibility of the specified mode string."""
         supported_modes = [
             AnomalyScoreMethods.PREDICTIVE.value,
@@ -110,8 +108,6 @@ class TSPulseADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
-        if isinstance(mode, (list, tuple)):
-            mode = "+".join(mode)
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_fft = AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value in mode
         use_ts = AnomalyScoreMethods.TIME_RECONSTRUCTION.value in mode

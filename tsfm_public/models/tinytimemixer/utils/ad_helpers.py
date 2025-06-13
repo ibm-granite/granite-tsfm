@@ -3,7 +3,7 @@
 """Helper class for anomaly detection support"""
 
 from collections import OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -22,7 +22,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
     def __init__(
         self,
         model: TinyTimeMixerForPrediction,
-        mode: str,
+        mode: List[str],
         score_exponent: float = 1.0,
         least_significant_scale: float = 1e-2,
         least_significant_score: float = 0.2,
@@ -33,7 +33,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
 
         Args:
             model (TinyTimeMixerForPrediction): model instance
-            mode (str): mode string specifies scoring logic
+            mode (list): list of mode string specifies scoring logic
             score_exponent(float, optional): parameter to sharpen the anomaly score. Defaults to 1.
             least_significant_scale (float, optional): allowed model deviation from the data in the scale of data variance. Defaults to 1e-2.
             least_significant_score (float, optional): minimum anomaly score for significant detection. Defaults to 0.2.
@@ -42,7 +42,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             ValueError: unsupported scoring mode
         """
         if mode is None:
-            mode = "forecast"
+            mode = [AnomalyScoreMethods.PREDICTIVE.value]
         super(TinyTimeMixerADUtility, self).__init__()
         if not self.is_valid_mode(mode):
             raise ValueError(f"Error: unsupported inference method {mode}!")
@@ -55,7 +55,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
 
     def is_valid_mode(
         self,
-        mode_str: str,
+        mode_str: List[str],
     ) -> bool:
         """Validates compatibility of the specified mode string."""
         supported_modes = [
@@ -84,8 +84,6 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
-        if isinstance(mode, (list, tuple)):
-            mode = "+".join(mode)
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_meandev = AnomalyScoreMethods.MEAN_DEVIATION.value in mode
         use_probabilistic = AnomalyScoreMethods.PROBABILISTIC.value in mode

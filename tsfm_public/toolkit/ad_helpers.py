@@ -34,11 +34,11 @@ class TSADHelperUtility:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def is_valid_mode(self, mode_str: str) -> bool:
+    def is_valid_mode(self, mode_str: List[str]) -> bool:
         """Validates given Anomaly Prediction mode is supported by the model or not.
 
         Args:
-            mode_str (str): prediction mode string
+            mode_str (list): list of prediction mode string
 
         Returns:
             bool: returns true if supported

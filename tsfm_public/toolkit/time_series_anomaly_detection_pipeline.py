@@ -100,8 +100,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if prediction_mode is None:
             prediction_mode = [AnomalyScoreMethods.PREDICTIVE.value]
 
-        if isinstance(prediction_mode, (list, tuple)):
-            prediction_mode = "+".join([str(mode) for mode in prediction_mode])
+        if isinstance(prediction_mode, str):
+            prediction_mode = [prediction_mode]
 
         model_processor = None
         if isinstance(model, TSPulseForReconstruction):
