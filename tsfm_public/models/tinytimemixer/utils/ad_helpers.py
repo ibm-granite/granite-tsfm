@@ -112,7 +112,9 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 y_gt=batch_future_values.detach().cpu().numpy(),
                 y_pred=future_predictions.detach().cpu().numpy(),
                 outlier_label=False,
+                aggregation = None, #aggregation is done outside this method
             )
+            print(f'Outlier score shape {outlier_score.shape}')
             scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
                 outlier_score if expand_score else np.mean(outlier_score, axis=2)
             )
