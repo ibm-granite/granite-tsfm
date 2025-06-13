@@ -91,7 +91,7 @@ dset = [
 for dataset_name in dset:
     seed = 42
     set_seed(seed)
-    path = f"/datasets/{dataset_name}/{dataset_name}_TRAIN.ts"
+    path = f"/datasets/{dataset_name}/{dataset_name}_TRAIN.ts"  # train
 
     df_base = convert_tsfile_to_dataframe(
         path,
@@ -122,7 +122,7 @@ for dataset_name in dset:
         full_series=True,
     )
 
-    path = f"/datasets/{dataset_name}/{dataset_name}_TEST.ts"
+    path = f"/datasets/{dataset_name}/{dataset_name}_TEST.ts"  # test
 
     df_test = convert_tsfile_to_dataframe(
         path,
@@ -154,6 +154,7 @@ for dataset_name in dset:
         full_series=True,
     )
 
+    # validation set
     if dataset_name == "DuckDuckGeese":
         data_dict = clf_params[dataset_name]["DATA_PARAMS"]
 
@@ -185,8 +186,9 @@ for dataset_name in dset:
     config_dict["num_input_channels"] = tsp.num_input_channels
     config_dict["num_targets"] = df_base["class_vals"].nunique()
 
-    model_path = "../../model-binaries/tspulse_classification/tspulse_model"
-    model = TSPulseForClassification.from_pretrained(model_path, **config_dict)
+    model = TSPulseForClassification.from_pretrained(
+        "ibm-granite/granite-timeseries-tspulse-r1", revision="tspulse-block-dualhead-512-p16-r1", **config_dict
+    )
     model = model.to("cuda").float()
 
     # Freezing Backbone except patch embedding layer....
