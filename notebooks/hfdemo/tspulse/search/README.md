@@ -24,4 +24,3 @@ Run the following commands:
 python benchmark.py synth # synthetic dataset
 python benchmark.py real  # real dataset
 ```
-> Note: Due to randomness, the performance results may slightly differ (approximately ±0.02) from those reported in the paper.
