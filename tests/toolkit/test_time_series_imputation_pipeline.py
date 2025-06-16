@@ -108,11 +108,12 @@ def test_imputation_pipeline_outputs_for_original_values(tspulse_model, etth_mis
         non_missing_loc = test_imputed[col].notna()
         assert (test_imputed.loc[non_missing_loc, col] == test_imputed.loc[non_missing_loc, imp_col]).all()
 
+
 def test_idempotency_on_fully_observed_data(tspulse_model, etth_data):
-    train_data, test_data, params = etth_data  
+    train_data, test_data, params = etth_data
     test_data = test_data.copy()
 
-    assert not test_data.isna().any().any() # no missing values
+    assert not test_data.isna().any().any()  # no missing values
 
     tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
     tsp.train(train_data)
@@ -128,5 +129,6 @@ def test_idempotency_on_fully_observed_data(tspulse_model, etth_data):
         original_vals = test_imputed[col].values
         imputed_vals = test_imputed[imputed_col].values
 
-        assert np.allclose(original_vals, imputed_vals), \
-            f"Imputed column '{imputed_col}' differs from original column '{col}'"
+        assert np.allclose(
+            original_vals, imputed_vals
+        ), f"Imputed column '{imputed_col}' differs from original column '{col}'"
