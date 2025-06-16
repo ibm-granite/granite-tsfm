@@ -161,6 +161,7 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     Returns:
         pd.DataFrame: a pandas DataFrame object
     """
+    print(f"grr data {list(os.walk('data'))}")
     print("grrr uri", uri)
     print("grr kwargs", kwargs)
     received_bytes = not isinstance(uri, str)
