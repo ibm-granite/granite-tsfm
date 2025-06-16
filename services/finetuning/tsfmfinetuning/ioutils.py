@@ -99,33 +99,23 @@ def _split_text_file(
 
 
 def _iscsv(uri: str):
-    LOGGER.info(f"in _iscsv with {uri}")
-    print(f"grr in _iscsv with {uri}")
-
     # we got a directory?
     # we require that it contains **only** files ending with CSV
     #                          0123456
     if uri.upper().startswith("FILE://"):
         if os.path.isdir(uri[7:]):
-            LOGGER.info(f"isdir({uri[7:]}) True")
             contents: List[Tuple] = list(os.walk(uri[7:]))
-            LOGGER.info(f"contents: {contents}")
             # we do not allow nested directorys
             if len(contents) > 1:
                 raise ValueError(f"{uri} must not have subdirectories.")
             files: List[str] = contents[0][2]  # type: ignore
-            LOGGER.info(f"files: {files}")
             if not all(x.upper().endswith(".CSV") for x in files):
                 raise ValueError(f"All files in {uri} must have the 'cvs' extension.")
-            LOGGER.info("returning False")
             return True
         else:  # uri is NOT a directory
-            LOGGER.info("uri is not a directory")
             if any([uri.upper().endswith(".CSV"), uri.upper().endswith(".CSV.GZ")]):
-                LOGGER.info("returning True")
                 return True
 
-    LOGGER.info("returning False")
     return False
 
 
@@ -161,9 +151,9 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     Returns:
         pd.DataFrame: a pandas DataFrame object
     """
-    print(f"grr data {list(os.walk('data'))}")
-    print("grrr uri", uri)
-    print("grr kwargs", kwargs)
+    # print(f"grr data {list(os.walk('data'))}")
+    # print("grrr uri", uri)
+    # print("grr kwargs", kwargs)
     received_bytes = not isinstance(uri, str)
     # some guardrails (dependeing on deployment we'll want to paramterize these)
     # at present all we're allowing is a local (file://) refernece to csv or feather
@@ -180,6 +170,8 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     timestamp_column = kwargs.get("timestamp_column", None)
     # we're reading from file                              0123456
     if not received_bytes and uri[0:7].upper().startswith("FILE://"):
+        if not os.path.exists(uri[7:]):
+            raise ValueError(f"{uri[7:]} does not exist.")
         return _to_pandas(iscsv=_iscsv(uri), isfeather=_isfeather(uri), buf=uri[7:], timestamp_column=timestamp_column)
     if os.path.exists(uri):
         raise NotImplementedError(f"{uri} is not a proper URI. Absolute or relative path specifies are not allowed.")
