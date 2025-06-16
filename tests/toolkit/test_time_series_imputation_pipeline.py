@@ -44,9 +44,6 @@ def etth_missing_data(etth_data):
     train_data, test_data, params = etth_data
     test_data = test_data.copy()
 
-    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
-    tsp.train(train_data)
-
     # quick and dirty random missing
     n = 20
     rng = np.random.default_rng(seed=42)
@@ -110,3 +107,26 @@ def test_imputation_pipeline_outputs_for_original_values(tspulse_model, etth_mis
 
         non_missing_loc = test_imputed[col].notna()
         assert (test_imputed.loc[non_missing_loc, col] == test_imputed.loc[non_missing_loc, imp_col]).all()
+
+def test_idempotency_on_fully_observed_data(tspulse_model, etth_data):
+    train_data, test_data, params = etth_data  
+    test_data = test_data.copy()
+
+    assert not test_data.isna().any().any() # no missing values
+
+    tsp = TimeSeriesPreprocessor(target_columns=params["target_columns"], scaling=True)
+    tsp.train(train_data)
+
+    pipe = TimeSeriesImputationPipeline(tspulse_model, feature_extractor=tsp, device="cpu")
+
+    test_imputed = pipe(test_data)
+
+    for col in params["target_columns"]:
+        imputed_col = f"{col}_imputed"
+        assert imputed_col in test_imputed.columns, f"Missing imputed column: {imputed_col}"
+
+        original_vals = test_imputed[col].values
+        imputed_vals = test_imputed[imputed_col].values
+
+        assert np.allclose(original_vals, imputed_vals), \
+            f"Imputed column '{imputed_col}' differs from original column '{col}'"
