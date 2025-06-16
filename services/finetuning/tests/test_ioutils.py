@@ -24,7 +24,6 @@ def test_to_pandas_with_csv_content_from_filesystem():
 
 
 def test_to_pandas_with_multipart_csv_content_from_filesystem():
-    _split_text_file(source="./data/ETTh1.csv", target_dir="data/multipart", has_header=True, shuffle=False, parts=4)
     df = pd.read_csv(filepath_or_buffer="data/ETTh1.csv", parse_dates=["date"])
     df2 = to_pandas(uri="file://./data/multipart")
     assert isinstance(df2.dtypes["date"], np.dtypes.DateTime64DType)
@@ -37,17 +36,18 @@ def test_to_pandas_with_multipart_csv_content_from_filesystem():
 
 def test___split_text_file():
     original = open("./data/ETTh1.csv").readlines()
-    parts = 3
-    filenames = _split_text_file(
-        source="./data/ETTh1.csv", target_dir=tempfile.gettempdir(), has_header=True, shuffle=False, parts=parts
-    )
-    sum = 0
-    for fn in filenames:
-        sum += len(open(fn).readlines())
-    sum -= parts - 1  # account for added header in each part
-    assert len(original) == sum, "Line lengths do not match"
-    assert original[-1] == open(filenames[-1]).readlines()[-1]
-    assert original[1] == open(filenames[0]).readlines()[1]
+    with tempfile.TemporaryDirectory() as td:
+        parts = 10
+        filenames = _split_text_file(
+            source="./data/ETTh1.csv", target_dir=td, has_header=True, shuffle=False, parts=parts
+        )
+        sum = 0
+        for fn in filenames:
+            sum += len(open(fn).readlines())
+        sum -= parts - 1  # account for added header in each part
+        assert len(original) == sum, "Line lengths do not match"
+        assert original[-1] == open(filenames[-1]).readlines()[-1]
+        assert original[1] == open(filenames[0]).readlines()[1]
 
 
 def test_to_pandas_with_unsupported_uri():
@@ -61,6 +61,8 @@ def test_to_pandas_with_unsupported_uri():
         to_pandas("./data/ETTh1.csv")  # we require a proper uri
     with pytest.raises(ValueError) as _:
         to_pandas("./data/foo.csv")
+    with pytest.raises(ValueError) as _:
+        to_pandas("./data/foo")  # passing multipart that's not there
 
 
 def test_to_pandas_with_bad_binary_content():
