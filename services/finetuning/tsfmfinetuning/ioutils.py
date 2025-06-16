@@ -99,23 +99,32 @@ def _split_text_file(
 
 
 def _iscsv(uri: str):
+    LOGGER.info(f"in _iscsv with {uri}")
+
     # we got a directory?
     # we require that it contains **only** files ending with CSV
     #                          0123456
     if uri.upper().startswith("FILE://"):
         if os.path.isdir(uri[7:]):
+            LOGGER.info(f"isdir({uri[7:]}) True")
             contents: List[Tuple] = list(os.walk(uri[7:]))
+            LOGGER.info(f"contents: {contents}")
             # we do not allow nested directorys
             if len(contents) > 1:
                 raise ValueError(f"{uri} must not have subdirectories.")
             files: List[str] = contents[0][2]  # type: ignore
+            LOGGER.info(f"files: {files}")
             if not all(x.upper().endswith(".CSV") for x in files):
                 raise ValueError(f"All files in {uri} must have the 'cvs' extension.")
+            LOGGER.info("returning False")
             return True
         else:  # uri is NOT a directory
+            LOGGER.info("uri is not a directory")
             if any([uri.upper().endswith(".CSV"), uri.upper().endswith(".CSV.GZ")]):
+                LOGGER.info("returning True")
                 return True
 
+    LOGGER.info("returning False")
     return False
 
 
