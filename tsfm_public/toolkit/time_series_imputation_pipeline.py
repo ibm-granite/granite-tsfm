@@ -285,6 +285,11 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         reconstructed_df.index = out.index
         imputed_output = out.where(~out.isna(), reconstructed_df)
 
+        dtype_map = {col: out[col].dtype for col in out.columns}
+        imputed_output = imputed_output.astype(
+            dtype_map
+        )  # setting the type of imputed columns to same as the input data columns
+
         if kwargs["add_known_ground_truth"]:
             imputed_output = imputed_output[kwargs["target_columns"]]
             imputed_output = imputed_output.add_suffix("_imputed")
