@@ -1,8 +1,13 @@
 # Copyright authors of TSPulse: Dual Space Tiny Pre-trained Models for Rapid Time-series Analysis
 
-import numpy as np
 from typing import Optional, Union
+
+import numpy as np
 import torch
+from transformers.utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 def _reduce(metric, reduction="mean", axis=None):
@@ -67,10 +72,8 @@ def hybrid_masking_with_token(tensor, mask_percentage, patch_size, num_full_patc
 
     # === Patch info ===
     patch_ids_full = torch.arange(T, device=device) // patch_size  # [T]
-    patch_ids_relative = torch.arange(T, device=device) % patch_size  # [T]
     num_patches = T // patch_size
 
-    patch_ids_batched = patch_ids_full.view(1, T, 1).expand(B, T, C)  # [B, T, C]
     rand_vals = torch.rand(B, C, num_patches, device=device, generator=generator)
     _, top_patch_ids = torch.topk(rand_vals, k=num_full_patches_to_mask, dim=2)  # [B, C, K]
     selected_patch_ids = top_patch_ids.unsqueeze(1).expand(B, T, C, num_full_patches_to_mask)
