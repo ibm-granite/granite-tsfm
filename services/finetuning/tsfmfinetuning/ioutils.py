@@ -105,7 +105,7 @@ def _iscsv(uri: str):
     if uri.upper().startswith("FILE://"):
         if os.path.isdir(uri[7:]):
             contents: List[Tuple] = list(os.walk(uri[7:]))
-            # we do not allow nested directorys
+            # we do not allow nested directories
             if len(contents) > 1:
                 raise ValueError(f"{uri} must not have subdirectories.")
             files: List[str] = contents[0][2]  # type: ignore
@@ -116,6 +116,7 @@ def _iscsv(uri: str):
             if any([uri.upper().endswith(".CSV"), uri.upper().endswith(".CSV.GZ")]):
                 return True
 
+    # LOGGER.info("returning False")
     return False
 
 
@@ -151,9 +152,6 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     Returns:
         pd.DataFrame: a pandas DataFrame object
     """
-    # print(f"grr data {list(os.walk('data'))}")
-    # print("grrr uri", uri)
-    # print("grr kwargs", kwargs)
     received_bytes = not isinstance(uri, str)
     # some guardrails (dependeing on deployment we'll want to paramterize these)
     # at present all we're allowing is a local (file://) refernece to csv or feather
