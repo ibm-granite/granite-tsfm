@@ -624,9 +624,17 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         cols_to_scale = self._get_other_columns_to_scale()
         scaler_class = self._get_scaler_class(self.scaler_type)
 
-        for name, g in self._get_groups(df):
-            if self.scaling:
-                # train and transform
+        if self.scaling:
+            for name, g in self._get_groups(df):
+                # check for na
+                if (cols_to_scale and np.any(np.all(g[cols_to_scale].isna(), axis=0))) or np.any(
+                    np.all(g[self.target_columns].isna(), axis=0)
+                ):
+                    raise RuntimeError(
+                        "Input dataframe contains a group with at least one column containing all missing values."
+                    )
+
+                # train
                 if cols_to_scale:
                     self.scaler_dict[name] = scaler_class()
                     self.scaler_dict[name].fit(g[cols_to_scale])
