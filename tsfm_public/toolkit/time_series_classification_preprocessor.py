@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Classification-specific preprocessor for time series data preparation"""
+
 import copy
 import itertools
 from collections import defaultdict

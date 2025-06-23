@@ -53,6 +53,8 @@ class TimeSeriesPipeline(Pipeline):
         """
         # our preprocess returns a dataset
         dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
+        model_output_key = getattr(self, "_model_output_key", None)
+        copy_dataset_keys = getattr(self, "_copy_dataset_keys", True)
 
         batch_size = forward_params["batch_size"]
         num_workers = forward_params["num_workers"]
@@ -77,27 +79,29 @@ class TimeSeriesPipeline(Pipeline):
         # iterate over dataloader
         it = iter(dataloader)
         accumulator = []
-        model_output_key = None
         while (batch := next(it, None)) is not None:
             item = self.forward(batch, **forward_params)
             if not model_output_key:
                 model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
             accumulator.append(item[model_output_key])
 
-        # collect all ouputs needed for post processing
-        model_outputs = defaultdict(list)
-        items = list(dataset[0].items())
-        for r in dataset:
+        if copy_dataset_keys:
+            # collect all ouputs needed for post processing
+            model_outputs = defaultdict(list)
+            items = list(dataset[0].items())
+            for r in dataset:
+                for k, v in items:
+                    model_outputs[k].append(r[k])
+
             for k, v in items:
-                model_outputs[k].append(r[k])
+                if isinstance(v, torch.Tensor):
+                    model_outputs[k] = torch.stack(model_outputs[k])
 
-        for k, v in items:
-            if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(model_outputs[k])
-
-        # without shuffling in the dataloader above, we assume that order is preserved
-        # otherwise we need to incorporate sequence id somewhere and do a proper join
-        model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+            # without shuffling in the dataloader above, we assume that order is preserved
+            # otherwise we need to incorporate sequence id somewhere and do a proper join
+            model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+        else:
+            model_outputs = accumulator
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -153,8 +157,14 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
 
-        if use_frequency_token and "feature_extractor" in kwargs:
-            kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
+        if use_frequency_token and ("feature_extractor" not in kwargs) and "freq" in kwargs:
+            raise ValueError(
+                "Passing `freq` without a `feature_extractor` is not supported when the model requires a `frequency_token`."
+            )
+
+        if use_frequency_token:
+            if "feature_extractor" in kwargs:
+                kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
         else:
             kwargs["frequency_token"] = None
 
@@ -440,13 +450,13 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
             prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
-            out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
+            out[prediction_columns[-1]] = input[model_output_key][:, :, i].detach().cpu().numpy().tolist()
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if add_known_ground_truth:
             for i, c in enumerate(kwargs["target_columns"]):
-                ground_truth = input["future_values"][:, :, i].numpy()
-                missing = ~input["future_observed_mask"][:, :, i].numpy()
+                ground_truth = input["future_values"][:, :, i].detach().cpu().numpy()
+                missing = ~input["future_observed_mask"][:, :, i].detach().cpu().numpy()
                 ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
