@@ -116,15 +116,39 @@ if __name__ == '__main__':
 
     ## ArgumentParser
     parser = argparse.ArgumentParser(description='Running TSB-AD')
-    parser.add_argument('--data_direc', type=str, default='Datasets/TSB-AD-U/')
-    parser.add_argument('--eval_file', type=str, default='Datasets/File_List/TSB-AD-U-Eva.csv')
-    parser.add_argument('--use_gpu', type=bool, default=False)
-    parser.add_argument('--out_file', type=str, default="TSB_results.csv")
-    parser.add_argument('--dataset', type=str, required=False, default='#')
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--score_window', type=int, default=96)
-    parser.add_argument('--mode', type=str, default='forecast+fft+time')
-    parser.add_argument('--smooth', type=int, default=8)
+    parser.add_argument('--data_direc', 
+                        type=str, 
+                        default='Datasets/TSB-AD-U/', 
+                        help="specify the directory where all the csv data-files are stored.")
+    parser.add_argument('--eval_file', 
+                        type=str, 
+                        default='Datasets/File_List/TSB-AD-U-Eva.csv',
+                        help='file containing list of valid csv files.')
+    parser.add_argument('--out_file', 
+                        type=str, 
+                        default="TSB_results.csv"
+                        help="output file where the results will be stored.")
+    parser.add_argument('--dataset', 
+                        type=str, 
+                        required=False, 
+                        default='#',
+                        help="optional file selector parameter, if specified runs experiment only on the files containing the string.")
+    parser.add_argument('--batch_size', 
+                        type=int, 
+                        default=128,
+                        help="batch size used by the TSAD pipeline.")
+    parser.add_argument('--score_window', 
+                        type=int, 
+                        default=96,
+                        help="optional parameter to specify the scoring window size.")
+    parser.add_argument('--mode', 
+                        type=str, 
+                        default='forecast+fft+time',
+                        help="running mode for the TSPulse AD pipeline.")
+    parser.add_argument('--smooth', 
+                        type=int, 
+                        default=8,
+                        help="score smoothing window specification.")
     args = parser.parse_args()
     print(args)   
  
