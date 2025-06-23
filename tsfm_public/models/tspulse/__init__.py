@@ -27,8 +27,6 @@ else:
         "TSPulseForReconstruction",
         "TSPulseForClassification",
         "TSPulsePreTrainedModel",
-        "TSPulseDecoderWithReconstructionHead",
-        "TSPulseDecoderWithClassificationHead",
     ]
 
 
@@ -46,8 +44,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_tspulse import (
             TSPULSE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TSPulseDecoderWithClassificationHead,
-            TSPulseDecoderWithReconstructionHead,
             TSPulseForClassification,
             TSPulseForReconstruction,
             TSPulseModel,
