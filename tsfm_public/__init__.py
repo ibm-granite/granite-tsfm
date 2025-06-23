@@ -62,6 +62,12 @@ _import_structure = {
         "TrackingCallback",
         "count_parameters",
         "optimal_lr_finder",
+        "ClassificationDFDataset",
+        "TimeSeriesImputationPipeline",
+        "TimeSeriesClassificationPipeline",
+        "TimeSeriesAnomalyDetectionPipeline",
+        "TimeSeriesPreprocessor",
+        "TimeSeriesClassificationPreprocessor",
     ],
 }
 
@@ -107,10 +113,15 @@ if TYPE_CHECKING:
         TSPulsePreTrainedModel,
     )
     from .toolkit import (
+        ClassificationDFDataset,
         ForecastDFDataset,
         PretrainDFDataset,
         RegressionDFDataset,
+        TimeSeriesAnomalyDetectionPipeline,
+        TimeSeriesClassificationPipeline,
+        TimeSeriesClassificationPreprocessor,
         TimeSeriesForecastingPipeline,
+        TimeSeriesImputationPipeline,
         TimeSeriesPreprocessor,
         TrackingCallback,
         count_parameters,
