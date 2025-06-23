@@ -126,7 +126,7 @@ if __name__ == '__main__':
                         help='file containing list of valid csv files.')
     parser.add_argument('--out_file', 
                         type=str, 
-                        default="TSB_results.csv"
+                        default="TSB_results.csv",
                         help="output file where the results will be stored.")
     parser.add_argument('--dataset', 
                         type=str, 
