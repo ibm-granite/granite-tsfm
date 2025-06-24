@@ -1,11 +1,8 @@
 """
-Code adapted from https://github.com/TheDatumOrg/TSB-UAD 
-
-
+Code adapted from https://github.com/TheDatumOrg/TSB-UAD
 """
 
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
 import abc
 import warnings
@@ -21,7 +18,8 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils import deprecated
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
-from .utility import precision_n_scores, _pprint
+
+from .utility import _pprint, precision_n_scores
 
 
 class BaseDetector(metaclass=abc.ABCMeta):
@@ -56,12 +54,9 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def __init__(self, contamination=0.1):
-
-        if (isinstance(contamination, (float, int))):
-
-            if not (0. < contamination <= 0.5):
-                raise ValueError("contamination must be in (0, 0.5], "
-                                 "got: %f" % contamination)
+        if isinstance(contamination, (float, int)):
+            if not (0.0 < contamination <= 0.5):
+                raise ValueError("contamination must be in (0, 0.5], got: %f" % contamination)
 
         # allow arbitrary input such as PyThreshld object
         self.contamination = contamination
@@ -157,11 +152,11 @@ class BaseDetector(metaclass=abc.ABCMeta):
             Only if return_confidence is set to True.
         """
 
-        check_is_fitted(self, ['decision_scores_', 'threshold_', 'labels_'])
+        check_is_fitted(self, ["decision_scores_", "threshold_", "labels_"])
         pred_score = self.decision_function(X)
 
         if isinstance(self.contamination, (float, int)):
-            prediction = (pred_score > self.threshold_).astype('int').ravel()
+            prediction = (pred_score > self.threshold_).astype("int").ravel()
 
         # if this is a PyThresh object
         else:
@@ -173,7 +168,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         return prediction
 
-    def predict_proba(self, X, method='linear', return_confidence=False):
+    def predict_proba(self, X, method="linear", return_confidence=False):
         """Predict the probability of a sample being outlier. Two approaches
         are possible:
 
@@ -205,16 +200,15 @@ class BaseDetector(metaclass=abc.ABCMeta):
             default 2 classes ([proba of normal, proba of outliers]).
         """
 
-        check_is_fitted(self, ['decision_scores_', 'threshold_', 'labels_'])
+        check_is_fitted(self, ["decision_scores_", "threshold_", "labels_"])
         train_scores = self.decision_scores_
 
         test_scores = self.decision_function(X)
 
         probs = np.zeros([X.shape[0], int(self._classes)])
-        if method == 'linear':
+        if method == "linear":
             scaler = MinMaxScaler().fit(train_scores.reshape(-1, 1))
-            probs[:, 1] = scaler.transform(
-                test_scores.reshape(-1, 1)).ravel().clip(0, 1)
+            probs[:, 1] = scaler.transform(test_scores.reshape(-1, 1)).ravel().clip(0, 1)
             probs[:, 0] = 1 - probs[:, 1]
 
             if return_confidence:
@@ -223,10 +217,9 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
             return probs
 
-        elif method == 'unify':
+        elif method == "unify":
             # turn output into probability
-            pre_erf_score = (test_scores - self._mu) / (
-                    self._sigma * np.sqrt(2))
+            pre_erf_score = (test_scores - self._mu) / (self._sigma * np.sqrt(2))
             erf_score = erf(pre_erf_score)
             probs[:, 1] = erf_score.clip(0, 1).ravel()
             probs[:, 0] = 1 - probs[:, 1]
@@ -237,8 +230,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
             return probs
         else:
-            raise ValueError(method,
-                             'is not a valid probability conversion method')
+            raise ValueError(method, "is not a valid probability conversion method")
 
     def predict_confidence(self, X):
         """Predict the model's confidence in making the same prediction
@@ -259,7 +251,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         """
 
-        check_is_fitted(self, ['decision_scores_', 'threshold_', 'labels_'])
+        check_is_fitted(self, ["decision_scores_", "threshold_", "labels_"])
 
         n = len(self.decision_scores_)
 
@@ -267,8 +259,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
         # already be available
         test_scores = self.decision_function(X)
 
-        count_instances = np.vectorize(
-            lambda x: np.count_nonzero(self.decision_scores_ <= x))
+        count_instances = np.vectorize(lambda x: np.count_nonzero(self.decision_scores_ <= x))
         n_instances = count_instances(test_scores)
 
         # Derive the outlier probability using Bayesian approach
@@ -281,12 +272,10 @@ class BaseDetector(metaclass=abc.ABCMeta):
             contam = self.contamination
 
         # Transform the outlier probability into a confidence value
-        confidence = np.vectorize(
-            lambda p: 1 - binom.cdf(n - int(n * contam), n, p))(
-            posterior_prob)
+        confidence = np.vectorize(lambda p: 1 - binom.cdf(n - int(n * contam), n, p))(posterior_prob)
 
         if isinstance(self.contamination, (float, int)):
-            prediction = (test_scores > self.threshold_).astype('int').ravel()
+            prediction = (test_scores > self.threshold_).astype("int").ravel()
         # if this is a PyThresh object
         else:
             prediction = self.contamination.eval(test_scores)
@@ -313,7 +302,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         """
 
-        check_is_fitted(self, ['decision_scores_'])
+        check_is_fitted(self, ["decision_scores_"])
 
         test_scores = self.decision_function(X)
         train_scores = self.decision_scores_
@@ -327,7 +316,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
         return ranks
 
     @deprecated()
-    def fit_predict_score(self, X, y, scoring='roc_auc_score'):
+    def fit_predict_score(self, X, y, scoring="roc_auc_score"):
         """Fit the detector, predict on samples, and evaluate the model by
         predefined metrics, e.g., ROC.
 
@@ -358,13 +347,12 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         self.fit(X)
 
-        if scoring == 'roc_auc_score':
+        if scoring == "roc_auc_score":
             score = roc_auc_score(y, self.decision_scores_)
-        elif scoring == 'prc_n_score':
+        elif scoring == "prc_n_score":
             score = precision_n_scores(y, self.decision_scores_)
         else:
-            raise NotImplementedError('PyOD built-in scoring only supports '
-                                      'ROC and Precision @ rank n')
+            raise NotImplementedError("PyOD built-in scoring only supports ROC and Precision @ rank n")
 
         print("{metric}: {score}".format(metric=scoring, score=score))
 
@@ -420,8 +408,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
         if y is not None:
             check_classification_targets(y)
             self._classes = len(np.unique(y))
-            warnings.warn(
-                "y should not be presented in unsupervised learning.")
+            warnings.warn("y should not be presented in unsupervised learning.")
         return self
 
     def _process_decision_scores(self):
@@ -436,10 +423,8 @@ class BaseDetector(metaclass=abc.ABCMeta):
         """
 
         if isinstance(self.contamination, (float, int)):
-            self.threshold_ = percentile(self.decision_scores_,
-                                         100 * (1 - self.contamination))
-            self.labels_ = (self.decision_scores_ > self.threshold_).astype(
-                'int').ravel()
+            self.threshold_ = percentile(self.decision_scores_, 100 * (1 - self.contamination))
+            self.labels_ = (self.decision_scores_ > self.threshold_).astype("int").ravel()
 
         # if this is a PyThresh object
         else:
@@ -466,7 +451,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         # fetch the constructor or the original constructor before
         # deprecation wrapping if any
-        init = getattr(cls.__init__, 'deprecated_original', cls.__init__)
+        init = getattr(cls.__init__, "deprecated_original", cls.__init__)
         if init is object.__init__:
             # No explicit constructor to introspect
             return []
@@ -475,16 +460,16 @@ class BaseDetector(metaclass=abc.ABCMeta):
         # to represent
         init_signature = signature(init)
         # Consider the constructor parameters excluding 'self'
-        parameters = [p for p in init_signature.parameters.values()
-                      if p.name != 'self' and p.kind != p.VAR_KEYWORD]
+        parameters = [p for p in init_signature.parameters.values() if p.name != "self" and p.kind != p.VAR_KEYWORD]
         for p in parameters:
             if p.kind == p.VAR_POSITIONAL:
-                raise RuntimeError("scikit-learn estimators should always "
-                                   "specify their parameters in the signature"
-                                   " of their __init__ (no varargs)."
-                                   " %s with constructor %s doesn't "
-                                   " follow this convention."
-                                   % (cls, init_signature))
+                raise RuntimeError(
+                    "scikit-learn estimators should always "
+                    "specify their parameters in the signature"
+                    " of their __init__ (no varargs)."
+                    " %s with constructor %s doesn't "
+                    " follow this convention." % (cls, init_signature)
+                )
         # Extract and sort argument names excluding 'self'
         return sorted([p.name for p in parameters])
 
@@ -507,7 +492,7 @@ class BaseDetector(metaclass=abc.ABCMeta):
             Parameter names mapped to their values.
         """
 
-        out = dict()
+        out = {}
         for key in self._get_param_names():
             # We need deprecation warnings to always be on in order to
             # catch deprecated param values.
@@ -517,16 +502,16 @@ class BaseDetector(metaclass=abc.ABCMeta):
             try:
                 with warnings.catch_warnings(record=True) as w:
                     value = getattr(self, key, None)
-                if len(w) and w[0].category == DeprecationWarning:
+                if len(w) and isinstance(w[0].category, DeprecationWarning):
                     # if the parameter is deprecated, don't show it
                     continue
             finally:
                 warnings.filters.pop(0)
 
             # XXX: should we rather test if instance of estimator?
-            if deep and hasattr(value, 'get_params'):
+            if deep and hasattr(value, "get_params"):
                 deep_items = value.get_params().items()
-                out.update((key + '__' + k, val) for k, val in deep_items)
+                out.update((key + "__" + k, val) for k, val in deep_items)
             out[key] = value
         return out
 
@@ -553,12 +538,13 @@ class BaseDetector(metaclass=abc.ABCMeta):
 
         nested_params = defaultdict(dict)  # grouped by prefix
         for key, value in params.items():
-            key, delim, sub_key = key.partition('__')
+            key, delim, sub_key = key.partition("__")
             if key not in valid_params:
-                raise ValueError('Invalid parameter %s for estimator %s. '
-                                 'Check the list of available parameters '
-                                 'with `estimator.get_params().keys()`.' %
-                                 (key, self))
+                raise ValueError(
+                    "Invalid parameter %s for estimator %s. "
+                    "Check the list of available parameters "
+                    "with `estimator.get_params().keys()`." % (key, self)
+                )
 
             if delim:
                 nested_params[key][sub_key] = value
@@ -578,6 +564,10 @@ class BaseDetector(metaclass=abc.ABCMeta):
         """
 
         class_name = self.__class__.__name__
-        return '%s(%s)' % (class_name, _pprint(self.get_params(deep=False),
-                                               offset=len(class_name), ),)
-        
+        return "%s(%s)" % (
+            class_name,
+            _pprint(
+                self.get_params(deep=False),
+                offset=len(class_name),
+            ),
+        )

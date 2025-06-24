@@ -1,20 +1,23 @@
+"""
+Code adapted from https://github.com/TheDatumOrg/TSB-UAD
+"""
+
 import numpy as np
 from scipy.signal import argrelextrema
 from statsmodels.tsa.stattools import acf
 
 
-class basic_metricor():
-    def __init__(self, 
-                 eps: float = 1e-15):
+class basic_metricor:
+    def __init__(self, eps: float = 1e-15):
         self.eps = eps
 
     def range_convers_new(self, label):
-        '''
+        """
         input: arrays of binary values
         output: list of ordered pair [[a0,b0], [a1,b1]... ] of the inputs
-        '''
+        """
         anomaly_starts = np.where(np.diff(label) == 1)[0] + 1
-        anomaly_ends, = np.where(np.diff(label) == -1)
+        (anomaly_ends,) = np.where(np.diff(label) == -1)
         if len(anomaly_ends):
             if not len(anomaly_starts) or anomaly_ends[0] < anomaly_starts[0]:
                 # we started with an anomaly, so the start of the first anomaly is the start of the labels
@@ -25,10 +28,7 @@ class basic_metricor():
                 anomaly_ends = np.concatenate([anomaly_ends, [len(label) - 1]])
         return list(zip(anomaly_starts, anomaly_ends))
 
-    def new_sequence(self, 
-                     label, 
-                     sequence_original, 
-                     window):
+    def new_sequence(self, label, sequence_original, window):
         a = max(sequence_original[0][0] - window // 2, 0)
         sequence_new = []
         for i in range(len(sequence_original) - 1):
@@ -56,11 +56,7 @@ class basic_metricor():
         return label
 
     # TPR_FPR_window
-    def RangeAUC_volume_opt(self, 
-                            labels_original, 
-                            score, 
-                            windowSize, 
-                            thre=250):
+    def RangeAUC_volume_opt(self, labels_original, score, windowSize, thre=250):
         window_3d = np.arange(0, windowSize + 1, 1)
         P = np.sum(labels_original)
         seq = self.range_convers_new(labels_original)
@@ -84,7 +80,6 @@ class basic_metricor():
             N_pred[k] = np.sum(pred)
 
         for window in window_3d:
-
             labels_extended = self.sequencing(labels_original, seq, window)
             L = self.new_sequence(labels_extended, seq, window)
 
@@ -99,17 +94,17 @@ class basic_metricor():
                 existence = 0
 
                 for seg in L:
-                    labels[seg[0]:seg[1] + 1] = labels_extended[seg[0]:seg[1] + 1] * pred[seg[0]:seg[1] + 1]
-                    if (pred[seg[0]:(seg[1] + 1)] > 0).any():
+                    labels[seg[0] : seg[1] + 1] = labels_extended[seg[0] : seg[1] + 1] * pred[seg[0] : seg[1] + 1]
+                    if (pred[seg[0] : (seg[1] + 1)] > 0).any():
                         existence += 1
                 for seg in seq:
-                    labels[seg[0]:seg[1] + 1] = 1
+                    labels[seg[0] : seg[1] + 1] = 1
 
                 TP = 0
                 N_labels = 0
                 for seg in l:
-                    TP += np.dot(labels[seg[0]:seg[1] + 1], pred[seg[0]:seg[1] + 1])
-                    N_labels += np.sum(labels[seg[0]:seg[1] + 1])
+                    TP += np.dot(labels[seg[0] : seg[1] + 1], pred[seg[0] : seg[1] + 1])
+                    N_labels += np.sum(labels[seg[0] : seg[1] + 1])
 
                 TP += tp[j]
                 FP = N_pred[j] - TP
@@ -138,7 +133,7 @@ class basic_metricor():
             width = TF_list[1:, 1] - TF_list[:-1, 1]
             height = (TF_list[1:, 0] + TF_list[:-1, 0]) / 2
             AUC_range = np.dot(width, height)
-            auc_3d[window] = (AUC_range)
+            auc_3d[window] = AUC_range
 
             width_PR = TF_list[1:-1, 0] - TF_list[:-2, 0]
             height_PR = Precision_list[1:]
@@ -148,11 +143,7 @@ class basic_metricor():
 
         return tpr_3d, fpr_3d, prec_3d, window_3d, sum(auc_3d) / len(window_3d), sum(ap_3d) / len(window_3d)
 
-    def RangeAUC_volume_opt_mem(self, 
-                                labels_original, 
-                                score, 
-                                windowSize, 
-                                thre=250):
+    def RangeAUC_volume_opt_mem(self, labels_original, score, windowSize, thre=250):
         window_3d = np.arange(0, windowSize + 1, 1)
         P = np.sum(labels_original)
         seq = self.range_convers_new(labels_original)
@@ -190,17 +181,17 @@ class basic_metricor():
                 existence = 0
 
                 for seg in L:
-                    labels[seg[0]:seg[1] + 1] = labels_extended[seg[0]:seg[1] + 1] * p[j][seg[0]:seg[1] + 1]
-                    if (p[j][seg[0]:(seg[1] + 1)] > 0).any():
+                    labels[seg[0] : seg[1] + 1] = labels_extended[seg[0] : seg[1] + 1] * p[j][seg[0] : seg[1] + 1]
+                    if (p[j][seg[0] : (seg[1] + 1)] > 0).any():
                         existence += 1
                 for seg in seq:
-                    labels[seg[0]:seg[1] + 1] = 1
+                    labels[seg[0] : seg[1] + 1] = 1
 
                 N_labels = 0
                 TP = 0
                 for seg in l:
-                    TP += np.dot(labels[seg[0]:seg[1] + 1], p[j][seg[0]:seg[1] + 1])
-                    N_labels += np.sum(labels[seg[0]:seg[1] + 1])
+                    TP += np.dot(labels[seg[0] : seg[1] + 1], p[j][seg[0] : seg[1] + 1])
+                    N_labels += np.sum(labels[seg[0] : seg[1] + 1])
 
                 TP += tp[j]
                 FP = N_pred[j] - TP
@@ -228,52 +219,57 @@ class basic_metricor():
             width = TF_list[1:, 1] - TF_list[:-1, 1]
             height = (TF_list[1:, 0] + TF_list[:-1, 0]) / 2
             AUC_range = np.dot(width, height)
-            auc_3d[window] = (AUC_range)
+            auc_3d[window] = AUC_range
 
             width_PR = TF_list[1:-1, 0] - TF_list[:-2, 0]
             height_PR = Precision_list[1:]
             AP_range = np.dot(width_PR, height_PR)
-            ap_3d[window] = (AP_range)
+            ap_3d[window] = AP_range
         return tpr_3d, fpr_3d, prec_3d, window_3d, sum(auc_3d) / len(window_3d), sum(ap_3d) / len(window_3d)
 
 
-def generate_curve(label, score, slidingWindow, version='opt', thre=250):
-    if version =='opt_mem':
-        tpr_3d, fpr_3d, prec_3d, window_3d, avg_auc_3d, avg_ap_3d = basic_metricor().RangeAUC_volume_opt_mem(labels_original=label, score=score, windowSize=slidingWindow, thre=thre)
+def generate_curve(label, score, slidingWindow, version="opt", thre=250):
+    if version == "opt_mem":
+        tpr_3d, fpr_3d, prec_3d, window_3d, avg_auc_3d, avg_ap_3d = basic_metricor().RangeAUC_volume_opt_mem(
+            labels_original=label, score=score, windowSize=slidingWindow, thre=thre
+        )
     else:
-        tpr_3d, fpr_3d, prec_3d, window_3d, avg_auc_3d, avg_ap_3d = basic_metricor().RangeAUC_volume_opt(labels_original=label, score=score, windowSize=slidingWindow, thre=thre)
+        tpr_3d, fpr_3d, prec_3d, window_3d, avg_auc_3d, avg_ap_3d = basic_metricor().RangeAUC_volume_opt(
+            labels_original=label, score=score, windowSize=slidingWindow, thre=thre
+        )
 
-
-    X = np.array(tpr_3d).reshape(1,-1).ravel()
-    X_ap = np.array(tpr_3d)[:,:-1].reshape(1,-1).ravel()
-    Y = np.array(fpr_3d).reshape(1,-1).ravel()
-    W = np.array(prec_3d).reshape(1,-1).ravel()
+    X = np.array(tpr_3d).reshape(1, -1).ravel()
+    X_ap = np.array(tpr_3d)[:, :-1].reshape(1, -1).ravel()
+    Y = np.array(fpr_3d).reshape(1, -1).ravel()
+    W = np.array(prec_3d).reshape(1, -1).ravel()
     Z = np.repeat(window_3d, len(tpr_3d[0]))
-    Z_ap = np.repeat(window_3d, len(tpr_3d[0])-1)
+    Z_ap = np.repeat(window_3d, len(tpr_3d[0]) - 1)
 
-    return Y, Z, X, X_ap, W, Z_ap,avg_auc_3d, avg_ap_3d
+    return Y, Z, X, X_ap, W, Z_ap, avg_auc_3d, avg_ap_3d
 
 
-def get_metrics(score, labels, slidingWindow=100, pred=None, version='opt', thre=250):
+def get_metrics(score, labels, slidingWindow=100, pred=None, version="opt", thre=250):
     metrics = {}
 
     # R_AUC_ROC, R_AUC_PR, _, _, _ = grader.RangeAUC(labels=labels, score=score, window=slidingWindow, plot_ROC=True)
-    _, _, _, _, _, _,VUS_ROC, VUS_PR = generate_curve(labels.astype(int), score, slidingWindow, version, thre)
+    _, _, _, _, _, _, VUS_ROC, VUS_PR = generate_curve(labels.astype(int), score, slidingWindow, version, thre)
 
-    metrics['VUS-PR'] = VUS_PR
-    metrics['VUS-ROC'] = VUS_ROC
+    metrics["VUS-PR"] = VUS_PR
+    metrics["VUS-ROC"] = VUS_ROC
     return metrics
 
 
 def find_length_rank(data, rank=1):
     data = data.squeeze()
-    if len(data.shape)>1: return 0
-    if rank==0: return 1
-    data = data[:min(20000, len(data))]
-    
+    if len(data.shape) > 1:
+        return 0
+    if rank == 0:
+        return 1
+    data = data[: min(20000, len(data))]
+
     base = 3
     auto_corr = acf(data, nlags=400, fft=True)[base:]
-    
+
     # plot_acf(data, lags=400, fft=True)
     # plt.xlabel('Lags')
     # plt.ylabel('Autocorrelation')
@@ -287,29 +283,29 @@ def find_length_rank(data, rank=1):
 
     try:
         # max_local_max = np.argmax([auto_corr[lcm] for lcm in local_max])
-        sorted_local_max = np.argsort([auto_corr[lcm] for lcm in local_max])[::-1]    # Ascending order
-        max_local_max = sorted_local_max[0]     # Default
-        if rank == 1: max_local_max = sorted_local_max[0]
-        if rank == 2: 
-            for i in sorted_local_max[1:]: 
-                if i > sorted_local_max[0]: 
-                    max_local_max = i 
+        sorted_local_max = np.argsort([auto_corr[lcm] for lcm in local_max])[::-1]  # Ascending order
+        max_local_max = sorted_local_max[0]  # Default
+        if rank == 1:
+            max_local_max = sorted_local_max[0]
+        if rank == 2:
+            for i in sorted_local_max[1:]:
+                if i > sorted_local_max[0]:
+                    max_local_max = i
                     break
         if rank == 3:
             id_tmp = 1
-            for i in sorted_local_max[1:]: 
-                if i > sorted_local_max[0]: 
+            for i in sorted_local_max[1:]:
+                if i > sorted_local_max[0]:
                     id_tmp = i
                     break
             for i in sorted_local_max[id_tmp:]:
-                if i > sorted_local_max[id_tmp]: 
-                    max_local_max = i           
+                if i > sorted_local_max[id_tmp]:
+                    max_local_max = i
                     break
         # print('sorted_local_max: ', sorted_local_max)
         # print('max_local_max: ', max_local_max)
-        if local_max[max_local_max]<3 or local_max[max_local_max]>300:
+        if local_max[max_local_max] < 3 or local_max[max_local_max] > 300:
             return 125
-        return local_max[max_local_max]+base
-    except:
+        return local_max[max_local_max] + base
+    except Exception:
         return 125
-

@@ -1,9 +1,11 @@
-import numpy as np 
-from numpy import percentile
-from sklearn.utils import column_or_1d
-from sklearn.utils import check_consistent_length
-from sklearn.metrics import precision_score
+"""
+Code adapted from https://github.com/TheDatumOrg/TSB-UAD
+"""
 
+import numpy as np
+from numpy import percentile
+from sklearn.metrics import precision_score
+from sklearn.utils import check_consistent_length, column_or_1d
 
 
 def _pprint(params, offset=0, printer=repr):
@@ -29,35 +31,36 @@ def _pprint(params, offset=0, printer=repr):
     # Do a multi-line justified repr:
     options = np.get_printoptions()
     np.set_printoptions(precision=5, threshold=64, edgeitems=2)
-    params_list = list()
+    params_list = []
     this_line_length = offset
-    line_sep = ',\n' + (1 + offset // 2) * ' '
+    line_sep = ",\n" + (1 + offset // 2) * " "
     for i, (k, v) in enumerate(sorted(params.items())):
         if type(v) is float:
             # use str for representing floating point numbers
             # this way we get consistent representation across
             # architectures and versions.
-            this_repr = '%s=%s' % (k, str(v))
+            this_repr = "%s=%s" % (k, str(v))
         else:
             # use repr of the rest
-            this_repr = '%s=%s' % (k, printer(v))
+            this_repr = "%s=%s" % (k, printer(v))
         if len(this_repr) > 500:
-            this_repr = this_repr[:300] + '...' + this_repr[-100:]
+            this_repr = this_repr[:300] + "..." + this_repr[-100:]
         if i > 0:
-            if this_line_length + len(this_repr) >= 75 or '\n' in this_repr:
+            if this_line_length + len(this_repr) >= 75 or "\n" in this_repr:
                 params_list.append(line_sep)
                 this_line_length = len(line_sep)
             else:
-                params_list.append(', ')
+                params_list.append(", ")
                 this_line_length += 2
         params_list.append(this_repr)
         this_line_length += len(this_repr)
 
     np.set_printoptions(**options)
-    lines = ''.join(params_list)
+    lines = "".join(params_list)
     # Strip trailing space to avoid nightmare in doctests
-    lines = '\n'.join(l.rstrip(' ') for l in lines.split('\n'))
+    lines = "\n".join(l.rstrip(" ") for l in lines.split("\n"))
     return lines
+
 
 def precision_n_scores(y, y_pred, n=None):
     """Utility function to calculate precision @ rank n.
@@ -123,6 +126,6 @@ def get_label_n(y, y_pred, n=None):
         outliers_fraction = np.count_nonzero(y) / y_len
 
     threshold = percentile(y_pred, 100 * (1 - outliers_fraction))
-    y_pred = (y_pred > threshold).astype('int')
+    y_pred = (y_pred > threshold).astype("int")
 
     return y_pred
