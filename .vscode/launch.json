@@ -9,8 +9,12 @@
             "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
-            "env": {"TSFM_MODEL_DIR": "./mytest-tsfm", "PROMETHEUS_MULTIPROC_DIR" : "/tmp"},
+            "env": {
+                "TSFM_MODEL_DIR": "./mytest-tsfm",
+                "PROMETHEUS_MULTIPROC_DIR": "/tmp"
+            },
             "cwd": "${workspaceFolder}/services/inference",
+            "justMyCode": false,
             "args": [
                 "tsfminference.main:app",
                 "--reload",
@@ -20,6 +24,32 @@
                 "127.0.0.1",
                 "--port",
                 "8000"
+            ],
+            "jinja": true
+        },
+        {
+            "name": "FineTuning Main",
+            "type": "debugpy",
+            "request": "launch",
+            "env": {
+                "TSFM_MODEL_DIR": "./"
+            },
+            "cwd": "${workspaceFolder}/services/finetuning",
+            "program": "tsfmfinetuning/ftmain.py",
+            "justMyCode": false,
+            "args": [
+                "--payload",
+                "./data/ftpayload.json",
+                "--target_dir",
+                "/tmp/ftmodels",
+                "--model_name",
+                "myftmodel",
+                "--config_file",
+                "tsfmfinetuning/default_config.yml",
+                "--model_arch",
+                "ttm",
+                "--task_type",
+                "forecasting",
             ],
             "jinja": true
         }
