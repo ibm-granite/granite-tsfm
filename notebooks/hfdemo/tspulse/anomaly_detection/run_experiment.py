@@ -1,3 +1,6 @@
+# Copyright contributors to the TSFM project
+#
+
 import argparse
 import os
 import random

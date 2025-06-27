@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 import numpy as np
 import pandas as pd
 

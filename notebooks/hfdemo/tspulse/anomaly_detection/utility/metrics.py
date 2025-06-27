@@ -1,6 +1,6 @@
-"""
-Code adapted from https://github.com/TheDatumOrg/TSB-UAD
-"""
+# Copyright contributors to the TSFM project
+#
+"""Code adapted from https://github.com/TheDatumOrg/TSB-UAD"""
 
 import numpy as np
 from scipy.signal import argrelextrema
