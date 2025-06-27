@@ -56,42 +56,11 @@ json_file = "config.json"
 with open(json_file, "r") as file:
     clf_params = json.load(file)
 
-dset = [
-    "ArticularyWordRecognition",
-    "AtrialFibrillation",
-    "BasicMotions",
-    "CharacterTrajectories",
-    "Cricket",
-    "DuckDuckGeese",
-    "Epilepsy",
-    "ERing",
-    "EthanolConcentration",
-    "FaceDetection",
-    "FingerMovements",
-    "HandMovementDirection",
-    "Handwriting",
-    "Heartbeat",
-    "InsectWingbeat",
-    "JapaneseVowels",
-    "Libras",
-    "LSST",
-    "MotorImagery",
-    "NATOPS",
-    "PEMS-SF",
-    "PenDigits",
-    "PhonemeSpectra",
-    "RacketSports",
-    "SelfRegulationSCP1",
-    "SelfRegulationSCP2",
-    "SpokenArabicDigits",
-    "StandWalkJump",
-    "UWaveGestureLibrary",
-]
 
-for dataset_name in dset:
+def main(dataset_name):
     seed = 42
     set_seed(seed)
-    path = f"/datasets/{dataset_name}/{dataset_name}_TRAIN.ts"  # train
+    path = f"datasets/{dataset_name}/{dataset_name}_TRAIN.ts"  # train
 
     df_base = convert_tsfile_to_dataframe(
         path,
@@ -122,7 +91,7 @@ for dataset_name in dset:
         full_series=True,
     )
 
-    path = f"/datasets/{dataset_name}/{dataset_name}_TEST.ts"  # test
+    path = f"datasets/{dataset_name}/{dataset_name}_TEST.ts"  # test
 
     df_test = convert_tsfile_to_dataframe(
         path,
@@ -300,3 +269,16 @@ for dataset_name in dset:
     with open(output_file, mode="a", newline="") as file:
         writer = csv.writer(file)
         writer.writerow([dataset_name, test_accuracy])
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--datasets", nargs="+", required=True, help="List of UEA dataset names")
+    args = parser.parse_args()
+
+    print("Datasets : ", args.datasets)
+
+    for dataset_name in args.datasets:
+        main(dataset_name)
