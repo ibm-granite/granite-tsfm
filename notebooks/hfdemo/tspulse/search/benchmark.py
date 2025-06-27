@@ -176,4 +176,5 @@ if __name__ == "__main__":
     k = 3
     seed = 42
     df_result = main(seed, batch_size, k, dataset)
+    df_result.to_csv(f"results_{dataset}.csv")
     print(df_result[["level", "PREC@k", "MRR@k", "AP@k", "NDCG@k"]])
