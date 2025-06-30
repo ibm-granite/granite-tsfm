@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 import torch
 from scipy.stats import norm
 from transformers.feature_extraction_utils import PreTrainedFeatureExtractor
@@ -231,13 +232,39 @@ class PostHocProbabilisticProcessor(BaseProcessor):
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def train(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray) -> "PostHocProbabilisticProcessor":
+    def _get_numpy_input(self, df: pd.DataFrame) -> np.ndarray:
+        """Convert dataframe output from the forecasting pipeline in the numpy array format needed
+        for conformal.
+
+        Args:
+            df (pd.DataFrame): Input dataframe from the output of the forecasting pipeline.
+
+        Returns:
+            np.ndarray: Tensor with the following shape: number of samples x prediction length x number of features
+        """
+        prediction_length = len(df.iloc[0, 0])
+        y = df.values
+        y = np.array([np.stack(z) for z in y]).transpose(0, 2, 1)
+        return y[:-prediction_length, ...]
+
+    def train(
+        self,
+        y_cal_gt: Union[pd.DataFrame, np.ndarray],
+        y_cal_pred: Union[pd.DataFrame, np.ndarray],
+    ) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
         Input:
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
         y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
+        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
 
         """
+
+        if isinstance(y_cal_pred, pd.DataFrame):
+            y_cal_pred = self._get_numpy_input(y_cal_pred)
+
+        if isinstance(y_cal_gt, pd.DataFrame):
+            y_cal_gt = self._get_numpy_input(y_cal_gt)
+
         if len(y_cal_pred.shape) != 3:
             raise ValueError("y_cal_pred should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
