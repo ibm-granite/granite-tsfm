@@ -32,7 +32,9 @@ class TuningHandler(ServiceHandler):
                 enum.
 
         """
-
+        # this is loading config and returning
+        # the appropriate model handler, it's
+        # not loading the model yet
         return super().load(model_id, model_path, handler_function=HandlerFunction.TUNING.value)
 
     def train(
