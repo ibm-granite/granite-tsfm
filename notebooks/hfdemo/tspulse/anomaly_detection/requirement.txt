@@ -1,2 +1,0 @@
-granite-tsfm[testing] @ git+https://github.com/ibm-granite/granite-tsfm.git
-statsmodels

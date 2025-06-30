@@ -4,9 +4,9 @@
 Download the TSB UAD Benchmark Datasets (please refer [TSB-AD Github](https://github.com/TheDatumOrg/TSB-AD), and the [evaluation file list](https://github.com/TheDatumOrg/TSB-AD/tree/main/Datasets) . 
 
 ## Recommended setup
-The base environment should contain python >= 3.11. The dependent packages can be installed via pip utility using the `requirement.txt` file provided.
+The base environment should contain python >= 3.11. The dependent packages can be installed via pip utility using the `granite-tsfm/notebooks/hfdemo/tspulse/tspulse_repro_libs.txt` file provided.
 ```bash
-$ pip install -r requirement.txt
+$ pip install -r granite-tsfm/notebooks/hfdemo/tspulse/tspulse_repro_libs.txt
 ```
 
 The script expects the datasets and resource files from [TSB-AD Github](https://github.com/TheDatumOrg/TSB-AD)) to be placed in specific directory architecture, as. specified below. 
