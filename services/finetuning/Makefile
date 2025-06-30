@@ -26,6 +26,7 @@ clone_models:
 
 
 fetchdata:
+	rm -rf data || true
 	python tests/fetchdata.py
 
 test_local: clone_models fetchdata boilerplate

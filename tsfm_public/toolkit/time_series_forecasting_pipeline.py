@@ -53,7 +53,9 @@ class TimeSeriesPipeline(Pipeline):
             _type_: _description_
         """
         # our preprocess returns a dataset
-        dataset = self.preprocess(inputs, **preprocess_params)
+        dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
+        model_output_key = getattr(self, "_model_output_key", None)
+        copy_dataset_keys = getattr(self, "_copy_dataset_keys", True)
 
         batch_size = forward_params["batch_size"]
         num_workers = forward_params["num_workers"]
@@ -78,27 +80,29 @@ class TimeSeriesPipeline(Pipeline):
         # iterate over dataloader
         it = iter(dataloader)
         accumulator = []
-        model_output_key = None
         while (batch := next(it, None)) is not None:
             item = self.forward(batch, **forward_params)
             if not model_output_key:
                 model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
             accumulator.append(item[model_output_key])
 
-        # collect all ouputs needed for post processing
-        model_outputs = defaultdict(list)
-        items = list(dataset[0].items())
-        for r in dataset:
+        if copy_dataset_keys:
+            # collect all ouputs needed for post processing
+            model_outputs = defaultdict(list)
+            items = list(dataset[0].items())
+            for r in dataset:
+                for k, v in items:
+                    model_outputs[k].append(r[k])
+
             for k, v in items:
-                model_outputs[k].append(r[k])
+                if isinstance(v, torch.Tensor):
+                    model_outputs[k] = torch.stack(model_outputs[k])
 
-        for k, v in items:
-            if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(model_outputs[k])
-
-        # without shuffling in the dataloader above, we assume that order is preserved
-        # otherwise we need to incorporate sequence id somewhere and do a proper join
-        model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+            # without shuffling in the dataloader above, we assume that order is preserved
+            # otherwise we need to incorporate sequence id somewhere and do a proper join
+            model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+        else:
+            model_outputs = accumulator
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -411,7 +415,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        return dataset
+        return {"dataset": dataset}
 
     def _forward(self, model_inputs, **kwargs):
         """Forward step

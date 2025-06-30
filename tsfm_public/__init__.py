@@ -47,9 +47,11 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "models": [],
     "models.tinytimemixer": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyTimeMixerConfig"],
+    "models.tspulse": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TSPulseConfig"],
     "toolkit": [
         "TimeSeriesPreprocessor",
         "TimeSeriesForecastingPipeline",
+        "ClassificationDFDataset",
         "ForecastDFDataset",
         "PretrainDFDataset",
         "RegressionDFDataset",
@@ -60,6 +62,12 @@ _import_structure = {
         "TrackingCallback",
         "count_parameters",
         "optimal_lr_finder",
+        "ClassificationDFDataset",
+        "TimeSeriesImputationPipeline",
+        "TimeSeriesClassificationPipeline",
+        "TimeSeriesAnomalyDetectionPipeline",
+        "TimeSeriesPreprocessor",
+        "TimeSeriesClassificationPreprocessor",
     ],
 }
 
@@ -74,6 +82,15 @@ _import_structure["models.tinytimemixer"].extend(
         "TinyTimeMixerForPrediction",
     ]
 )
+_import_structure["models.tspulse"].extend(
+    [
+        "TSPULSE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TSPulsePreTrainedModel",
+        "TSPulseModel",
+        "TSPulseForReconstruction",
+        "TSPulseForClassification",
+    ]
+)
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -86,11 +103,25 @@ if TYPE_CHECKING:
         TinyTimeMixerModel,
         TinyTimeMixerPreTrainedModel,
     )
+    from .models.tspulse import (
+        TSPULSE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TSPULSE_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TSPulseConfig,
+        TSPulseForClassification,
+        TSPulseForReconstruction,
+        TSPulseModel,
+        TSPulsePreTrainedModel,
+    )
     from .toolkit import (
+        ClassificationDFDataset,
         ForecastDFDataset,
         PretrainDFDataset,
         RegressionDFDataset,
+        TimeSeriesAnomalyDetectionPipeline,
+        TimeSeriesClassificationPipeline,
+        TimeSeriesClassificationPreprocessor,
         TimeSeriesForecastingPipeline,
+        TimeSeriesImputationPipeline,
         TimeSeriesPreprocessor,
         TrackingCallback,
         count_parameters,
@@ -113,3 +144,4 @@ else:
 
 # register local models now
 register_config(model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public")
+register_config(model_type="tspulse", model_config_name="TSPulseConfig", module_path="tsfm_public")

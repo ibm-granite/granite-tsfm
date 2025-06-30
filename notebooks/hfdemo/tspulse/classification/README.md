@@ -21,18 +21,19 @@ datasets
 
 ## Prepare the environment 
 
-Create a seperate conda environment having the `specific versions` of the `torch` and `transformers` libraries as mentioned in the `../tspulse_repro_requirements.txt`.
+Create a `seperate virtual environment` and pip install the `granite-tsfm` library using the following code snippet. Now pip install `specific versions` of the `torch` and `transformers` libraries as mentioned in the `../tspulse_repro_libs.txt`.
 
 ```bash
-conda create --name tspulse_classification python=3.11.0
-conda activate tspulse_classification
-
 pip install git+https://github.com/ibm-granite/granite-tsfm.git@v0.2.28
-pip install -r ../tspulse_repro_requirements.txt
+pip install -r ../tspulse_repro_libs.txt
 ```
 📌 **Note on Versioning for Reproducibility**
 >
-> To ensure reproducibility of the reported results, we have **fixed the versions** of `torch` and `transformers` libraries. Please use the specified versions in the `../tspulse_repro_requirements.txt`, as different versions may lead to variations in numbers.
+> To ensure reproducibility of the reported results, we have **fixed the versions** of `torch` and `transformers` libraries. Please use the specified versions in the `../tspulse_repro_libs.txt`, as different versions may lead to variations in numbers.
 
 ## Run classification benchmarking
-Run the python script `full_benchmarking_script.py`. It will run TSPulse classification benchmarking on datasets in the UEA classification archive and save all the results in `tspulse_uea_classification_accuracies.csv`.
+Run the bash script `full_benchmarking_script.sh`. 
+```bash
+bash full_benchmarking_script.sh
+```
+It will run TSPulse classification benchmarking on all the datasets in the UEA classification archive mentioned in the bash script and save all the results in `tspulse_uea_classification_accuracies.csv`.

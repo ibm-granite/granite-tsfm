@@ -1,6 +1,7 @@
 # Standard
 
 import tempfile
+from pathlib import Path
 
 import pytest
 from tsfmfinetuning.finetuning import FinetuningRuntime
@@ -27,6 +28,7 @@ file_data_uris = [
     "file://./data/ETTh1.feather",
     "file://./data/ETTh1.csv",
     "file://./data/ETTh1.csv.gz",
+    "file://./data/multipart",
 ]
 
 
@@ -40,6 +42,6 @@ def test_fine_tune_forecasting_with_local_io(uri, payload):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tuned_model_name = "pytest_tuned_model"
-        response = ftr.finetuning(input=input, tuned_model_name=tuned_model_name, output_dir=tmp_dir)
+        response = ftr.finetuning(input=input, tuned_model_name=tuned_model_name, output_dir=Path(tmp_dir))
         assert response.exists()
         assert (response / "config.json").exists() and (response / "config.json").stat().st_size > 0

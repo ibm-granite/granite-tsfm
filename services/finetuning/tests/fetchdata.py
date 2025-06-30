@@ -5,6 +5,7 @@ import os
 
 import pandas as pd
 import wget
+from tsfmfinetuning.ioutils import _split_text_file
 
 
 def fetch_etth():
@@ -42,3 +43,4 @@ def fetch_finetune_json():
 if __name__ == "__main__":
     fetch_etth()
     fetch_finetune_json()
+    _split_text_file(source="./data/ETTh1.csv", target_dir="data/multipart", has_header=True, shuffle=False, parts=5)
