@@ -414,7 +414,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         for k in model_outputs:
             score = model_outputs[k]
             if deployed:
-                score, state_k = self._model_processor.adjust_boundary_(k, score, state=state.get(k, {}) **extra_kwargs)
+                score, state_k = self._model_processor.adjust_boundary_(k, score, state=state.get(k, {}), **extra_kwargs)
                 updated_states[k] = state_k
             else:
                 score = self._model_processor.adjust_boundary(k, score, **extra_kwargs)
