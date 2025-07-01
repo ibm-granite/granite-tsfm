@@ -511,15 +511,12 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         # add probabilistic here
         if self._probabilistic_processor is not None:
-            # add columns for each chosen quantile
-            predictions = np.array([np.stack(z) for z in out[prediction_columns].values]).transpose(0, 2, 1)
-
             # get the conformal bounds and add to the forecasts on the test set
-            predictions_test_conformal = self._probabilistic_processor.predict(predictions)
+            predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns])
 
             for j, q in enumerate(self._probabilistic_processor.quantiles):
                 for i, c in enumerate(prediction_columns):
-                    out[f"{c}_q{q}"] = predictions_test_conformal[..., i, j].tolist()
-                    out[f"{c}_q{q}"] = predictions_test_conformal[..., i, j].tolist()
+                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
 
         return out

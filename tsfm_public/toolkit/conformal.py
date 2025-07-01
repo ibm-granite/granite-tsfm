@@ -232,7 +232,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def _get_numpy_input(self, df: pd.DataFrame) -> np.ndarray:
+    @classmethod
+    def _get_numpy_input(cls, df: pd.DataFrame) -> np.ndarray:
         """Convert dataframe output from the forecasting pipeline in the numpy array format needed
         for conformal.
 
@@ -242,10 +243,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         Returns:
             np.ndarray: Tensor with the following shape: number of samples x prediction length x number of features
         """
-        prediction_length = len(df.iloc[0, 0])
-        y = df.values
-        y = np.array([np.stack(z) for z in y]).transpose(0, 2, 1)
-        return y[:-prediction_length, ...]
+        return np.array([np.stack(z) for z in df.values]).transpose(0, 2, 1)
 
     def train(
         self,
@@ -292,6 +290,10 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         Returns:
         y_test_prob_pred: nsamples x forecast_horizon x number_features x len(quantiles)
         """
+
+        if isinstance(y_test_pred, pd.DataFrame):
+            y_test_pred = self._get_numpy_input(y_test_pred)
+
         if len(quantiles) == 0:
             quantiles = self.quantiles
 
