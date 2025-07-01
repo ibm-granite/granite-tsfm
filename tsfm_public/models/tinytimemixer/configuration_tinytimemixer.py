@@ -217,7 +217,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         # masked prediction,
         mask_value: int = 0,
         differencing: bool = False,
-        diff_init_strategy: str = "learnable",
+        diff_init_strategy: str = "short",
+        trend_kernel_sizes: list = [32, 64, 96, 256],
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -250,6 +251,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
         self.differencing = differencing
 
+        self.trend_kernel_sizes = trend_kernel_sizes
+
         self.adaptive_patching_levels = adaptive_patching_levels
         self.resolution_prefix_tuning = resolution_prefix_tuning
         self.exogenous_channel_indices = exogenous_channel_indices
@@ -278,6 +281,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.huber_delta = huber_delta
         self.mask_value = mask_value
         self.masked_context_length = None
+        self.diff_init_strategy = diff_init_strategy
 
         super().__init__(**kwargs)
 
@@ -291,7 +295,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
                 else self.context_length
             )
 
-            if self.differencing:
+            if self.differencing and self.diff_init_strategy == "short":
+                print("Using Differenced Layer")
                 context_length = context_length - 1
 
             self.num_patches = (

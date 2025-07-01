@@ -151,6 +151,16 @@ def get_ttm_args():  # pragma: no cover
         default=0,
         help="Whether to enable differencing layer or not",
     )
+
+    parser.add_argument(
+        "--diff_init_strategy",
+        "-dis",
+        type=str,
+        required=False,
+        default="learnable",
+        help="diff init to follow",
+    )
+
     parser.add_argument(
         "--enable_prefix_tuning",
         "-ept",

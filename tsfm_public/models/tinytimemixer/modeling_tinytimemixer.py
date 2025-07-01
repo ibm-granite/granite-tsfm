@@ -27,6 +27,7 @@ from transformers.utils import (
 
 from .configuration_tinytimemixer import TinyTimeMixerConfig
 
+import torch.nn.init as init
 
 logger = logging.get_logger(__name__)
 
@@ -102,35 +103,35 @@ class TinyTimeMixerDifferencingLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dim = getattr(config, "diff_dim", 1)
-        # self.init_strategy = getattr(config, "diff_init_strategy", "zero")
+        self.init_strategy = getattr(config, "diff_init_strategy", "zero")
 
-        # if self.init_strategy == "learnable":
-        #     self.learnable_init = nn.Parameter(
-        #         torch.zeros(1)
-        #     )  # same across all channels
+        if self.init_strategy == "learnable":
+            self.learnable_init = nn.Parameter(
+                torch.zeros(1)
+            )  # same across all channels
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
-        diff = x[:, 1:, :] - x[:, :-1, :]
-        last_value = x[:, [-1], :]
-        return diff, last_value
-
-        # if self.init_strategy == "short":
-        #     diff = x[:, 1:, :] - x[:, :-1, :]
-        # else:
-        #     diff = torch.zeros_like(x)
-        #     diff[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
-        #     if self.init_strategy == "learnable":
-        #         diff[:, 0, :] = (
-        #             self.learnable_init.view(1, 1, 1)
-        #             .expand(x.size(0), 1, x.size(2))
-        #             .squeeze(1)
-        #         )
-        #     else:
-        #         diff[:, 0, :] = 0.0
-
+        # diff = x[:, 1:, :] - x[:, :-1, :]
         # last_value = x[:, [-1], :]
         # return diff, last_value
+
+        if self.init_strategy == "short":
+            diff = x[:, 1:, :] - x[:, :-1, :]
+        else:
+            diff = torch.zeros_like(x)
+            diff[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
+            if self.init_strategy == "learnable":
+                diff[:, 0, :] = (
+                    self.learnable_init.view(1, 1, 1)
+                    .expand(x.size(0), 1, x.size(2))
+                    .squeeze(1)
+                )
+            else:
+                diff[:, 0, :] = 0.0
+
+        last_value = x[:, [-1], :]
+        return diff, last_value
 
     def inverse(self, diff: torch.Tensor, last_value: torch.Tensor) -> torch.Tensor:
         """
@@ -1366,6 +1367,13 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TinyTimeMixerBatchNorm):
             module.batchnorm.bias.data.zero_()
             module.batchnorm.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Conv1d):
+            init.xavier_uniform_(
+                module.weight
+            )  # Xavier uniform initialization for weights
+            # Initialize biases if they exist
+            if module.bias is not None:
+                init.zeros_(module.bias)  # Zero initialization for biases
         elif isinstance(module, nn.Linear):
             # print(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
@@ -1761,7 +1769,8 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
 
         if config.differencing:
             temp_config = copy.deepcopy(config)
-            temp_config.context_length -= 1
+            if config.diff_init_strategy == "short":
+                temp_config.context_length -= 1
             self.patching = TinyTimeMixerPatchify(temp_config)
             self.diff_layer = TinyTimeMixerDifferencingLayer(temp_config)
         else:
@@ -2070,6 +2079,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             if self.config.masked_context_length is not None
             else self.config.context_length
         )
+
+        # if self.config.differencing and (past_values.shape[1] - sequence_length) == 1:
+        #     sequence_length += 1
 
         if past_values.shape[1] > sequence_length:
             past_values = past_values[:, -sequence_length:, :]
@@ -2404,4 +2416,182 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
             freq_token=freq_token,
             static_categorical_values=static_categorical_values,
             metadata=metadata,
+        )
+
+
+# === Fixed Moving Average Trend Extractor ===
+class moving_avg(nn.Module):
+    def __init__(self, kernel_size, stride=1):
+        super(moving_avg, self).__init__()
+        self.kernel_size = kernel_size
+        self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
+
+    def forward(self, x):
+        # x: [B, S, C] -> [B, C, S]
+        x = x.permute(0, 2, 1)
+        pad_len = (self.kernel_size - 1) // 2
+        x = nn.functional.pad(x, pad=(pad_len, pad_len), mode="replicate")
+        x = self.avg(x)
+        return x.permute(0, 2, 1)  # back to [B, S, C]
+
+
+class MultiScaleSeriesDecomp(nn.Module):
+    def __init__(self, kernel_sizes: list[int]):
+        super().__init__()
+        self.filters = nn.ModuleList(
+            [moving_avg(k if k % 2 == 1 else k + 1) for k in kernel_sizes]
+        )
+        # self.filters = nn.ModuleList([moving_avg(k) for k in kernel_sizes])
+        self.fuser = nn.Conv1d(
+            in_channels=len(kernel_sizes), out_channels=1, kernel_size=1, bias=False
+        )
+
+    def forward(self, x):
+        # x: [B, S, C]
+        trends = []
+        for filt in self.filters:
+            t = filt(x)  # [B, S, C]
+            trends.append(t.unsqueeze(1))  # [B, 1, S, C]
+
+        trend_stack = torch.cat(trends, dim=1)  # [B, K, S, C]
+        trend_stack = trend_stack.permute(0, 3, 1, 2)  # [B, C, K, S]
+        B, C, K, S = trend_stack.shape
+
+        trend_stack = trend_stack.reshape(B, C * K, S)  # [B, C*K, S]
+        trend_fused = self.fuser(trend_stack)  # [B, 1, S]
+        trend_fused = trend_fused.squeeze(1).unsqueeze(-1).repeat(1, 1, C)  # [B, S, C]
+
+        # trend_fused = self.fuser(trend_stack).squeeze(2)  # [B, C, S]
+        # trend_fused = trend_fused.permute(0, 2, 1)  # [B, S, C]
+
+        residual = x - trend_fused  # [B, S, C]
+        return residual, trend_fused
+
+
+class series_decomp(nn.Module):
+    def __init__(self, kernel_size):
+        super(series_decomp, self).__init__()
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        self.moving_avg = moving_avg(kernel_size, stride=1)
+
+    def forward(self, x):
+        moving_mean = self.moving_avg(x)
+        res = x - moving_mean
+        return res, moving_mean
+
+
+# === Trend Extractor ===
+class NonLinearTrendExtractor(nn.Module):
+    def __init__(self, channels, kernel_size=33):
+        super().__init__()
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        self.conv = nn.Conv1d(
+            in_channels=channels,
+            out_channels=channels,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            groups=channels,
+            bias=False,
+        )
+        # nn.init.constant_(self.conv.weight, 1.0 / kernel_size)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # [B, C, S]
+        trend = self.conv(x)
+        return trend.permute(0, 2, 1)  # [B, S, C]
+
+
+# === Trend Forecaster ===
+class TrendForecasterConv(nn.Module):
+    def __init__(self, channels, context_len, forecast_len):
+        super().__init__()
+        self.conv = nn.Conv1d(channels, channels, kernel_size=5, padding=2)
+        self.linear = nn.Linear(context_len, forecast_len)
+
+    def forward(self, trend):
+        x = trend.permute(0, 2, 1)  # [B, C, S]
+        x = self.conv(x)
+        x = self.linear(x)  # [B, C, F]
+        return x.permute(0, 2, 1)  # [B, F, C]
+
+
+class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__(config)
+        self.config = config
+        trend_kernel_sizes = config.trend_kernel_sizes
+
+        # self.trend_extractor = NonLinearTrendExtractor(
+        #     config.num_input_channels, kernel_size=trend_kernel_size
+        # )
+        # self.trend_extractor = MultiScaleSeriesDecomp(kernel_sizes=trend_kernel_sizes)
+        self.trend_extractor = series_decomp(kernel_sizes=trend_kernel_sizes)
+        self.trend_forecaster = TrendForecasterConv(
+            channels=config.num_input_channels,
+            context_len=config.context_length,
+            forecast_len=config.prediction_length,
+        )
+        self.resid_forecaster = TinyTimeMixerForPrediction(config)
+
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForPredictionOutput:
+
+        resid, trend = self.trend_extractor(past_values)
+        resid = past_values - trend
+
+        # resid = past_values
+        trend_pred = self.trend_forecaster(trend)
+
+        resid_out = self.resid_forecaster(
+            past_values=resid,
+            future_values=None,  # We won't compute its loss directly
+            past_observed_mask=past_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=False,  # Disable internal loss computation
+            return_dict=True,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+        )
+
+        combined_forecast = trend_pred + resid_out.prediction_outputs
+        # combined_forecast = resid_out.prediction_outputs
+
+        # Get final loss
+        loss_val = None
+        if future_values is not None and return_loss:
+            if self.config.loss == "mse":
+                criterion = nn.MSELoss(reduction="mean")
+            elif self.config.loss == "mae":
+                criterion = nn.L1Loss(reduction="mean")
+            else:
+                raise ValueError(
+                    "Only 'mse' and 'mae' supported for trend+residual wrapper"
+                )
+
+            if future_observed_mask is not None:
+                mask = future_observed_mask.bool()
+                loss_val = criterion(combined_forecast[mask], future_values[mask])
+            else:
+                loss_val = criterion(combined_forecast, future_values)
+
+        return TinyTimeMixerForPredictionOutput(
+            loss=loss_val,
+            prediction_outputs=combined_forecast,
+            backbone_hidden_state=resid_out.backbone_hidden_state,
+            decoder_hidden_state=resid_out.decoder_hidden_state,
+            hidden_states=resid_out.hidden_states,
+            loc=resid_out.loc,
+            scale=resid_out.scale,
         )

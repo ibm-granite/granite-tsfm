@@ -1,4 +1,4 @@
-python ttm_pretrain_sample.py  --context_length 513 \
+python ttm_pretrain_sample.py  --context_length 512 \
                                --forecast_length 96 \
                                --patch_length 64 \
                                --batch_size 16 \
@@ -10,3 +10,4 @@ python ttm_pretrain_sample.py  --context_length 513 \
                                --adaptive_patching_levels 0 \
                                --num_epochs 10 \
                                --differencing 1 \
+                               --diff_init_strategy zero \
