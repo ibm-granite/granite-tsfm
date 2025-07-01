@@ -263,16 +263,27 @@ class TSPulseADUtility(TSADHelperUtility):
             model_forward_output = self._model(batch_x)
 
         stitched_dict = {}
+        boundary_dict = {}
         if use_ts or use_fft:
-            reconstruct_start_ = 0 if batch_counter == 0 else reconstruct_start
-                
+            if batch_counter == 0:
+                reconstruct_start_ = 0  
+                boundary_dict = patchwise_stitched_reconstruction(
+                    model=self._model,
+                    past_values=batch_x[:1],
+                    patch_size=self._model.config.patch_length,
+                    keys_to_stitch=keys_to_stitch,
+                    keys_to_aggregate=[],
+                    reconstruct_start=reconstruct_start_,
+                    reconstruct_end=reconstruct_end,
+                    debug=False,
+                )
             stitched_dict = patchwise_stitched_reconstruction(
                 model=self._model,
                 past_values=batch_x,
                 patch_size=self._model.config.patch_length,
                 keys_to_stitch=keys_to_stitch,
                 keys_to_aggregate=[],
-                reconstruct_start=reconstruct_start_,
+                reconstruct_start=reconstruct_start,
                 reconstruct_end=reconstruct_end,
                 debug=False,
             )
@@ -287,15 +298,20 @@ class TSPulseADUtility(TSADHelperUtility):
         if use_ts:
             # time reconstruction
             output = stitched_dict["reconstruction_outputs"]
-            reconstruct_start_ = 0 if batch_counter == 0 else reconstruct_start
             pointwise_score = anomaly_criterion(
-                batch_x[:, reconstruct_start_:reconstruct_end, :],
-                output[:, reconstruct_start_:reconstruct_end, :],
+                batch_x[:, reconstruct_start:reconstruct_end, :],
+                output[:, reconstruct_start:reconstruct_end, :],
             )
             if batch_counter == 0:
-                data_start = pointwise_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
+                reconstruct_start_ = 0
+                boundary_output = boundary_dict["reconstruction_outputs"] 
+                boundary_score = anomaly_criterion(
+                    batch_x[:1, reconstruct_start_:reconstruct_end, :],
+                    boundary_output[:, reconstruct_start_:reconstruct_end, :],
+                )
+                data_start = boundary_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
                 pointwise_score = torch.cat([data_start, 
-                                             pointwise_score[1:, reconstruct_start:reconstruct_end, :]], 
+                                             pointwise_score[1:, :, :]], 
                                              dim=0)
                 
             scores[AnomalyScoreMethods.TIME_RECONSTRUCTION.value] = torch.mean(pointwise_score, 
@@ -304,15 +320,20 @@ class TSPulseADUtility(TSADHelperUtility):
         if use_fft:
             # time reconstruction from fft
             output = stitched_dict["reconstructed_ts_from_fft"]
-            reconstruct_start_ = 0 if batch_counter == 0 else reconstruct_start
             pointwise_score = anomaly_criterion(
-                batch_x[:, reconstruct_start_:reconstruct_end, :],
-                output[:, reconstruct_start_:reconstruct_end, :],
+                batch_x[:, reconstruct_start:reconstruct_end, :],
+                output[:, reconstruct_start:reconstruct_end, :],
             )
             if batch_counter == 0:
-                data_start = pointwise_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
+                reconstruct_start_ = 0
+                boundary_output = boundary_dict["reconstructed_ts_from_fft"] 
+                boundary_score = anomaly_criterion(
+                    batch_x[:1, reconstruct_start_:reconstruct_end, :],
+                    boundary_output[:, reconstruct_start_:reconstruct_end, :],
+                )
+                data_start = boundary_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
                 pointwise_score = torch.cat([data_start, 
-                                             pointwise_score[1:, reconstruct_start:reconstruct_end, :]], 
+                                             pointwise_score[1:, :, :]], 
                                              dim=0)
             scores[AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value] = torch.mean(
                 pointwise_score, dim=reduction_axis
@@ -412,7 +433,10 @@ class TSPulseADUtility(TSADHelperUtility):
         
         if state is None:
             state = {'upper': None, 'lower': None}
-            
+        
+        running_std = np.asarray(state.get('running_std', 0.))
+        running_size = np.asarray(state.get('running_size', 1))
+        
         if isinstance(x, (list, tuple)):
             if (len(x) > 0) and isinstance(x[0], torch.Tensor):
                 x = torch.cat(x, axis=0).detach().cpu().numpy()
@@ -448,8 +472,13 @@ class TSPulseADUtility(TSADHelperUtility):
         min_score = 0.0
         if reference is not None:
             reference_data = np.asarray(reference)
+            curr_std = np.nanstd(np.diff(reference_data, axis=0), axis=0, keepdims=True)
+            curr_size = reference_data.shape[0] - 1
+            running_variance = ((curr_std ** 2) * curr_size + (running_std ** 2) * running_size)/(curr_size + running_size)
+            running_size = curr_size + running_size
+            running_std = np.sqrt(running_variance)
             min_score = (
-                self._least_significant_scale * np.nanstd(np.diff(reference_data, axis=0), axis=0, keepdims=True) ** 2
+                self._least_significant_scale *  running_variance
             )
 
             if min_score.shape[-1] != score.shape[-1]:
@@ -463,5 +492,7 @@ class TSPulseADUtility(TSADHelperUtility):
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score
         scale = 1 if np.any(score > min_score) else self._least_significant_score
         score, state = causal_minmax(score_**score_exponent, **state)
+        state.update(running_std=running_std.tolist(),
+                     running_size=running_size.tolist())
         score = score * scale
         return score, state
