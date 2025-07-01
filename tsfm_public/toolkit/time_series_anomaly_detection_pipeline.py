@@ -221,6 +221,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "predictive_score_smoothing",
             "pad_value",
             "state",
+            "align"
         ]
 
         for c in preprocess_params:
