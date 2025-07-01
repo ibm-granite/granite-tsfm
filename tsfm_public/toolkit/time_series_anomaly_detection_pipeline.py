@@ -5,7 +5,7 @@
 import inspect
 from collections import defaultdict
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -71,6 +71,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         *args,
         prediction_mode: Optional[List[str]] = None,
         aggr_function: str = AggregationFunction.MAX.value,
+        variate_aggr_function: str = AggregationFunction.MEAN.value,
         aggregation_length: int = 32,
         smoothing_length: int = 8,
         probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
@@ -163,6 +164,18 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.aggr_function = aggr_function_
         self.select_function = select_function_
 
+        if variate_aggr_function.lower() == AggregationFunction.MIN.value:
+            variate_aggr_function_ = np.min 
+        elif variate_aggr_function.lower() == AggregationFunction.MEAN.value:
+            variate_aggr_function_ = np.mean 
+        elif variate_aggr_function.lower() == AggregationFunction.MAX.value:
+            variate_aggr_function_ = np.max 
+        else:
+            raise ValueError(
+                f"Unsupported variate aggregation function {variate_aggr_function}, expected one of {[c.value for c in AggregationFunction]}"
+            )
+        self.variate_aggr_function = variate_aggr_function_
+
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
@@ -206,6 +219,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "expand_score",
             "report_mode",
             "predictive_score_smoothing",
+            "pad_value",
+            "state",
         ]
 
         for c in preprocess_params:
@@ -218,6 +233,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         if self.model_type == "tspulse":
             preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
+
+        deployed = kwargs.get('deployed', False)
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
@@ -237,7 +254,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         forward_kwargs = {
             "batch_size": batch_size,
             "num_workers": num_workers,
+            "deployed": deployed
         }
+        
+        postprocess_kwargs.update(deployed=deployed)
 
         for p in ["mode", "aggregation_length", "expand_score"]:
             if p in kwargs:
@@ -270,7 +290,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # Fixing stride to 1
         kwargs["stride"] = 1
-
+        
         # maintaining processed data reference
         # CHECK if there is a preprocessor should we pass the preprocessed data here instead?
         processed_input_ = self._model_processor.preprocess(input_prep, **kwargs)
@@ -284,7 +304,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.__context_memory["reference"] = processed_input_
         return {"dataset": dataset}
 
-    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> pd.DataFrame:
+    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict]]:
         """Replaces base `run_single` method which does batching during inference. This is needed to support
         large inference requests.
 
@@ -316,12 +336,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         it = iter(dataloader)
         accumulator = defaultdict(list)
-
+        
         with torch.no_grad():  # check if really needed
+            batch_counter = 0
             while (batch := next(it, None)) is not None:
-                scores = self.forward(batch, **forward_params)
+                scores = self.forward(batch, batch=batch_counter, **forward_params)
                 for key in scores:
                     accumulator[key].append(scores[key])
+                batch_counter += 1
 
         # call postprocess
         outputs = self.postprocess(ModelOutput(accumulator), **postprocess_params)
@@ -338,7 +360,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-        return self._model_processor.compute_score(input_tensors, **kwargs)
+        deployed = kwargs.pop('deployed', False)
+
+        deployed = deployed and hasattr(self._model_processor, 'compute_score_' )
+
+        if deployed:
+            return self._model_processor.compute_score_(input_tensors, **kwargs)
+        else:
+            return self._model_processor.compute_score(input_tensors, **kwargs)
 
     def postprocess(self, model_outputs, **postprocess_parameters):
         """Overrides the postprocess of the base class. Applies post-processing logic on the model outputs.
@@ -355,7 +384,13 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_length", 1)
-        target_columns = postprocess_parameters.get("target_columns")
+        pad_value = postprocess_parameters.get('pad_value', None)
+        state = postprocess_parameters.get('state', {})
+        target_columns = postprocess_parameters.get("target_columns", [])
+        
+        deployed = postprocess_parameters.pop('deployed', False)
+
+        deployed = deployed and hasattr(self._model_processor, 'adjust_boundary_' )
 
         report_mode = postprocess_parameters.get("report_mode", False)
         predictive_score_smoothing = postprocess_parameters.get("predictive_score_smoothing", False)
@@ -372,11 +407,17 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if len(target_columns) > 0:
                 data = data[target_columns]
             extra_kwargs["reference"] = data.values
+            extra_kwargs['pad_value'] = pad_value
 
         model_outputs_ = {}
+        updated_states = {}
         for k in model_outputs:
             score = model_outputs[k]
-            score = self._model_processor.adjust_boundary(k, score, **extra_kwargs)
+            if deployed:
+                score, state_k = self._model_processor.adjust_boundary_(k, score, state=state.get(k, {}) **extra_kwargs)
+                updated_states[k] = state_k
+            else:
+                score = self._model_processor.adjust_boundary(k, score, **extra_kwargs)
             if not predictive_score_smoothing and (
                 k == AnomalyScoreMethods.PREDICTIVE.value
             ):  # Skip Smoothing For 1 Lookahead forecast
@@ -399,6 +440,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         score = self.aggr_function(score, axis=0)
 
         expand_score = (len(target_columns) > 1) and expand_score
+        
+        if deployed and (not expand_score):
+            score = self.variate_aggr_function(score, axis=-1)
+            
         model_outputs = {}
         if expand_score:
             if len(target_columns) != score.shape[-1]:
@@ -418,4 +463,6 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         for k in model_outputs:
             result[k] = model_outputs[k]
         self.__context_memory = {}
+        if deployed:
+            return result, updated_states
         return result
