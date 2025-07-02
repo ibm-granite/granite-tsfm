@@ -3,7 +3,7 @@
 """Helper class for anomaly detection support"""
 
 from collections import OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -23,33 +23,33 @@ from tsfm_public.toolkit.ad_helpers import (
 
 from .helpers import patchwise_stitched_reconstruction
 
-def causal_minmax(x, 
-                  upper: Optional[np.ndarray | List[float]] = None, 
-                  lower: Optional[np.ndarray | List[float]] = None,
-                  **kwargs):
+
+def causal_minmax(
+    x, upper: Optional[np.ndarray | List[float]] = None, lower: Optional[np.ndarray | List[float]] = None, **kwargs
+):
     x_ = np.asarray(x)
     expanded = False
     if x_.ndim == 1:
         x_ = x_.reshape(-1, 1)
         expanded = True
     if x_.ndim != 2:
-        raise ValueError(f"Expects: 1D / 2D data!")
+        raise ValueError("Expects: 1D / 2D data!")
 
-    dummy_head = [f'x{i}' for i in range(x_.shape[1])]
+    dummy_head = [f"x{i}" for i in range(x_.shape[1])]
     x_expanding = pd.DataFrame(x_, columns=dummy_head).expanding()
-    x_max = x_expanding.max().values 
+    x_max = x_expanding.max().values
     x_min = x_expanding.min().values
 
     if (upper is None) or (len(upper) != x_.shape[-1]):
         upper = np.asarray([-np.inf])
     else:
         upper = np.asarray(upper)
-    
+
     if (lower is None) or (len(lower) != x_.shape[-1]):
-        lower = np.asarray([np.inf]) 
+        lower = np.asarray([np.inf])
     else:
         lower = np.asarray(lower)
-        
+
     x_max = np.maximum(x_max, upper)
     x_min = np.minimum(x_min, lower)
     den = np.maximum(x_max - x_min, 1e-6)
@@ -57,9 +57,8 @@ def causal_minmax(x,
     x_scaled = (x_ - x_min) / den
     if expanded:
         x_scaled = x_scaled.ravel()
-        
-    state = {'upper': upper.tolist(), 
-             'lower': lower.tolist()}
+
+    state = {"upper": upper.tolist(), "lower": lower.tolist()}
     return x_scaled, state
 
 
@@ -101,8 +100,10 @@ class TSPulseADUtility(TSADHelperUtility):
         if not self.is_valid_mode(mode):
             raise ValueError(f"Error: unsupported inference method {mode}!")
         if aggregation_length % model.config.patch_length != 0:
-            raise ValueError(f"Error: aggregation window must be multiple of model patch_length {model.config.patch_length}!")
-        
+            raise ValueError(
+                f"Error: aggregation window must be multiple of model patch_length {model.config.patch_length}!"
+            )
+
         self._model = model
         self._mode = mode
         self._aggr_win_size = aggregation_length
@@ -202,8 +203,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            scores[AnomalyScoreMethods.TIME_RECONSTRUCTION.value] = torch.mean(pointwise_score, 
-                                                                               dim=reduction_axis)
+            scores[AnomalyScoreMethods.TIME_RECONSTRUCTION.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_fft:
             # time reconstruction from fft
@@ -220,13 +220,11 @@ class TSPulseADUtility(TSADHelperUtility):
             # forecast output
             batch_future_values = payload["future_values"]
             output = model_forward_output["forecast_output"]
-            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], 
-                                                output[:, 0, :]).unsqueeze(1)
-            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, 
-                                                                      dim=reduction_axis)
+            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
+            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         return ModelOutput(scores)
-    
+
     def compute_score_(
         self,
         payload: dict,
@@ -266,7 +264,7 @@ class TSPulseADUtility(TSADHelperUtility):
         boundary_dict = {}
         if use_ts or use_fft:
             if batch_counter == 0:
-                reconstruct_start_ = 0  
+                reconstruct_start_ = 0
                 boundary_dict = patchwise_stitched_reconstruction(
                     model=self._model,
                     past_values=batch_x[:1],
@@ -294,7 +292,7 @@ class TSPulseADUtility(TSADHelperUtility):
         # output shape: [batch_size, window_size, n_channels]
         scores = OrderedDict()
 
-        reduction_axis = [1] 
+        reduction_axis = [1]
         if use_ts:
             # time reconstruction
             output = stitched_dict["reconstruction_outputs"]
@@ -304,18 +302,15 @@ class TSPulseADUtility(TSADHelperUtility):
             )
             if batch_counter == 0:
                 reconstruct_start_ = 0
-                boundary_output = boundary_dict["reconstruction_outputs"] 
+                boundary_output = boundary_dict["reconstruction_outputs"]
                 boundary_score = anomaly_criterion(
                     batch_x[:1, reconstruct_start_:reconstruct_end, :],
                     boundary_output[:, reconstruct_start_:reconstruct_end, :],
                 )
                 data_start = boundary_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
-                pointwise_score = torch.cat([data_start, 
-                                             pointwise_score[1:, :, :]], 
-                                             dim=0)
-                
-            scores[AnomalyScoreMethods.TIME_RECONSTRUCTION.value] = torch.mean(pointwise_score, 
-                                                                                dim=reduction_axis)
+                pointwise_score = torch.cat([data_start, pointwise_score[1:, :, :]], dim=0)
+
+            scores[AnomalyScoreMethods.TIME_RECONSTRUCTION.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         if use_fft:
             # time reconstruction from fft
@@ -326,15 +321,13 @@ class TSPulseADUtility(TSADHelperUtility):
             )
             if batch_counter == 0:
                 reconstruct_start_ = 0
-                boundary_output = boundary_dict["reconstructed_ts_from_fft"] 
+                boundary_output = boundary_dict["reconstructed_ts_from_fft"]
                 boundary_score = anomaly_criterion(
                     batch_x[:1, reconstruct_start_:reconstruct_end, :],
                     boundary_output[:, reconstruct_start_:reconstruct_end, :],
                 )
                 data_start = boundary_score[0].unfold(0, aggr_win_size, 1).transpose(2, 1)
-                pointwise_score = torch.cat([data_start, 
-                                             pointwise_score[1:, :, :]], 
-                                             dim=0)
+                pointwise_score = torch.cat([data_start, pointwise_score[1:, :, :]], dim=0)
             scores[AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value] = torch.mean(
                 pointwise_score, dim=reduction_axis
             )
@@ -343,18 +336,18 @@ class TSPulseADUtility(TSADHelperUtility):
             # forecast output
             batch_future_values = payload["future_values"]
             output = model_forward_output["forecast_output"]
-            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], 
-                                                output[:, 0, :]).unsqueeze(1)
-            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, 
-                                                                      dim=reduction_axis)
+            pointwise_score = anomaly_criterion(batch_future_values[:, 0, :], output[:, 0, :]).unsqueeze(1)
+            scores[AnomalyScoreMethods.PREDICTIVE.value] = torch.mean(pointwise_score, dim=reduction_axis)
 
         return ModelOutput(scores)
 
-    def adjust_boundary(self, 
-                        key: str, 
-                        x: np.ndarray | torch.Tensor | List[np.ndarray | torch.Tensor], 
-                        reference: Optional[np.ndarray] = None,
-                        **kwargs) -> np.ndarray:
+    def adjust_boundary(
+        self,
+        key: str,
+        x: np.ndarray | torch.Tensor | List[np.ndarray | torch.Tensor],
+        reference: Optional[np.ndarray] = None,
+        **kwargs,
+    ) -> np.ndarray:
         """Combines model outputs with boundary adjustment.
 
         Args:
@@ -414,45 +407,48 @@ class TSPulseADUtility(TSADHelperUtility):
         state: Optional[dict] = None,
         **kwargs,
     ) -> Tuple[np.ndarray, dict]:
-        """Combines model outputs with boundary adjustment. 
+        """Combines model outputs with boundary adjustment.
 
         Args:
             key (str): key associated with model output.
             x (ScoreListType): model outputs across all batches combined.
             reference (np.ndarray, optional): reference data for score scale adjustment. Defaults to None.
+            align (str): takes value (center/left/right) suggesting how to time align the window score, default in 'center'
+            pad_value (float): optional field suggesting value used for padding the end values, if not provided forward and backward fill algorithm is applied.
+            state (dict): optional parameters, expects dictionary containing required values for scoring using a using state memory.
 
         Returns:
             np.ndarray: combined score
-        """        
+        """
         context_length = self._model.config.context_length
         aggr_win_size = self._aggr_win_size
         score_exponent = self._score_exponent
-        
+
         if align is None:
             align = "center"
-        
+
         if state is None:
-            state = {'upper': None, 'lower': None}
-        
-        running_std = np.asarray(state.get('running_std', 0.))
-        running_size = np.asarray(state.get('running_size', 1))
-        
+            state = {"upper": None, "lower": None}
+
+        running_std = np.asarray(state.get("running_std", 0.0))
+        running_size = np.asarray(state.get("running_size", 1))
+
         if isinstance(x, (list, tuple)):
             if (len(x) > 0) and isinstance(x[0], torch.Tensor):
-                x = torch.cat(x, axis=0).detach().cpu().numpy()
+                x = torch.cat(x, dim=0).detach().cpu().numpy()
             else:
                 x = np.concatenate(x, axis=0).astype(float)
         if key == AnomalyScoreMethods.PREDICTIVE.value:
             start_pad_len = context_length
             end_pad_len = 0
         else:
-            if align == 'center':
+            if align == "center":
                 start_pad_len = aggr_win_size // 2
                 end_pad_len = aggr_win_size // 2
-            elif align == 'left':
+            elif align == "left":
                 start_pad_len = 0
                 end_pad_len = aggr_win_size
-            elif align == 'right':
+            elif align == "right":
                 start_pad_len = aggr_win_size - 1
                 end_pad_len = 1
             else:
@@ -464,7 +460,7 @@ class TSPulseADUtility(TSADHelperUtility):
         else:
             start_pad_value = np.ones(x[0].shape) * pad_value
             end_pad_value = np.ones(x[-1].shape) * pad_value
-            
+
         score = np.array([start_pad_value] * start_pad_len + list(x) + [end_pad_value] * end_pad_len)
         if score.ndim == 1:
             score = score.reshape(-1, 1)
@@ -474,12 +470,12 @@ class TSPulseADUtility(TSADHelperUtility):
             reference_data = np.asarray(reference)
             curr_std = np.nanstd(np.diff(reference_data, axis=0), axis=0, keepdims=True)
             curr_size = reference_data.shape[0] - 1
-            running_variance = ((curr_std ** 2) * curr_size + (running_std ** 2) * running_size)/(curr_size + running_size)
+            running_variance = ((curr_std**2) * curr_size + (running_std**2) * running_size) / (
+                curr_size + running_size
+            )
             running_size = curr_size + running_size
             running_std = np.sqrt(running_variance)
-            min_score = (
-                self._least_significant_scale *  running_variance
-            )
+            min_score = self._least_significant_scale * running_variance
 
             if min_score.shape[-1] != score.shape[-1]:
                 min_score = np.nanmax(min_score, axis=-1)
@@ -492,7 +488,6 @@ class TSPulseADUtility(TSADHelperUtility):
         score_[np.where(score > min_score)] *= 1 / self._least_significant_score
         scale = 1 if np.any(score > min_score) else self._least_significant_score
         score, state = causal_minmax(score_**score_exponent, **state)
-        state.update(running_std=running_std.tolist(),
-                     running_size=running_size.tolist())
+        state.update(running_std=running_std.tolist(), running_size=running_size.tolist())
         score = score * scale
         return score, state

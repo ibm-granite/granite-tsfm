@@ -5,7 +5,7 @@
 import inspect
 from collections import defaultdict
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -165,11 +165,11 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.select_function = select_function_
 
         if variate_aggr_function.lower() == AggregationFunction.MIN.value:
-            variate_aggr_function_ = np.min 
+            variate_aggr_function_ = np.min
         elif variate_aggr_function.lower() == AggregationFunction.MEAN.value:
-            variate_aggr_function_ = np.mean 
+            variate_aggr_function_ = np.mean
         elif variate_aggr_function.lower() == AggregationFunction.MAX.value:
-            variate_aggr_function_ = np.max 
+            variate_aggr_function_ = np.max
         else:
             raise ValueError(
                 f"Unsupported variate aggregation function {variate_aggr_function}, expected one of {[c.value for c in AggregationFunction]}"
@@ -221,7 +221,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             "predictive_score_smoothing",
             "pad_value",
             "state",
-            "align"
+            "align",
         ]
 
         for c in preprocess_params:
@@ -235,7 +235,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         if self.model_type == "tspulse":
             preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
 
-        deployed = kwargs.get('deployed', False)
+        deployed = kwargs.get("deployed", False)
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
@@ -252,12 +252,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             else:
                 num_workers = self._num_workers
 
-        forward_kwargs = {
-            "batch_size": batch_size,
-            "num_workers": num_workers,
-            "deployed": deployed
-        }
-        
+        forward_kwargs = {"batch_size": batch_size, "num_workers": num_workers, "deployed": deployed}
+
         postprocess_kwargs.update(deployed=deployed)
 
         for p in ["mode", "aggregation_length", "expand_score"]:
@@ -291,7 +287,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         # Fixing stride to 1
         kwargs["stride"] = 1
-        
+
         # maintaining processed data reference
         # CHECK if there is a preprocessor should we pass the preprocessed data here instead?
         processed_input_ = self._model_processor.preprocess(input_prep, **kwargs)
@@ -305,7 +301,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.__context_memory["reference"] = processed_input_
         return {"dataset": dataset}
 
-    def run_single(self, inputs, preprocess_params, forward_params, postprocess_params) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict]]:
+    def run_single(
+        self, inputs, preprocess_params, forward_params, postprocess_params
+    ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict]]:
         """Replaces base `run_single` method which does batching during inference. This is needed to support
         large inference requests.
 
@@ -337,7 +335,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
 
         it = iter(dataloader)
         accumulator = defaultdict(list)
-        
+
         with torch.no_grad():  # check if really needed
             batch_counter = 0
             while (batch := next(it, None)) is not None:
@@ -361,9 +359,9 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         The keys in model_outputs are governed by the underlying model combined with any
         original input keys.
         """
-        deployed = kwargs.pop('deployed', False)
+        deployed = kwargs.pop("deployed", False)
 
-        deployed = deployed and hasattr(self._model_processor, 'compute_score_' )
+        deployed = deployed and hasattr(self._model_processor, "compute_score_")
 
         if deployed:
             return self._model_processor.compute_score_(input_tensors, **kwargs)
@@ -385,13 +383,14 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         result = self.__context_memory["data"].copy()
         expand_score = postprocess_parameters.get("expand_score", False)
         smoothing_window_size = postprocess_parameters.get("smoothing_length", 1)
-        pad_value = postprocess_parameters.get('pad_value', None)
-        state = postprocess_parameters.get('state', {})
+        pad_value = postprocess_parameters.get("pad_value", None)
+        align = postprocess_parameters.get("align", None)
+        state = postprocess_parameters.get("state", {})
         target_columns = postprocess_parameters.get("target_columns", [])
-        
-        deployed = postprocess_parameters.pop('deployed', False)
 
-        deployed = deployed and hasattr(self._model_processor, 'adjust_boundary_' )
+        deployed = postprocess_parameters.pop("deployed", False)
+
+        deployed = deployed and hasattr(self._model_processor, "adjust_boundary_")
 
         report_mode = postprocess_parameters.get("report_mode", False)
         predictive_score_smoothing = postprocess_parameters.get("predictive_score_smoothing", False)
@@ -408,14 +407,17 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             if len(target_columns) > 0:
                 data = data[target_columns]
             extra_kwargs["reference"] = data.values
-            extra_kwargs['pad_value'] = pad_value
+            extra_kwargs["pad_value"] = pad_value
+            extra_kwargs["align"] = align
 
         model_outputs_ = {}
         updated_states = {}
         for k in model_outputs:
             score = model_outputs[k]
             if deployed:
-                score, state_k = self._model_processor.adjust_boundary_(k, score, state=state.get(k, {}), **extra_kwargs)
+                score, state_k = self._model_processor.adjust_boundary_(
+                    k, score, state=state.get(k, {}), **extra_kwargs
+                )
                 updated_states[k] = state_k
             else:
                 score = self._model_processor.adjust_boundary(k, score, **extra_kwargs)
@@ -441,10 +443,10 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         score = self.aggr_function(score, axis=0)
 
         expand_score = (len(target_columns) > 1) and expand_score
-        
+
         if deployed and (not expand_score):
             score = self.variate_aggr_function(score, axis=-1)
-            
+
         model_outputs = {}
         if expand_score:
             if len(target_columns) != score.shape[-1]:
