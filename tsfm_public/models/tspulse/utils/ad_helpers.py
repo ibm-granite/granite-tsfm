@@ -32,6 +32,7 @@ def causal_minmax(
     score_mean: Optional[np.ndarray | List[float]] = None,
     score_history_length: Optional[int] = None,
     sigma_factor: float = 6.0,
+    max_history_length: int = 10_000,
     eps: float = 1e-2,
     **kwargs,
 ) -> Tuple[np.ndarray, dict]:
@@ -45,6 +46,7 @@ def causal_minmax(
         score_mean (Optional[np.ndarray  |  List[float]], optional): states for computing running mean of the scores. Defaults to None.
         score_history_length (Optional[int], optional): size historical observation over which the state parameters are computer. Defaults to None.
         sigma_factor (float, optional): sigma factor for estimating upper bound for cold start use case. Defaults to 6..
+        max_history_length(int, optional): maximum history length to be maintained for state. Default to 10000.
         eps (float, optional): min value cutoff for computational stability. Defaults to 1e-2.
 
     Raises:
@@ -71,6 +73,7 @@ def causal_minmax(
     if score_history_length is None:
         score_history_length = 0
 
+    score_history_length = min(score_history_length, max_history_length)
     score2_mean = np.asarray(score2_mean)
     score_mean = np.asarray(score_mean)
 
@@ -117,6 +120,7 @@ def causal_minmax(
         score_mean=curr_mean.tolist(),
         score_history_length=curr_len,
         sigma_factor=sigma_factor,
+        max_history_length=max_history_length,
         eps=eps,
     )
     return x_scaled, state
@@ -545,9 +549,9 @@ class TSPulseADUtility(TSADHelperUtility):
                 min_score = min_score * (1 + self._model.config.patch_length)
 
         score_ = score.copy()
-        score_[np.where(score > min_score)] *= 1 / self._least_significant_score
-        scale = 1 if np.any(score > min_score) else self._least_significant_score
         score, state = causal_minmax(score_**score_exponent, **state)
-        state.update(running_std=running_std.tolist(), running_size=running_size.tolist())
+        scale = np.ones_like(score_)
+        scale[score_ <= min_score] = self._least_significant_score
         score = score * scale
+        state.update(running_std=running_std.tolist(), running_size=running_size.tolist())
         return score, state
