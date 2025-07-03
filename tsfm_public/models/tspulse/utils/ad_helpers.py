@@ -25,15 +25,62 @@ from .helpers import patchwise_stitched_reconstruction
 
 
 def causal_minmax(
-    x, upper: Optional[np.ndarray | List[float]] = None, lower: Optional[np.ndarray | List[float]] = None, **kwargs
-):
+    x,
+    upper: Optional[np.ndarray | List[float]] = None,
+    lower: Optional[np.ndarray | List[float]] = None,
+    score2_mean: Optional[np.ndarray | List[float]] = None,
+    score_mean: Optional[np.ndarray | List[float]] = None,
+    score_history_length: Optional[int] = None,
+    sigma_factor: float = 6.0,
+    eps: float = 1e-2,
+    **kwargs,
+) -> Tuple[np.ndarray, dict]:
+    """Perform causal minmax scaling. Allow state management, to score in a streaming fashion.
+
+    Args:
+        x (_type_): data as 1D/2D numpy array
+        upper (Optional[np.ndarray  |  List[float]], optional): upper bound of score known from history. Defaults to None.
+        lower (Optional[np.ndarray  |  List[float]], optional): lower bound of the score known from history. Defaults to None.
+        score2_mean (Optional[np.ndarray  |  List[float]], optional): states for computing running standard deviation of the scores. Defaults to None.
+        score_mean (Optional[np.ndarray  |  List[float]], optional): states for computing running mean of the scores. Defaults to None.
+        score_history_length (Optional[int], optional): size historical observation over which the state parameters are computer. Defaults to None.
+        sigma_factor (float, optional): sigma factor for estimating upper bound for cold start use case. Defaults to 6..
+        eps (float, optional): min value cutoff for computational stability. Defaults to 1e-2.
+
+    Raises:
+        ValueError: Invalid data shape
+
+    """
     x_ = np.asarray(x)
     expanded = False
     if x_.ndim == 1:
         x_ = x_.reshape(-1, 1)
         expanded = True
     if x_.ndim != 2:
-        raise ValueError("Expects: 1D / 2D data!")
+        raise ValueError(f"Expects: 1D / 2D data got {x_.shape}!")
+
+    curr_std = np.nanstd(x_, axis=0)
+    curr_len = len(x_)
+
+    if score2_mean is None:
+        score2_mean = np.zeros(x_.shape[1])
+
+    if score_mean is None:
+        score_mean = np.zeros(x_.shape[1])
+
+    if score_history_length is None:
+        score_history_length = 0
+
+    score2_mean = np.asarray(score2_mean)
+    score_mean = np.asarray(score_mean)
+
+    curr_mean_2 = np.mean(x_**2, axis=0)
+    curr_mean = np.mean(x_, axis=0)
+    curr_mean_2 = (curr_mean_2 * curr_len + score2_mean * score_history_length) / (curr_len + score_history_length)
+    curr_mean = (curr_mean * curr_len + score_mean * score_history_length) / (curr_len + score_history_length)
+    curr_len += score_history_length
+
+    curr_std = np.maximum(np.sqrt(curr_mean_2 - np.square(curr_mean)), eps)
 
     dummy_head = [f"x{i}" for i in range(x_.shape[1])]
     x_expanding = pd.DataFrame(x_, columns=dummy_head).expanding()
@@ -42,23 +89,36 @@ def causal_minmax(
 
     if (upper is None) or (len(upper) != x_.shape[-1]):
         upper = np.asarray([-np.inf])
-    else:
-        upper = np.asarray(upper)
+
+    upper = np.asarray(upper)
 
     if (lower is None) or (len(lower) != x_.shape[-1]):
         lower = np.asarray([np.inf])
-    else:
-        lower = np.asarray(lower)
+    lower = np.asarray(lower)
 
+    upper = np.maximum(upper, curr_mean + sigma_factor * curr_std)
+    # lower = np.minimum(lower, curr_mean - sigma_factor * curr_std)
     x_max = np.maximum(x_max, upper)
     x_min = np.minimum(x_min, lower)
-    den = np.maximum(x_max - x_min, 1e-6)
-    upper, lower = x_max[-1], x_min[-1]
-    x_scaled = (x_ - x_min) / den
+    num = x_ - x_min
+    den = np.maximum(x_max - x_min, eps)
+    num[num < eps] = 0
+    upper, lower = x_max[-1, ...], x_min[-1, ...]
+    x_scaled = num / den
     if expanded:
         x_scaled = x_scaled.ravel()
 
-    state = {"upper": upper.tolist(), "lower": lower.tolist()}
+    state = {}
+
+    state.update(
+        upper=upper.tolist(),
+        lower=lower.tolist(),
+        score2_mean=curr_mean_2.tolist(),
+        score_mean=curr_mean.tolist(),
+        score_history_length=curr_len,
+        sigma_factor=sigma_factor,
+        eps=eps,
+    )
     return x_scaled, state
 
 
