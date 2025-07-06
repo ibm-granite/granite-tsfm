@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 import torch
 from scipy.stats import norm
 from transformers.feature_extraction_utils import PreTrainedFeatureExtractor
@@ -231,25 +232,43 @@ class PostHocProbabilisticProcessor(BaseProcessor):
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def train(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray) -> "PostHocProbabilisticProcessor":
+    @classmethod
+    def _get_numpy_input(cls, df: pd.DataFrame) -> np.ndarray:
+        """Convert dataframe output from the forecasting pipeline in the numpy array format needed
+        for conformal.
+
+        Args:
+            df (pd.DataFrame): Input dataframe from the output of the forecasting pipeline.
+
+        Returns:
+            np.ndarray: Tensor with the following shape: number of samples x prediction length x number of features
+        """
+        return np.array([np.stack(z) for z in df.values]).transpose(0, 2, 1)
+
+    def train(
+        self,
+        y_cal_gt: Union[pd.DataFrame, np.ndarray],
+        y_cal_pred: Union[pd.DataFrame, np.ndarray],
+    ) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
-        Input:
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
-        y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
+
+        Args:
+            y_cal_gt (Union[pd.DataFrame, np.ndarray]):  ground truth values, nsamples x forecast_horizon x number_features
+            y_cal_pred (Union[pd.DataFrame, np.ndarray]): model perdictions, nsamples x forecast_horizon x number_features
 
         """
+
+        if isinstance(y_cal_pred, pd.DataFrame):
+            y_cal_pred = self._get_numpy_input(y_cal_pred)
+
+        if isinstance(y_cal_gt, pd.DataFrame):
+            y_cal_gt = self._get_numpy_input(y_cal_gt)
+
         if len(y_cal_pred.shape) != 3:
             raise ValueError("y_cal_pred should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
         if len(y_cal_gt.shape) != 3:
             raise ValueError("y_cal_gt should have 3 dimensions: nsamples x forecast_horizon x number_features")
-
-        # WMG to do: check that updated window size is used in the fit call
-        # (update) WMG: I don't think we need this
-        # if self.window_size is None:
-        #     window_size = y_cal_gt.shape[0]
-        # else:
-        #     window_size = self.window_size
 
         self.model.fit(
             y_cal_gt=y_cal_gt,
@@ -258,13 +277,19 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         )
         return self
 
-    def predict(self, y_test_pred: np.ndarray, quantiles: List[float] = []) -> np.ndarray:
+    def predict(self, y_test_pred: Union[pd.DataFrame, np.ndarray], quantiles: List[float] = []) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
-        Input:
-        y_test_pred: nsamples x forecast_horizon x number_features
+
+        Args:
+            y_test_pred (Union[pd.DataFrame, np.ndarray]): nsamples x forecast_horizon x number_features
+
         Returns:
-        y_test_prob_pred: nsamples x forecast_horizon x number_features x len(quantiles)
+            y_test_prob_pred (np.ndarray): nsamples x forecast_horizon x number_features x len(quantiles)
         """
+
+        if isinstance(y_test_pred, pd.DataFrame):
+            y_test_pred = self._get_numpy_input(y_test_pred)
+
         if len(quantiles) == 0:
             quantiles = self.quantiles
 
@@ -303,17 +328,27 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         return y_test_prob_pred
 
     def update(
-        self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None
+        self,
+        y_gt: Union[pd.DataFrame, np.ndarray],
+        y_pred: Union[pd.DataFrame, np.ndarray],
+        X: np.ndarray = None,
+        timestamps: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
         """
         Update the probabilistic post hoc model
 
         Args:
-            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
-            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            y_gt (Union[pd.DataFrame, np.ndarray]): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (Union[pd.DataFrame, np.ndarray]): Predicted values. Shape: (n_samples,forecast_length, num_features).
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
+
+        if isinstance(y_gt, pd.DataFrame):
+            y_gt = self._get_numpy_input(y_gt)
+        if isinstance(y_pred, pd.DataFrame):
+            y_pred = self._get_numpy_input(y_pred)
+
         if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
             self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
         if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:

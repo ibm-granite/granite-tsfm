@@ -4,7 +4,7 @@
 
 import inspect
 from collections import defaultdict
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ from transformers.pipelines.base import (
 from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils import add_end_docstrings, logging
 
+from .conformal import PostHocProbabilisticProcessor
 from .dataset import ForecastDFDataset
 from .time_series_preprocessor import create_timestamps, extend_time_series
 
@@ -126,6 +127,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         explode_forecasts: bool = False,
         inverse_scale_outputs: bool = True,
         add_known_ground_truth: bool = True,
+        probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         kwargs["explode_forecasts"] = explode_forecasts
@@ -167,6 +169,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
         else:
             kwargs["frequency_token"] = None
+
+        self._probabilistic_processor = probabilistic_processor
 
         super().__init__(model, *args, **kwargs)
 
@@ -504,5 +508,15 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             out = self.feature_extractor.inverse_scale_targets(out)
             if add_known_ground_truth:
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+
+        # add probabilistic here
+        if self._probabilistic_processor is not None:
+            # get the conformal bounds and add to the forecasts on the test set
+            predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns])
+
+            for j, q in enumerate(self._probabilistic_processor.quantiles):
+                for i, c in enumerate(prediction_columns):
+                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
 
         return out
