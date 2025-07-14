@@ -187,7 +187,7 @@ if __name__ == "__main__":
         data = df.values.astype(float)
 
         if input_c is None: 
-            input_c = data.shape[-1]
+            input_c = df.shape[-1]
         
         if input_c != data.shape[-1]:
             raise ValueError(f"Error: input channels not consistent across finetuned datasets "
@@ -196,6 +196,7 @@ if __name__ == "__main__":
         # Create a dataset with this data only
         dataframes.append(data)
     
+    print(f"Number of channels: {input_c}")
     # Load model
     model = TSPulseForReconstruction.from_pretrained(
         args.model_path,
@@ -283,8 +284,8 @@ if __name__ == "__main__":
     if input_c > 1:
         # Reduce batch size to avoid OOMs (A100-80GB Gpu)
         batch_size = int(batch_size // input_c)
-        if batch_size < 128:
-            batch_size = 128
+        if batch_size < 64:
+            batch_size = 64
             print("Forcing batch size to be", batch_size)
     
     print("Batch Size is set to = ", batch_size)
