@@ -1,11 +1,19 @@
-python ttm_pretrain_sample.py  --context_length 90 \
-                               --forecast_length 30 \
-                               --patch_length 10 \
+python ttm_pretrain_sample.py  --context_length 512 \
+                               --forecast_length 96 \
+                               --patch_length 8 \
                                --batch_size 64 \
-                               --num_layers 3 \
+                               --num_layers 10 \
                                --decoder_num_layers 3 \
-                               --dropout 0.2 \
-                               --head_dropout 0.2 \
+                               --dropout 0.7 \
+                               --head_dropout 0.7 \
                                --early_stopping 1 \
                                --adaptive_patching_levels 0 \
-                               --num_epochs 10
+                               --num_epochs 50 \
+                               --multi_scale 1 \
+                               --register_tokens 5 \
+                               --fft_length 10 \
+                               --patch_gating 0 \
+                               --scaling std \
+                               --multi_scale_loss 0 \
+                               --use_fft_embedding 1 \
+                               --enable_fourier_attention 0 \

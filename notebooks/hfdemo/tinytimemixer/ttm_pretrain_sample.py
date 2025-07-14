@@ -9,6 +9,7 @@ import tempfile
 import pandas as pd
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
+from torch.utils.data import ConcatDataset
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
 from tsfm_public import TimeSeriesPreprocessor, get_datasets
@@ -52,7 +53,7 @@ def get_base_model(args):
         expansion_factor=2,
         dropout=args.dropout,
         head_dropout=args.head_dropout,
-        scaling="std",
+        scaling=args.scaling,
         gated_attn=True,
         adaptive_patching_levels=args.adaptive_patching_levels,
         # decoder params
@@ -62,6 +63,14 @@ def get_base_model(args):
         decoder_raw_residual=False,
         use_decoder=True,
         decoder_d_model=args.decoder_d_model,
+        multi_scale=args.multi_scale,
+        register_tokens=args.register_tokens,
+        fft_length=args.fft_length,
+        patch_gating=args.patch_gating,
+        multi_scale_loss=args.multi_scale_loss,
+        use_fft_embedding=args.use_fft_embedding,
+        self_attn=args.self_attn,
+        enable_fourier_attention=args.enable_fourier_attention,
     )
 
     model = TinyTimeMixerForPrediction(config)
@@ -96,7 +105,9 @@ def pretrain(args, model, dset_train, dset_val):
         save_strategy="epoch",
         logging_strategy="epoch",
         save_total_limit=1,
-        logging_dir=os.path.join(args.save_dir, "logs"),  # Make sure to specify a logging directory
+        logging_dir=os.path.join(
+            args.save_dir, "logs"
+        ),  # Make sure to specify a logging directory
         load_best_model_at_end=True,  # Load the best model when training ends
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
@@ -205,9 +216,7 @@ if __name__ == "__main__":
     # Data prep
     # Dataset
     TARGET_DATASET = "etth1"
-    dataset_path = (
-        "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"  # mention the dataset path
-    )
+    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"  # mention the dataset path
     timestamp_column = "date"
     id_columns = []  # mention the ids that uniquely identify a time-series.
 
@@ -245,6 +254,7 @@ if __name__ == "__main__":
     )
 
     dset_train, dset_valid, dset_test = get_datasets(tsp, data, split_config)
+    # dset_combined = ConcatDataset([dset_train, dset_test])
 
     # Get model
     model = get_base_model(args)

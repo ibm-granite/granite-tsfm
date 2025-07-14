@@ -72,8 +72,12 @@ def get_ttm_args():  # pragma: no cover
         default=None,
         help="Number of GPUs",
     )
-    parser.add_argument("--random_seed", "-rs", type=int, required=False, default=42, help="Random seed")
-    parser.add_argument("--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size")
+    parser.add_argument(
+        "--random_seed", "-rs", type=int, required=False, default=42, help="Random seed"
+    )
+    parser.add_argument(
+        "--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size"
+    )
     parser.add_argument(
         "--num_epochs",
         "-ne",
@@ -115,6 +119,15 @@ def get_ttm_args():  # pragma: no cover
         default="datasets/",
         help="Dataset",
     )
+
+    parser.add_argument(
+        "--scaling",
+        "-sc",
+        type=str,
+        required=False,
+        default="std",
+        help="Scaler",
+    )
     parser.add_argument(
         "--save_dir",
         "-sd",
@@ -131,6 +144,34 @@ def get_ttm_args():  # pragma: no cover
         default=1,
         help="Whether to use early stopping during finetuning.",
     )
+
+    parser.add_argument(
+        "--multi_scale",
+        "-ms",
+        type=int,
+        required=False,
+        default=0,
+        help="Enable or Disable multi scale.",
+    )
+
+    parser.add_argument(
+        "--multi_scale_loss",
+        "-msl",
+        type=int,
+        required=False,
+        default=0,
+        help="Enable or Disable multi scale loss.",
+    )
+
+    parser.add_argument(
+        "--patch_gating",
+        "-pg",
+        type=int,
+        required=False,
+        default=0,
+        help="Enable or Disable Patch Gating.",
+    )
+
     parser.add_argument(
         "--freeze_backbone",
         "-fb",
@@ -147,6 +188,16 @@ def get_ttm_args():  # pragma: no cover
         default=0,
         help="Enable prefix tuning in TTM.",
     )
+
+    parser.add_argument(
+        "--use_fft_embedding",
+        "-ufe",
+        type=int,
+        required=False,
+        default=0,
+        help="Use embedding layer for FFT or not",
+    )
+
     parser.add_argument(
         "--hf_model_path",
         "-hmp",
@@ -206,6 +257,22 @@ def get_ttm_args():  # pragma: no cover
     )
 
     parser.add_argument(
+        "--register_tokens",
+        type=int,
+        required=False,
+        default=0,
+        help="Number of  register tokens",
+    )
+
+    parser.add_argument(
+        "--fft_length",
+        type=int,
+        required=False,
+        default=0,
+        help="FFT Length",
+    )
+
+    parser.add_argument(
         "--dropout",
         type=float,
         required=False,
@@ -221,14 +288,37 @@ def get_ttm_args():  # pragma: no cover
         help="head_dropout",
     )
 
+    parser.add_argument(
+        "--self_attn",
+        "-sa",
+        type=int,
+        required=False,
+        default=0,
+        help="self_attn",
+    )
+
+    parser.add_argument(
+        "--enable_fourier_attention",
+        "-fa",
+        type=int,
+        required=False,
+        default=0,
+        help="enable_fourier_attention",
+    )
+
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
+    args.patch_gating = int_to_bool(args.patch_gating)
     args.freeze_backbone = int_to_bool(args.freeze_backbone)
+    args.multi_scale = int_to_bool(args.multi_scale)
+    args.multi_scale_loss = int_to_bool(args.multi_scale_loss)
     args.enable_prefix_tuning = int_to_bool(args.enable_prefix_tuning)
     args.d_model = args.patch_length * args.d_model_scale
     args.decoder_d_model = args.patch_length * args.decoder_d_model_scale
-
+    args.use_fft_embedding = int_to_bool(args.use_fft_embedding)
+    args.self_attn = int_to_bool(args.self_attn)
+    args.enable_fourier_attention = int_to_bool(args.enable_fourier_attention)
     # Calculate number of gpus
     if args.num_gpus is None:
         args.num_gpus = torch.cuda.device_count()
