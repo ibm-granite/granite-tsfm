@@ -124,6 +124,16 @@ def get_args():
     )
     
     parser.add_argument(
+        "--device",
+        "-d",
+        type=str,
+        metavar="STRING",
+        required=False,
+        default=None,
+        help="Device to be used for compute."
+    )
+    
+    parser.add_argument(
         "--enable_fft_prob_loss", 
         "-efpl",
         type=int,
@@ -139,6 +149,15 @@ def get_args():
         metavar="INTEGER",
         default=1024,
         help="Batch size to be used for model finetuning. Default value is 1024.",
+    )
+    
+    parser.add_argument(
+        "--stride",
+        "-s",
+        type=int,
+        metavar='INTEGER',
+        default=1,
+        help="Stride for data generation."
     )
     
     parser.add_argument(
@@ -206,6 +225,9 @@ if __name__ == "__main__":
         enable_fft_prob_loss=args.enable_fft_prob_loss,
     )
     
+    if args.device is not None:
+        model = model.to(args.device)
+    
     context_length = model.config.context_length 
     forecast_length = model.config.prediction_length
     min_length = context_length if forecast_length is None else context_length + forecast_length
@@ -217,6 +239,7 @@ if __name__ == "__main__":
             window_size=context_length,
             aggr_window_size=args.aggr_win_size,
             normalize=True,
+            stride=args.stride
         )
         all_train_dsets.append(dset_train)
 
@@ -284,8 +307,8 @@ if __name__ == "__main__":
     if input_c > 1:
         # Reduce batch size to avoid OOMs (A100-80GB Gpu)
         batch_size = int(batch_size // input_c)
-        if batch_size < 64:
-            batch_size = 64
+        if batch_size < 16:
+            batch_size = 16
             print("Forcing batch size to be", batch_size)
     
     print("Batch Size is set to = ", batch_size)
