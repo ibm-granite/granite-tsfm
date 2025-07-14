@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from collections import defaultdict
-from utility.datasets import TSPulseDataset
+from utility.datasets import TSPulseReconstructionDataset
 from torch.utils.data import ConcatDataset, random_split
 from tsfm_public.models.tspulse import TSPulseForReconstruction
 from tsfm_public.models.tspulse.utils.helpers import PatchMaskingDatasetWrapper
@@ -74,15 +74,16 @@ def get_args():
         type=str,
         metavar="DIRECTORY",
         required=True,
-        help="Output directory where the finetuned model will be saved"
+        help="Output directory where the finetuned model will be saved."
     )
     
     parser.add_argument(
         "--aggr_win_size", 
+        "-wsz",
         type=int, 
         metavar="INTEGER",
-        default=96,
-        help="Size of the scoring window, default is 96"
+        default=64,
+        help="Size of the scoring window, default is 64."
     )
 
     parser.add_argument(
@@ -106,9 +107,9 @@ def get_args():
     parser.add_argument(
         "--freeze_backbone", 
         "-fb", 
-        type=bool, 
-        metavar="BOOLEAN",
-        default=True,
+        type=int, 
+        metavar="INT",
+        default=1,
         help="Freeze backbone while finetuning."        
     )
     
@@ -125,9 +126,9 @@ def get_args():
     parser.add_argument(
         "--enable_fft_prob_loss", 
         "-efpl",
-        type=bool,
-        metavar="BOOLEAN",
-        default=True,
+        type=int,
+        metavar="INT",
+        default=1,
         help="Use fft probability loss in the finetuning."
     )
 
@@ -209,11 +210,12 @@ if __name__ == "__main__":
     min_length = context_length if forecast_length is None else context_length + forecast_length
     
     for data in dataframes:
-        dset_train = TSPulseDataset(
+        dset_train = TSPulseReconstructionDataset(
             data,
+            return_dict=True,
             window_size=context_length,
-            forecast_window_size=forecast_length,
             aggr_window_size=args.aggr_win_size,
+            normalize=True,
         )
         all_train_dsets.append(dset_train)
 
