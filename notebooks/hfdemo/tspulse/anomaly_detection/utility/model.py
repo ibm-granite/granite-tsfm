@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 
+from typing import Optional
 from tsfm_public.models.tspulse.modeling_tspulse import TSPulseForReconstruction
 from tsfm_public.toolkit.time_series_anomaly_detection_pipeline import TimeSeriesAnomalyDetectionPipeline
 
@@ -24,6 +25,7 @@ def attach_timestamp_column(
 class TSAD_Pipeline(BaseDetector):
     def __init__(
         self,
+        model_path: Optional[str] = None,
         batch_size: int = 256,
         aggr_win_size: int = 96,
         num_input_channels: int = 1,
@@ -33,8 +35,14 @@ class TSAD_Pipeline(BaseDetector):
     ):
         self._batch_size = batch_size
         self._headers = [f"x{i + 1}" for i in range(num_input_channels)]
+        if model_path is None:
+            model_path = MODEL_PATH
+            
         self._model = TSPulseForReconstruction.from_pretrained(
-            MODEL_PATH, num_input_channels=num_input_channels, scaling="revin", mask_type="user"
+            model_path, 
+            num_input_channels=num_input_channels, 
+            scaling="revin", 
+            mask_type="user"
         )
         prediction_mode_array = [s_.strip() for s_ in str(prediction_mode).split("+")]
         self._scorer = TimeSeriesAnomalyDetectionPipeline(
