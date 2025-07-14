@@ -50,8 +50,6 @@ class TSPulseReconstructionDataset(torch.utils.data.Dataset):
             self.input_mask[:aggr_window_size, :] = 0
 
         if not self.channel_last:
-            # For MOMENT
-            # breakpoint()
             self.samples = self.samples.permute(0, 2, 1)  # batch, channel, window_size
             self.input_mask = self.input_mask[:, 0]  # window_size
 
@@ -66,8 +64,10 @@ class TSPulseReconstructionDataset(torch.utils.data.Dataset):
 
         if self.univariate:
             X = torch.stack([data[i : i + self.window_size] for i in indices])
+            print(X.shape)
         else:
-            X = torch.stack([data[i : i + self.window_size, :] for i in indices])
+            X = torch.stack([data[i : i + self.window_size] for i in indices])
+            print(X.shape)
 
         if self.label is not None:
             self.label = torch.tensor(self.label)
