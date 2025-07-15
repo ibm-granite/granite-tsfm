@@ -2,9 +2,7 @@
 #
 """Code adapted from https://github.com/TheDatumOrg/TSB-UAD"""
 
-import torch
 import numpy as np
-import subprocess as sp
 from numpy import percentile
 from sklearn.metrics import precision_score
 from sklearn.utils import check_consistent_length, column_or_1d
@@ -131,4 +129,3 @@ def get_label_n(y, y_pred, n=None):
     y_pred = (y_pred > threshold).astype("int")
 
     return y_pred
-

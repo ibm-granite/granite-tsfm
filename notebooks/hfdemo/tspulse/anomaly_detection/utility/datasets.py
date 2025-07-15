@@ -1,9 +1,10 @@
 # Copyright contributors to the TSFM project
 #
 
+import numpy as np
 import torch
 import torch.utils.data
-import numpy as np
+
 
 epsilon = 1e-8
 
@@ -43,9 +44,7 @@ class TSPulseReconstructionDataset(torch.utils.data.Dataset):
             self.samples, self.gen_labels = self._generate_samples()
         else:
             self.samples = self._generate_samples()
-        self.input_mask = np.ones(
-            (self.window_size, data.shape[1]), dtype=np.float32
-        )  # Fixed input mask
+        self.input_mask = np.ones((self.window_size, data.shape[1]), dtype=np.float32)  # Fixed input mask
         if aggr_window_size is not None:
             self.input_mask[:aggr_window_size, :] = 0
 
@@ -99,7 +98,6 @@ class TSPulseReconstructionDataset(torch.utils.data.Dataset):
                 return self.samples[index], self.input_mask
 
 
-
 # The following dataset is used by TSPulse
 # It generates data for reconstruction as well as
 # forecasting task.
@@ -123,10 +121,7 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
         self.stride = stride
         self.data = self._normalize_data(data) if normalize else data
 
-        if (
-            forecast_window_size is not None
-            and self.data.shape[0] < window_size + forecast_window_size
-        ):
+        if forecast_window_size is not None and self.data.shape[0] < window_size + forecast_window_size:
             pad_len = window_size + forecast_window_size - self.data.shape[0]
             pad = np.ones((pad_len, self.data.shape[1])) * self.data[:1]
             self.data = np.concatenate((pad, self.data), axis=0)
@@ -153,10 +148,8 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
                 self.samples = self._generate_samples()
 
         print(f"Sample size: {self.samples.shape}")
-        
-        self.input_mask = np.ones(
-            (self.window_size, data.shape[1]), dtype=np.float32
-        )  # Fixed input mask
+
+        self.input_mask = np.ones((self.window_size, data.shape[1]), dtype=np.float32)  # Fixed input mask
         if aggr_window_size is not None:
             self.input_mask[:aggr_window_size, :] = 0
 
@@ -179,11 +172,7 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
                 F = []
                 for i in indices:
                     X.append(data[i : i + self.window_size])
-                    f = data[
-                        i + self.window_size : i
-                        + self.window_size
-                        + self.forecast_window_size
-                    ]
+                    f = data[i + self.window_size : i + self.window_size + self.forecast_window_size]
                     if len(f) < self.forecast_window_size:
                         pad_len = self.forecast_window_size - len(f)
                         f = torch.cat(
@@ -206,9 +195,7 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
                 for i in indices:
                     X.append(data[i : i + self.window_size, :])
                     f = data[
-                        i + self.window_size : i
-                        + self.window_size
-                        + self.forecast_window_size,
+                        i + self.window_size : i + self.window_size + self.forecast_window_size,
                         :,
                     ]
                     if len(f) < self.forecast_window_size:
