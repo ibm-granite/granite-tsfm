@@ -120,11 +120,21 @@ def get_args():
     )
 
     parser.add_argument(
-        "--num_workers", "-nw", type=int, metavar="INTEGER", default=4, help="Number of workers for data loader"
+        "--num_workers",
+        "-nw",
+        type=int,
+        metavar="INTEGER",
+        default=4,
+        help="Number of workers for data loader. Default value is 4.",
     )
 
     parser.add_argument(
-        "--freeze_backbone", "-fb", type=int, metavar="INT", default=1, help="Freeze backbone while finetuning."
+        "--freeze_backbone",
+        "-fb",
+        type=int,
+        metavar="INT",
+        default=1,
+        help="Freeze backbone while finetuning (0 = tune backbone, 1 = freeze backbone). Default is 1.",
     )
 
     parser.add_argument(
@@ -153,7 +163,7 @@ def get_args():
         type=int,
         metavar="INT",
         default=1,
-        help="Use fft probability loss in the finetuning.",
+        help="Use fft probability loss in the finetuning (1 = enable, 0 = disable). Default is 1.",
     )
 
     parser.add_argument(
@@ -171,7 +181,7 @@ def get_args():
         type=int,
         metavar="INTEGER",
         default=1,
-        help="Stride for train and validation data generation for model finetuning.",
+        help="Stride for train and validation data generation for model finetuning. Default is 1.",
     )
 
     parser.add_argument(
