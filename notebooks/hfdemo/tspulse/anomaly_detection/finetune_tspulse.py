@@ -38,9 +38,6 @@ random.seed(seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 
-print("CUDA Available: ", torch.cuda.is_available())
-print("cuDNN Version: ", torch.backends.cudnn.version())
-
 def get_args():
     ## ArgumentParser
     parser = argparse.ArgumentParser(description="Running TSPulse AD Finetuning Script.")
@@ -51,6 +48,25 @@ def get_args():
         metavar="CSV_FILE",
         required=True,
         help="filename with training dataset file name!"
+    )
+    
+    parser.add_argument(
+        "--skip_columns",
+        "-sc",
+        type=str,
+        metavar="COLUMN_IDS",
+        default=None,
+        help="Specify the columns (by position) to drop from the CSV data, comma separated list."
+    )
+    
+    parser.add_argument(
+        "--target_columns",
+        "-tc",
+        type=str, 
+        metavar="COLUMN_IDS",
+        default=None,
+        help="Specify the target columns (by position) for model finetuning, comma separated list. "
+             "This overrides skip_columns."
     )
     
     parser.add_argument(
@@ -85,6 +101,15 @@ def get_args():
         default=64,
         help="Size of the scoring window, default is 64."
     )
+    
+    parser.add_argument(
+        "--tspulse_encoder_mode", 
+        "-tem", 
+        type=str, 
+        metavar="STRING",
+        default="common_channel",        
+        help="Activate encoder channel mixing by selecting the appropriate mode. Default is common_channel."
+    )
 
     parser.add_argument(
         "--tspulse_decoder_mode", 
@@ -92,7 +117,7 @@ def get_args():
         type=str, 
         metavar="STRING",
         default="common_channel",        
-        help="Activate channel mixing by selecting the appropriate mode."
+        help="Activate decoder channel mixing by selecting the appropriate mode. Default is common_channel."
     )
     
     parser.add_argument(
@@ -130,7 +155,7 @@ def get_args():
         metavar="STRING",
         required=False,
         default=None,
-        help="Device to be used for compute."
+        help="Device to be used for compute. Supported values are (cpu, cuda, mps)"
     )
     
     parser.add_argument(
@@ -171,18 +196,42 @@ def get_args():
 
     args = parser.parse_args()
     
+    if args.skip_columns is not None:
+        try:
+            columns = [int(f.strip()) for f in str(args.skip_columns).split(",")]
+            columns = list(set(columns))
+            args.skip_columns = columns
+        except ValueError as e:
+            print(f"Error: invalid column specification")
+            args.skip_columns = None
+    
+    if args.target_columns is not None:
+        try:
+            columns = [int(f.strip()) for f in str(args.target_columns).split(",")]
+            columns = list(set(columns))
+            args.target_columns = columns
+        except ValueError as e:
+            print(f"Error: invalid column specification")
+            args.target_columns = None
+    
     args.freeze_backbone = bool(args.freeze_backbone)
     args.enable_fft_prob_loss = bool(args.enable_fft_prob_loss)
+    
+    if args.device not in ['cpu', 'cuda', 'mps']:
+        args.device = None
 
     if args.tspulse_decoder_mode not in ('common_channel', 'mix_channel'):
         args.tspulse_decoder_mode = "common_channel"
+        
+    if args.tspulse_encoder_mode not in ('common_channel', 'mix_channel'):
+        args.tspulse_encoder_mode = "common_channel"
         
     return args
 
 
 if __name__ == "__main__":
     args = get_args()
-    
+     
     if not os.path.exists(args.filename):
         raise ValueError(f"Error: can not access the model list files!")
     
@@ -202,11 +251,20 @@ if __name__ == "__main__":
     print("Creating dataset from all data.")
     input_c = None 
     for filename in tqdm(all_files):
-        df = pd.read_csv(os.path.join(args.data_direc, filename)).dropna()
-        data = df.values.astype(float)
+        df = pd.read_csv(os.path.join(args.data_direc, filename), index_col=None).dropna()
+        col_names = df.columns
+        
+        if args.target_columns is not None:
+            col_names = col_names[args.target_columns]
+        elif args.skip_columns is not None:
+            skip_columns = args.skip_columns
+            skip_column_names = col_names[skip_columns]
+            col_names = [c for c in col_names if c not in skip_column_names]
+        
+        data = df[col_names].values.astype(float)
 
         if input_c is None: 
-            input_c = df.shape[-1]
+            input_c = data.shape[-1]
         
         if input_c != data.shape[-1]:
             raise ValueError(f"Error: input channels not consistent across finetuned datasets "
@@ -220,13 +278,11 @@ if __name__ == "__main__":
     model = TSPulseForReconstruction.from_pretrained(
         args.model_path,
         num_input_channels=input_c,
+        mode=args.tspulse_encoder_mode,
         decoder_mode=args.tspulse_decoder_mode,
         mask_type="user",
         enable_fft_prob_loss=args.enable_fft_prob_loss,
     )
-    
-    if args.device is not None:
-        model = model.to(args.device)
     
     context_length = model.config.context_length 
     forecast_length = model.config.prediction_length
@@ -242,7 +298,6 @@ if __name__ == "__main__":
             stride=args.stride
         )
         all_train_dsets.append(dset_train)
-
 
     train_val_dset = ConcatDataset(all_train_dsets)
 
@@ -306,12 +361,24 @@ if __name__ == "__main__":
     
     if input_c > 1:
         # Reduce batch size to avoid OOMs (A100-80GB Gpu)
-        batch_size = int(batch_size // input_c)
-        if batch_size < 16:
-            batch_size = 16
-            print("Forcing batch size to be", batch_size)
+        batch_size_ = int(batch_size // input_c)
+        batch_size = max(16, batch_size_)
+        print("Setting batch size to be", batch_size)
     
     print("Batch Size is set to = ", batch_size)
+    
+    extra_args = dict()
+    if args.device == "cpu":
+        extra_args.update(use_cpu=True,
+                          use_mps_device=False)
+    elif args.device == "cuda":
+        extra_args.update(use_cpu=False,
+                          use_mps_device=False)
+        print("CUDA Available: ", torch.cuda.is_available())
+        print("cuDNN Version: ", torch.backends.cudnn.version())
+    elif args.device == "mps":
+        extra_args.update(use_cpu=False,
+                          use_mps_device=True)
     
     finetune_args = TrainingArguments(
         output_dir=f"{save_dir}/outputs",
@@ -331,8 +398,9 @@ if __name__ == "__main__":
         load_best_model_at_end=True,  # Load the best model when training ends
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
+        **extra_args,
     )
-
+    
     # Create the early stopping callback
     early_stopping_callback = EarlyStoppingCallback(
         early_stopping_patience=5,  # Number of epochs with no improvement after which to stop
@@ -347,7 +415,7 @@ if __name__ == "__main__":
         epochs=finetune_num_epochs,
         steps_per_epoch=math.ceil(len(train_dataset) / (batch_size * num_gpus)),
     )
-
+    
     finetune_trainer = Trainer(
         model=model,
         args=finetune_args,
@@ -356,7 +424,9 @@ if __name__ == "__main__":
         callbacks=[early_stopping_callback],
         optimizers=(optimizer, scheduler),
     )
-
+    
+    print(f"Device used for training = {finetune_trainer.args.device}")
+    
     # Fine tune
     finetune_trainer.train()
 

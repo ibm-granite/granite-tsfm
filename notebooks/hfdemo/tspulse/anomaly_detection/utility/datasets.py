@@ -29,15 +29,15 @@ class TSPulseReconstructionDataset(torch.utils.data.Dataset):
 
         if self.data.shape[0] < window_size:
             pad_len = window_size - self.data.shape[0]
-            pad = np.zeros((pad_len, self.data.shape[1]))
-            self.data = np.concatenate((self.data, pad), axis=0)
+            pad = np.ones((pad_len, self.data.shape[1])) * self.data[:1]
+            self.data = np.concatenate((pad, self.data), axis=0)
 
         self.label = label
         self.return_dict = return_dict
         self.channel_last = channel_last
 
         self.univariate = self.data.shape[1] == 1
-        self.sample_num = max((self.data.shape[0] - window_size) // stride + 1, 0)
+        self.sample_num = max(((self.data.shape[0] - window_size) // stride) + 1, 0)
 
         if self.label is not None:
             self.samples, self.gen_labels = self._generate_samples()
@@ -128,12 +128,12 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
             and self.data.shape[0] < window_size + forecast_window_size
         ):
             pad_len = window_size + forecast_window_size - self.data.shape[0]
-            pad = np.zeros((pad_len, self.data.shape[1]))
+            pad = np.ones((pad_len, self.data.shape[1])) * self.data[:1]
             self.data = np.concatenate((pad, self.data), axis=0)
         elif self.data.shape[0] < window_size:
             pad_len = window_size - self.data.shape[0]
-            pad = np.zeros((pad_len, self.data.shape[1]))
-            self.data = np.concatenate((self.data, pad), axis=0)
+            pad = np.ones((pad_len, self.data.shape[1])) * self.data[:1]
+            self.data = np.concatenate((pad, self.data), axis=0)
 
         self.label = label
         self.channel_last = channel_last
@@ -152,6 +152,8 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
             else:
                 self.samples = self._generate_samples()
 
+        print(f"Sample size: {self.samples.shape}")
+        
         self.input_mask = np.ones(
             (self.window_size, data.shape[1]), dtype=np.float32
         )  # Fixed input mask
@@ -159,7 +161,6 @@ class TSPulseForecastDataset(torch.utils.data.Dataset):
             self.input_mask[:aggr_window_size, :] = 0
 
         if not self.channel_last:
-            # For MOMENT
             self.samples = self.samples.permute(0, 2, 1)  # batch, channel, window_size
             self.input_mask = self.input_mask[:, 0]  # window_size
 
