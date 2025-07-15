@@ -122,10 +122,12 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self.aggregation = aggregation
         self.aggregation_axis = aggregation_axis
 
-        if self.nonconformity_score in [NonconformityScores.ERROR.value]:
-            self.false_alarm = np.min(quantiles).item()
+        # if self.nonconformity_score in [NonconformityScores.ERROR.value]:
+            # self.false_alarm = np.min(quantiles).item()
 
         self.critical_size = np.ceil(1 / self.false_alarm).item()
+        if self.nonconformity_score in [NonconformityScores.ERROR.value]:
+            self.critical_size = 2*self.critical_size
 
         if self.method not in [PostHocProbabilisticMethod.CONFORMAL.value, PostHocProbabilisticMethod.GAUSSIAN.value]:
             raise ValueError(f"Provided Post Hoc probabilistic method {self.method} is not valid.")
@@ -300,7 +302,10 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
         if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
             ix_q = 0
+            # print('QUANTILES : ', quantiles, self.model.false_alarm)
+            # print('NON CONFORMITY SCORE :', self.model.nonconformity_score)
             for q in quantiles:
+                # print(q)
                 if self.model.nonconformity_score in [
                     NonconformityScores.ABSOLUTE_ERROR.value,
                     NonconformityScores.ERROR.value,
@@ -316,7 +321,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                     else:
                         if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
                             q_pi_error_rate = 0.5
-                            output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
+                            # print('Quantile q = ',q_pi_error_rate)
+                            output_q = self.model.predict(y_test_pred, false_alarm=2*q_pi_error_rate)
                             y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
                         else:
                             y_test_prob_pred[..., ix_q] = y_test_pred
@@ -390,6 +396,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
             if self.model.nonconformity_score in [
                 NonconformityScores.ABSOLUTE_ERROR.value,
+                NonconformityScores.ERROR.value,
             ]:
                 output = self.model.predict(
                     y_pred=y_pred, y_gt=y_gt, X=X, timestamps=timestamps, false_alarm=significance
@@ -1243,6 +1250,12 @@ class WeightedConformalWrapper:
                     score_threshold_up = weighted_conformal_quantile(
                         cal_scores_infty, cal_weights_infty, alpha=np.minimum(false_alarm / 2, 1 - (false_alarm / 2))
                     )
+                    # if score_threshold_up >= score_threshold_low:
+                    # print('SCORE UP LOWER THAN SCORE LOW!!')
+                    # print('FALSE ALARM :: ', false_alarm, ' cal scores/weights size :', cal_scores_infty.shape[0], cal_weights_infty.shape[0])
+                    # print('MAX/MIN/MEAN scores :', np.mean(cal_scores), np.min(cal_scores), np.max(cal_scores))
+                    # print(np.maximum(false_alarm / 2, 1 - (false_alarm / 2)), np.minimum(false_alarm / 2, 1 - (false_alarm / 2)))
+                    # print(score_threshold_up,score_threshold_low)
                     assert (
                         score_threshold_up >= score_threshold_low
                     ), " score_threshold_up is not greater than score_threshold_low"
@@ -1337,18 +1350,35 @@ class WeightedConformalWrapper:
             test_scores = nonconformity_score_functions(
                 y_gt, y_pred, X=X, nonconformity_score=self.nonconformity_score
             )
+            # print('TEST SCORES :', test_scores.shape, test_scores, score_threshold)
 
             # Outlier Flag and Outlier Scores
-            test_outliers = np.array(test_scores > score_threshold).astype("int")
+            test_outliers = None
             test_ad_scores = []
-            for score in test_scores:
-                ad_score = weighted_conformal_alpha(
-                    np.append(self.cal_scores, np.array([np.inf]), axis=0),
-                    np.append(cal_weights, np.array([1]), axis=0),
-                    score,
-                )
-                # test_ad_scores.append(1 - ad_score)
-                test_ad_scores.append(ad_score)  # p-value (significance)
+            if self.nonconformity_score in [NonconformityScores.ABSOLUTE_ERROR.value]:
+                test_outliers = np.array(test_scores > score_threshold).astype("int")
+                for score in test_scores:
+                    ad_score = weighted_conformal_alpha(
+                        np.append(self.cal_scores, np.array([np.inf]), axis=0),
+                        np.append(cal_weights, np.array([1]), axis=0),
+                        score,
+                    )
+                    # test_ad_scores.append(1 - ad_score)
+                    test_ad_scores.append(ad_score)  # p-value (significance)
+            elif self.nonconformity_score in [NonconformityScores.ERROR.value]:
+                test_outliers = np.array((test_scores < score_threshold[0]) | (test_scores > score_threshold[1]) ).astype("int")
+                for score in test_scores:
+                    ad_score = weighted_conformal_alpha(
+                        np.append(self.cal_scores, np.array([np.inf,-np.inf]), axis=0),
+                        np.append(cal_weights, np.array([1,1]), axis=0),
+                        score,
+                    )
+                    # test_ad_scores.append(1 - ad_score)
+                    # test_ad_scores.append(ad_score)  # p-value (significance)
+                    test_ad_scores.append(np.minimum(float(ad_score),1-float(ad_score)))
+            
+            
+
 
             # Update
             if update:
