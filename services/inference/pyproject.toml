@@ -32,7 +32,7 @@ poetry-plugin-export = ">=1.8"
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-granite-tsfm = "==0.2.28"
+granite-tsfm = "==0.3.1"
 
 fastapi = { version = "*" }
 pydantic = { version = ">1,<3" }
