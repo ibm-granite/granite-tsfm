@@ -135,6 +135,138 @@ def patchwise_stitched_reconstruction(
         return result_dict
 
 
+def patchwise_stitched_reconstruction_with_separation(
+    model,
+    past_values,
+    patch_size,
+    keys_to_stitch,
+    keys_to_aggregate,
+    reconstruct_start,
+    reconstruct_end,
+    separation=None,
+    debug=False,
+):
+    """
+    Performs patchwise reconstruction within a specified time window on a multivariate time-series tensor.
+    Only patches whose **start indices fall within** [reconstruct_start, reconstruct_end) are masked and reconstructed.
+    Results are then stitched or aggregated across the specified keys.
+
+    Args:
+        model: A callable that accepts `past_values` and `past_observed_mask` and returns a dict of outputs.
+        past_values (torch.Tensor): Input tensor of shape [B, L, C], where
+                                    B = batch size,
+                                    L = sequence length,
+                                    C = number of input channels.
+        patch_size (int): Size of each non-overlapping patch.
+        keys_to_stitch (List[str]): Keys in the model output dict that should be reconstructed and stitched
+                                    back into full time-series format (shape [B, L, C]).
+        keys_to_aggregate (List[str]): Keys in the model output dict that should be aggregated (mean-pooled)
+                                       across patches (resulting in shape [B, ...]).
+        reconstruct_start (int): Start index (inclusive) of the reconstruction window.
+        reconstruct_end (int): End index (exclusive) of the reconstruction window.
+        separation (int): Optional separation parameter used for faster evaluation
+        debug (bool): If True, also returns patch-level outputs and patch indices.
+
+    Returns:
+        result_dict (dict): Dictionary containing:
+            - For each key in `keys_to_stitch`: Reconstructed and stitched tensor of shape [B, L, C],
+              with reconstructed values only in the patchwise regions; rest is filled with NaNs.
+            - For each key in `keys_to_aggregate`: Aggregated (mean) tensor of shape [B, ...].
+
+        If `debug=True`, also returns:
+            patch_outputs (dict):
+                - For each stitched key: Tensor of shape [B, num_selected_patches, patch_size, C],
+                  which contains patch-level reconstructed outputs.
+                - For each aggregated key: Tensor of shape [B, num_selected_patches, ...],
+                  representing the output for each patch before aggregation.
+                - "patch_starts_selected" (torch.Tensor): 1D tensor of shape [num_selected_patches]
+                  with the start positions of each selected patch (in original time indices).
+
+    Raises:
+        ValueError: If no patches fall within the reconstruction window.
+    """
+
+    B, L, C = past_values.shape
+    device = past_values.device
+    num_patches = L // patch_size
+    if separation is None:
+        separation = num_patches
+    separation = min(max(separation, 2), num_patches)
+
+    patch_indices = torch.arange(num_patches, device=device)
+    patch_starts = patch_indices * patch_size
+    # patch_ends = patch_starts + patch_size
+
+    # Select only patches fully inside the reconstruct window
+    valid_mask = (patch_starts >= reconstruct_start) & (patch_starts < reconstruct_end)
+
+    selected_patch_indices = patch_indices[valid_mask]
+    num_selected_patches = selected_patch_indices.shape[0]
+
+    if num_selected_patches == 0:
+        raise ValueError("No patches fall entirely within the reconstruction window.")
+
+    patch_schedule = []
+
+    for p in range(separation):
+        schedule = [patch_starts[selected_patch_indices[i]] for i in range(p, num_selected_patches, separation)]
+        if len(schedule) > 0:
+            patch_schedule.append(schedule)
+    num_selected_patches = len(patch_schedule)
+
+    # Step 1: Create expanded inputs → shape: [B * num_selected_patches, L, C]
+    past_values_expanded = past_values.unsqueeze(1).repeat(1, num_selected_patches, 1, 1)
+    past_values_expanded = past_values_expanded.view(B * num_selected_patches, L, C)
+
+    # Step 2: Create past_observed_mask: [B * num_selected_patches, L, C]
+    past_observed_mask = torch.ones_like(past_values, dtype=torch.bool)
+    past_observed_mask = past_observed_mask.unsqueeze(1).repeat(1, num_selected_patches, 1, 1)
+    past_observed_mask = past_observed_mask.view(B * num_selected_patches, L, C)
+
+    patch_starts_selected = patch_starts[valid_mask]
+    for i, patch in enumerate(patch_schedule):
+        b_indices = torch.arange(B, device=device)
+        flat_idx = b_indices * num_selected_patches + i
+        for start in patch:
+            idx_range = slice(start.item(), start.item() + patch_size)
+            past_observed_mask[flat_idx, idx_range, :] = 0  # Mask the patch
+
+    # Step 3: Forward pass
+    model_outputs = model(
+        past_values=past_values_expanded,
+        past_observed_mask=past_observed_mask,
+    )
+
+    # Step 5: Initialize result dict
+    result_dict = {key: torch.full_like(past_values, float("nan")) for key in keys_to_stitch}
+    patch_outputs = {}
+
+    # Step 6: Stitch keys
+    for key in keys_to_stitch:
+        output = model_outputs[key]  # [B * num_selected_patches, L, C]
+        for i, patch in enumerate(patch_schedule):
+            b_indices = torch.arange(B, device=device)
+            flat_idx = b_indices * num_selected_patches + i
+            for start in patch:
+                idx_range = slice(start.item(), start.item() + patch_size)
+                result_dict[key][:, idx_range, :] = output[flat_idx, idx_range]
+
+    for key in keys_to_aggregate:
+        output = model_outputs[key]  # [B * num_selected_patches, ...]
+        out_shape = output.shape[1:]
+        output = output.view(B, num_selected_patches, *out_shape)
+        mean_output = output.mean(dim=1)
+        result_dict[key] = mean_output
+        if debug:
+            patch_outputs[key] = output  # [B, num_selected_patches, ...]
+
+    if debug:
+        patch_outputs["patch_starts_selected"] = patch_starts_selected
+        return result_dict, patch_outputs
+    else:
+        return result_dict
+
+
 class PatchMaskingDatasetWrapper(Dataset):
     def __init__(self, base_dataset, window_length, patch_length, window_position="first"):
         """

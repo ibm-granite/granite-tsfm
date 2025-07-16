@@ -21,7 +21,7 @@ from tsfm_public.toolkit.ad_helpers import (
     TSADHelperUtility,
 )
 
-from .helpers import patchwise_stitched_reconstruction
+from .helpers import patchwise_stitched_reconstruction, patchwise_stitched_reconstruction_with_separation
 
 
 def causal_minmax(
@@ -304,7 +304,9 @@ class TSPulseADUtility(TSADHelperUtility):
             ModelOutput: model output
         """
         mode = kwargs.get("mode", self._mode)
+        separation = kwargs.get("separation", None)
         batch_counter = kwargs.get("batch", 1)
+        state = kwargs.get("state", {})
         use_forecast = AnomalyScoreMethods.PREDICTIVE.value in mode
         use_fft = AnomalyScoreMethods.FREQUENCY_RECONSTRUCTION.value in mode
         use_ts = AnomalyScoreMethods.TIME_RECONSTRUCTION.value in mode
@@ -326,10 +328,12 @@ class TSPulseADUtility(TSADHelperUtility):
 
         stitched_dict = {}
         boundary_dict = {}
+        initialized = state.get("initialized", False)
+
         if use_ts or use_fft:
-            if batch_counter == 0:
+            if (batch_counter == 0) and (not initialized):
                 reconstruct_start_ = 0
-                boundary_dict = patchwise_stitched_reconstruction(
+                boundary_dict = patchwise_stitched_reconstruction_with_separation(
                     model=self._model,
                     past_values=batch_x[:1],
                     patch_size=self._model.config.patch_length,
@@ -337,9 +341,10 @@ class TSPulseADUtility(TSADHelperUtility):
                     keys_to_aggregate=[],
                     reconstruct_start=reconstruct_start_,
                     reconstruct_end=reconstruct_end,
+                    separation=separation,
                     debug=False,
                 )
-            stitched_dict = patchwise_stitched_reconstruction(
+            stitched_dict = patchwise_stitched_reconstruction_with_separation(
                 model=self._model,
                 past_values=batch_x,
                 patch_size=self._model.config.patch_length,
@@ -347,6 +352,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 keys_to_aggregate=[],
                 reconstruct_start=reconstruct_start,
                 reconstruct_end=reconstruct_end,
+                separation=separation,
                 debug=False,
             )
             if isinstance(stitched_dict, tuple):
@@ -364,7 +370,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            if batch_counter == 0:
+            if (batch_counter == 0) and (not initialized):
                 reconstruct_start_ = 0
                 boundary_output = boundary_dict["reconstruction_outputs"]
                 boundary_score = anomaly_criterion(
@@ -383,7 +389,7 @@ class TSPulseADUtility(TSADHelperUtility):
                 batch_x[:, reconstruct_start:reconstruct_end, :],
                 output[:, reconstruct_start:reconstruct_end, :],
             )
-            if batch_counter == 0:
+            if (batch_counter == 0) and (not initialized):
                 reconstruct_start_ = 0
                 boundary_output = boundary_dict["reconstructed_ts_from_fft"]
                 boundary_score = anomaly_criterion(
@@ -456,9 +462,12 @@ class TSPulseADUtility(TSADHelperUtility):
                 min_score = min_score * (1 + self._model.config.patch_length)
 
         score_ = score.copy()
-        score_[np.where(score > min_score)] *= 1 / self._least_significant_score
-        scale = 1 if np.any(score > min_score) else self._least_significant_score
-        score = MinMaxScaler_().fit_transform(score_**score_exponent) * scale
+        # score_[np.where(score > min_score)] *= 1 / self._least_significant_score
+        # scale = 1 if np.any(score > min_score) else self._least_significant_score
+        score = MinMaxScaler_().fit_transform(score_**score_exponent)
+        scale = np.ones_like(score_)
+        scale[score_ <= min_score] = self._least_significant_score
+        score = score * scale
         return score
 
     def adjust_boundary_(

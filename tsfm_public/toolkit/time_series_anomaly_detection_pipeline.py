@@ -236,6 +236,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             preprocess_kwargs["prediction_length"] = 1  # should not override model setting when TTM
 
         deployed = kwargs.get("deployed", False)
+        separation = kwargs.get("separation", None)
 
         # same logic as HF Pipeline
         batch_size = kwargs.get("batch_size", self._batch_size)
@@ -252,7 +253,8 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
             else:
                 num_workers = self._num_workers
 
-        forward_kwargs = {"batch_size": batch_size, "num_workers": num_workers, "deployed": deployed}
+        forward_kwargs = {}
+        forward_kwargs.update(batch_size=batch_size, num_workers=num_workers, deployed=deployed, separation=separation)
 
         postprocess_kwargs.update(deployed=deployed)
 
