@@ -215,6 +215,13 @@ def get_ttm_args():  # pragma: no cover
     )
 
     parser.add_argument(
+        "--decoder_mode",
+        type=str,
+        default="common_channel",
+        help="Decoder mode",
+    )
+
+    parser.add_argument(
         "--zeroshot",
         "-zs",
         type=int,

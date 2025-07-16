@@ -69,6 +69,32 @@ TINYTIMEMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
+# def update_patch_mask(patch_mask_expanded, K, mode="prepend"):
+#     """
+#     Add K patches (all valid = all False) either at the beginning or end.
+
+#     Args:
+#         patch_mask_expanded: torch.BoolTensor of shape (B, C, P, D)
+#         K: number of patches to add
+#         mode: "prepend" or "postpend"
+#     Returns:
+#         new_mask: torch.BoolTensor of shape (B, C, P+K, D)
+#     """
+#     B, C, P, D = patch_mask_expanded.shape
+#     extra_mask = torch.zeros(
+#         (B, C, K, D), dtype=torch.bool, device=patch_mask_expanded.device
+#     )
+
+#     if mode == "prepend":
+#         new_mask = torch.cat([extra_mask, patch_mask_expanded], dim=2)
+#     elif mode == "postpend":
+#         new_mask = torch.cat([patch_mask_expanded, extra_mask], dim=2)
+#     else:
+#         raise ValueError("mode must be 'prepend' or 'postpend'")
+
+#     return new_mask
+
+
 class PinballLoss(nn.Module):
     def __init__(self, quantile: float):
         """
@@ -1739,7 +1765,7 @@ class TinyTimeMixerAddLearnableRegisterTokens(nn.Module):
             # Add patch tokens to the num_patches dimension
             # Shape: (batch x num_channels x (num_patches + num_patch_tokens) x d_model)
             x = torch.cat(
-                [x, patch_tokens_expanded.expand(batch_size, num_channels, -1, -1)],
+                [patch_tokens_expanded.expand(batch_size, num_channels, -1, -1), x],
                 dim=2,
             )
 
@@ -1893,7 +1919,6 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
                 patches = torch.cat(
                     (freq_embedding, patches), dim=-2
                 )  # bs x channels x num_patch+1 x num_features
-
             else:
                 raise Exception("Expecting freq_token in forward")
 
@@ -2018,6 +2043,7 @@ class MultiScaleFromPatchedSequence(nn.Module):
 
             i += 1
 
+        outputs.reverse()  # add hierarchies features to end
         return torch.cat(outputs, dim=2)
         # num_patches_per_scale, downsampled_sequences
 
@@ -2028,6 +2054,7 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
 
         self.fft_k = config.fft_length
         self.d_model = config.d_model
+        self.config = config
         self.seq_len = config.context_length
         self.max_freq_bins = self.seq_len // 2 + 1  # rfft output length
         print("config.", config.use_fft_embedding)
@@ -2051,6 +2078,10 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
     def forward(self, x, raw_input):
         # x: [B, C, P, D] — patched input
         # raw_input: [B, S, C] — original time-series
+        raw_input = raw_input[
+            :, : self.config.context_length, :
+        ]  # for maskedprediction workflow
+
         B, S, C = raw_input.shape
 
         # FFT: [B, F, C] where F = S//2 + 1
@@ -2081,7 +2112,7 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
         # fft_tokens = torch.cat([mag_token, phase_token, freq_tokens], dim=2)
         fft_tokens = freq_tokens
         # Merge with input patches
-        x = torch.cat([x, fft_tokens], dim=2)  # [B, C, P + k + 2, D]
+        x = torch.cat([fft_tokens, x], dim=2)  # [B, C, P + k + 2, D]
         return x
 
 
@@ -2141,6 +2172,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
+
         scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
 
         patched_x = self.patching(
@@ -2481,6 +2513,20 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
+        # create patch mask from past_observed_mask
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        B, S, C = past_observed_mask.shape
+        P = S // self.config.patch_length
+        D = self.config.d_model
+        patch_size = self.config.patch_length
+
+        # Reshape observed_mask into patches: (B, C, P, patch_size)
+        past_observed_patches = past_observed_mask.transpose(1, 2).reshape(
+            B, C, P, patch_size
+        )
+
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.backbone(
             past_values,
@@ -2788,3 +2834,201 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
             static_categorical_values=static_categorical_values,
             metadata=metadata,
         )
+
+
+class TinyTimeMixerForICLPrediction(TinyTimeMixerForPrediction):
+    def __init__(self, config: TinyTimeMixerConfig):
+        if config.prediction_filter_length is not None:
+            append_length = config.prediction_filter_length
+        else:
+            append_length = config.prediction_length
+
+        self.append_length = append_length
+        config.masked_context_length = config.context_length + append_length
+        config.fcm_prepend_past_offset = append_length
+        self.window_length = config.masked_context_length
+        config.num_input_channels = config.num_input_examples
+        self.num_input_examples = config.num_input_examples
+        num_input_channel_list = list(
+            range(config.num_input_channels)
+        )  # [0, 1, 2, 3, 4]
+        config.prediction_channel_indices = [num_input_channel_list[-1]]  # 4
+        config.exogenous_channel_indices = num_input_channel_list[:-1]  # [0, 1, 2, 3]
+        self.non_exog_channels = config.prediction_channel_indices
+
+        super().__init__(config)
+
+    def compute_stride(self, seq_len):
+        window_size = self.window_length
+        num_examples = self.num_input_examples
+        max_possible = (seq_len - window_size) // window_size + 1
+        if max_possible >= num_examples:
+            return window_size  # non-overlapping
+        return max(
+            (seq_len - window_size) // (num_examples - 1), 1
+        )  # overlapping fallback
+
+    def create_input_examples_with_mask(self, x, past_observed_mask):
+        """
+        Args:
+            x: Tensor of shape (B, Seq, C)
+            past_observed_mask: Tensor of same shape as x (B, Seq, C)
+            window_size: int, size of each window
+            num_input_examples: int, total examples to extract (last one always included)
+        Returns:
+            Tuple of tensors (x_windows, mask_windows), each of shape (B*C, num_input_examples, window_size)
+        """
+        B, Seq, C = x.shape
+        window_size = self.window_length
+        num_input_examples = self.num_input_examples
+        x_flat = x.permute(0, 2, 1).reshape(-1, Seq)  # (B*C, Seq)
+        mask_flat = past_observed_mask.permute(0, 2, 1).reshape(-1, Seq)  # (B*C, Seq)
+
+        stride = self.compute_stride(Seq)
+        indices = list(range(0, Seq - window_size + 1, stride))
+        if indices[-1] != Seq - window_size:
+            indices.append(Seq - window_size)
+
+        # Extract windows
+        x_windows = [x_flat[:, i : i + window_size].unsqueeze(1) for i in indices]
+        mask_windows = [mask_flat[:, i : i + window_size].unsqueeze(1) for i in indices]
+
+        x_windows = torch.cat(x_windows, dim=1)  # (B*C, total_windows, window_size)
+        mask_windows = torch.cat(
+            mask_windows, dim=1
+        )  # (B*C, total_windows, window_size)
+
+        # Always include last window
+        last_x = x_windows[:, -1:]
+        last_mask = mask_windows[:, -1:]
+
+        others_x = x_windows[:, :-1]
+        others_mask = mask_windows[:, :-1]
+        num_others = others_x.shape[1]
+
+        if num_others >= num_input_examples - 1:
+            idx = torch.randperm(num_others)[: num_input_examples - 1]
+            selected_x = others_x[:, idx]
+            selected_mask = others_mask[:, idx]
+        else:
+            repeats = (num_input_examples - 1 + num_others - 1) // max(num_others, 1)
+            selected_x = others_x.repeat(1, repeats, 1)[:, : num_input_examples - 1]
+            selected_mask = others_mask.repeat(1, repeats, 1)[
+                :, : num_input_examples - 1
+            ]
+
+        final_x = torch.cat([selected_x, last_x], dim=1)
+        final_mask = torch.cat([selected_mask, last_mask], dim=1)
+
+        final_x = final_x.transpose(-1, -2)  # # (B*C, window_size, num_input_examples)
+        final_mask = final_mask.transpose(
+            -1, -2
+        )  # # (B*C, window_size, num_input_examples)
+
+        return final_x, final_mask
+
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForPredictionOutput:
+        r"""
+        past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
+
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
+        future_observed_mask (`torch.Tensor` of shape `(batch_size, prediction_length, num_targets)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
+        static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
+            Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
+            TinyTimeMixerConfig param `categorical_vocab_size_list`
+        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
+            to support custom trainers. Defaults to None.
+
+        Returns:
+
+        """
+        if future_values is not None:
+            future_values_masked = future_values.clone()
+        else:
+            future_values_masked = torch.zeros(
+                past_values.shape[0], self.append_length, past_values.shape[2]
+            )
+
+        if (
+            self.config.prediction_filter_length is not None
+            and future_values_masked is not None
+            and future_values_masked.shape[1] != self.config.prediction_filter_length
+        ):
+            future_values_masked = future_values_masked[
+                :, : self.config.prediction_filter_length, :
+            ]
+
+        future_values_masked.fill_(self.config.mask_value)
+
+        past_values = torch.cat(
+            (past_values, future_values_masked), dim=-2
+        )  # xb: [bs x seq_len+ fl x n_vars]
+
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        # if there is already a past mask - update with it
+        # index 1 refers to the seq len
+
+        if past_observed_mask.shape[1] < past_values.shape[1]:
+            temp_mask = torch.ones_like(past_values)
+            temp_mask[:, : past_observed_mask.shape[1], :] = past_observed_mask
+            past_observed_mask = temp_mask
+
+        # past_observed_mask[:, -self.config.prediction_length :, :] = 0
+        past_observed_mask[:, -self.config.prediction_length :, :] = 0
+        # [bs x seq_len+ fl x n_vars]
+        past_values_examples, past_observed_mask_examples = (
+            self.create_input_examples_with_mask(past_values, past_observed_mask)
+        )
+
+        future_values_examples = future_values.permute(0, 2, 1).reshape(
+            -1, future_values.shape[1], 1
+        )
+        output = super().forward(
+            past_values=past_values_examples,
+            future_values=future_values_examples,
+            past_observed_mask=past_observed_mask_examples,
+            future_observed_mask=None,
+            output_hidden_states=output_hidden_states,
+            return_loss=return_loss,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+        output.prediction_outputs = output.prediction_outputs.reshape(
+            future_values.shape[0], future_values.shape[2], -1
+        ).permute(0, 2, 1)
+
+        return output

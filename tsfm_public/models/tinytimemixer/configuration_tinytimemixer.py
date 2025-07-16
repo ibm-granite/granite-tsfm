@@ -224,6 +224,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         loss_scales: Optional[list] = None,
         use_fft_embedding: bool = False,
         enable_fourier_attention: bool = False,
+        num_input_examples: int = 5,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -270,7 +271,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.fcm_prepend_past_offset = fcm_prepend_past_offset
         self.enable_forecast_channel_mixing = enable_forecast_channel_mixing
         self.frequency_token_vocab_size = frequency_token_vocab_size
-
+        self.num_input_examples = num_input_examples
         self.d_model = d_model
         self.patch_stride = patch_stride
         self.decoder_d_model = decoder_d_model

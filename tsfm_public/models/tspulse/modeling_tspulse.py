@@ -65,6 +65,24 @@ TSPULSE_INPUTS_DOCSTRING = r"""
 """
 
 
+def mask_tokens_from_observed(observed_mask, tokens, patch_size):
+    B, S, C = observed_mask.shape
+    _, _, P, D = tokens.shape
+
+    # Reshape observed_mask into patches: (B, C, P, patch_size)
+    observed_patches = observed_mask.transpose(1, 2).reshape(B, C, P, patch_size)
+
+    # Check if all values in each patch are zero: (B, C, P)
+    patch_mask = observed_patches.sum(dim=-1) == 0  # True where all values are 0
+
+    # Expand to match token shape: (B, C, P, D)
+    patch_mask_expanded = patch_mask.unsqueeze(-1).expand(-1, -1, -1, D)
+
+    # Zero out tokens where all associated observed_mask values are 0
+    tokens = tokens.masked_fill(patch_mask_expanded, 0.0)
+    return tokens
+
+
 class TSPulseGatedAttention(nn.Module):
     """
     Module that applies gated attention to input data.
@@ -85,7 +103,9 @@ class TSPulseGatedAttention(nn.Module):
 
     def _init_identity_weights(self):
         logger.info("Try identity init in Gated Attention.")
-        nn.init.zeros_(self.attn_layer.weight)  # Zero weights to start with no influence
+        nn.init.zeros_(
+            self.attn_layer.weight
+        )  # Zero weights to start with no influence
         nn.init.constant_(self.attn_layer.bias, 0)  # Bias to zero for neutral effect
 
     def forward(self, inputs):
@@ -111,7 +131,9 @@ class TSPulseBatchNorm(nn.Module):
         Returns:
             `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
         """
-        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
+        output = inputs.transpose(
+            1, 2
+        )  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
         return output.transpose(1, 2)
 
@@ -127,17 +149,24 @@ class TSPulsePositionalEncoding(nn.Module):
         if config.use_positional_encoding:
             self.position_enc = self._init_pe(config)
         else:
-            self.position_enc = nn.Parameter(torch.zeros(config.num_patches, config.d_model))
+            self.position_enc = nn.Parameter(
+                torch.zeros(config.num_patches, config.d_model)
+            )
 
     @staticmethod
     def _init_pe(config: TSPulseConfig) -> nn.Parameter:
         # Positional encoding
         if config.positional_encoding_type == "random":
-            position_enc = nn.Parameter(torch.randn(config.num_patches, config.d_model), requires_grad=True)
+            position_enc = nn.Parameter(
+                torch.randn(config.num_patches, config.d_model), requires_grad=True
+            )
         elif config.positional_encoding_type == "sincos":
             position_enc = torch.zeros(config.num_patches, config.d_model)
             position = torch.arange(0, config.num_patches).unsqueeze(1)
-            div_term = torch.exp(torch.arange(0, config.d_model, 2) * -(math.log(10000.0) / config.d_model))
+            div_term = torch.exp(
+                torch.arange(0, config.d_model, 2)
+                * -(math.log(10000.0) / config.d_model)
+            )
             position_enc[:, 0::2] = torch.sin(position * div_term)
             position_enc[:, 1::2] = torch.cos(position * div_term)
             position_enc = position_enc - position_enc.mean()
@@ -232,7 +261,9 @@ class TSPulseMLP(nn.Module):
             if self.in_features == self.num_hidden:
                 nn.init.eye_(self.fc1.weight)  # Identity matrix for weights
             else:
-                nn.init.kaiming_uniform_(self.fc1.weight)  # Use a reasonable default for non-square matrices
+                nn.init.kaiming_uniform_(
+                    self.fc1.weight
+                )  # Use a reasonable default for non-square matrices
             nn.init.zeros_(self.fc1.bias)  # Zero biases
 
             # Initialize fc2 to be identity (or as close as possible)
@@ -358,7 +389,11 @@ class TSPulseAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -435,7 +470,10 @@ class TSPulseAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -446,7 +484,9 @@ class TSPulseAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -454,12 +494,18 @@ class TSPulseAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -532,9 +578,13 @@ class PatchMixerBlock(nn.Module):
 
         if self.self_attn:
             batch_size, n_vars, num_patches, d_model = hidden_state.shape
-            hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, d_model)
+            hidden_state_reshaped = hidden_state.reshape(
+                batch_size * n_vars, num_patches, d_model
+            )
 
-            x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
+            x_attn, _, _ = self.self_attn_layer(
+                hidden_state_reshaped, output_attentions=False
+            )
             x_attn = x_attn.reshape(batch_size, n_vars, num_patches, d_model)
 
         # Transpose so that num_patches is the last dimension
@@ -639,7 +689,9 @@ class TSPulseLayer(nn.Module):
 
         if self.num_patches > 1:
             hidden = self.patch_mixer(hidden)
-        hidden = self.feature_mixer(hidden)  # hidden: (batch_size x num_patches x d_model)
+        hidden = self.feature_mixer(
+            hidden
+        )  # hidden: (batch_size x num_patches x d_model)
         return hidden
 
 
@@ -686,13 +738,19 @@ class TSPulseBlock(nn.Module):
 
             if current_num_input_channels != temp_config.num_input_channels:
                 self.mixers.append(LTranspose(-1, -3))
-                self.mixers.append(nn.Linear(current_num_input_channels, temp_config.num_input_channels))
+                self.mixers.append(
+                    nn.Linear(
+                        current_num_input_channels, temp_config.num_input_channels
+                    )
+                )
                 current_num_input_channels = temp_config.num_input_channels
                 self.mixers.append(LTranspose(-1, -3))
 
             if current_num_patches != temp_config.num_patches:
                 self.mixers.append(LTranspose(-1, -2))
-                self.mixers.append(nn.Linear(current_num_patches, temp_config.num_patches))
+                self.mixers.append(
+                    nn.Linear(current_num_patches, temp_config.num_patches)
+                )
                 current_num_patches = temp_config.num_patches
                 self.mixers.append(LTranspose(-1, -2))
 
@@ -748,9 +806,15 @@ class TSPulseDecoder(nn.Module):
 
         decoder_config.dropout = config.head_dropout
         decoder_config.mode = config.decoder_mode
-        decoder_config.gated_attention_activation = config.head_gated_attention_activation
-        decoder_config.num_channels_layerwise_scale = config.decoder_num_channels_layerwise_scale
-        decoder_config.num_patches_layerwise_scale = config.decoder_num_patches_layerwise_scale
+        decoder_config.gated_attention_activation = (
+            config.head_gated_attention_activation
+        )
+        decoder_config.num_channels_layerwise_scale = (
+            config.decoder_num_channels_layerwise_scale
+        )
+        decoder_config.num_patches_layerwise_scale = (
+            config.decoder_num_patches_layerwise_scale
+        )
         decoder_config.d_model_layerwise_scale = config.decoder_d_model_layerwise_scale
 
         decoder_config.num_channels_layerwise = config.decoder_num_channels_layerwise
@@ -805,9 +869,13 @@ class TSPulseForReconstructionHead(nn.Module):
         self.reconstruction_type = config.reconstruction_type
 
         if config.reconstruction_type == "full":
-            self.base_reconstruction_block = nn.Linear((config.num_patches * head_d_model), config.context_length)
+            self.base_reconstruction_block = nn.Linear(
+                (config.num_patches * head_d_model), config.context_length
+            )
         else:
-            self.base_reconstruction_block = nn.Linear(head_d_model, config.patch_length)
+            self.base_reconstruction_block = nn.Linear(
+                head_d_model, config.patch_length
+            )
 
         self.flatten = nn.Flatten(start_dim=-2)
 
@@ -821,7 +889,9 @@ class TSPulseForReconstructionHead(nn.Module):
         """
 
         if self.reconstruction_type == "full":
-            hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * d_model]
+            hidden_features = self.flatten(
+                hidden_features
+            )  # [batch_size x n_vars x num_patch * d_model]
 
         hidden_features = self.dropout_layer(hidden_features)
         reconstruction = self.base_reconstruction_block(
@@ -829,9 +899,13 @@ class TSPulseForReconstructionHead(nn.Module):
         )  # [batch_size, n_vars, num_patch, patch_length] or [batch_size x n_vars x context_length]
 
         if self.reconstruction_type != "full":
-            reconstruction = self.flatten(reconstruction)  # [batch_size x n_vars x num_patch*patch_length]
+            reconstruction = self.flatten(
+                reconstruction
+            )  # [batch_size x n_vars x num_patch*patch_length]
 
-        reconstruction = reconstruction.transpose(-1, -2)  # [batch_size x context_length x n_vars]
+        reconstruction = reconstruction.transpose(
+            -1, -2
+        )  # [batch_size x context_length x n_vars]
 
         return reconstruction
 
@@ -853,7 +927,10 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
+        elif (
+            isinstance(module, TSPulseChannelFeatureMixerBlock)
+            and self.config.free_channel_flow
+        ):
             logger.info(f"Identity Init in Module: , {module.__class__.__name__}")
             module._init_identity_weights()
 
@@ -861,13 +938,17 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             module.batchnorm.bias.data.zero_()
             module.batchnorm.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            init.xavier_uniform_(module.weight)  # Xavier uniform initialization for weights
+            init.xavier_uniform_(
+                module.weight
+            )  # Xavier uniform initialization for weights
             # Initialize biases if they exist
             if module.bias is not None:
                 init.zeros_(module.bias)  # Zero initialization for biases
 
         elif isinstance(module, nn.Linear):
-            logger.info(f"Initializing Linear layers with method: {self.config.init_linear}")
+            logger.info(
+                f"Initializing Linear layers with method: {self.config.init_linear}"
+            )
             if self.config.init_linear == "normal":
                 module.weight.data.normal_(mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
@@ -883,7 +964,9 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             else:
                 module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            logger.info(f"Initializing Embedding layers with method: {self.config.init_embed}")
+            logger.info(
+                f"Initializing Embedding layers with method: {self.config.init_embed}"
+            )
             if self.config.init_embed == "normal":
                 nn.init.normal_(module.weight)
             elif self.config.init_embed == "uniform":
@@ -919,8 +1002,12 @@ class TSPulsePatchify(nn.Module):
             )
 
         # get the number of patches
-        self.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
-        new_sequence_length = self.patch_length + self.patch_stride * (self.num_patches - 1)
+        self.num_patches = (
+            max(self.sequence_length, self.patch_length) - self.patch_length
+        ) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (
+            self.num_patches - 1
+        )
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -940,7 +1027,9 @@ class TSPulsePatchify(nn.Module):
         # output: [bs x new_sequence_length x num_channels]
         output = past_values[:, self.sequence_start :, :]
         # output: [bs x num_patches x num_input_channels x patch_length]
-        output = output.unfold(dimension=-2, size=self.patch_length, step=self.patch_stride)
+        output = output.unfold(
+            dimension=-2, size=self.patch_length, step=self.patch_stride
+        )
         # output: [bs x num_input_channels x num_patches x patch_length]
         output = output.transpose(-2, -3).contiguous()
         return output
@@ -981,9 +1070,15 @@ class TSPulseLearnableMaskRevIN(nn.Module):
         Returns:
             normed_data, loc, scale
         """
-        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim).clamp_min(1.0)
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim).clamp_min(
+            1.0
+        )
+        loc = (data * observed_indicator).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
         scale = torch.sqrt(variance.clamp_min(self.minimum_scale))
 
         normalized = (data - loc) / scale
@@ -1022,7 +1117,9 @@ class TSPulseStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1040,9 +1137,13 @@ class TSPulseStdScaler(nn.Module):
         """
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
 
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
 
         variance = variance + self.minimum_scale
 
@@ -1075,8 +1176,12 @@ class TSPulseMeanScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        )
+        self.default_scale = (
+            config.default_scale if hasattr(config, "default_scale") else None
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1161,8 +1266,12 @@ class TSPulseFFTMasker(nn.Module):
             mask (torch.Tensor): Binary mask tensor of the same shape as fft_tensor.
         """
         batch, seq_len, channels = fft_tensor.shape
-        half_seq_len = seq_len // 2  # First half: real part, Second half: imaginary part
-        num_mask = int(half_seq_len * self.mask_ratio)  # Number of elements to mask per channel in the real part
+        half_seq_len = (
+            seq_len // 2
+        )  # First half: real part, Second half: imaginary part
+        num_mask = int(
+            half_seq_len * self.mask_ratio
+        )  # Number of elements to mask per channel in the real part
 
         if self.batch_mode == "odd":
             batch_mask = torch.arange(batch, device=fft_tensor.device) % 2 == 1
@@ -1179,9 +1288,13 @@ class TSPulseFFTMasker(nn.Module):
                 device=fft_tensor.device,
                 dtype=torch.bool,
             )
-            random_indices = torch.rand(batch, half_seq_len, channels, device=fft_tensor.device).argsort(dim=1)
+            random_indices = torch.rand(
+                batch, half_seq_len, channels, device=fft_tensor.device
+            ).argsort(dim=1)
 
-            mask[batch_mask] = mask[batch_mask].scatter(1, random_indices[batch_mask, :num_mask, :], False)
+            mask[batch_mask] = mask[batch_mask].scatter(
+                1, random_indices[batch_mask, :num_mask, :], False
+            )
 
             # mask.scatter_(
             #     1, random_indices[:, :num_mask, :], False
@@ -1199,7 +1312,9 @@ class TSPulseFFTMasker(nn.Module):
             _, topk_indices = torch.topk(magnitudes, k=num_mask, dim=1, largest=True)
             # mask.scatter_(1, topk_indices, False)  # Mask the top `num_mask` magnitudes
 
-            mask[batch_mask] = mask[batch_mask].scatter(1, topk_indices[batch_mask], False)
+            mask[batch_mask] = mask[batch_mask].scatter(
+                1, topk_indices[batch_mask], False
+            )
 
         elif self.strategy == "full_magnitude":
             # Full complex magnitude-based masking
@@ -1217,13 +1332,17 @@ class TSPulseFFTMasker(nn.Module):
             _, topk_indices = torch.topk(complex_mag, k=num_mask, dim=1, largest=True)
 
             # Apply masking to selected samples only
-            mask[batch_mask] = mask[batch_mask].scatter(1, topk_indices[batch_mask], False)
+            mask[batch_mask] = mask[batch_mask].scatter(
+                1, topk_indices[batch_mask], False
+            )
 
         else:
             raise Exception("Invalid fft_mask_strategy")
 
         # Replicate the mask for the imaginary part
-        full_mask = torch.cat([mask, mask], dim=1)  # Apply the same mask to the second half (imaginary part)
+        full_mask = torch.cat(
+            [mask, mask], dim=1
+        )  # Apply the same mask to the second half (imaginary part)
 
         # Apply the mask to the FFT tensor
         masked_fft = fft_tensor * full_mask.float()
@@ -1253,8 +1372,12 @@ class TSPulseNOPScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        scale = torch.ones_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
+        loc = torch.zeros_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
         return data, loc, scale
 
     def inverse(
@@ -1352,7 +1475,9 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    @replace_return_docstrings(output_type=TSPulseEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TSPulseEncoderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1385,7 +1510,9 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
         if self.positional_encoder is not None:
             patches = self.positional_encoder(patches)
 
-        last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
+        last_hidden_state, hidden_states = self.mlp_mixer_encoder(
+            patches, output_hidden_states=output_hidden_states
+        )
 
         if not return_dict:
             return tuple(
@@ -1396,7 +1523,9 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
                 ]
             )
 
-        return TSPulseEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
+        return TSPulseEncoderOutput(
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states
+        )
 
 
 class TSPulseAddLearnableRegisterTokens(nn.Module):
@@ -1408,11 +1537,15 @@ class TSPulseAddLearnableRegisterTokens(nn.Module):
 
         # Learnable patch tokens (p): shape (num_patch_tokens x d_model)
         if self.num_patch_tokens is not None:
-            self.patch_tokens = nn.Parameter(torch.randn(self.num_patch_tokens, d_model).to(device))
+            self.patch_tokens = nn.Parameter(
+                torch.randn(self.num_patch_tokens, d_model).to(device)
+            )
 
         # Learnable channel tokens (z): shape (num_channel_tokens x d_model)
         if self.num_channel_tokens is not None:
-            self.channel_tokens = nn.Parameter(torch.randn(self.num_channel_tokens, d_model).to(device))
+            self.channel_tokens = nn.Parameter(
+                torch.randn(self.num_channel_tokens, d_model).to(device)
+            )
 
     def forward(self, x):
         # Input x shape: batch x num_channels x num_patches x d_model
@@ -1531,8 +1664,12 @@ class TSPulseModel(TSPulsePreTrainedModel):
 
         device = next(self.parameters()).device
 
-        if (config.mask_ratio is not None and config.mask_ratio > 0) or config.mask_type == "user":
-            self.time_masker = TSPulseMasking(config, device, batch_mode=time_batch_mode)
+        if (
+            config.mask_ratio is not None and config.mask_ratio > 0
+        ) or config.mask_type == "user":
+            self.time_masker = TSPulseMasking(
+                config, device, batch_mode=time_batch_mode
+            )
 
         if config.scaling == "mean":
             self.scaler = TSPulseMeanScaler(config)
@@ -1550,7 +1687,9 @@ class TSPulseModel(TSPulsePreTrainedModel):
             self.groundtruth_scaler_for_fft = TSPulseStdScaler(config)
 
         self.fft_time_consistent_masking = config.fft_time_consistent_masking
-        self.embedding_size = config.d_model_layerwise[-1] * config.num_patches_layerwise[-1]
+        self.embedding_size = (
+            config.d_model_layerwise[-1] * config.num_patches_layerwise[-1]
+        )
 
         self.add_tokens = TSPulseAddLearnableRegisterTokens(config, device=device)
 
@@ -1559,7 +1698,9 @@ class TSPulseModel(TSPulsePreTrainedModel):
         #         self.embedding_size * config.num_channels_layerwise[-1]
         #     )
 
-        self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
+        self.base_norm = nn.LayerNorm(
+            self.config.num_patches * self.config.d_model, eps=config.norm_eps
+        )
 
         if config.post_init:
             self.post_init()
@@ -1638,10 +1779,17 @@ class TSPulseModel(TSPulsePreTrainedModel):
         scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
         masked_scaled_past_values = scaled_past_values
 
-        if self.config.channel_virtual_expand_scale and self.config.channel_virtual_expand_scale > 1:
-            scaled_past_values = scaled_past_values.repeat(1, 1, self.config.channel_virtual_expand_scale)
+        if (
+            self.config.channel_virtual_expand_scale
+            and self.config.channel_virtual_expand_scale > 1
+        ):
+            scaled_past_values = scaled_past_values.repeat(
+                1, 1, self.config.channel_virtual_expand_scale
+            )
 
-        patched_time = self.patching(scaled_past_values)  # [batch_size x num_input_channels x num_patch x patch_length
+        patched_time = self.patching(
+            scaled_past_values
+        )  # [batch_size x num_input_channels x num_patch x patch_length
 
         patched_encoding = self.time_encoding(patched_time)
 
@@ -1658,7 +1806,9 @@ class TSPulseModel(TSPulsePreTrainedModel):
                     fft_input = past_values  # take masked input
             else:
                 if self.config.fft_applied_on == "scaled_ts":
-                    fft_input = original_scaled_past_values  # take original scaled input
+                    fft_input = (
+                        original_scaled_past_values  # take original scaled input
+                    )
                 else:
                     fft_input = original_past_values  # take original input
 
@@ -1703,14 +1853,23 @@ class TSPulseModel(TSPulsePreTrainedModel):
                     fft_prob_length=self.config.fft_prob_length,
                 )
 
-            if self.config.channel_virtual_expand_scale and self.config.channel_virtual_expand_scale > 1:
-                past_values_fft = past_values_fft.repeat(1, 1, self.config.channel_virtual_expand_scale)
+            if (
+                self.config.channel_virtual_expand_scale
+                and self.config.channel_virtual_expand_scale > 1
+            ):
+                past_values_fft = past_values_fft.repeat(
+                    1, 1, self.config.channel_virtual_expand_scale
+                )
 
-            patched_fft = self.patching(past_values_fft)  # [batch_size x num_input_channels x num_patch x patch_length
+            patched_fft = self.patching(
+                past_values_fft
+            )  # [batch_size x num_input_channels x num_patch x patch_length
 
             patched_fft_encoding = self.fft_encoding(patched_fft)
 
-            patched_encoding = torch.concat([patched_encoding, patched_fft_encoding], dim=-2)
+            patched_encoding = torch.concat(
+                [patched_encoding, patched_fft_encoding], dim=-2
+            )
 
         patched_encoding = self.add_tokens(patched_encoding)
         #  [batch_size x num_input_channels+channel_register_tokens x num_patch+patch_register_tokens x patch_length
@@ -1910,7 +2069,10 @@ class TSPulseCategoricalEmbeddingLayer(nn.Module):
         super().__init__()
         self.categorical_vocab_size_list = config.categorical_vocab_size_list
         self.embedding_layers = nn.ModuleList(
-            [nn.Embedding(vocab, config.d_model) for vocab in self.categorical_vocab_size_list]
+            [
+                nn.Embedding(vocab, config.d_model)
+                for vocab in self.categorical_vocab_size_list
+            ]
         )
         self.number_of_categorical_variables = len(self.categorical_vocab_size_list)
         self.num_patches = config.num_patches
@@ -1920,10 +2082,14 @@ class TSPulseCategoricalEmbeddingLayer(nn.Module):
         embedded_tensors = []
 
         for i in range(self.number_of_categorical_variables):
-            embedded_tensor = self.embedding_layers[i](static_categorical_values[:, i].long())
+            embedded_tensor = self.embedding_layers[i](
+                static_categorical_values[:, i].long()
+            )
             embedded_tensors.append(embedded_tensor)
 
-        output_tensor = torch.stack(embedded_tensors, dim=1)  # bs x number_of_categorical_variables x d_model
+        output_tensor = torch.stack(
+            embedded_tensors, dim=1
+        )  # bs x number_of_categorical_variables x d_model
         output_tensor = output_tensor.unsqueeze(2).repeat(
             1, 1, self.num_patches, 1
         )  # bs x number_of_categorical_variables x num_patches x d_model
@@ -1960,28 +2126,37 @@ def register_token_config_update(config):
     if temp_config.patch_register_tokens is not None:
         temp_config.num_patches += temp_config.patch_register_tokens
         temp_config.num_patches_layerwise = [
-            i + temp_config.patch_register_tokens for i in temp_config.num_patches_layerwise
+            i + temp_config.patch_register_tokens
+            for i in temp_config.num_patches_layerwise
         ]
         temp_config.decoder_num_patches_layerwise = [
-            i + temp_config.patch_register_tokens for i in temp_config.decoder_num_patches_layerwise
+            i + temp_config.patch_register_tokens
+            for i in temp_config.decoder_num_patches_layerwise
         ]
 
     if temp_config.channel_register_tokens is not None:
         temp_config.num_input_channels += temp_config.channel_register_tokens
         temp_config.num_channels_layerwise = [
-            i + temp_config.channel_register_tokens for i in temp_config.num_channels_layerwise
+            i + temp_config.channel_register_tokens
+            for i in temp_config.num_channels_layerwise
         ]
         temp_config.decoder_num_channels_layerwise = [
-            i + temp_config.channel_register_tokens for i in temp_config.decoder_num_channels_layerwise
+            i + temp_config.channel_register_tokens
+            for i in temp_config.decoder_num_channels_layerwise
         ]
 
-    if temp_config.channel_virtual_expand_scale and temp_config.channel_virtual_expand_scale > 1:
+    if (
+        temp_config.channel_virtual_expand_scale
+        and temp_config.channel_virtual_expand_scale > 1
+    ):
         temp_config.num_input_channels *= temp_config.channel_virtual_expand_scale
         temp_config.num_channels_layerwise = [
-            i * temp_config.channel_virtual_expand_scale for i in temp_config.num_channels_layerwise
+            i * temp_config.channel_virtual_expand_scale
+            for i in temp_config.num_channels_layerwise
         ]
         temp_config.decoder_num_channels_layerwise = [
-            i * temp_config.channel_virtual_expand_scale for i in temp_config.decoder_num_channels_layerwise
+            i * temp_config.channel_virtual_expand_scale
+            for i in temp_config.decoder_num_channels_layerwise
         ]
 
     return temp_config
@@ -2060,16 +2235,24 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         self.decoder_with_head = TSPulseDecoderWithReconstructionHead(config)
 
         if config.decoder_d_model != config.d_model:
-            raise Exception("decoder_d_model should be same as d_model for reconstruction tasks")
+            raise Exception(
+                "decoder_d_model should be same as d_model for reconstruction tasks"
+            )
 
         if config.decoder_d_model_layerwise[-1] != config.d_model:
-            raise ValueError("decoder_d_model_layerwise[-1] should be same as config.d_model")
+            raise ValueError(
+                "decoder_d_model_layerwise[-1] should be same as config.d_model"
+            )
 
         if config.decoder_num_patches_layerwise[-1] != config.num_patches:
-            raise ValueError("decoder_num_patches_layerwise[-1] should be same as config.num_patches")
+            raise ValueError(
+                "decoder_num_patches_layerwise[-1] should be same as config.num_patches"
+            )
 
         if config.decoder_num_channels_layerwise[-1] != config.num_input_channels:
-            raise ValueError("decoder_num_channels_layerwise[-1] should be same as config.num_input_channels")
+            raise ValueError(
+                "decoder_num_channels_layerwise[-1] should be same as config.num_input_channels"
+            )
 
         self.ces_loss = CrossEntropySoftmaxLoss()
 
@@ -2149,16 +2332,22 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         )
 
         if isinstance(decoder_with_head_output, tuple):
-            decoder_with_head_output = TSPulseDecoderWithReconstructionHeadOutput(*decoder_with_head_output)
+            decoder_with_head_output = TSPulseDecoderWithReconstructionHeadOutput(
+                *decoder_with_head_output
+            )
 
         forecast_output = decoder_with_head_output.forecast_output
         reconstruction_outputs = decoder_with_head_output.reconstruction_outputs
         reconstructed_ts_from_fft = decoder_with_head_output.reconstructed_ts_from_fft
 
         if self.config.fft_time_add_forecasting_pt_loss:
-            forecast_output = self.backbone.scaler.inverse(data=forecast_output, loc=loc, scale=scale)
+            forecast_output = self.backbone.scaler.inverse(
+                data=forecast_output, loc=loc, scale=scale
+            )
 
-        reconstruction_outputs = self.backbone.scaler.inverse(data=reconstruction_outputs, loc=loc, scale=scale)
+        reconstruction_outputs = self.backbone.scaler.inverse(
+            data=reconstruction_outputs, loc=loc, scale=scale
+        )
 
         if (
             self.config.fft_applied_on == "scaled_ts"
@@ -2185,10 +2374,12 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
 
         if return_loss is True:
             if self.config.loss_apply_mode == "full" or (
-                (self.config.mask_ratio is None or self.config.mask_ratio == 0) and self.config.mask_type != "user"
+                (self.config.mask_ratio is None or self.config.mask_ratio == 0)
+                and self.config.mask_type != "user"
             ):
-                reconstruction_loss = self.config.reconstruction_loss_weight * self.loss(
-                    reconstruction_outputs, past_values
+                reconstruction_loss = (
+                    self.config.reconstruction_loss_weight
+                    * self.loss(reconstruction_outputs, past_values)
                 )
                 loss_val = reconstruction_loss
 
@@ -2196,20 +2387,27 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
                 if self.config.loss_apply_mode == "mask":
                     bool_mask = mask.type(torch.bool)
 
-                    masked_reconstruction_loss = self.config.masked_reconstruction_loss_weight * self.loss(
-                        reconstruction_outputs[bool_mask],
-                        past_values[bool_mask],
+                    masked_reconstruction_loss = (
+                        self.config.masked_reconstruction_loss_weight
+                        * self.loss(
+                            reconstruction_outputs[bool_mask],
+                            past_values[bool_mask],
+                        )
                     )
 
                     loss_val = masked_reconstruction_loss
                 elif self.config.loss_apply_mode == "mask_and_full":
                     bool_mask = mask.type(torch.bool)
-                    masked_reconstruction_loss = self.config.masked_reconstruction_loss_weight * self.loss(
-                        reconstruction_outputs[bool_mask],
-                        past_values[bool_mask],
+                    masked_reconstruction_loss = (
+                        self.config.masked_reconstruction_loss_weight
+                        * self.loss(
+                            reconstruction_outputs[bool_mask],
+                            past_values[bool_mask],
+                        )
                     )
-                    reconstruction_loss = self.config.reconstruction_loss_weight * self.loss(
-                        reconstruction_outputs, past_values
+                    reconstruction_loss = (
+                        self.config.reconstruction_loss_weight
+                        * self.loss(reconstruction_outputs, past_values)
                     )
                     loss_val = reconstruction_loss + masked_reconstruction_loss
                 else:
@@ -2237,13 +2435,17 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
             if self.config.fuse_fft and self.config.fft_original_signal_loss_weight > 0:
                 bool_mask = mask.type(torch.bool)
                 if self.config.loss_apply_mode == "mask" and bool_mask.any():
-                    reconstructed_ts_from_fft_loss = self.config.fft_original_signal_loss_weight * self.loss(
-                        reconstructed_ts_from_fft[bool_mask],
-                        past_values[bool_mask],
+                    reconstructed_ts_from_fft_loss = (
+                        self.config.fft_original_signal_loss_weight
+                        * self.loss(
+                            reconstructed_ts_from_fft[bool_mask],
+                            past_values[bool_mask],
+                        )
                     )
                 else:
-                    reconstructed_ts_from_fft_loss = self.config.fft_original_signal_loss_weight * self.loss(
-                        reconstructed_ts_from_fft, past_values
+                    reconstructed_ts_from_fft_loss = (
+                        self.config.fft_original_signal_loss_weight
+                        * self.loss(reconstructed_ts_from_fft, past_values)
                     )
                 loss_val = loss_val + reconstructed_ts_from_fft_loss
 
@@ -2256,9 +2458,13 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
 
                 loss_val = loss_val + fft_prob_loss
 
-            if self.config.fft_time_add_forecasting_pt_loss and future_values is not None:
-                forecast_loss = self.config.fft_time_add_forecasting_pt_loss_weight * self.loss(
-                    forecast_output, future_values
+            if (
+                self.config.fft_time_add_forecasting_pt_loss
+                and future_values is not None
+            ):
+                forecast_loss = (
+                    self.config.fft_time_add_forecasting_pt_loss_weight
+                    * self.loss(forecast_output, future_values)
                 )
 
                 loss_val += forecast_loss
@@ -2343,7 +2549,9 @@ def get_fft(
             rfft_mag = rfft_mag[:, :fft_prob_length, :]
         rfft_softmax_without_dc = torch.softmax(rfft_mag, dim=1)
     else:
-        rfft_softmax_without_dc = torch.softmax(rfft_result[:, 1:, :].real, dim=1)  # remove DC component
+        rfft_softmax_without_dc = torch.softmax(
+            rfft_result[:, 1:, :].real, dim=1
+        )  # remove DC component
 
     # rfft_mag = torch.abs(rfft_result[:, 1:, :])
     # if fft_prob_mode == "log":
@@ -2386,7 +2594,9 @@ class TSPulseMasking(nn.Module):
         self.config = config
 
         if self.config.use_learnable_mask_token:
-            self.mask_token = torch.nn.Parameter(torch.randn(self.config.mask_block_length).to(device))
+            self.mask_token = torch.nn.Parameter(
+                torch.randn(self.config.mask_block_length).to(device)
+            )
         else:
             self.mask_token = None
 
@@ -2420,7 +2630,9 @@ class TSPulseMasking(nn.Module):
             total_masks = total_masks.clamp(min=1)
 
         if self.mask_token is None:
-            self.mask_token = torch.full((patch_size,), 0, dtype=tensor.dtype).to(device)
+            self.mask_token = torch.full((patch_size,), 0, dtype=tensor.dtype).to(
+                device
+            )
 
         # === Patch info
         patch_ids_full = torch.arange(T, device=device) // patch_size  # [T]
@@ -2432,24 +2644,40 @@ class TSPulseMasking(nn.Module):
 
             # === Compute number of patches per sample
             full_patch_counts = (
-                (full_patch_mask_percentage * total_masks / patch_size).clamp(max=num_patches).long()
+                (full_patch_mask_percentage * total_masks / patch_size)
+                .clamp(max=num_patches)
+                .long()
             )  # [B]
             sorted_ids = torch.argsort(rand_vals, dim=1)  # [B, P]
-            patch_range = torch.arange(num_patches, device=device).unsqueeze(0).expand(B, -1)  # [B, P]
+            patch_range = (
+                torch.arange(num_patches, device=device).unsqueeze(0).expand(B, -1)
+            )  # [B, P]
             mask_patch_ids = patch_range < full_patch_counts.unsqueeze(1)  # [B, P]
             selected_patch_ids = torch.gather(sorted_ids, 1, patch_range)  # [B, P]
-            top_patch_ids = selected_patch_ids.masked_fill(~mask_patch_ids, -1)  # [B, P]
+            top_patch_ids = selected_patch_ids.masked_fill(
+                ~mask_patch_ids, -1
+            )  # [B, P]
 
             # Broadcast comparison to get full patch mask
-            full_patch_mask = (patch_ids_batched.unsqueeze(-1) == top_patch_ids.unsqueeze(1)).any(-1)  # [B, T]
+            full_patch_mask = (
+                patch_ids_batched.unsqueeze(-1) == top_patch_ids.unsqueeze(1)
+            ).any(
+                -1
+            )  # [B, T]
 
             full_patch_count_actual = full_patch_mask.sum(dim=1, keepdim=True)  # [B, 1]
-            remaining_to_mask = (total_masks.view(B, 1) - full_patch_count_actual).clamp(min=0)  # [B, 1]
+            remaining_to_mask = (
+                total_masks.view(B, 1) - full_patch_count_actual
+            ).clamp(
+                min=0
+            )  # [B, 1]
 
             rand_scores = torch.rand(B, T, device=device)
             rand_scores[full_patch_mask] = float("inf")
             sorted_scores, sorted_indices = torch.sort(rand_scores, dim=1)
-            topk_mask = torch.arange(T, device=device).unsqueeze(0) < remaining_to_mask  # [B, T]
+            topk_mask = (
+                torch.arange(T, device=device).unsqueeze(0) < remaining_to_mask
+            )  # [B, T]
             additional_mask = torch.zeros_like(topk_mask)
             additional_mask.scatter_(1, sorted_indices, topk_mask)
             combined_mask = full_patch_mask | additional_mask
@@ -2461,22 +2689,34 @@ class TSPulseMasking(nn.Module):
             rand_vals = torch.rand(B, C, num_patches, device=device)  # [B, C, P]
 
             full_patch_counts = (
-                (full_patch_mask_percentage * total_masks / patch_size).clamp(max=num_patches).long()
+                (full_patch_mask_percentage * total_masks / patch_size)
+                .clamp(max=num_patches)
+                .long()
             )  # [B]
             full_patch_counts_bc = full_patch_counts.view(B, 1).expand(B, C)  # [B, C]
             sorted_ids = torch.argsort(rand_vals, dim=2)  # [B, C, P]
-            patch_range = torch.arange(num_patches, device=device).view(1, 1, -1).expand(B, C, -1)  # [B, C, P]
-            mask_patch_ids = patch_range < full_patch_counts_bc.unsqueeze(-1)  # [B, C, P]
+            patch_range = (
+                torch.arange(num_patches, device=device).view(1, 1, -1).expand(B, C, -1)
+            )  # [B, C, P]
+            mask_patch_ids = patch_range < full_patch_counts_bc.unsqueeze(
+                -1
+            )  # [B, C, P]
             selected_patch_ids = torch.gather(sorted_ids, 2, patch_range)  # [B, C, P]
-            top_patch_ids = selected_patch_ids.masked_fill(~mask_patch_ids, -1)  # [B, C, P]
+            top_patch_ids = selected_patch_ids.masked_fill(
+                ~mask_patch_ids, -1
+            )  # [B, C, P]
 
             patch_ids_exp = patch_ids_full.view(1, T, 1, 1).expand(B, T, C, num_patches)
-            top_patch_ids_exp = top_patch_ids.view(B, 1, C, num_patches).expand(B, T, C, num_patches)
+            top_patch_ids_exp = top_patch_ids.view(B, 1, C, num_patches).expand(
+                B, T, C, num_patches
+            )
             full_patch_mask = (patch_ids_exp == top_patch_ids_exp).any(-1)  # [B, T, C]
 
             full_patch_counts_actual = full_patch_mask.sum(dim=1)  # [B, C]
             total_masks_per_channel = total_masks.view(B, 1).expand(B, C)
-            remaining_masks = (total_masks_per_channel - full_patch_counts_actual).clamp(min=0)
+            remaining_masks = (
+                total_masks_per_channel - full_patch_counts_actual
+            ).clamp(min=0)
 
             rand_scores = torch.rand(B, T, C, device=device)
             rand_scores[full_patch_mask] = float("inf")
@@ -2495,7 +2735,9 @@ class TSPulseMasking(nn.Module):
 
         return masked_tensor, mask
 
-    def hybrid_masking_with_token(self, tensor, mask_percentage, patch_size, num_full_patches_to_mask=1):
+    def hybrid_masking_with_token(
+        self, tensor, mask_percentage, patch_size, num_full_patches_to_mask=1
+    ):
         """
         Args:
             tensor: [B, T, C]
@@ -2512,7 +2754,9 @@ class TSPulseMasking(nn.Module):
         total_masks = int(mask_percentage * T)
 
         if self.mask_token is None:
-            self.mask_token = torch.full((patch_size,), 0, dtype=tensor.dtype).to(tensor.device)  # set to default zero
+            self.mask_token = torch.full((patch_size,), 0, dtype=tensor.dtype).to(
+                tensor.device
+            )  # set to default zero
 
         if num_full_patches_to_mask * patch_size > total_masks:
             logger.warning(
@@ -2532,8 +2776,14 @@ class TSPulseMasking(nn.Module):
             # -----------------------------
             patch_ids_batched = patch_ids_full.unsqueeze(0).expand(B, T)  # [B, T]
             rand_vals = torch.rand(B, num_patches, device=device)
-            _, top_patch_ids = torch.topk(rand_vals, k=num_full_patches_to_mask, dim=1)  # [B, K]
-            full_patch_mask = (patch_ids_batched.unsqueeze(-1) == top_patch_ids.unsqueeze(1)).any(-1)  # [B, T]
+            _, top_patch_ids = torch.topk(
+                rand_vals, k=num_full_patches_to_mask, dim=1
+            )  # [B, K]
+            full_patch_mask = (
+                patch_ids_batched.unsqueeze(-1) == top_patch_ids.unsqueeze(1)
+            ).any(
+                -1
+            )  # [B, T]
 
             full_patch_counts = full_patch_mask.sum(dim=1, keepdim=True)  # [B, 1]
             remaining_to_mask = (total_masks - full_patch_counts).clamp(min=0)  # [B, 1]
@@ -2541,7 +2791,10 @@ class TSPulseMasking(nn.Module):
             rand_scores = torch.rand(B, T, device=device)
             rand_scores[full_patch_mask] = float("inf")
             sorted_scores, sorted_indices = torch.sort(rand_scores, dim=1)
-            topk_mask = torch.arange(T, device=device).unsqueeze(0).expand(B, T) < remaining_to_mask
+            topk_mask = (
+                torch.arange(T, device=device).unsqueeze(0).expand(B, T)
+                < remaining_to_mask
+            )
             additional_mask = torch.zeros_like(topk_mask)
             additional_mask.scatter_(1, sorted_indices, topk_mask)
             combined_mask = full_patch_mask | additional_mask  # [B, T]
@@ -2552,16 +2805,26 @@ class TSPulseMasking(nn.Module):
             # Channel-Random Masking
             # -----------------------------
 
-            patch_ids_batched = patch_ids_full.view(1, T, 1).expand(B, T, C)  # [B, T, C]
+            patch_ids_batched = patch_ids_full.view(1, T, 1).expand(
+                B, T, C
+            )  # [B, T, C]
             rand_vals = torch.rand(B, C, num_patches, device=device)
-            _, top_patch_ids = torch.topk(rand_vals, k=num_full_patches_to_mask, dim=2)  # [B, C, K]
-            selected_patch_ids = top_patch_ids.unsqueeze(1).expand(B, T, C, num_full_patches_to_mask)
-            patch_id_exp = patch_ids_full.view(1, T, 1, 1).expand(B, T, C, num_full_patches_to_mask)
+            _, top_patch_ids = torch.topk(
+                rand_vals, k=num_full_patches_to_mask, dim=2
+            )  # [B, C, K]
+            selected_patch_ids = top_patch_ids.unsqueeze(1).expand(
+                B, T, C, num_full_patches_to_mask
+            )
+            patch_id_exp = patch_ids_full.view(1, T, 1, 1).expand(
+                B, T, C, num_full_patches_to_mask
+            )
             full_patch_mask = (patch_id_exp == selected_patch_ids).any(-1)  # [B, T, C]
 
             full_patch_counts = full_patch_mask.sum(dim=1)  # [B, C]
             total_masks_per_channel = int(mask_percentage * T)
-            remaining_masks = (total_masks_per_channel - full_patch_counts).clamp(min=0)  # [B, C]
+            remaining_masks = (total_masks_per_channel - full_patch_counts).clamp(
+                min=0
+            )  # [B, C]
 
             rand_scores = torch.rand(B, T, C, device=device)
             rand_scores[full_patch_mask] = float("inf")
@@ -2602,7 +2865,9 @@ class TSPulseMasking(nn.Module):
         channel_consistent = self.channel_consistent_masking
 
         if self.mask_token is None:
-            self.mask_token = torch.full((patch_length,), 0).to(tensor.device)  # set to default zero
+            self.mask_token = torch.full((patch_length,), 0).to(
+                tensor.device
+            )  # set to default zero
 
         b, s, c = tensor.shape
 
@@ -2610,7 +2875,9 @@ class TSPulseMasking(nn.Module):
         num_patches = s // patch_length
         # Ensure the sequence length is divisible by the patch length
         if s % patch_length != 0:
-            raise ValueError("Sequence length (s) must be divisible by the patch length (K).")
+            raise ValueError(
+                "Sequence length (s) must be divisible by the patch length (K)."
+            )
 
         tensor = tensor.transpose(-1, -2)  # b, c, s
         tensor_patches = tensor.reshape(b, c, num_patches, patch_length)  # b, c, n, l
@@ -2620,15 +2887,21 @@ class TSPulseMasking(nn.Module):
 
         if channel_consistent:
             # Generate a random permutation for each sample in the batch
-            rand_indices = torch.rand(b, num_patches, device=tensor.device).argsort(dim=1)
+            rand_indices = torch.rand(b, num_patches, device=tensor.device).argsort(
+                dim=1
+            )
             # Expand dimensions to match the tensor shape for consistent masking across channels
             rand_indices = rand_indices.unsqueeze(1).expand(b, c, num_patches)
         else:
             # Generate a random permutation for each channel in each sample in the batch
-            rand_indices = torch.rand(b, c, num_patches, device=tensor.device).argsort(dim=2)
+            rand_indices = torch.rand(b, c, num_patches, device=tensor.device).argsort(
+                dim=2
+            )
 
         # Create a mask by setting the first num_patches_to_mask_per_sample entries of each sample to False
-        mask_patches = torch.ones((b, c, num_patches), dtype=torch.bool, device=tensor.device)
+        mask_patches = torch.ones(
+            (b, c, num_patches), dtype=torch.bool, device=tensor.device
+        )
 
         if self.batch_mode == "odd":
             batch_mask = torch.arange(b, device=tensor.device) % 2 == 1
@@ -2639,7 +2912,9 @@ class TSPulseMasking(nn.Module):
 
         mask_indices = rand_indices[:, :, :num_patches_to_mask_per_sample]
         # mask_patches.scatter_(-1, mask_indices, False)
-        mask_patches[batch_mask] = mask_patches[batch_mask].scatter(-1, mask_indices[batch_mask], False)
+        mask_patches[batch_mask] = mask_patches[batch_mask].scatter(
+            -1, mask_indices[batch_mask], False
+        )
 
         # Expand the patch mask to match the patch size: (b, c, num_patches, patch_length)
         patch_mask = mask_patches.unsqueeze(-1).expand(-1, -1, -1, patch_length)
@@ -2647,17 +2922,25 @@ class TSPulseMasking(nn.Module):
         mask_token_expanded = self.mask_token.view(1, 1, 1, patch_length)  # 1,1,1,l
         mask_patches_expanded = mask_patches.unsqueeze(-1)  # b, c, n, 1
 
-        masked_data = torch.where(mask_patches_expanded, tensor_patches, mask_token_expanded)  # b, c, n, l
+        masked_data = torch.where(
+            mask_patches_expanded, tensor_patches, mask_token_expanded
+        )  # b, c, n, l
 
         masked_data = masked_data.permute(0, 2, 3, 1)  # b, n, l, c
         masked_data = masked_data.reshape(b, s, c)  # b, s, c
 
         # Convert the patch mask back to the original shape (b, s, c)
-        mask = ~patch_mask.reshape(b, c, s // patch_length, patch_length).permute(0, 2, 3, 1).reshape(b, s, c)
+        mask = (
+            ~patch_mask.reshape(b, c, s // patch_length, patch_length)
+            .permute(0, 2, 3, 1)
+            .reshape(b, s, c)
+        )
 
         return masked_data, mask
 
-    def mask_with_past_observed(self, tensor: torch.Tensor, past_observed_mask: torch.Tensor, patch_length):
+    def mask_with_past_observed(
+        self, tensor: torch.Tensor, past_observed_mask: torch.Tensor, patch_length
+    ):
         """
         Args:
             tensor: [B, T, C]
@@ -2671,7 +2954,9 @@ class TSPulseMasking(nn.Module):
         device = tensor.device
 
         if self.mask_token is None:
-            self.mask_token = torch.full((patch_length,), 0).to(tensor.device)  # set to default zero
+            self.mask_token = torch.full((patch_length,), 0).to(
+                tensor.device
+            )  # set to default zero
 
         if past_observed_mask is None:
             mask = torch.zeros_like(tensor, dtype=torch.bool, device=device)
@@ -2726,7 +3011,9 @@ class TSPulseMasking(nn.Module):
             )
 
         elif self.config.mask_type == "random":
-            masked_inputs, mask = self.mask_random_percentage(tensor=inputs, mask_percentage=self.config.mask_ratio)
+            masked_inputs, mask = self.mask_random_percentage(
+                tensor=inputs, mask_percentage=self.config.mask_ratio
+            )
         else:
             raise Exception("Invalid mask type")
 
@@ -2815,7 +3102,11 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         Returns: TSPulseForClassificationOutput or Tuple
 
         """
-        if self.config.loss == "cross_entropy" and class_weights is not None and return_loss is True:
+        if (
+            self.config.loss == "cross_entropy"
+            and class_weights is not None
+            and return_loss is True
+        ):
             self.loss = nn.CrossEntropyLoss(weight=class_weights[0])
 
         # loss = torch.nn.CrossEntropyLoss()
@@ -2853,7 +3144,9 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         )
 
         if isinstance(decoder_with_head_output, tuple):
-            decoder_with_head_output = TSPulseDecoderWithClassificationHeadOutput(*decoder_with_head_output)
+            decoder_with_head_output = TSPulseDecoderWithClassificationHeadOutput(
+                *decoder_with_head_output
+            )
 
         # if output_hidden_states:
         #     hidden_states.extend(decoder_with_head_output.hidden_states)
@@ -2861,9 +3154,13 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         loss_val = torch.zeros(size=(1,)).to(loc.device)
 
         if return_loss is True and target_values is not None:
-            loss_val = self.loss(decoder_with_head_output.prediction_outputs, target_values)
+            loss_val = self.loss(
+                decoder_with_head_output.prediction_outputs, target_values
+            )
 
-        decoder_hidden_state = decoder_with_head_output.decoder_hidden_state.flatten(start_dim=2)
+        decoder_hidden_state = decoder_with_head_output.decoder_hidden_state.flatten(
+            start_dim=2
+        )
         if not return_dict:
             return tuple(
                 v
@@ -2904,13 +3201,22 @@ class TSPulseLinearHead(nn.Module):
         self.actual_local_patches = None
         self.num_patches = config.num_patches
 
-        if config.data_actual_context_length is not None and config.data_actual_context_length < config.context_length:
-            self.actual_local_patches = math.ceil(config.data_actual_context_length / config.patch_length)
-            self.num_patches = 2 * self.actual_local_patches + config.patch_register_tokens
+        if (
+            config.data_actual_context_length is not None
+            and config.data_actual_context_length < config.context_length
+        ):
+            self.actual_local_patches = math.ceil(
+                config.data_actual_context_length / config.patch_length
+            )
+            self.num_patches = (
+                2 * self.actual_local_patches + config.patch_register_tokens
+            )
 
         head_channels = config.num_input_channels
         if config.head_reduce_channels is not None:
-            self.reduce_channel_proj = nn.Linear(config.num_input_channels, config.head_reduce_channels)
+            self.reduce_channel_proj = nn.Linear(
+                config.num_input_channels, config.head_reduce_channels
+            )
             # self.reduce_channel_norm = nn.LayerNorm(
             #     config.head_reduce_channels, eps=config.norm_eps
             # )
@@ -2937,14 +3243,18 @@ class TSPulseLinearHead(nn.Module):
         else:
             dim_size = self.num_patches
 
-        projection_dim = (d_model_size * dim_size * mul_factor) + 2 * config.loc_num_input_channels
+        projection_dim = (
+            d_model_size * dim_size * mul_factor
+        ) + 2 * config.loc_num_input_channels
         self.projection = nn.Linear(
             projection_dim,
             config.num_targets,
         )
         # self.projection = nn.utils.spectral_norm(self.projection)
 
-        self.loc_scale_norm = nn.Linear(2 * config.loc_num_input_channels, 2 * config.loc_num_input_channels)
+        self.loc_scale_norm = nn.Linear(
+            2 * config.loc_num_input_channels, 2 * config.loc_num_input_channels
+        )
 
         self.flatten = nn.Flatten(start_dim=1)
 
@@ -2993,7 +3303,9 @@ class TSPulseLinearHead(nn.Module):
                 "long_embedding",
                 "full_embedding",
             ]:
-                selected_patches.append(hidden_features[:, :, : self.actual_local_patches, :])
+                selected_patches.append(
+                    hidden_features[:, :, : self.actual_local_patches, :]
+                )
 
                 if self.config.fuse_fft:
                     selected_patches.append(
@@ -3006,12 +3318,16 @@ class TSPulseLinearHead(nn.Module):
                     )
 
             if self.config.classification_mode in ["short_embedding", "full_embedding"]:
-                selected_patches.append(hidden_features[:, :, -self.config.patch_register_tokens :, :])
+                selected_patches.append(
+                    hidden_features[:, :, -self.config.patch_register_tokens :, :]
+                )
 
             hidden_features = torch.cat(selected_patches, dim=2)
 
         if self.config.head_reduce_channels is not None:
-            hidden_features = hidden_features.permute(0, 2, 3, 1)  # batch_size x num_patch x d_model x n_vars
+            hidden_features = hidden_features.permute(
+                0, 2, 3, 1
+            )  # batch_size x num_patch x d_model x n_vars
             hidden_features = self.reduce_channel_proj(hidden_features)
             # hidden_features = self.reduce_channel_norm(hidden_features)
             hidden_features = hidden_features.permute(0, 3, 1, 2)
@@ -3021,10 +3337,17 @@ class TSPulseLinearHead(nn.Module):
             # hidden_features = self.reduce_proj_norm(hidden_features)
 
         if self.head_aggregation is not None:
-            if self.config.head_aggregation_dim == "patch" or self.head_aggregation == "use_last":
-                hidden_features = hidden_features.transpose(-1, -2)  # batch_size x n_vars x d_model x num_patch
+            if (
+                self.config.head_aggregation_dim == "patch"
+                or self.head_aggregation == "use_last"
+            ):
+                hidden_features = hidden_features.transpose(
+                    -1, -2
+                )  # batch_size x n_vars x d_model x num_patch
             else:
-                hidden_features = hidden_features.transpose(-1, -3)  # batch_size x d_model x num_patches x n_vars
+                hidden_features = hidden_features.transpose(
+                    -1, -3
+                )  # batch_size x d_model x num_patches x n_vars
 
         if self.head_aggregation == "use_last":
             # batch_size x d_model (flatten) or # batch_size x n_vars x d_model (common_channel)
@@ -3052,7 +3375,9 @@ class TSPulseLinearHead(nn.Module):
 
         if self.output_range is not None:
             hidden_features = (
-                torch.sigmoid(hidden_features) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
+                torch.sigmoid(hidden_features)
+                * (self.output_range[1] - self.output_range[0])
+                + self.output_range[0]
             )
         return hidden_features
 
@@ -3109,8 +3434,13 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         if self.config.channel_register_tokens is not None:
             self.base_num_input_channels -= self.config.channel_register_tokens
 
-        if self.config.channel_virtual_expand_scale and self.config.channel_virtual_expand_scale > 1:
-            self.base_num_input_channels = self.base_num_input_channels // self.config.channel_virtual_expand_scale
+        if (
+            self.config.channel_virtual_expand_scale
+            and self.config.channel_virtual_expand_scale > 1
+        ):
+            self.base_num_input_channels = (
+                self.base_num_input_channels // self.config.channel_virtual_expand_scale
+            )
 
         if self.config.patch_register_tokens is not None:
             self.base_num_patches -= self.config.patch_register_tokens
@@ -3124,12 +3454,17 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         self.time_head = TSPulseForReconstructionHead(head_config)
 
         self.fft_head = None
-        if self.config.fuse_fft and (self.config.fft_weight > 0 or self.config.fft_original_signal_loss_weight > 0):
+        if self.config.fuse_fft and (
+            self.config.fft_weight > 0
+            or self.config.fft_original_signal_loss_weight > 0
+        ):
             self.fft_head = TSPulseForReconstructionHead(head_config)
 
         self.backbone_mode = config.mode
 
-        self.patch_register_embedding_len = config.patch_register_tokens * config.d_model
+        self.patch_register_embedding_len = (
+            config.patch_register_tokens * config.d_model
+        )
 
         if self.config.register_mixer_layers is not None:
             self.register_mix_config = copy.deepcopy(self.decoder.decoder_config)
@@ -3140,14 +3475,20 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
             self.register_mix_config.num_patches_layerwise = [
                 self.register_mix_config.num_patches
             ] * self.register_mix_config.num_layers
-            self.register_mix_config.num_patches_layerwise_scale = [1] * self.register_mix_config.num_layers
+            self.register_mix_config.num_patches_layerwise_scale = [
+                1
+            ] * self.register_mix_config.num_layers
 
             # set d_model
-            self.register_mix_config.d_model = self.register_mix_config.decoder_d_model_layerwise[-1]
+            self.register_mix_config.d_model = (
+                self.register_mix_config.decoder_d_model_layerwise[-1]
+            )
             self.register_mix_config.d_model_layerwise = [
                 self.register_mix_config.d_model
             ] * self.register_mix_config.num_layers
-            self.register_mix_config.d_model_layerwise_scale = [1] * self.register_mix_config.num_layers
+            self.register_mix_config.d_model_layerwise_scale = [
+                1
+            ] * self.register_mix_config.num_layers
 
             # set num channels
             # self.register_mix_config.num_input_channels = (
@@ -3157,7 +3498,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
             self.register_mix_config.num_channels_layerwise = [
                 self.register_mix_config.num_input_channels
             ] * self.register_mix_config.num_layers
-            self.register_mix_config.num_channels_layerwise_scale = [1] * self.register_mix_config.num_layers
+            self.register_mix_config.num_channels_layerwise_scale = [
+                1
+            ] * self.register_mix_config.num_layers
 
         if self.config.fft_time_add_forecasting_pt_loss is True:
             # self.forecast_mapping = nn.Linear(
@@ -3169,7 +3512,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
                 self.forecast_mapping = nn.Sequential(
                     TSPulseBlock(config=self.register_mix_config, return_tuple=False),
                     nn.Flatten(start_dim=2),
-                    nn.LayerNorm(self.patch_register_embedding_len, eps=config.norm_eps),
+                    nn.LayerNorm(
+                        self.patch_register_embedding_len, eps=config.norm_eps
+                    ),
                     nn.Linear(
                         self.patch_register_embedding_len,
                         self.config.prediction_length,
@@ -3178,7 +3523,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
             else:
                 self.forecast_mapping = nn.Sequential(
                     nn.Flatten(start_dim=2),
-                    nn.LayerNorm(self.patch_register_embedding_len, eps=config.norm_eps),
+                    nn.LayerNorm(
+                        self.patch_register_embedding_len, eps=config.norm_eps
+                    ),
                     TSPulseMLP(
                         in_features=self.patch_register_embedding_len,
                         out_features=self.config.prediction_length,
@@ -3210,7 +3557,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
                 self.fft_softmax_mapping = nn.Sequential(
                     TSPulseBlock(config=self.register_mix_config, return_tuple=False),
                     nn.Flatten(start_dim=2),
-                    nn.LayerNorm(self.patch_register_embedding_len, eps=config.norm_eps),
+                    nn.LayerNorm(
+                        self.patch_register_embedding_len, eps=config.norm_eps
+                    ),
                     nn.Linear(
                         self.patch_register_embedding_len,
                         fft_prob_length,
@@ -3219,7 +3568,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
             else:
                 self.fft_softmax_mapping = nn.Sequential(
                     nn.Flatten(start_dim=2),
-                    nn.LayerNorm(self.patch_register_embedding_len, eps=config.norm_eps),
+                    nn.LayerNorm(
+                        self.patch_register_embedding_len, eps=config.norm_eps
+                    ),
                     TSPulseMLP(
                         in_features=self.patch_register_embedding_len,
                         out_features=fft_prob_length,
@@ -3265,7 +3616,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
 
         decoder_input = decoder_input.reshape(self.reshape_dims)
 
-        decoder_output, decoder_hidden_states = self.decoder(decoder_input, output_hidden_states)
+        decoder_output, decoder_hidden_states = self.decoder(
+            decoder_input, output_hidden_states
+        )
 
         patch_register_output = decoder_output[
             :, : self.base_num_input_channels, -self.config.patch_register_tokens :, :
@@ -3279,28 +3632,38 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         # patch_register_output = self.register_norm(patch_register_output)
         # breakpoint()
 
-        decoder_hidden_state = decoder_output[:, : self.base_num_input_channels, :, :].flatten(start_dim=2)
+        decoder_hidden_state = decoder_output[
+            :, : self.base_num_input_channels, :, :
+        ].flatten(start_dim=2)
 
-        decoder_output = decoder_output[:, : self.base_num_input_channels, : self.base_num_patches, :]
+        decoder_output = decoder_output[
+            :, : self.base_num_input_channels, : self.base_num_patches, :
+        ]
 
         forecast_output = torch.zeros(size=(1,)).to(decoder_output.device)
         fft_softmax_preds = torch.zeros(size=(1,)).to(decoder_output.device)
 
         if self.config.fft_time_add_forecasting_pt_loss is True:
-            forecast_output = self.forecast_mapping(patch_register_output).transpose(-1, -2)  # bs x c x forecast
+            forecast_output = self.forecast_mapping(patch_register_output).transpose(
+                -1, -2
+            )  # bs x c x forecast
 
             # moved to TSPulseForReconstruction class
             # if loc is not None and scale is not None:
             #     forecast_output = forecast_output * scale + loc
 
         if self.fft_softmax_mapping is not None:
-            fft_softmax_preds = torch.softmax(self.fft_softmax_mapping(patch_register_output).transpose(-1, -2), dim=1)
+            fft_softmax_preds = torch.softmax(
+                self.fft_softmax_mapping(patch_register_output).transpose(-1, -2), dim=1
+            )
 
         reconstruction_fft_outputs = torch.zeros(size=(1,)).to(decoder_output.device)
         reconstructed_ts_from_fft = torch.zeros(size=(1,)).to(decoder_output.device)
 
         if self.config.fuse_fft:
-            decoder_output_time = decoder_output[:, :, 0 : self.base_num_patches // 2, :]
+            decoder_output_time = decoder_output[
+                :, :, 0 : self.base_num_patches // 2, :
+            ]
             decoder_output_fft = decoder_output[:, :, -self.base_num_patches // 2 :, :]
 
             if self.fft_head is not None:
@@ -3323,7 +3686,9 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
                     rfft_result = torch.cat([rfft_result, fft_base_component], dim=1)
 
                 # Apply inverse FFT to recover the original input
-                reconstructed_ts_from_fft = torch.fft.irfft(rfft_result, n=(rfft_result.shape[1] - 1) * 2, dim=1)
+                reconstructed_ts_from_fft = torch.fft.irfft(
+                    rfft_result, n=(rfft_result.shape[1] - 1) * 2, dim=1
+                )
 
                 # mag = reconstruction_fft_outputs[:, :half_pos, :] * fft_real_max
                 # phase = reconstruction_fft_outputs[:, half_pos:, :] * fft_imag_max
@@ -3406,39 +3771,60 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
         self.base_num_patches = self.config.num_patches
         self.base_backbone_last_num_patches = config.num_patches_layerwise[-1]
         self.base_decoder_last_num_patches = config.decoder_num_patches_layerwise[-1]
-        self.base_decoder_last_num_input_channels = config.decoder_num_channels_layerwise[-1]
+        self.base_decoder_last_num_input_channels = (
+            config.decoder_num_channels_layerwise[-1]
+        )
 
         if self.config.channel_register_tokens is not None:
             self.base_num_input_channels -= self.config.channel_register_tokens
-            self.base_decoder_last_num_input_channels -= self.config.channel_register_tokens
+            self.base_decoder_last_num_input_channels -= (
+                self.config.channel_register_tokens
+            )
 
-        if self.config.channel_virtual_expand_scale and self.config.channel_virtual_expand_scale > 1:
-            self.base_num_input_channels = self.base_num_input_channels // self.config.channel_virtual_expand_scale
+        if (
+            self.config.channel_virtual_expand_scale
+            and self.config.channel_virtual_expand_scale > 1
+        ):
+            self.base_num_input_channels = (
+                self.base_num_input_channels // self.config.channel_virtual_expand_scale
+            )
             self.base_decoder_last_num_input_channels = (
-                self.base_decoder_last_num_input_channels // self.config.channel_virtual_expand_scale
+                self.base_decoder_last_num_input_channels
+                // self.config.channel_virtual_expand_scale
             )
 
         decoder_config = copy.deepcopy(config)
-        decoder_config.gated_attention_activation = config.head_gated_attention_activation
+        decoder_config.gated_attention_activation = (
+            config.head_gated_attention_activation
+        )
         if config.categorical_vocab_size_list is not None:
             raise Exception("categorical code to be updated... not ready....")
             if config.decoder_mode == "common_channel":
                 # logger.warning("Setting decoder_mode to mix_channel as static categorical variables is available")
                 # config.decoder_mode = "mix_channel"
-                raise ValueError("set decoder_mode to mix_channel when using static categorical variables")
+                raise ValueError(
+                    "set decoder_mode to mix_channel when using static categorical variables"
+                )
 
             cat_config = copy.deepcopy(decoder_config)
             cat_config.num_patches = cat_config.num_patches_layerwise[-1]
             cat_config.d_model = cat_config.d_model_layerwise[-1]
 
             # decoder_config.num_input_channels += len(config.categorical_vocab_size_list)
-            self.decoder_cat_embedding_layer = TSPulseCategoricalEmbeddingLayer(cat_config)
-            decoder_config.num_channels_layerwise[-1] += len(config.categorical_vocab_size_list)
+            self.decoder_cat_embedding_layer = TSPulseCategoricalEmbeddingLayer(
+                cat_config
+            )
+            decoder_config.num_channels_layerwise[-1] += len(
+                config.categorical_vocab_size_list
+            )
             decoder_config.decoder_num_channels_layerwise = [
-                x + len(config.categorical_vocab_size_list) for x in decoder_config.decoder_num_channels_layerwise
+                x + len(config.categorical_vocab_size_list)
+                for x in decoder_config.decoder_num_channels_layerwise
             ]
 
-            self.base_decoder_last_num_input_channels = decoder_config.decoder_num_channels_layerwise[-1]
+            self.base_decoder_last_num_input_channels = (
+                decoder_config.decoder_num_channels_layerwise[-1]
+            )
 
         else:
             self.decoder_cat_embedding_layer = None
@@ -3463,11 +3849,15 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
             self.base_backbone_last_num_patches -= self.config.patch_register_tokens
             self.base_decoder_last_num_patches -= self.config.patch_register_tokens
             self.base_num_patches = self.base_num_patches // 2
-            self.base_backbone_last_num_patches = self.base_backbone_last_num_patches // 2
+            self.base_backbone_last_num_patches = (
+                self.base_backbone_last_num_patches // 2
+            )
             self.base_decoder_last_num_patches = self.base_decoder_last_num_patches // 2
             temp_config.num_patches = self.base_decoder_last_num_patches
         elif self.config.classification_mode == "time_with_short_fft_embedding":
-            time_patches = (self.base_num_patches - self.config.patch_register_tokens) // 2
+            time_patches = (
+                self.base_num_patches - self.config.patch_register_tokens
+            ) // 2
             total_patches = time_patches + self.config.patch_register_tokens
             self.time_patches = time_patches
             self.base_num_patches = total_patches
@@ -3501,7 +3891,9 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
                 #     temp_config.num_input_channels * 1 + temp_config.num_patches * 1
                 # )
 
-                self.hydra_head_weight_layer = nn.Linear(head_input_size, len(config.hydra_class_head))
+                self.hydra_head_weight_layer = nn.Linear(
+                    head_input_size, len(config.hydra_class_head)
+                )
 
         # self.head = TSPulseLinearAttentionHead(temp_config)
         # # Initialize weights and apply final processing
@@ -3564,12 +3956,16 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
             decoder_input = torch.concat(
                 (decoder_input, cat_embeddings), dim=1
             )  # bs x nvars+n_cat x n_patches x d_model
-        decoder_output, decoder_hidden_states = self.decoder(decoder_input, output_hidden_states)
+        decoder_output, decoder_hidden_states = self.decoder(
+            decoder_input, output_hidden_states
+        )
 
         # # filter in case of register tokens
 
         if self.config.classification_mode == "long_embedding":
-            decoder_output = decoder_output[:, : self.base_num_input_channels, : self.base_num_patches, :]
+            decoder_output = decoder_output[
+                :, : self.base_num_input_channels, : self.base_num_patches, :
+            ]
         elif self.config.classification_mode == "short_embedding":
             decoder_output = decoder_output[
                 :,
@@ -3578,7 +3974,9 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
                 :,
             ]
         elif self.config.classification_mode == "time_embedding":
-            decoder_output = decoder_output[:, : self.base_num_input_channels, : self.base_num_patches, :]
+            decoder_output = decoder_output[
+                :, : self.base_num_input_channels, : self.base_num_patches, :
+            ]
         elif self.config.classification_mode == "fft_embedding":
             decoder_output = decoder_output[
                 :,
@@ -3623,13 +4021,21 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
                 # breakpoint()
                 E = decoder_output.mean(dim=(1, 2))
 
-                raw_weights = self.hydra_head_weight_layer(E)  # Shape: [batch, num_heads]
-                weights = F.softmax(raw_weights, dim=-1)  # Apply softmax across the heads
+                raw_weights = self.hydra_head_weight_layer(
+                    E
+                )  # Shape: [batch, num_heads]
+                weights = F.softmax(
+                    raw_weights, dim=-1
+                )  # Apply softmax across the heads
 
                 # Apply weights and aggregate outputs
-                prediction_outputs = torch.einsum("bht,bh->bt", head_outputs, weights)  # Shape: [batch, num_targets]
+                prediction_outputs = torch.einsum(
+                    "bht,bh->bt", head_outputs, weights
+                )  # Shape: [batch, num_targets]
             else:
-                prediction_outputs = head_outputs.mean(dim=1)  # Shape: [batch, num_targets]
+                prediction_outputs = head_outputs.mean(
+                    dim=1
+                )  # Shape: [batch, num_targets]
 
         if output_hidden_states:
             decoder_hidden_states.append(prediction_outputs)

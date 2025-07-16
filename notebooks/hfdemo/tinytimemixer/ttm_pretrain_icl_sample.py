@@ -8,14 +8,14 @@ import tempfile
 
 import pandas as pd
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import OneCycleLR, ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import ConcatDataset
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
 from tsfm_public import TimeSeriesPreprocessor, get_datasets
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
-    TinyTimeMixerForPrediction,
+    TinyTimeMixerForICLPrediction,
 )
 from tsfm_public.models.tinytimemixer.utils import get_ttm_args
 from tsfm_public.toolkit.get_model import get_model
@@ -59,7 +59,7 @@ def get_base_model(args):
         # decoder params
         decoder_num_layers=args.decoder_num_layers,  # increase the number of layers if we want more complex models
         decoder_adaptive_patching_levels=0,
-        decoder_mode="common_channel",
+        decoder_mode=args.decoder_mode,
         decoder_raw_residual=False,
         use_decoder=True,
         decoder_d_model=args.decoder_d_model,
@@ -73,7 +73,7 @@ def get_base_model(args):
         enable_fourier_attention=args.enable_fourier_attention,
     )
 
-    model = TinyTimeMixerForPrediction(config)
+    model = TinyTimeMixerForICLPrediction(config)
     return model
 
 
@@ -122,8 +122,6 @@ def pretrain(args, model, dset_train, dset_val):
     #     steps_per_epoch=math.ceil(len(dset_train) / args.batch_size),
     #     # steps_per_epoch=math.ceil(len(dset_train) / (args.batch_size * args.num_gpus)),
     # )
-    # scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=10)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
 
     # Create the early stopping callback
     early_stopping_callback = EarlyStoppingCallback(
@@ -138,8 +136,8 @@ def pretrain(args, model, dset_train, dset_val):
             args=trainer_args,
             train_dataset=dset_train,
             eval_dataset=dset_val,
-            optimizers=(optimizer, scheduler),
-            # optimizers=(optimizer),
+            # optimizers=(optimizer, scheduler),
+            optimizers=(optimizer),
             callbacks=[early_stopping_callback],
         )
     else:
@@ -148,8 +146,8 @@ def pretrain(args, model, dset_train, dset_val):
             args=trainer_args,
             train_dataset=dset_train,
             eval_dataset=dset_val,
-            optimizers=(optimizer, scheduler),
-            # optimizers=(optimizer,),
+            # optimizers=(optimizer, scheduler),
+            optimizers=(optimizer,),
         )
 
     # Train
@@ -163,8 +161,7 @@ def pretrain(args, model, dset_train, dset_val):
 
 
 def inference(args, model_path, dset_test):
-    model = get_model(model_path=model_path)
-
+    model = TinyTimeMixerForICLPrediction.from_pretrained(model_path)
     temp_dir = tempfile.mkdtemp()
     trainer = Trainer(
         model=model,
@@ -250,7 +247,7 @@ if __name__ == "__main__":
 
     tsp = TimeSeriesPreprocessor(
         **column_specifiers,
-        context_length=args.context_length,
+        context_length=args.context_length * 4,
         prediction_length=args.forecast_length,
         scaling=True,
         encode_categorical=False,
