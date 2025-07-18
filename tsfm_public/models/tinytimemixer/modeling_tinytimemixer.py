@@ -1073,7 +1073,6 @@ class TinyTimeMixerBlock(nn.Module):
         super().__init__()
 
         num_layers = config.num_layers
-
         self.adaptive_patching_levels = config.adaptive_patching_levels
 
         if self.adaptive_patching_levels > 0:
@@ -1423,6 +1422,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(module.weight)
             else:
                 module.reset_parameters()
+        elif isinstance(module, nn.Conv1d):
+            nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
 
 
 class TinyTimeMixerPatchify(nn.Module):
@@ -1512,7 +1513,6 @@ class TinyTimeMixerStdScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(torch.tensor(1, device=denominator.device))
         loc = (data * observed_indicator).sum(
@@ -2057,7 +2057,6 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
         self.config = config
         self.seq_len = config.context_length
         self.max_freq_bins = self.seq_len // 2 + 1  # rfft output length
-        print("config.", config.use_fft_embedding)
         self.use_fft_embedding = getattr(config, "use_fft_embedding", False)
 
         # Either use embedding or MLP for frequency index
@@ -2246,6 +2245,25 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
 
 
 @dataclass
+class TinyTimeMixerForDecomposedPredictionOutput(ModelOutput):
+    """
+    Output type of [`TinyTimeMixerForDecomposedPredictionOutput`].
+
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_outputs: torch.FloatTensor = None
+    trend_prediction_outputs: torch.FloatTensor = None
+    residual_prediction_outputs: torch.FloatTensor = None
+    input_data: torch.FloatTensor = None
+    trend_input: torch.FloatTensor = None
+    residual_input: torch.FloatTensor = None
+    forecast_groundtruth: torch.FloatTensor = None
+    combined_input: torch.FloatTensor = None
+
+
+
+@dataclass
 class SampleTinyTimeMixerPredictionOutput(ModelOutput):
     """
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
@@ -2359,7 +2377,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             config=config,
             distribution_output=self.distribution_output,
         )
-
+        print("CONFIG:", config)
         # Initialize weights and apply final processing
         if config.post_init:
             self.post_init()
@@ -2512,20 +2530,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             raise ValueError("Invalid loss function: Allowed values: mse, mae and nll")
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
-
-        # create patch mask from past_observed_mask
-        if past_observed_mask is None:
-            past_observed_mask = torch.ones_like(past_values)
-
-        B, S, C = past_observed_mask.shape
-        P = S // self.config.patch_length
-        D = self.config.d_model
-        patch_size = self.config.patch_length
-
-        # Reshape observed_mask into patches: (B, C, P, patch_size)
-        past_observed_patches = past_observed_mask.transpose(1, 2).reshape(
-            B, C, P, patch_size
-        )
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.backbone(
@@ -3032,3 +3036,238 @@ class TinyTimeMixerForICLPrediction(TinyTimeMixerForPrediction):
         ).permute(0, 2, 1)
 
         return output
+
+
+class ChannelIndependentMultiScaleTrend(nn.Module):
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__()
+        kernel_sizes = self.auto_kernel_sizes(
+            L=config.context_length, num_kernels=config.num_kernels
+        )
+        self.convs = nn.ModuleList(
+            [
+                nn.Conv1d(1, 1, kernel_size=k, padding=k // 2, bias=False)
+                for k in kernel_sizes
+            ]
+        )
+        # for conv in self.convs:
+        #     nn.init.constant_(conv.weight, 1.0 / conv.kernel_size[0])
+        self.gate = nn.Parameter(torch.ones(len(kernel_sizes)))
+
+    def auto_kernel_sizes(self, L, num_kernels=3):
+        """
+        Automatically pick a set of odd kernel sizes for multi-scale trend extraction.
+
+        Args:
+            L (int): input sequence length
+            num_kernels (int): number of scales (default 3)
+
+        Returns:
+            List[int]: sorted list of odd kernel sizes
+        """
+
+        def make_odd(k):
+            k = max(3, int(round(k)))
+            return k if k % 2 == 1 else k + 1
+
+        # default ratios for small/medium/large
+        base_ratios = [1 / 50, 1 / 10, 1 / 5, 1 / 3]
+        # trim to num_kernels
+        ratios = base_ratios[:num_kernels]
+
+        return [make_odd(L * r) for r in ratios]
+
+    def forward(self, x):  # x: [B,L,C]
+        B, L, C = x.shape
+        x_reshaped = x.permute(0, 2, 1).reshape(B * C, 1, L)
+        trends = [conv(x_reshaped) for conv in self.convs]
+        trends = torch.stack(trends, dim=-1)  # [B*C,1,L,K]
+        weights = F.softmax(self.gate, dim=0)
+        trend = torch.einsum("bclk,k->bcl", trends, weights)
+        trend = trend.reshape(B, C, L).permute(0, 2, 1)
+        remainder = x - trend
+        return trend, remainder
+
+
+class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__(config)
+        trend_config = copy.deepcopy(config)
+        trend_config.patch_length = config.trend_patch_length
+        trend_config.patch_stride = config.trend_patch_stride
+        trend_config.d_model = config.trend_d_model
+        trend_config.decoder_d_model = config.trend_decoder_d_model
+        trend_config.num_layers = config.trend_num_layers
+        trend_config.decoder_num_layers = config.decoder_num_layers
+        trend_config.num_patches = None
+        trend_config.scaling = "std"
+
+        residual_config = copy.deepcopy(config)
+        residual_config.scaling = "std"
+
+        self.use_return_dict = config.use_return_dict
+        
+        if config.scaling == "mean":
+            self.scaler = TinyTimeMixerMeanScaler(config)
+        elif config.scaling == "std" or config.scaling is True:
+            self.scaler = TinyTimeMixerStdScaler(config)
+        elif config.scaling == "revin":
+            self.scaler = TinyTimeMixerRevIN(config)
+        else:
+            self.scaler = TinyTimeMixerNOPScaler(config)
+
+
+        self.trend_forecaster = TinyTimeMixerForPrediction(trend_config)
+
+        self.residual_forecaster = TinyTimeMixerForPrediction(residual_config)
+
+
+        self.splitter = ChannelIndependentMultiScaleTrend(config)
+        self.loss = config.loss
+
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
+        r"""
+        past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
+
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
+        future_observed_mask (`torch.Tensor` of shape `(batch_size, prediction_length, num_targets)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
+        static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
+            Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
+            TinyTimeMixerConfig param `categorical_vocab_size_list`
+        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
+            to support custom trainers. Defaults to None.
+
+        Returns:
+
+        """
+
+        if self.loss == "mse":
+            loss = nn.MSELoss(reduction="mean")
+        elif self.loss == "mae":
+            loss = nn.L1Loss(reduction="mean")
+        elif self.loss == "pinball":
+            loss = PinballLoss(quantile=self.config.quantile)
+        elif self.loss == "huber":
+            loss = nn.HuberLoss(delta=self.config.huber_delta)
+        elif self.loss is None:
+            loss = None
+        else:
+            raise ValueError("Invalid loss function: Allowed values: mse, mae and nll")
+
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+        
+        scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
+        trend_signal, residual_signal = self.splitter(scaled_past_values)
+
+        
+        trend_prediction = self.trend_forecaster(
+            past_values=trend_signal,
+            future_values=future_values,
+            past_observed_mask=past_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=False,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+
+        residual_prediction = self.residual_forecaster(
+            past_values=residual_signal,
+            future_values=future_values,
+            past_observed_mask=past_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=False,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+
+        trend_prediction_signal = trend_prediction.prediction_outputs
+        residual_prediction_signal = residual_prediction.prediction_outputs
+
+        # print(trend_prediction_signal.requires_grad)  # should be True
+        # print(residual_prediction_signal.requires_grad)  # should be True
+
+        
+        combined_forecast = trend_prediction_signal + residual_prediction_signal
+        combined_input = trend_signal + residual_signal
+
+        combined_forecast = self.scaler.inverse(combined_forecast,loc,scale)
+        combined_input = self.scaler.inverse(combined_input,loc,scale)
+
+        loss_val = None
+
+        # loss_val = loss(combined_forecast, future_values)
+
+        if return_loss and future_values is not None:
+            if future_observed_mask is not None:
+                fut_mask_bool = future_observed_mask.type(torch.bool)
+                loss_val = loss(
+                    combined_forecast[fut_mask_bool], future_values[fut_mask_bool]
+                )
+            else:
+                loss_val = loss(combined_forecast, future_values)
+
+            if self.training:
+                loss_val += loss(combined_input, past_values)
+        
+        # if not return_dict:
+        #     return tuple(
+        #         v
+        #         for v in [
+        #             loss_val,
+        #             combined_forecast,
+        #             combined_forecast,
+        #             combined_forecast,
+        #             combined_forecast,
+        #             combined_forecast,
+        #             combined_forecast,
+        #         ]
+        #     )
+        return TinyTimeMixerForDecomposedPredictionOutput(
+            loss=loss_val,
+            prediction_outputs=combined_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
+            trend_prediction_outputs = trend_prediction_signal,
+            residual_prediction_outputs = residual_prediction_signal,
+            input_data = past_values,
+            trend_input = trend_signal,
+            residual_input = residual_signal,
+            forecast_groundtruth = future_values,
+            combined_input = combined_input,
+
+        )

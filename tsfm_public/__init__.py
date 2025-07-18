@@ -80,6 +80,7 @@ _import_structure["models.tinytimemixer"].extend(
         "TinyTimeMixerModel",
         "TinyTimeMixerForMaskedPrediction",
         "TinyTimeMixerForPrediction",
+        "TinyTimeMixerForDecomposedPrediction"
     ]
 )
 _import_structure["models.tspulse"].extend(
@@ -100,6 +101,7 @@ if TYPE_CHECKING:
         TinyTimeMixerConfig,
         TinyTimeMixerForMaskedPrediction,
         TinyTimeMixerForPrediction,
+        TinyTimeMixerForDecomposedPrediction,
         TinyTimeMixerModel,
         TinyTimeMixerPreTrainedModel,
     )

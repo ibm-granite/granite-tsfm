@@ -4,18 +4,22 @@
 import logging
 import math
 import os
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import random
 import tempfile
 
 import pandas as pd
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import OneCycleLR, ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR
 from torch.utils.data import ConcatDataset
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 
-from tsfm_public import TimeSeriesPreprocessor, get_datasets,load_dataset
+from tsfm_public import TimeSeriesPreprocessor, get_datasets, load_dataset
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
-    TinyTimeMixerForPrediction,
+    TinyTimeMixerForDecomposedPrediction,
 )
 from tsfm_public.models.tinytimemixer.utils import get_ttm_args
 from tsfm_public.toolkit.get_model import get_model
@@ -59,7 +63,7 @@ def get_base_model(args):
         # decoder params
         decoder_num_layers=args.decoder_num_layers,  # increase the number of layers if we want more complex models
         decoder_adaptive_patching_levels=0,
-        decoder_mode="common_channel",
+        decoder_mode=args.decoder_mode,
         decoder_raw_residual=False,
         use_decoder=True,
         decoder_d_model=args.decoder_d_model,
@@ -71,9 +75,22 @@ def get_base_model(args):
         use_fft_embedding=args.use_fft_embedding,
         self_attn=args.self_attn,
         enable_fourier_attention=args.enable_fourier_attention,
+        trend_patch_length=args.trend_patch_length,
+        trend_patch_stride=args.trend_patch_stride,
+        trend_d_model=args.trend_d_model,
+        trend_decoder_d_model=args.trend_decoder_d_model,
+        trend_num_layers=args.trend_num_layers,
+        trend_decoder_num_layers=args.trend_decoder_num_layers,
     )
 
-    model = TinyTimeMixerForPrediction(config)
+    model = TinyTimeMixerForDecomposedPrediction(config)
+
+    for name, p in model.named_parameters():
+        def hook(grad, n=name):
+            if grad is None:
+                print(f"[WARN] No grad for {n}")
+        p.register_hook(hook)
+
     return model
 
 
@@ -88,7 +105,7 @@ def pretrain(args, model, dset_train, dset_val):
     )
     print("OPTIMAL SUGGESTED LEARNING RATE =", learning_rate)
 
-    # learning_rate = args.learning_rate
+    learning_rate = args.learning_rate
 
     trainer_args = TrainingArguments(
         output_dir=os.path.join(args.save_dir, "checkpoint"),
@@ -115,6 +132,9 @@ def pretrain(args, model, dset_train, dset_val):
 
     # Optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=learning_rate)
+
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
+
     # scheduler = OneCycleLR(
     #     optimizer,
     #     learning_rate,
@@ -122,8 +142,6 @@ def pretrain(args, model, dset_train, dset_val):
     #     steps_per_epoch=math.ceil(len(dset_train) / args.batch_size),
     #     # steps_per_epoch=math.ceil(len(dset_train) / (args.batch_size * args.num_gpus)),
     # )
-    # scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=10)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.num_epochs)
 
     # Create the early stopping callback
     early_stopping_callback = EarlyStoppingCallback(
@@ -163,8 +181,7 @@ def pretrain(args, model, dset_train, dset_val):
 
 
 def inference(args, model_path, dset_test):
-    model = get_model(model_path=model_path)
-
+    model = TinyTimeMixerForDecomposedPrediction.from_pretrained(model_path)
     temp_dir = tempfile.mkdtemp()
     trainer = Trainer(
         model=model,
@@ -184,26 +201,75 @@ def inference(args, model_path, dset_test):
 
     predictions_dict = trainer.predict(dset_test)
 
-    predictions_np = predictions_dict.predictions[0]
+    predictions_output = predictions_dict.predictions[0] # samples x forecast_len x channels
+    trend_prediction_outputs = predictions_dict.predictions[1] # samples x forecast_len x channels
+    residual_prediction_outputs = predictions_dict.predictions[2] # samples x forecast_len x channels
+    input_data = predictions_dict.predictions[3] # samples x input_len x channels
+    trend_input = predictions_dict.predictions[4] # samples x input_len x channels
+    residual_input = predictions_dict.predictions[5] # samples x input_len x channels
+    forecast_groundtruth = predictions_dict.predictions[6] # samples x input_len x channels
+    combined_input = predictions_dict.predictions[7]
 
-    print(predictions_np.shape)
+    # Create folder
+    save_folder = "random_plots"
+    os.makedirs(save_folder, exist_ok=True)
+
+    num_samples = predictions_output.shape[0]
+    num_plots = 10
+
+    for i in range(num_plots):
+        idx = random.randint(0, num_samples - 1)
+
+        forecast_main = predictions_output[idx, :, 0]
+        forecast_trend = trend_prediction_outputs[idx, :, 0]
+        forecast_residual = residual_prediction_outputs[idx, :, 0]
+        forecast_ori = forecast_groundtruth[idx,:,0]
+
+        input_main = input_data[idx, :, 0]
+        input_trend = trend_input[idx, :, 0]
+        input_residual = residual_input[idx, :, 0]
+        input_combined = combined_input[idx, :, 0]
+
+        plt.figure(figsize=(12, 8))
+
+        # Inputs
+        plt.subplot(2, 1, 1)
+        plt.plot(input_main, label='Input', linewidth=1.5)
+        plt.plot(input_trend, label='Trend Input', linewidth=1)
+        plt.plot(input_residual, label='Residual Input', linewidth=1)
+        plt.plot(input_combined, '--', label='Trend+Residual', linewidth=1)
+        plt.title(f"Inputs (Sample {idx})")
+        plt.legend()
+
+        # Forecasts
+        plt.subplot(2, 1, 2)
+        plt.plot(forecast_main, label='Forecast', linewidth=1.5)
+        plt.plot(forecast_trend, label='Trend Forecast', linewidth=1)
+        plt.plot(forecast_residual, label='Residual Forecast', linewidth=1)
+        plt.plot(forecast_ori, label='Original Forecast', linewidth=1)
+        plt.title(f"Forecasts (Sample {idx})")
+        plt.legend()
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_folder, f"plot_{i}.png"))
+        plt.close()
 
     # get backbone embeddings (if needed for further analysis)
 
-    backbone_embedding = predictions_dict.predictions[1]
+    # backbone_embedding = predictions_dict.predictions[0]
 
-    print(backbone_embedding.shape)
+    # print(backbone_embedding.shape)
 
-    plot_path = os.path.join(args.save_dir, "plots")
-    # plot
-    plot_predictions(
-        model=trainer.model,
-        dset=dset_test,
-        plot_dir=plot_path,
-        plot_prefix="test_inference",
-        channel=0,
-    )
-    print("Plots saved in location:", plot_path)
+    # plot_path = os.path.join(args.save_dir, "plots")
+    # # plot
+    # plot_predictions(
+    #     model=trainer.model,
+    #     dset=dset_test,
+    #     plot_dir=plot_path,
+    #     plot_prefix="test_inference",
+    #     channel=0,
+    # )
+    # print("Plots saved in location:", plot_path)
 
 
 if __name__ == "__main__":
@@ -262,8 +328,7 @@ if __name__ == "__main__":
                                                     forecast_length = args. forecast_length,
                                                     dataset_root_path = "/dccstor/tsfm23/datasets")
     
-
-    # dset_train, dset_valid, dset_test = get_datasets(tsp, data, split_config)
+    # get_datasets(tsp, data, split_config)
     # dset_combined = ConcatDataset([dset_train, dset_test])
 
     # Get model

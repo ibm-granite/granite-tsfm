@@ -313,6 +313,54 @@ def get_ttm_args():  # pragma: no cover
         help="enable_fourier_attention",
     )
 
+    parser.add_argument(
+        "--trend_patch_length",
+        type=int,
+        required=False,
+        default=8,
+        help="trend_patch_length",
+    )
+
+    parser.add_argument(
+        "--trend_patch_stride",
+        type=int,
+        required=False,
+        default=8,
+        help="trend_patch_stride",
+    )
+
+    parser.add_argument(
+        "--trend_d_model",
+        type=int,
+        required=False,
+        default=2,
+        help="trend_d_model",
+    )
+
+    parser.add_argument(
+        "--trend_decoder_d_model",
+        type=int,
+        required=False,
+        default=2,
+        help="trend_decoder_d_model",
+    )
+
+    parser.add_argument(
+        "--trend_num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="trend_num_layers",
+    )
+
+    parser.add_argument(
+        "--trend_decoder_num_layers",
+        type=int,
+        required=False,
+        default=2,
+        help="trend_decoder_num_layers",
+    )
+
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
@@ -325,7 +373,14 @@ def get_ttm_args():  # pragma: no cover
     args.decoder_d_model = args.patch_length * args.decoder_d_model_scale
     args.use_fft_embedding = int_to_bool(args.use_fft_embedding)
     args.self_attn = int_to_bool(args.self_attn)
-    args.enable_fourier_attention = int_to_bool(args.enable_fourier_attention)
+    args.enable_fourier_attention = args.enable_fourier_attention
+    args.trend_decoder_num_layers = args.trend_decoder_num_layers
+    args.trend_num_layers = args.trend_num_layers
+    args.trend_decoder_d_model = args.trend_decoder_d_model
+    args.trend_d_model = args.trend_d_model
+    args.trend_patch_stride = args.trend_patch_stride
+    args.trend_patch_length = args.trend_patch_length
+
     # Calculate number of gpus
     if args.num_gpus is None:
         args.num_gpus = torch.cuda.device_count()

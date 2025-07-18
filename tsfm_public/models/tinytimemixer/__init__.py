@@ -29,6 +29,7 @@ else:
         "TinyTimeMixerModel",
         "TinyTimeMixerForPrediction",
         "TinyTimeMixerForMaskedPrediction",
+        "TinyTimeMixerForDecomposedPrediction",
         "TinyTimeMixerForICLPrediction",
     ]
 
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
             TinyTimeMixerForMaskedPrediction,
             TinyTimeMixerForPrediction,
             TinyTimeMixerForICLPrediction,
+            TinyTimeMixerForDecomposedPrediction,
             TinyTimeMixerModel,
         )
         from .utils_tinytimemixer import (

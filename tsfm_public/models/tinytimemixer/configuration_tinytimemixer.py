@@ -225,6 +225,13 @@ class TinyTimeMixerConfig(PretrainedConfig):
         use_fft_embedding: bool = False,
         enable_fourier_attention: bool = False,
         num_input_examples: int = 5,
+        trend_patch_length: int = 8,
+        trend_patch_stride: int = 8,
+        trend_d_model: int = 16,
+        trend_decoder_d_model: int = 8,
+        trend_num_layers: int = 3,
+        trend_decoder_num_layers: int = 3,
+        num_kernels: int = 3,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -238,6 +245,14 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.norm_mlp = norm_mlp
         self.scaling = scaling
         self.head_dropout = head_dropout
+
+        self.trend_patch_length = trend_patch_length
+        self.trend_patch_stride = trend_patch_stride
+        self.trend_d_model = trend_d_model
+        self.trend_decoder_d_model = trend_decoder_d_model
+        self.num_kernels = num_kernels
+        self.trend_num_layers = trend_num_layers
+        self.trend_decoder_num_layers = trend_decoder_num_layers
 
         self.patch_last = True
         self.use_positional_encoding = use_positional_encoding
@@ -324,7 +339,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
     def check_and_init_preprocessing(self):
         self.init_processing = True
 
-        if not hasattr(self, "num_patches"):
+        if not hasattr(self, "num_patches") or self.num_patches is None:
 
             if self.multi_scale:
                 if self.masked_context_length is not None:
