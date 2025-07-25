@@ -232,6 +232,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         trend_num_layers: int = 3,
         trend_decoder_num_layers: int = 3,
         num_kernels: int = 3,
+        disable_pad_activations: bool = False,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -306,6 +307,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.multi_scale_loss = multi_scale_loss
         self.loss_scales = loss_scales
         self.use_fft_embedding = use_fft_embedding
+        self.disable_pad_activations = disable_pad_activations
+        
         super().__init__(**kwargs)
 
     def compute_total_num_patches_multiscale(self) -> int:
@@ -338,6 +341,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
     def check_and_init_preprocessing(self):
         self.init_processing = True
+
+        if self.disable_pad_activations and self.multi_scale:
+            raise Exception("disable_pad_activations and multi_scale cannot be enabled together")
 
         if not hasattr(self, "num_patches") or self.num_patches is None:
 

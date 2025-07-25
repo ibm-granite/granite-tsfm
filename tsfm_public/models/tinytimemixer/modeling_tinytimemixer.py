@@ -69,6 +69,43 @@ TINYTIMEMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
+def update_patch_mask(
+    patch_mask: torch.Tensor,
+    K: int,
+    mode: str = "prepend"
+) -> torch.Tensor:
+    """
+    Add K patches (all valid = all False) either at the beginning or end
+    of a patch-level mask.
+
+    Args:
+        patch_mask (Tensor): Boolean mask of shape (B, C, N),
+            where B = batch size, C = channels, N = number of patches.
+            True means this patch is masked (invalid),
+            False means valid.
+        K (int): Number of patches (all valid = all False) to add.
+        mode (str): "prepend" to add at the beginning,
+                    "postpend" to add at the end.
+
+    Returns:
+        Tensor: Updated boolean mask of shape (B, C, N + K).
+    """
+    if patch_mask is None:
+        return patch_mask
+
+    B, C, N = patch_mask.shape
+    extra_mask = torch.zeros((B, C, K), dtype=torch.bool, device=patch_mask.device)
+
+    if mode == "prepend":
+        new_mask = torch.cat([extra_mask, patch_mask], dim=2)
+    elif mode == "postpend":
+        new_mask = torch.cat([patch_mask, extra_mask], dim=2)
+    else:
+        raise ValueError("mode must be 'prepend' or 'postpend'")
+
+    return new_mask
+
+
 # def update_patch_mask(patch_mask_expanded, K, mode="prepend"):
 #     """
 #     Add K patches (all valid = all False) either at the beginning or end.
@@ -80,6 +117,9 @@ TINYTIMEMIXER_INPUTS_DOCSTRING = r"""
 #     Returns:
 #         new_mask: torch.BoolTensor of shape (B, C, P+K, D)
 #     """
+#     if patch_mask_expanded is None:
+#         return patch_mask_expanded
+
 #     B, C, P, D = patch_mask_expanded.shape
 #     extra_mask = torch.zeros(
 #         (B, C, K, D), dtype=torch.bool, device=patch_mask_expanded.device
@@ -944,7 +984,7 @@ class TinyTimeMixerLayer(nn.Module):
         super().__init__()
 
         self.fourier_attention = None
-
+        self.disable_pad_activations = config.disable_pad_activations
         if config.num_patches > 1:
             self.patch_mixer = PatchMixerBlock(config=config)
 
@@ -961,7 +1001,7 @@ class TinyTimeMixerLayer(nn.Module):
                 config=config
             )
 
-    def forward(self, hidden: torch.Tensor):
+    def forward(self, hidden: torch.Tensor, patch_mask: torch.Tensor = None):
         """
         Args:
             hidden (`torch.Tensor` of shape `(batch_size, num_patches, d_model)`):
@@ -982,6 +1022,11 @@ class TinyTimeMixerLayer(nn.Module):
         hidden = self.feature_mixer(
             hidden
         )  # hidden: (batch_size x num_patches x d_model)
+
+        if self.disable_pad_activations and patch_mask is not None:
+            patch_mask_expanded = patch_mask.unsqueeze(-1).expand(-1, -1, -1, hidden.size(-1))
+            hidden = hidden.masked_fill(patch_mask_expanded, 0.0)
+
         return hidden
 
 
@@ -997,6 +1042,8 @@ class TinyTimeMixerAdaptivePatchingBlock(nn.Module):
 
     def __init__(self, config: TinyTimeMixerConfig, adapt_patch_level: int):
         super().__init__()
+
+        self.config = config
         temp_config = copy.deepcopy(config)
         self.adapt_patch_level = adapt_patch_level
         adaptive_patch_factor = 2**adapt_patch_level
@@ -1020,8 +1067,10 @@ class TinyTimeMixerAdaptivePatchingBlock(nn.Module):
         self.mixer_layers = nn.ModuleList(
             [TinyTimeMixerLayer(temp_config) for i in range(temp_config.num_layers)]
         )
+        self.disable_pad_activations = config.disable_pad_activations
 
-    def forward(self, hidden: torch.Tensor):
+
+    def forward(self, hidden: torch.Tensor, patch_mask: torch.Tensor = None):
         """
         Args:
             hidden (`torch.Tensor` of shape `(batch_size x nvars x num_patch x d_model)`):
@@ -1058,6 +1107,10 @@ class TinyTimeMixerAdaptivePatchingBlock(nn.Module):
         )
         all_hidden_states.append(hidden)
 
+        if self.disable_pad_activations and patch_mask is not None:
+            patch_mask_expanded = patch_mask.unsqueeze(-1).expand(-1, -1, -1, hidden.size(-1))
+            hidden = hidden.masked_fill(patch_mask_expanded, 0.0)
+
         return hidden, all_hidden_states
 
 
@@ -1090,7 +1143,7 @@ class TinyTimeMixerBlock(nn.Module):
                 [TinyTimeMixerLayer(config=config) for _ in range(num_layers)]
             )
 
-    def forward(self, hidden_state, output_hidden_states: bool = False):
+    def forward(self, hidden_state, output_hidden_states: bool = False, patch_mask = None,):
         """
         Args:
             hidden_state (`torch.Tensor`): The input tensor.
@@ -1107,10 +1160,10 @@ class TinyTimeMixerBlock(nn.Module):
 
         for mod in self.mixers:
             if self.adaptive_patching_levels > 0:
-                embedding, hidden_states = mod(embedding)
+                embedding, hidden_states = mod(embedding, patch_mask = patch_mask)
                 all_hidden_states.extend(hidden_states)
             else:
-                embedding = mod(embedding)
+                embedding = mod(embedding,patch_mask = patch_mask)
                 if output_hidden_states:
                     all_hidden_states.append(embedding)
 
@@ -1180,6 +1233,7 @@ class TinyTimeMixerDecoder(nn.Module):
         patch_input,
         output_hidden_states: bool = False,
         static_categorical_values: Optional[torch.Tensor] = None,
+        patch_mask: Optional[torch.Tensor] = None,
     ):
         """
         Args:
@@ -1237,7 +1291,7 @@ class TinyTimeMixerDecoder(nn.Module):
             )  # bs x nvars+n_cat x n_patches x d_model
 
         decoder_output, hidden_states = self.decoder_block(
-            hidden_state=decoder_input, output_hidden_states=output_hidden_states
+            hidden_state=decoder_input, output_hidden_states=output_hidden_states, patch_mask = patch_mask,
         )  # bs x nvars+n_cat x n_patches x d_model
 
         if output_hidden_states:
@@ -1287,7 +1341,7 @@ class TinyTimeMixerForPredictionHead(nn.Module):
             )
 
         self.flatten = nn.Flatten(start_dim=-2)
-
+        self.disable_pad_activations = config.disable_pad_activations
         if self.enable_forecast_channel_mixing:
             temp_config = copy.deepcopy(config)
             if self.prediction_filter_length is not None:
@@ -1295,7 +1349,7 @@ class TinyTimeMixerForPredictionHead(nn.Module):
 
             self.fcm_block = ForecastChannelHeadMixer(config=temp_config)
 
-    def forward(self, hidden_features, past_values, future_values=None):
+    def forward(self, hidden_features, past_values, future_values=None, patch_mask = None):
         """
 
         Args:
@@ -1316,6 +1370,10 @@ class TinyTimeMixerForPredictionHead(nn.Module):
             `torch.Tensor` of shape `(batch_size, prediction_length, forecast_channels)`.
 
         """
+
+        if self.disable_pad_activations and patch_mask is not None:
+            patch_mask_expanded = patch_mask.unsqueeze(-1).expand(-1, -1, -1, hidden_features.size(-1))
+            hidden_features = hidden_features.masked_fill(patch_mask_expanded, 0.0)
 
         hidden_features = self.flatten(
             hidden_features
@@ -1737,6 +1795,7 @@ class TinyTimeMixerEncoderOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    patch_mask: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class TinyTimeMixerAddLearnableRegisterTokens(nn.Module):
@@ -1753,7 +1812,7 @@ class TinyTimeMixerAddLearnableRegisterTokens(nn.Module):
                 torch.randn(self.register_tokens, d_model).to(device)
             )
 
-    def forward(self, x):
+    def forward(self, x, patch_mask = None):
         # Input x shape: batch x num_channels x num_patches x d_model
         batch_size, num_channels, num_patches, d_model = x.size()
 
@@ -1768,8 +1827,9 @@ class TinyTimeMixerAddLearnableRegisterTokens(nn.Module):
                 [patch_tokens_expanded.expand(batch_size, num_channels, -1, -1), x],
                 dim=2,
             )
+            patch_mask = update_patch_mask(patch_mask, self.register_tokens)
 
-        return x
+        return x, patch_mask
 
 
 class PatchImportanceGating(nn.Module):
@@ -1879,6 +1939,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
         freq_token: Optional[torch.Tensor] = None,
         unpatched_past_values: Optional[torch.Tensor] = None,
+        patch_mask: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, TinyTimeMixerEncoderOutput]:
         r"""
         Args:
@@ -1919,14 +1980,16 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
                 patches = torch.cat(
                     (freq_embedding, patches), dim=-2
                 )  # bs x channels x num_patch+1 x num_features
+
+                patch_mask = update_patch_mask(patch_mask,1)
             else:
                 raise Exception("Expecting freq_token in forward")
 
         if self.add_tokens is not None:
-            patches = self.add_tokens(patches)
+            patches,patch_mask = self.add_tokens(patches,patch_mask)
 
         if self.add_fft_tokens is not None:
-            patches = self.add_fft_tokens(patches, unpatched_past_values)
+            patches,patch_mask = self.add_fft_tokens(patches, unpatched_past_values,patch_mask)
 
         # add positional encoder
         if self.positional_encoder is not None and self.config.multi_scale is False:
@@ -1943,7 +2006,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
             patches, _ = self.patch_gating_block(patches)
 
         last_hidden_state, hidden_states = self.mlp_mixer_encoder(
-            patches, output_hidden_states=output_hidden_states
+            patches, output_hidden_states=output_hidden_states, patch_mask = patch_mask,
         )
 
         if not return_dict:
@@ -1952,11 +2015,12 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
                 for v in [
                     last_hidden_state,
                     hidden_states,
+                    patch_mask,
                 ]
             )
 
         return TinyTimeMixerEncoderOutput(
-            last_hidden_state=last_hidden_state, hidden_states=hidden_states
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states, patch_mask = patch_mask,
         )
 
 
@@ -1985,6 +2049,7 @@ class TinyTimeMixerModelOutput(ModelOutput):
     patch_input: torch.FloatTensor = None
     loc: Optional[torch.FloatTensor] = None
     scale: Optional[torch.FloatTensor] = None
+    patch_mask: Optional[torch.FloatTensor] = None
 
 
 class MultiScaleFromPatchedSequence(nn.Module):
@@ -2074,7 +2139,7 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
         # self.mag_proj = nn.Linear(self.fft_k, self.d_model)
         # self.phase_proj = nn.Linear(self.fft_k, self.d_model)
 
-    def forward(self, x, raw_input):
+    def forward(self, x, raw_input, patch_mask = None):
         # x: [B, C, P, D] — patched input
         # raw_input: [B, S, C] — original time-series
         raw_input = raw_input[
@@ -2111,8 +2176,11 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
         # fft_tokens = torch.cat([mag_token, phase_token, freq_tokens], dim=2)
         fft_tokens = freq_tokens
         # Merge with input patches
-        x = torch.cat([fft_tokens, x], dim=2)  # [B, C, P + k + 2, D]
-        return x
+        x = torch.cat([fft_tokens, x], dim=2)  # [B, C, P + k, D]
+
+        patch_mask = update_patch_mask(patch_mask,self.fft_k)
+
+        return x, patch_mask
 
 
 @add_start_docstrings(
@@ -2156,6 +2224,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         freq_token: Optional[torch.Tensor] = None,
+        patch_mask: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerModelOutput:
         r"""
         past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
@@ -2178,6 +2247,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
             scaled_past_values
         )  # [batch_size x num_input_channels x num_patch x patch_length
 
+        
         enc_input = patched_x
 
         encoder_output = self.encoder(
@@ -2186,6 +2256,8 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
             return_dict=return_dict,
             freq_token=freq_token,
             unpatched_past_values=scaled_past_values,
+            patch_mask = patch_mask,
+            
         )
 
         if isinstance(encoder_output, tuple):
@@ -2200,6 +2272,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
                     patched_x,
                     loc,
                     scale,
+                    encoder_output.patch_mask,
                 ]
             )
 
@@ -2209,6 +2282,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
             patch_input=patched_x,
             loc=loc,
             scale=scale,
+            patch_mask = encoder_output.patch_mask,
         )
 
 
@@ -2282,6 +2356,50 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
     Computes the negative log likelihood loss from input distribution with respect to target.
     """
     return -input.log_prob(target)
+
+
+
+
+def build_patch_mask_from_observed(
+    observed_mask: torch.Tensor,
+    config,
+) -> torch.Tensor:
+    """
+    Build a boolean patch-level mask from an observed_mask.
+
+    For each non-overlapping patch, this function checks if all values
+    within that patch are unobserved (0) in the input `observed_mask`.
+    If so, the patch is marked as True in the returned mask; otherwise False.
+
+    Args:
+        observed_mask (Tensor): A mask of shape (B, S, C) where
+            B = batch size,
+            S = sequence length,
+            C = channels.
+            Values should be 1 (observed) or 0 (unobserved).
+        config: A configuration object with:
+            - `patch_length` (int): Length of each non-overlapping patch.
+            - `d_model` (int): Token embedding dimension.
+
+    Returns:
+        Tensor: A boolean mask of shape (B, C, P),
+            where P = number of patches (S // patch_length),
+            and values are True for patches where all points are unobserved.
+    """
+    B, S, C = observed_mask.shape
+    P = S // config.patch_length
+    D = config.d_model
+
+    # Reshape observed_mask into patches: (B, C, P, patch_length)
+    observed_patches = observed_mask.transpose(1, 2).reshape(B, C, P, config.patch_length)
+
+    # Determine which patches have all zeros
+    patch_mask = (observed_patches.sum(dim=-1) == 0)  # (B, C, P)
+
+    # # Expand to match token shape: (B, C, P, D)
+    # patch_mask_expanded = patch_mask.unsqueeze(-1).expand(-1, -1, -1, D)
+
+    return patch_mask
 
 
 def weighted_average(
@@ -2444,6 +2562,64 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         # print(loss_dict)
         return total_loss, loss_dict
 
+    
+    def pad_to_context(
+        self,
+        x: torch.Tensor,
+        context_length: int,
+        past_observed_mask: torch.Tensor = None,
+        pad_zeros: bool = False,
+        ):
+        """
+        Pads x and its mask (if given) to match context_length by prepending zeros.
+
+        Args:
+            x: [B, seq_len, C]
+            context_length: int
+            past_observed_mask: optional [B, seq_len, C]
+
+        Returns:
+            padded_x: [B, context_length, C]
+            padded_mask: [B, context_length, C]
+        """
+        B, seq_len, C = x.shape
+
+        # Case: already long enough
+        if seq_len >= context_length:
+            padded_x = x[:, -context_length:, :]
+            if past_observed_mask is not None:
+                padded_mask = past_observed_mask[:, -context_length:, :]
+            else:
+                padded_mask = torch.ones_like(padded_x)
+            return padded_x, padded_mask
+
+        if pad_zeros:
+            # Need to pad
+            pad_len = context_length - seq_len
+
+            # --- Pad x ---
+            pad_values = torch.zeros((B, pad_len, C), dtype=x.dtype, device=x.device)
+            padded_x = torch.cat([pad_values, x], dim=1)
+
+            # --- Pad mask ---
+            if past_observed_mask is not None:
+                # use the given mask
+                mask_pad = torch.zeros((B, pad_len, C), dtype=past_observed_mask.dtype, device=past_observed_mask.device)
+                padded_mask = torch.cat([mask_pad, past_observed_mask], dim=1)
+            else:
+                # create mask (1 for actual values, 0 for prepended zeros)
+                mask_pad = torch.zeros((B, pad_len, C), dtype=x.dtype, device=x.device)
+                mask_values = torch.ones((B, seq_len, C), dtype=x.dtype, device=x.device)
+                padded_mask = torch.cat([mask_pad, mask_values], dim=1)
+
+            return padded_x, padded_mask
+        
+        
+
+        return x, past_observed_mask
+
+
+
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC
@@ -2504,12 +2680,35 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             else self.config.context_length
         )
 
+
         if past_values.shape[1] > sequence_length:
             past_values = past_values[:, -sequence_length:, :]
         elif past_values.shape[1] < sequence_length:
             raise ValueError(
                 "Context length in `past_values` is shorter that TTM context_length."
             )
+
+        
+        # past_values,past_observed_mask = self.pad_to_context(x = past_values,
+        #                                     context_length=sequence_length,
+        #                                     past_observed_mask=past_observed_mask,
+        #                                     pad_zeros=self.config.pad_zeros)
+        
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        patch_mask = build_patch_mask_from_observed(observed_mask=past_observed_mask,config = self.config)
+
+        # if self.config.pad_zeros:
+        #     pass
+        # else:
+        #     if past_values.shape[1] > sequence_length:
+        #         past_values = past_values[:, -sequence_length:, :]
+        #         elif past_values.shape[1] < sequence_length:
+        #             raise ValueError(
+        #                 "Context length in `past_values` is shorter that TTM context_length."
+        #             )
+
 
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
@@ -2538,6 +2737,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             freq_token=freq_token,
+            patch_mask = patch_mask,
         )  # model_output: [batch_size x nvars x num_patch x d_model]
 
         if isinstance(model_output, tuple):
@@ -2552,6 +2752,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                 patch_input=model_output.patch_input,
                 output_hidden_states=output_hidden_states,
                 static_categorical_values=static_categorical_values,
+                patch_mask = model_output.patch_mask,
             )  # [batch_size x nvars x num_patch x decoder_d_model]
 
             if decoder_hidden_states:
@@ -2564,7 +2765,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         # head should take future mask
         y_hat = self.head(
-            decoder_output, past_values=past_values, future_values=future_values
+            decoder_output, past_values=past_values, future_values=future_values, patch_mask = model_output.patch_mask,
         )
 
         if (

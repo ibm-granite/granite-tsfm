@@ -71,6 +71,7 @@ def get_base_model(args):
         use_fft_embedding=args.use_fft_embedding,
         self_attn=args.self_attn,
         enable_fourier_attention=args.enable_fourier_attention,
+        disable_pad_activations = args.disable_pad_activations,
     )
 
     model = TinyTimeMixerForPrediction(config)

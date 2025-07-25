@@ -1,6 +1,8 @@
 python ttm_pretrain_sample.py  --context_length 512 \
                                --forecast_length 96 \
                                --patch_length 8 \
+                               --d_model 24 \
+                               --decoder_d_model 24 \
                                --batch_size 64 \
                                --num_layers 5 \
                                --decoder_num_layers 3 \
@@ -17,3 +19,4 @@ python ttm_pretrain_sample.py  --context_length 512 \
                                --multi_scale_loss 0 \
                                --use_fft_embedding 1 \
                                --enable_fourier_attention 0 \
+                               --disable_pad_activations 1 \

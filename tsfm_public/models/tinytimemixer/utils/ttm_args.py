@@ -190,6 +190,19 @@ def get_ttm_args():  # pragma: no cover
     )
 
     parser.add_argument(
+        "--disable_pad_activations",
+        "-dpa",
+        type=int,
+        required=False,
+        default=0,
+        help="disable_pad_activations.",
+    )
+
+
+    
+
+
+    parser.add_argument(
         "--use_fft_embedding",
         "-ufe",
         type=int,
@@ -372,6 +385,8 @@ def get_ttm_args():  # pragma: no cover
     args.d_model = args.patch_length * args.d_model_scale
     args.decoder_d_model = args.patch_length * args.decoder_d_model_scale
     args.use_fft_embedding = int_to_bool(args.use_fft_embedding)
+    args.disable_pad_activations = int_to_bool(args.disable_pad_activations)
+    
     args.self_attn = int_to_bool(args.self_attn)
     args.enable_fourier_attention = args.enable_fourier_attention
     args.trend_decoder_num_layers = args.trend_decoder_num_layers
