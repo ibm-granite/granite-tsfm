@@ -151,6 +151,17 @@ class ForecastingParameters(BaseParameters):
         default=None,
     )
 
+    prediction_quantiles: Optional[List[float]] = Field(
+        description="A list of prediction quantiles."
+        " If given, the service will return probabilistic predictions for each target."
+        " For example, passing [0.1, 0.9] will produce two additional prediction"
+        " vectors for each target representing the 10th and 90th percentile values"
+        " for each point forecast over the prediction period."
+        " When omitted only point forecasts will be returned."
+        " All values given must be >0.0 and <1.0.",
+        default=None,
+    )
+
     @field_validator("prediction_length")
     @classmethod
     def check_prediction_length(cls, v: int) -> float:
@@ -160,6 +171,13 @@ class ForecastingParameters(BaseParameters):
                 " and no more than the model default prediction length."
                 " When omitted the model default prediction_length will be used."
             )
+        return v
+
+    @field_validator("prediction_quantiles")
+    @classmethod
+    def check_prediction_quantiles(cls, v: List[float]) -> List[float]:
+        if v is not None and not all(0.0 < x < 1.0 for x in v):
+            raise ValueError("`prediction_quantiles` must must all be > 0.0 and < 1.0.")
         return v
 
 
