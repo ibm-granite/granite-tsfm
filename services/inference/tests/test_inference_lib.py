@@ -175,6 +175,17 @@ def test_forecast_with_schema_missing_target_columns(
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df)
 
+def test_forecast_with_bad_prediction_quantiles(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input = forecasting_input_base
+    input.schema.target_columns = []
+    input.parameters.prediciton_quantiles = [0.1,1.1]
+    df = copy.deepcopy(ts_data_base)
+    input.data = df.to_dict(orient="list")
+    runtime: InferenceRuntime = InferenceRuntime()
+    with pytest.raises(ValueError) as _:
+        po: PredictOutput = runtime.forecast(input=input)
 
 def test_forecast_with_integer_timestamps(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
