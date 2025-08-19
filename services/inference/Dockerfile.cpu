@@ -1,12 +1,10 @@
 # Copyright contributors to the TSFM project
 
-FROM registry.access.redhat.com/ubi9/ubi:latest AS base
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 
 ARG PYTHON_VERSION=3.12
-RUN dnf upgrade -y \
-    && dnf remove -y --disableplugin=subscription-manager \
-     subscription-manager \
-    && dnf install -y python${PYTHON_VERSION} \
+RUN microdnf upgrade -y \
+    && microdnf install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
     && pip${PYTHON_VERSION} install pip -U \
@@ -16,8 +14,8 @@ RUN dnf upgrade -y \
     --create-home --home-dir /home/tsfm --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
     && chmod o+rX /home/tsfm \
-    && dnf clean all \
-    && rm -rf /var/cache/dnf
+    && microdnf clean all \
+    && rm -rf /var/cache/microdnf
 
 FROM base AS tsfm-install
 
@@ -39,8 +37,8 @@ WORKDIR ${HOME}
 
 RUN python${PYTHON_VERSION} -m venv --upgrade-deps ${HOME}/.venv \
 && pip install --no-cache-dir poetry \
-&& poetry install --no-cache \ 
-&& pip uninstall -y torch \ 
+&& poetry install --no-cache \
+&& pip uninstall -y torch \
 && for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
 && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl#sha256=59e78aa0c690f70734e42670036d6b541930b8eabbaa18d94e090abf14cc4d91 \
 && rm -rf ${HOME}/.cache \
