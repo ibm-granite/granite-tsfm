@@ -141,7 +141,7 @@ class TTMGluonTSPredictor:
         self.insample_errors = None
 
         if force_short_context:
-            logger.info(f"Forcing short context: H = {prediction_length}, CL={prediction_length*min_context_mult}")
+            logger.info(f"Forcing short context: H = {prediction_length}, CL={prediction_length * min_context_mult}")
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -400,11 +400,11 @@ class TTMGluonTSPredictor:
                 logger.info(f"Length of orginal train set = {len(dset_train)}")
 
                 dset_train = Subset(dset_train_actual, lst_fewshot_indx)
-                logger.info(f"Length of {fewshot_fraction*100} % train set = {len(dset_train)}")
+                logger.info(f"Length of {fewshot_fraction * 100} % train set = {len(dset_train)}")
 
                 if len(dset_train) < 1:
                     raise ValueError(
-                        f"Data too small for finetuning in fewshot {fewshot_fraction*100}%. Resulting in 0 samples."
+                        f"Data too small for finetuning in fewshot {fewshot_fraction * 100}%. Resulting in 0 samples."
                     )
 
                 if self.use_valid_from_train:

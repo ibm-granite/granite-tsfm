@@ -56,14 +56,14 @@ class MyUser(FastHttpUser):
         for attempt in range(self.max_retries):
             try:
                 if attempt > 0:
-                    print(f"retrying on attempt {attempt+1}")
+                    print(f"retrying on attempt {attempt + 1}")
                 response = self.client.post(forecasting_url, json=self.payload, timeout=1200)
                 if response.status_code == 200:
                     break
                 else:
-                    print(f"Attempt {attempt+1} failed with status: {response.status_code}")
+                    print(f"Attempt {attempt + 1} failed with status: {response.status_code}")
             except Exception as e:
-                print(f"Attempt {attempt+1} raised exception: {e}")
+                print(f"Attempt {attempt + 1} raised exception: {e}")
 
     def on_start(self):
         model_param_map = {
@@ -89,4 +89,4 @@ class MyUser(FastHttpUser):
     def on_stop(self):
         # metrics_url = self.host.replace("/v1", "") + "/metrics"
         # print(self.client.post(metrics_url, json=self.payload, timeout=None, retries=10).text)
-        print(f"payload length was {len(json.dumps(self.payload))/1E6}MB")
+        print(f"payload length was {len(json.dumps(self.payload)) / 1e6}MB")

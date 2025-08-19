@@ -1373,14 +1373,14 @@ files = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.2.27"
+version = "0.2.28"
 description = "Public notebooks and utilities for TSFM"
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "granite_tsfm-0.2.27-py3-none-any.whl", hash = "sha256:ebae37fc01aa758a55d3fba97e4c6103b7e4d0da0a7beeb93d19930cd23bdc67"},
-    {file = "granite_tsfm-0.2.27.tar.gz", hash = "sha256:8296537c4bd69c6e19521ddaf4b2a7f709f4fd20a1c450e83f3c220c304d2962"},
+    {file = "granite_tsfm-0.2.28-py3-none-any.whl", hash = "sha256:43076e58154d2babef3828d1396caa68fb7851345452fbfc5b2fc47b5b3fa87a"},
+    {file = "granite_tsfm-0.2.28.tar.gz", hash = "sha256:5b78a53b71ddf0ff6eaeae3d8265bc653c62d0ed20802843edfed566b36050da"},
 ]
 
 [package.dependencies]
@@ -1389,6 +1389,7 @@ deprecated = "*"
 numpy = "<3"
 pandas = ">=2.2.0"
 scikit-learn = "*"
+torch = "<3"
 transformers = {version = ">=4.38.0", extras = ["torch"]}
 urllib3 = ">=1.26.19"
 
@@ -5071,4 +5072,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "ee887939d605c7fa2557e9b835cf81a7bda3085852071bbd6ba0216e94154666"
+content-hash = "938cbecfa53d6ac8fc94864dfc642d96474add1ff26a691c9f4e18a8d428c942"
