@@ -12,7 +12,7 @@ from tsfmfinetuning.ftpayloads import TinyTimeMixerForecastingTuneInput
 
 
 # remote container space
-def main() -> int:
+def main():
     # ###########################3
     args, _ = argparser().parse_known_args()
 

@@ -20,14 +20,16 @@ image: boilerplate
 	-f Dockerfile.gpu .
 
 clone_models:
+	rm -rf mytest-tsfm || true
 	git lfs install || true
-	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
+	git clone --depth 1 -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm 
 
 
 fetchdata:
+	rm -rf data || true
 	python tests/fetchdata.py
 
-test_local: boilerplate fetchdata clone_models
+test_local: clone_models fetchdata boilerplate
 	pytest -s tests
 
 install_dev: boilerplate

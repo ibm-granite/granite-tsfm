@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=66", "wheel", "Cython", "setuptools-scm>=8.0"]
+requires = ["setuptools>=78.1.1", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
 name = "granite-tsfm"
@@ -18,12 +18,12 @@ classifiers = [
 dependencies = [
     "pandas>=2.2.0",
     "scikit-learn",
-    "transformers[torch]>=4.38.0",
+    "transformers[torch]>=4.38.0,<4.51",
     "datasets",
     "deprecated",
     "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
-    "torch>2.6.0"                  # https://github.com/ibm-granite/granite-tsfm/security/dependabot/22
+    "torch<3",
 ]
 
 [tool.setuptools]

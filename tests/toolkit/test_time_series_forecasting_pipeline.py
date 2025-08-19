@@ -16,10 +16,11 @@ from tsfm_public.toolkit.util import select_by_index
 
 
 @pytest.fixture(scope="module")
-def ttm_dummy_model():
+def ttm_dummy_model(conf=None):
     # model_path = "ibm-granite/granite-timeseries-ttm-v1"
 
-    conf = TinyTimeMixerConfig()
+    if conf is None:
+        conf = TinyTimeMixerConfig()
     model = TinyTimeMixerForPrediction(conf)
 
     return model
@@ -238,3 +239,48 @@ def test_frequency_token(ttm_dummy_model, etth_data):
         inverse_scale_outputs=True,
     )
     assert forecast_pipeline._preprocess_params["frequency_token"] == DEFAULT_FREQUENCY_MAPPING["h"]
+
+    with pytest.raises(ValueError):
+        forecast_pipeline = TimeSeriesForecastingPipeline(
+            model=model,
+            timestamp_column=timestamp_column,
+            id_columns=id_columns,
+            target_columns=target_columns,
+            freq="1h",
+            explode_forecasts=False,
+            inverse_scale_outputs=True,
+        )
+
+
+def test_prediction_filter_length(etth_data):
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl)
+    model = TinyTimeMixerForPrediction(config=conf)
+    train_data, test_data, params = etth_data
+
+    timestamp_column = params["timestamp_column"]
+    id_columns = params["id_columns"]
+    target_columns = params["target_columns"]
+    prediction_length = params["prediction_length"]
+    context_length = params["context_length"]
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        freq="1h",
+        scaling=True,
+    )
+
+    tsp.train(train_data)
+
+    assert model.config.prediction_filter_length == pfl
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model, feature_extractor=tsp, explode_forecasts=False, inverse_scale_outputs=True, device="cpu"
+    )
+    forecasts = forecast_pipeline(train_data.iloc[:200])
+
+    assert len(forecasts[f"{target_columns[0]}_prediction"].iloc[0]) == pfl
