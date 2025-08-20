@@ -21,6 +21,13 @@ FROM base AS tsfm-install
 
 ENV CUDA_VISIBLE_DEVICES=""
 
+# Image hardening start
+
+COPY ImageHardening/* microservice_base_docker_image/scripts/common/
+
+
+# Image hardening stop
+
 USER tsfm
 
 ENV HOME=/home/tsfm

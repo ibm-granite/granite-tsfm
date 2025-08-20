@@ -1,6 +1,6 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
-NO_DOCKER_CACHE ?= 
+NO_DOCKER_CACHE ?=
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -32,7 +32,10 @@ start_service_local:
 stop_service_local:
 	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
 
-image: boilerplate
+imagehardening:
+	cp -avr ../../NGP-runbook/ImageHardening .
+
+image: boilerplate imagehardening
 	find . -name "*.pyc" | xargs rm -f || true
 	$(CONTAINER_BUILDER) build -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
