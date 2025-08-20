@@ -1,0 +1,3 @@
+[submodule "NGP-runbook"]
+	path = NGP-runbook
+	url = git@github.ibm.com:cds-devops/NGP-runbook.git
