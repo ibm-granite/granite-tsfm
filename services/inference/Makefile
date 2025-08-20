@@ -44,7 +44,7 @@ image: boilerplate imagehardening
 		echo "Skipping GPU build"; \
 	fi
 
-start_service_image: create_prometheus_metrics_dir image
+start_service_image: create_prometheus_metrics_dir
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
