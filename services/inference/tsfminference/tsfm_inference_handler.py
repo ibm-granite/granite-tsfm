@@ -301,6 +301,10 @@ class TSFMForecastingInferenceHandler:
 
         device = "cpu" if not torch.cuda.is_available() else "cuda"
 
+        prediction_quantiles = parameters.prediction_quantiles if parameters.prediction_quantiles else None
+        # @TODO
+        if prediction_quantiles
+
         extra_pipeline_args = getattr(self.handler_config, "extra_pipeline_arguments", {})
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
