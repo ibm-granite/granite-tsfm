@@ -44,4 +44,8 @@
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "charliermarsh.ruff",
   "editor.formatOnPaste": false,
+  "search.exclude": {
+    "**/services/finetuning/tsfmfinetuning/service_handler.py": true,
+    "**/services/inference/tsfminference/service_handler.py": true
+  },
 }
