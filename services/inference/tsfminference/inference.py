@@ -115,6 +115,12 @@ class InferenceRuntime:
         if ex:
             return None, ValueError("future_data:" + str(ex))
 
+        quantile_calibration_data, ex = decode_data(input_payload.quantile_calibration_data, schema)
+        if ex:
+            return None, ValueError("quantile_calibration_data:" + str(ex))
+        if len(quantile_calibration_data) < 1:
+            quantile_calibration_data = None
+
         handler_config = handler.handler_config
         # collect and check underlying time series lengths
         if getattr(handler_config, "minimum_context_length", None) or getattr(
@@ -149,12 +155,24 @@ class InferenceRuntime:
                     data, id_columns=schema.id_columns, start_index=-handler_config.maximum_context_length
                 )
 
-        _, e = handler.prepare(data=data, future_data=future_data, schema=schema, parameters=parameters)
+        _, e = handler.prepare(
+            data=data,
+            future_data=future_data,
+            quantile_calibration_data=quantile_calibration_data,
+            schema=schema,
+            parameters=parameters,
+        )
         if e is not None:
             return None, e
 
         LOGGER.info(f"HANDLER: {type(handler)}")
-        output, e = handler.run(data=data, future_data=future_data, schema=schema, parameters=parameters)
+        output, e = handler.run(
+            data=data,
+            future_data=future_data,
+            quantile_calibration_data=quantile_calibration_data,
+            schema=schema,
+            parameters=parameters,
+        )
 
         if e is not None:
             return None, e

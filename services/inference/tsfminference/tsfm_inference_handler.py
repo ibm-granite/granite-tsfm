@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 
 from tsfm_public import TimeSeriesForecastingPipeline
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
 from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor, extend_time_series
 from tsfm_public.toolkit.tsfm_config import TSFMConfig
 from tsfm_public.toolkit.util import select_by_index
@@ -303,7 +304,13 @@ class TSFMForecastingInferenceHandler:
 
         prediction_quantiles = parameters.prediction_quantiles if parameters.prediction_quantiles else None
         # @TODO
-        if prediction_quantiles
+        if prediction_quantiles:
+            prediction_columns = [f"{c}_prediction" for c in schema.target_columns]
+            cw = PostHocProbabilisticProcessor(window_size=100, method="conformal", quantiles=[0.1, 0.9])
+            cw = cw.train(
+                forecast_valid[schema.target_columns].iloc[:-prediction_length],
+                forecast_valid[prediction_columns].iloc[:-prediction_length],
+            )
 
         extra_pipeline_args = getattr(self.handler_config, "extra_pipeline_arguments", {})
         forecast_pipeline = TimeSeriesForecastingPipeline(
