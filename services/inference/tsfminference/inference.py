@@ -118,7 +118,7 @@ class InferenceRuntime:
         quantile_calibration_data, ex = decode_data(input_payload.quantile_calibration_data, schema)
         if ex:
             return None, ValueError("quantile_calibration_data:" + str(ex))
-        if len(quantile_calibration_data) < 1:
+        if quantile_calibration_data is None or len(quantile_calibration_data) < 1:
             quantile_calibration_data = None
 
         handler_config = handler.handler_config
@@ -158,7 +158,6 @@ class InferenceRuntime:
         _, e = handler.prepare(
             data=data,
             future_data=future_data,
-            quantile_calibration_data=quantile_calibration_data,
             schema=schema,
             parameters=parameters,
         )
