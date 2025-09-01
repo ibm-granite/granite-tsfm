@@ -26,6 +26,27 @@ MODEL_ID = "mytest-tsfm/ttm-r1"
 NUM_TIMESERIES = int(os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2))
 
 
+def series_for_quantile_tests():
+    """we currently support only single timeseries in conformal processor"""
+    # Generate a date range
+    length = SERIES_LENGTH + FORECAST_LENGTH
+    date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
+
+    timeseries = []
+    for idx in range(1):
+        timeseries.append(
+            pd.DataFrame(
+                {
+                    "date": date_range,
+                    "ID": str(idx),
+                    "VAL": np.random.rand(length),
+                }
+            )
+        )
+
+    return pd.concat(timeseries, ignore_index=True)
+
+
 @pytest.fixture(scope="module")
 def ts_data_base() -> pd.DataFrame:
     # Generate a date range
@@ -161,6 +182,23 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df)
+
+
+def test_quantile_forecast(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input = forecasting_input_base
+    df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
+    quantile_calibration_data = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # we need to extend these data to be at least min_context_length + prediction_length long
+
+    input.parameters.prediction_quantiles = [0.1, 0.9]
+
+    runtime: InferenceRuntime = InferenceRuntime()
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    # _basic_result_checks(results, df)
 
 
 def test_forecast_with_schema_missing_target_columns(
