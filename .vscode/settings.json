@@ -3,10 +3,6 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
   },
-  "python.testing.pytestArgs": [
-    "tests",
-    "services"
-  ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "editor.codeActionsOnSave": {
@@ -48,4 +44,12 @@
     "**/services/finetuning/tsfmfinetuning/service_handler.py": true,
     "**/services/inference/tsfminference/service_handler.py": true
   },
+  "python-envs.pythonProjects": [
+    {
+      "path": "",
+      "envManager": "ms-python.python:venv",
+      "packageManager": "ms-python.python:pip"
+    }
+  ],
+  "python.testing.cwd": "services/inference",
 }
