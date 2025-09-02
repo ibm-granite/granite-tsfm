@@ -348,7 +348,8 @@ class TSFMForecastingInferenceHandler:
             LOGGER.info(
                 f"quantile_calibration_data {len(quantile_calibration_data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
             )
-
+            # @ todo, we actually need more than this and depends on the quantiles specified. ask natalia for this calculation or
+            # suggest that the code have some means of giving you that number should be doable with a classmethod
             if min_data_length < min_context_length + max_prediction_length:
                 raise ValueError(
                     f"""The size of each timeseries in the given quantile_calibration_data
@@ -369,15 +370,15 @@ class TSFMForecastingInferenceHandler:
                 explode_forecasts=False,
                 **extra_pipeline_args,
             )
-            forecasts = forecast_pipeline(quantile_calibration_data[:-max_prediction_length])
+            forecasts = forecast_pipeline(quantile_calibration_data)
             prediction_columns = [f"{c}_prediction" for c in schema.target_columns]
             pp_processor = PostHocProbabilisticProcessor(
                 window_size=100, method="conformal", quantiles=prediction_quantiles
             )
             pp_processor = pp_processor.train(
-                y_cal_gt=quantile_calibration_data[schema.target_columns][-max_prediction_length:],
-                y_cal_pred=forecasts[prediction_columns],
-            )
+                y_cal_gt=forecasts.iloc[:-max_prediction_length][schema.target_columns],
+                y_cal_pred=forecasts.iloc[:-max_prediction_length][prediction_columns],
+            )  # we use forecasts twice b/c it does contain the quantile calibration data in a better format via the call to forecast_pipeline(quantile_calibration_data)
 
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -387,7 +388,7 @@ class TSFMForecastingInferenceHandler:
             freq=self.preprocessor.freq,
             device=device,
             batch_size=1000,
-            probabilistic_processor=pp_processor,
+            probabilistic_processor=None,
             **extra_pipeline_args,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
@@ -398,6 +399,7 @@ class TSFMForecastingInferenceHandler:
         self,
         data: pd.DataFrame,
         future_data: Optional[pd.DataFrame] = None,
+        quantile_calibration_data: Optional[pd.DataFrame] = None,
         output_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,

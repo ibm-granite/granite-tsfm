@@ -29,7 +29,9 @@ NUM_TIMESERIES = int(os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2))
 def series_for_quantile_tests():
     """we currently support only single timeseries in conformal processor"""
     # Generate a date range
-    length = SERIES_LENGTH + FORECAST_LENGTH
+    length = (
+        SERIES_LENGTH + FORECAST_LENGTH + 10
+    )  # (seem comments in tsfm_inference handler about min data requirements for conformal processor)
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
     timeseries = []
