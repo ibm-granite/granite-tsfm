@@ -289,15 +289,15 @@ def test_prediction_filter_length(etth_data):
 
 
 def test_probabilistic_forecasts(etth_data):
+    train_data, test_data, params = etth_data
     pfl = 10
     conf = TinyTimeMixerConfig(prediction_filter_length=pfl)
     model = TinyTimeMixerForPrediction(config=conf)
-    train_data, test_data, params = etth_data
 
     timestamp_column = params["timestamp_column"]
     id_columns = params["id_columns"]
     target_columns = params["target_columns"]
-    context_length = params["context_length"]
+    context_length = conf.context_length
     prediction_length = conf.prediction_length
 
     tsp = TimeSeriesPreprocessor(
@@ -357,3 +357,20 @@ def test_probabilistic_forecasts(etth_data):
     assert len(forecasts[f"{target_columns[0]}_prediction"].iloc[0]) == pfl
     assert len(forecasts[f"{target_columns[0]}_prediction_q{conformal.quantiles[0]}"].iloc[0]) == pfl
     assert len(forecasts[f"{target_columns[0]}_prediction_q{conformal.quantiles[1]}"].iloc[0]) == pfl
+
+    # with explode
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=True,
+        inverse_scale_outputs=True,
+        device="cpu",
+        probabilistic_processor=conformal,
+        batch_size=100,
+    )
+
+    forecasts = forecast_pipeline(test_data[-context_length:])
+
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[0]}"]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[1]}"]) == pfl

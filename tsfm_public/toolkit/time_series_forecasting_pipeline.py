@@ -471,6 +471,25 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
 
+        # inverse scale if we have a feature extractor
+        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
+            out = self.feature_extractor.inverse_scale_targets(out)
+            if add_known_ground_truth:
+                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+
+        # add probabilistic
+        conformal_cols = []
+        if self._probabilistic_processor is not None:
+            # get the conformal bounds and add to the forecasts on the test set
+            predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns])
+
+            for j, q in enumerate(self._probabilistic_processor.quantiles):
+                for i, c in enumerate(prediction_columns):
+                    col = f"{c}_q{q}"
+                    out[col] = predictions_conformal[..., i, j].tolist()
+                    conformal_cols.append(col)
+                    # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
             # explode == expand the lists in the dataframe
@@ -487,6 +506,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                         tmp[c] = row[c]
                 for p in prediction_columns:
                     tmp[p] = row[p]
+                for c in conformal_cols:
+                    tmp[c] = row[c]
 
                 out_explode.append(pd.DataFrame(tmp))
 
@@ -502,21 +523,5 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         cols_ordered.extend([c for c in cols if c not in cols_ordered])
 
         out = out[cols_ordered]
-
-        # inverse scale if we have a feature extractor
-        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out)
-            if add_known_ground_truth:
-                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
-
-        # add probabilistic here
-        if self._probabilistic_processor is not None:
-            # get the conformal bounds and add to the forecasts on the test set
-            predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns])
-
-            for j, q in enumerate(self._probabilistic_processor.quantiles):
-                for i, c in enumerate(prediction_columns):
-                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
-                    out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
 
         return out
