@@ -203,7 +203,12 @@ def test_quantile_forecast(ts_data_base: pd.DataFrame, forecasting_input_base: F
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df, num_timeseries=1)
 
-    print(po)
+    # confirm expected column names
+    expected = {f"VAL_q{q}" for q in input.parameters.prediction_quantiles}
+    assert len(expected.intersection(set(results.columns))) == 2
+
+    # confirm that mean predictions fall between quantile predictions
+    assert ((results["VAL_q0.1"] < results["VAL"]) & (results["VAL"] < results["VAL_q0.9"])).all()
 
 
 def test_forecast_with_schema_missing_target_columns(
