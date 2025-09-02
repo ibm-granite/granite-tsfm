@@ -123,11 +123,11 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self.aggregation_axis = aggregation_axis
 
         # if self.nonconformity_score in [NonconformityScores.ERROR.value]:
-            # self.false_alarm = np.min(quantiles).item()
+        # self.false_alarm = np.min(quantiles).item()
 
         self.critical_size = np.ceil(1 / self.false_alarm).item()
         if self.nonconformity_score in [NonconformityScores.ERROR.value]:
-            self.critical_size = 2*self.critical_size
+            self.critical_size = 2 * self.critical_size
 
         if self.method not in [PostHocProbabilisticMethod.CONFORMAL.value, PostHocProbabilisticMethod.GAUSSIAN.value]:
             raise ValueError(f"Provided Post Hoc probabilistic method {self.method} is not valid.")
@@ -138,16 +138,21 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         ]:
             raise ValueError(f"Provided nonconformity_score {self.nonconformity_score } is not valid.")
 
+        self.weighting = weighting
+        self.weighting_params = weighting_params
+        self.threshold_function = threshold_function
+
         self.model = kwargs.pop("model", None)
+
         if self.model is None:
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 self.model = WeightedConformalForecasterWrapper(
                     window_size=self.window_size,
                     false_alarm=self.false_alarm,
                     nonconformity_score=self.nonconformity_score,
-                    weighting=weighting,
-                    weighting_params=weighting_params,
-                    threshold_function=threshold_function,
+                    weighting=self.weighting,
+                    weighting_params=self.weighting_params,
+                    threshold_function=self.threshold_function,
                 )
             elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
@@ -251,6 +256,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self,
         y_cal_gt: Union[pd.DataFrame, np.ndarray],
         y_cal_pred: Union[pd.DataFrame, np.ndarray],
+        id_column: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
 
@@ -272,14 +278,39 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if len(y_cal_gt.shape) != 3:
             raise ValueError("y_cal_gt should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
-        self.model.fit(
-            y_cal_gt=y_cal_gt,
-            y_cal_pred=y_cal_pred,  # ttm predicted values
-            # ttm corresponding gt values
-        )
+        if id_column is None:
+            self.model.fit(
+                y_cal_gt=y_cal_gt,
+                y_cal_pred=y_cal_pred,  # ttm predicted values
+                # ttm corresponding gt values
+            )
+        else:
+            ### Initialize and fit a dictionary of models ###
+            self.model = {}
+            for g in np.unique(id_column):
+                idx = np.where(id_column == g)[0]  # indices for this group
+                y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
+                assert y_cal_pred_g.shape[0] >= self.critical_size, " Group id did not have enough calibration points."
+                if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                    self.model[g] = WeightedConformalForecasterWrapper(
+                        window_size=self.window_size,
+                        false_alarm=self.false_alarm,
+                        nonconformity_score=self.nonconformity_score,
+                        weighting=self.weighting,
+                        weighting_params=self.weighting_params,
+                        threshold_function=self.threshold_function,
+                    )
+                elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                    self.model[g] = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
+                self.model[g].fit(
+                    y_cal_gt=y_cal_gt_g,
+                    y_cal_pred=y_cal_pred_g,
+                )
         return self
 
-    def predict(self, y_test_pred: Union[pd.DataFrame, np.ndarray], quantiles: List[float] = []) -> np.ndarray:
+    def predict(
+        self, y_test_pred: Union[pd.DataFrame, np.ndarray], quantiles: List[float] = [], id_column: np.ndarray = None
+    ) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
 
         Args:
@@ -300,36 +331,54 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         ), " y_test_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
 
         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
-        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
-            ix_q = 0
-            # print('QUANTILES : ', quantiles, self.model.false_alarm)
-            # print('NON CONFORMITY SCORE :', self.model.nonconformity_score)
-            for q in quantiles:
-                # print(q)
-                if self.model.nonconformity_score in [
-                    NonconformityScores.ABSOLUTE_ERROR.value,
-                    NonconformityScores.ERROR.value,
-                ]:
-                    if q < 0.5:
-                        q_pi_error_rate = q * 2
-                        output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                        y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_low"]
-                    elif q > 0.5:
-                        q_pi_error_rate = (1 - q) * 2
-                        output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                        y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-                    else:
-                        if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
-                            q_pi_error_rate = 0.5
-                            # print('Quantile q = ',q_pi_error_rate)
-                            output_q = self.model.predict(y_test_pred, false_alarm=2*q_pi_error_rate)
-                            y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-                        else:
-                            y_test_prob_pred[..., ix_q] = y_test_pred
+        if id_column is None:
+            assert not isinstance(
+                self.model, dict
+            ), "Probabilistic processor models were trained with id_columns and no id_column was provided as an input. Please provide id_columns."
+            groups_unique_dummy = [None]
+        else:
+            groups_unique_dummy = np.unique(id_column)
 
-                ix_q += 1
-        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
-            y_test_prob_pred = self.model.predict(y_test_pred)
+        for g in groups_unique_dummy:
+            if id_column is None:
+                model = self.model
+                y_test_pred_g = y_test_pred
+                idx = np.arange(y_test_prob_pred.shape[0])
+            else:
+                model = self.model[g]
+                idx = np.where(id_column == g)[0]
+                y_test_pred_g = y_test_pred[idx]
+
+            if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                ix_q = 0
+                # print('QUANTILES : ', quantiles, self.model.false_alarm)
+                # print('NON CONFORMITY SCORE :', self.model.nonconformity_score)
+                for q in quantiles:
+                    # print(q)
+                    if model.nonconformity_score in [
+                        NonconformityScores.ABSOLUTE_ERROR.value,
+                        NonconformityScores.ERROR.value,
+                    ]:
+                        if q < 0.5:
+                            q_pi_error_rate = q * 2
+                            output_q = model.predict(y_test_pred_g, false_alarm=q_pi_error_rate)
+                            y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_low"]
+                        elif q > 0.5:
+                            q_pi_error_rate = (1 - q) * 2
+                            output_q = model.predict(y_test_pred_g, false_alarm=q_pi_error_rate)
+                            y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_high"]
+                        else:
+                            if model.nonconformity_score in [NonconformityScores.ERROR.value]:
+                                q_pi_error_rate = 0.5
+                                # print('Quantile q = ',q_pi_error_rate)
+                                output_q = model.predict(y_test_pred_g, false_alarm=2 * q_pi_error_rate)
+                                y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_high"]
+                            else:
+                                y_test_prob_pred[idx, :, :, ix_q] = y_test_pred_g
+
+                    ix_q += 1
+            if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                y_test_prob_pred[idx, ...] = model.predict(y_test_pred_g)
 
         return y_test_prob_pred
 
@@ -337,6 +386,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self,
         y_gt: Union[pd.DataFrame, np.ndarray],
         y_pred: Union[pd.DataFrame, np.ndarray],
+        id_column: np.ndarray = None,
         X: np.ndarray = None,
         timestamps: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
@@ -355,10 +405,23 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if isinstance(y_pred, pd.DataFrame):
             y_pred = self._get_numpy_input(y_pred)
 
-        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
-            self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
-        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
-            self.model.update(y_gt=y_gt, y_pred=y_pred)
+        if id_column is None:
+            if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
+            if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                self.model.update(y_gt=y_gt, y_pred=y_pred)
+        else:
+            for g in np.unique(id_column):
+                idx = np.where(id_column == g)[0]
+                y_pred_g, y_gt_g = y_pred[idx], y_gt[idx]
+                X_g = X
+                timestamps_g = timestamps
+                if X is not None:
+                    X_g = X[idx]
+                if timestamps is not None:
+                    timestamps_g = timestamps[idx]
+
+                self.model.update(y_gt=y_gt_g, y_pred=y_pred_g, X=X_g, timestamps=timestamps_g)
 
         return self
 
@@ -1366,19 +1429,18 @@ class WeightedConformalWrapper:
                     # test_ad_scores.append(1 - ad_score)
                     test_ad_scores.append(ad_score)  # p-value (significance)
             elif self.nonconformity_score in [NonconformityScores.ERROR.value]:
-                test_outliers = np.array((test_scores < score_threshold[0]) | (test_scores > score_threshold[1]) ).astype("int")
+                test_outliers = np.array(
+                    (test_scores < score_threshold[0]) | (test_scores > score_threshold[1])
+                ).astype("int")
                 for score in test_scores:
                     ad_score = weighted_conformal_alpha(
-                        np.append(self.cal_scores, np.array([np.inf,-np.inf]), axis=0),
-                        np.append(cal_weights, np.array([1,1]), axis=0),
+                        np.append(self.cal_scores, np.array([np.inf, -np.inf]), axis=0),
+                        np.append(cal_weights, np.array([1, 1]), axis=0),
                         score,
                     )
                     # test_ad_scores.append(1 - ad_score)
                     # test_ad_scores.append(ad_score)  # p-value (significance)
-                    test_ad_scores.append(np.minimum(float(ad_score),1-float(ad_score)))
-            
-            
-
+                    test_ad_scores.append(np.minimum(float(ad_score), 1 - float(ad_score)))
 
             # Update
             if update:
@@ -1675,9 +1737,9 @@ class AdaptiveWeightedConformalScoreWrapper:
         self.weights_average = None
         self.weights_average_count = 0
 
-        assert (
-            self.weighting_params["n_batch_update"] > self.weights_critical_norm
-        ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
+        # assert (
+        #     self.weighting_params["n_batch_update"] > self.weights_critical_norm
+        # ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
 
     def fit(self, scores: np.ndarray) -> np.ndarray:
         """
@@ -1703,7 +1765,8 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         self.weights_parameters = torch.nn.Parameter(w_init)
 
-        self.weights_optimizer = torch.optim.Adam([self.weights_parameters], lr=self.weighting_params["lr"])
+        self.weights_optimizer = torch.optim.AdamW([self.weights_parameters], lr=self.weighting_params["lr"])
+        # self.weights_optimizer = torch.optim.RMSprop([self.weights_parameters], lr=self.weighting_params["lr"])
 
         """
         2. Compute p-values for the given scores (should be ignored)
@@ -1742,31 +1805,48 @@ class AdaptiveWeightedConformalScoreWrapper:
             np.ndarray: Array of weighted p-scores (beta_t) for each test score. Shape: (n_samples,).
         """
 
+        # print('scores :', scores.shape[0])
+
         n_scores = scores.shape[0]
         n_batch = int(self.weighting_params["n_batch_update"])
         n_epochs = int(self.weighting_params["epochs"])
         stride = int(self.weighting_params["stride"])
         conformal_weights_update = self.weighting_params["conformal_weights_update"]
 
-        n_batch_updates = (n_scores - n_batch) / stride + 1
+        n_min_update = int(
+            self.weights_critical_norm + n_batch
+        )  # Minimum previous scores needed to update weights with Wass1
+
+        # n_batch_updates = (n_scores - n_batch) / stride + 1
+        n_batch_updates = n_scores / stride  # + 1
         n_batch_updates = int(np.ceil(n_batch_updates))
 
         losses = []
         beta_output = []
         for i in range(n_batch_updates):
             ini_t_i = int(i * stride)
-            end_t_i = int(i * stride + n_batch)
+            end_t_i = np.minimum(int(i * stride + stride), scores.shape[0])
             if verbose:
                 LOGGER.info("ini/end batch :", ini_t_i, end_t_i)
-            scores_i = torch.tensor(scores[ini_t_i:end_t_i])
-
-            """Generate Matrix With Past Scores per batch observation"""
-            scores_concat_i = torch.cat((self.cal_scores, scores_i), dim=0)
+            scores_new_i = torch.tensor(scores[ini_t_i:end_t_i])
+            if len(scores_new_i) == 0:
+                continue
+            """Generate Matrix With Past Scores per batch observation and "present" scores to compute Wass1"""
+            scores_concat_i = torch.cat((self.cal_scores, scores_new_i), dim=0)
+            update_weights_feasible = len(scores_concat_i) >= n_min_update
+            n_batch_effective = n_batch if update_weights_feasible else scores_new_i.shape[0]
+            n_batch_effective = int(n_batch_effective)
+            # print(ini_t_i,end_t_i, scores_concat_i.shape, n_batch_effective, self.cal_scores.shape[0], self.weights_critical_norm, n_min_update)
+            # print('Update feasible :', update_weights_feasible)
+            scores_i = scores_concat_i[-n_batch_effective:]  # Scores to compute the Wass1 distance
+            cal_context_available = len(scores_concat_i) - n_batch_effective
             scores_matrix = [
-                scores_concat_i[i - self.cal_scores.shape[0] : i]
-                for i in range(self.cal_scores.shape[0], len(scores_concat_i))
+                scores_concat_i[j - cal_context_available : j]
+                for j in range(len(scores_concat_i) - n_batch_effective, len(scores_concat_i))
             ]
+
             scores_matrix = torch.stack(scores_matrix)
+            # print(scores_matrix.shape)
 
             """Get Betas"""
             if self.weights_average is None:
@@ -1774,79 +1854,81 @@ class AdaptiveWeightedConformalScoreWrapper:
                 self.weights_average_count = 1
 
             with torch.no_grad():
-                if (i < n_batch_updates - 1) & (i > 0):
-                    ## Only inference for the stride items (betas should rely on weoghts updated with past observations)
-                    betas = (
-                        get_beta(
-                            scores_i[-stride:],
-                            scores_matrix[-stride:, :],
-                            weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                            # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
-                            conformal_weights=True,
-                        )
-                        .clone()
-                        .detach()
-                        .numpy()
+                n_scores_compute = int(scores_new_i.shape[0])
+                betas = (
+                    get_beta(
+                        scores_i[-n_scores_compute:],
+                        scores_matrix[-n_scores_compute:],
+                        weights=self.weights_parameters[-scores_matrix.shape[1] :],
+                        # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
+                        conformal_weights=True,
                     )
-                else:
-                    betas = (
-                        get_beta(
-                            scores_i,
-                            scores_matrix,
-                            weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                            # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
-                            conformal_weights=True,
-                        )
-                        .clone()
-                        .detach()
-                        .numpy()
-                    )
+                    .clone()
+                    .detach()
+                    .numpy()
+                )
                 if verbose:
                     LOGGER.info("Beta shape :", betas.shape)
                 beta_output.extend(betas.tolist())
+                # print('beta length :', len(beta_output), '; new scores shapes :', scores_i[-n_scores_compute:].shape)
 
             """Optimize Weights"""
-            losses_i = []
-            for _ in range(n_epochs):
-                self.weights_optimizer.zero_grad()
-                loss = get_w1_distance(
-                    scores_i,
-                    scores_matrix,
-                    weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                    conformal_weights=conformal_weights_update,
-                )
-                losses_i.append(loss.item())
+            # if not update_weights_feasible:
 
-                loss.backward()
-                self.weights_optimizer.step()
+            if update_weights_feasible:
+                losses_i = []
+                for _ in range(n_epochs):
+                    self.weights_optimizer.zero_grad()
+                    loss = get_w1_distance(
+                        scores_i,
+                        scores_matrix,
+                        weights=self.weights_parameters[-scores_matrix.shape[1] :],
+                        conformal_weights=conformal_weights_update,
+                    )
+                    losses_i.append(loss.item())
 
-                ## Project weights into the simplex
-                self.weights_parameters.data = project_l1_box_torch(
-                    self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
-                )
+                    loss.backward()
+                    self.weights_optimizer.step()
+
+                    ## Project weights into the simplex
+                    self.weights_parameters.data = project_l1_box_torch(
+                        self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
+                    )
+                    if verbose:
+                        LOGGER.info(
+                            "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
+                                loss.item(),
+                                self.weights_parameters.data.sum(),
+                                self.weights_parameters.data.min(),
+                                self.weights_parameters.data.max(),
+                            )
+                        )
+
+                    self.weights_average = self.weights_average + self.weights_parameters.clone().detach()
+                    self.weights_average_count += 1
+                    # self.weights_parameters.data.clamp_(0, 1.0)
+                losses.append(losses_i)
+                # self.cal_weights = self.weights_average.clone().detach().numpy()/self.weights_average_count
+                self.cal_weights = self.weights_parameters.clone().detach().numpy()
+            else:
                 if verbose:
                     LOGGER.info(
-                        "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
-                            loss.item(),
-                            self.weights_parameters.data.sum(),
-                            self.weights_parameters.data.min(),
-                            self.weights_parameters.data.max(),
+                        "Update not feasible for indexes {} to {}; all available past scores are {} minimum number required are {} ".format(
+                            ini_t_i,
+                            end_t_i,
+                            len(scores_concat_i),
+                            n_min_update,
                         )
                     )
-
-                self.weights_average = self.weights_average + self.weights_parameters.clone().detach()
-                self.weights_average_count += 1
-                # self.weights_parameters.data.clamp_(0, 1.0)
-            losses.append(losses_i)
-
+                # print('Update not feasible for indexes :',ini_t_i, end_t_i )
+                # print('Cal scores size :', len(self.cal_scores))
+                # print('Minimum number of elements required are :', n_min_update, ' but in total we have :', scores_concat_i.shape[0])
             """ Update Past Calibration Scores """
-            self.cal_scores = torch.cat((self.cal_scores, scores_i[0:stride]), dim=0)
+            self.cal_scores = torch.cat((self.cal_scores, scores_new_i[0:stride]), dim=0)
             self.cal_scores = self.cal_scores[-self.window_size :]
-            # self.cal_weights = self.weights_average.clone().detach().numpy()/self.weights_average_count
-            self.cal_weights = self.weights_parameters.clone().detach().numpy()
-
-        self.losses.extend(losses)
-
+            # print('Cal scores updated to :', len(self.cal_scores))
+        if len(losses) > 0:
+            self.losses.extend(losses)
         return np.array(beta_output)
 
 
@@ -1997,7 +2079,7 @@ def euclidean_proj_simplex_torch(vector: torch.Tensor, radius: int = 1) -> torch
     return w
 
 
-def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1) -> torch.Tensor:
+def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1, verbose: bool = False) -> torch.Tensor:
     w = torch.clamp(v, min=0, max=max_value)
     if v.sum() > torch.tensor(min_l1_norm):
         return w
@@ -2022,10 +2104,14 @@ def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1) -> tor
 
             n_iter += 1
             condition = n_iter > 10
-            LOGGER.info("iter : ", n_iter)
+            if verbose:
+                LOGGER.info("iter : ", n_iter)
 
         w_i = torch.clamp(w_i, max=max_value, min=0)
-        LOGGER.info(
-            "proj ending due to max iterations, norm_l1 is {} and objective was >= {}".format(w_i.sum(), min_l1_norm)
-        )
+        if verbose:
+            LOGGER.info(
+                "proj ending due to max iterations, norm_l1 is {} and objective was >= {}".format(
+                    w_i.sum(), min_l1_norm
+                )
+            )
         return w_i
