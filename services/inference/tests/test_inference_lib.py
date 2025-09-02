@@ -96,9 +96,9 @@ def forecasting_input_base() -> ForecastingInferenceInput:
     return input
 
 
-def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
+def _basic_result_checks(results: PredictOutput, df: pd.DataFrame, num_timeseries: int = NUM_TIMESERIES):
     # expected length
-    assert len(results) == FORECAST_LENGTH * NUM_TIMESERIES
+    assert len(results) == FORECAST_LENGTH * num_timeseries
     # expected start time
     answer = results["date"].iloc[0] - df["date"].iloc[-1]
     assert (
@@ -186,8 +186,9 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
     _basic_result_checks(results, df)
 
 
+# @pytest.mark.skip
 def test_quantile_forecast(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
-    input = forecasting_input_base
+    input = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
     quantile_calibration_data = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
     input.data = df.to_dict(orient="list")
@@ -200,7 +201,9 @@ def test_quantile_forecast(ts_data_base: pd.DataFrame, forecasting_input_base: F
     runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
-    # _basic_result_checks(results, df)
+    _basic_result_checks(results, df, num_timeseries=1)
+
+    print(po)
 
 
 def test_forecast_with_schema_missing_target_columns(
