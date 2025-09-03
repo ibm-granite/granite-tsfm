@@ -348,17 +348,13 @@ class TSFMForecastingInferenceHandler:
             LOGGER.info(
                 f"quantile_calibration_data {len(quantile_calibration_data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
             )
-            # @ todo, we actually need more than this and depends on the quantiles specified. ask natalia for this calculation or
-            # suggest that the code have some means of giving you that number should be doable with a classmethod
+
             if min_data_length < min_context_length + max_prediction_length:
                 raise ValueError(
                     f"""The size of each timeseries in the given quantile_calibration_data
                     must be greater than or equal to the sum of the minimum_context_length {min_context_length}"
                     plus the model's default prediction length of {max_prediction_length}"""
                 )
-
-            # @TODO current impl of PostHocProbabilisticProcessor suuports only
-            # single timeseries
 
             forecast_pipeline = TimeSeriesForecastingPipeline(
                 model=self.model,
@@ -375,6 +371,7 @@ class TSFMForecastingInferenceHandler:
             pp_processor = PostHocProbabilisticProcessor(
                 window_size=100, method="conformal", quantiles=prediction_quantiles
             )
+
             pp_processor = pp_processor.train(
                 y_cal_gt=forecasts.iloc[:-max_prediction_length][schema.target_columns],
                 y_cal_pred=forecasts.iloc[:-max_prediction_length][prediction_columns],
