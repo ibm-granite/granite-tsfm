@@ -30,7 +30,7 @@ def series_for_quantile_tests():
     """we currently support only single timeseries in conformal processor"""
     # Generate a date range
     length = (
-        SERIES_LENGTH + FORECAST_LENGTH + 10
+        SERIES_LENGTH + FORECAST_LENGTH + 5
     )  # (seem comments in tsfm_inference handler about min data requirements for conformal processor)
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
@@ -187,7 +187,9 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
 
 
 # @pytest.mark.skip
-def test_quantile_forecast(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+def test_quantile_forecast_with_single_timeseries(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
     input = copy.deepcopy(forecasting_input_base)
     df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
     quantile_calibration_data = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests()
