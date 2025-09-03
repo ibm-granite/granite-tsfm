@@ -51,5 +51,4 @@
       "packageManager": "ms-python.python:pip"
     }
   ],
-  "python.testing.cwd": "services/inference",
-}
+  }
