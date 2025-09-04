@@ -291,7 +291,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 idx = np.where(id_column == g)[0]  # indices for this group
                 y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
                 if y_cal_pred_g.shape[0] < self.critical_size:
-                    raise ValueError(f"id {g} has fewer rows of data than the minimum number {self.critical_size}")
+                    raise ValueError(
+                        f"id {g} has only {y_cal_pred_g.shape[0]} rows of data which is less than the minimum number {self.critical_size}"
+                    )
                 if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                     self.model[g] = WeightedConformalForecasterWrapper(
                         window_size=self.window_size,
