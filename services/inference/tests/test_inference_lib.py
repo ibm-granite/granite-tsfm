@@ -206,7 +206,7 @@ def test_quantile_forecast_with_single_timeseries(
     runtime: InferenceRuntime = InferenceRuntime()
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
-    results.to_csv("/tmp/singelseries.csv")
+    results.to_csv("singelseries.csv")
     _basic_result_checks(results, df, num_timeseries=1)
 
     # confirm expected column names
@@ -250,7 +250,7 @@ def test_quantile_forecast_with_multi_timeseries(
     # filtered_df = results[(results["VAL"] <= results["VAL_q0.1"])]
 
     # print(filtered_df)
-    results.to_csv("/tmp/multiseries.csv")
+    results.to_csv("multiseries.csv")
 
     assert (results["VAL_q0.1"] <= results["VAL"]).all()
 
