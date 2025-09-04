@@ -7,6 +7,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -373,6 +374,7 @@ class TSFMForecastingInferenceHandler:
             )
 
             pp_processor = pp_processor.train(
+                id_column=np.array(schema.id_columns),
                 y_cal_gt=forecasts.iloc[:-max_prediction_length][schema.target_columns],
                 y_cal_pred=forecasts.iloc[:-max_prediction_length][prediction_columns],
             )  # we use forecasts twice b/c it does contain the quantile calibration data in a better format via the call to forecast_pipeline(quantile_calibration_data)
