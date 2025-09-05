@@ -341,7 +341,6 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             groups_unique_dummy = [None]
         else:
             groups_unique_dummy = np.unique(id_column)
-
         for g in groups_unique_dummy:
             if id_column is None:
                 model = self.model
@@ -351,7 +350,6 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 model = self.model[g]
                 idx = np.where(id_column == g)[0]
                 y_test_pred_g = y_test_pred[idx]
-
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 ix_q = 0
                 # print('QUANTILES : ', quantiles, self.model.false_alarm)
