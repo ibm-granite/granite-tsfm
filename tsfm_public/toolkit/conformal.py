@@ -1175,6 +1175,11 @@ class WeightedConformalWrapper:
             cal_timestamps (np.ndarray, optional): Timestamps corresponding to each forecasted value. Shape: (num_samples).
         """
 
+        # check and remove nans
+        filter = ~np.isnan(y_cal_gt) & ~np.isnan(y_cal_pred)
+        y_cal_gt = y_cal_gt[filter]
+        y_cal_pred = y_cal_pred[filter]
+
         if self.window_size is None:
             self.window_size = y_cal_pred.shape[0]
         self.cal_scores = nonconformity_score_functions(
@@ -1184,10 +1189,10 @@ class WeightedConformalWrapper:
         self.cal_scores = self.cal_scores[-self.window_size :]
 
         if X_cal is not None:
-            self.cal_X = X_cal[-self.window_size :]
+            self.cal_X = X_cal[filter][-self.window_size :]
 
         if cal_timestamps is not None:
-            self.cal_timestamps = cal_timestamps[-self.window_size :]
+            self.cal_timestamps = cal_timestamps[filter][-self.window_size :]
 
         critical_efficient_size = int(np.ceil(1 / self.false_alarm))
 
@@ -1395,7 +1400,9 @@ class WeightedConformalWrapper:
             update = self.online
 
         # Weight Computation
-        cal_weights = self.get_weights(y_pred, X=X, timestamps=timestamps, false_alarm=false_alarm)
+        cal_weights = self.get_weights(y_pred, X=X, timestamps=timestamps, false_alarm=false_alarm)[
+            -self.cal_scores.shape[0] :
+        ]
 
         # Score Threshold
         if (

@@ -723,6 +723,8 @@ def test_posthoc_probabilistic_processor_with_id_columns():
 
 
 if __name__ == "__main__":
+    test_posthoc_probabilistic_processor()
+    test_posthoc_probabilistic_processor_online_update()
     test_posthoc_probabilistic_processor_outlier_score()
     test_adaptive_conformal_wrapper()
     test_forecast_horizon_aggregation()
