@@ -601,9 +601,10 @@ def test_posthoc_probabilistic_processor_with_id_columns():
             context_length=120, prediction_length=forecast_horizon, num_input_channels=len(target_variables)
         )
     )
-    dataset["id_column"] = [1 if x < len(dataset) / 2 else 2 for x in range(len(dataset))]
+    id_columns = ["id_column"]
+    dataset[id_columns[0]] = [1 if x < len(dataset) / 2 else 2 for x in range(len(dataset))]
     fpipe = TimeSeriesForecastingPipeline(
-        model, timestamp_column="timestamp", id_columns=["id_column"], target_columns=target_variables, device="cpu"
+        model, timestamp_column="timestamp", id_columns=id_columns, target_columns=target_variables, device="cpu"
     )
     forecasts = fpipe(dataset)
 
@@ -612,8 +613,8 @@ def test_posthoc_probabilistic_processor_with_id_columns():
 
     n_features = len(target_variables)
 
-    y_pred = forecasts[["X1_prediction", "X2_prediction"]].copy()
-    y_gt = forecasts[["X1", "X2"]].copy()
+    y_pred = forecasts[["X1_prediction", "X2_prediction"] + id_columns].copy()
+    y_gt = forecasts[["X1", "X2"] + id_columns].copy()
 
     g1_idx = forecasts.loc[forecasts["id_column"].eq(1)].index
     g2_idx = forecasts.loc[forecasts["id_column"].eq(2)].index
@@ -647,10 +648,14 @@ def test_posthoc_probabilistic_processor_with_id_columns():
         for nonconformity_score in nonconformity_score_list:
             # print(method,nonconformity_score )
             p = PostHocProbabilisticProcessor(
-                window_size=window_size, quantiles=quantiles, nonconformity_score=nonconformity_score, method=method
+                id_columns=["id_column"],
+                window_size=window_size,
+                quantiles=quantiles,
+                nonconformity_score=nonconformity_score,
+                method=method,
             )
-            p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred, id_column=id_columns_cal)
-            y_test_prob_pred = p.predict(y_test_pred, id_column=id_columns_test)
+            p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred, id_column_values=id_columns_cal)
+            y_test_prob_pred = p.predict(y_test_pred, id_column_values=id_columns_test)
 
             ### ASSERTIONS ###
 
@@ -722,10 +727,10 @@ def test_posthoc_probabilistic_processor_with_id_columns():
             ), "Quantile 0.5 is not <= 0.9 for method {} nonconformity score {}".format(method, nonconformity_score)
 
 
-if __name__ == "__main__":
-    test_posthoc_probabilistic_processor()
-    test_posthoc_probabilistic_processor_online_update()
-    test_posthoc_probabilistic_processor_outlier_score()
-    test_adaptive_conformal_wrapper()
-    test_forecast_horizon_aggregation()
-    test_posthoc_probabilistic_processor_with_id_columns()
+# if __name__ == "__main__":
+#     test_posthoc_probabilistic_processor()
+#     test_posthoc_probabilistic_processor_online_update()
+#     test_posthoc_probabilistic_processor_outlier_score()
+#     test_adaptive_conformal_wrapper()
+#     test_forecast_horizon_aggregation()
+#     test_posthoc_probabilistic_processor_with_id_columns()

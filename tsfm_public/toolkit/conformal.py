@@ -82,6 +82,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         threshold_function: str = ThresholdFunction.WEIGHTING.value,
         aggregation: Union[str, int] = "median",
         aggregation_axis: Union[int, Tuple[int, ...]] = 1,
+        id_columns: List[str] = [],
         **kwargs,
     ):
         """
@@ -112,6 +113,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 - If None, returns outlier scores for all dimensions independently without aggregation.
             aggregation_axis (tuple of int, optional) to consider in outlier_score:
                 Specifies the axes over which to aggregate when `aggregation` is a string.
+            id_columns (List[str]): List of column names which identify different time series in a multi-time series input. Defaults to [].
         """
 
         self.window_size = window_size
@@ -121,6 +123,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self.method = method
         self.aggregation = aggregation
         self.aggregation_axis = aggregation_axis
+        self.id_columns = id_columns
 
         # if self.nonconformity_score in [NonconformityScores.ERROR.value]:
         # self.false_alarm = np.min(quantiles).item()
@@ -240,7 +243,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         return super().from_dict(feature_extractor_dict, **kwargs)
 
     @classmethod
-    def _get_numpy_input(cls, df: pd.DataFrame) -> np.ndarray:
+    def _get_numpy_input(cls, df: pd.DataFrame, id_columns: List[str] = []) -> np.ndarray:
         """Convert dataframe output from the forecasting pipeline in the numpy array format needed
         for conformal.
 
@@ -250,27 +253,41 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         Returns:
             np.ndarray: Tensor with the following shape: number of samples x prediction length x number of features
         """
-        return np.array([np.stack(z) for z in df.values]).transpose(0, 2, 1)
+
+        columns = [c for c in df.columns if c not in id_columns]
+
+        return np.array([np.stack(z) for z in df[columns].values]).transpose(0, 2, 1)
 
     def train(
         self,
         y_cal_gt: Union[pd.DataFrame, np.ndarray],
         y_cal_pred: Union[pd.DataFrame, np.ndarray],
-        id_column: np.ndarray = None,
+        id_column_values: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
 
         Args:
             y_cal_gt (Union[pd.DataFrame, np.ndarray]):  ground truth values, nsamples x forecast_horizon x number_features
             y_cal_pred (Union[pd.DataFrame, np.ndarray]): model perdictions, nsamples x forecast_horizon x number_features
-
+            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
         """
 
         if isinstance(y_cal_pred, pd.DataFrame):
-            y_cal_pred = self._get_numpy_input(y_cal_pred)
+            id_column_values = y_cal_pred[self.id_columns].values
+            y_cal_pred = self._get_numpy_input(y_cal_pred, id_columns=self.id_columns)
 
         if isinstance(y_cal_gt, pd.DataFrame):
-            y_cal_gt = self._get_numpy_input(y_cal_gt)
+            y_cal_gt = self._get_numpy_input(y_cal_gt, id_columns=self.id_columns)
+
+        if (isinstance(y_cal_pred, pd.DataFrame) and not isinstance(y_cal_gt, pd.DataFrame)) or (
+            not isinstance(y_cal_pred, pd.DataFrame) and isinstance(y_cal_gt, pd.DataFrame)
+        ):
+            # limits to our flexibility here
+            raise ValueError("Stop it")
+
+        #### !!!!!
+        ### to do: ensure that y_cal_pred / y_cal_gt are ordered similarly (same dim and same id column values)
 
         if len(y_cal_pred.shape) != 3:
             raise ValueError("y_cal_pred should have 3 dimensions: nsamples x forecast_horizon x number_features")
@@ -278,7 +295,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if len(y_cal_gt.shape) != 3:
             raise ValueError("y_cal_gt should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
-        if id_column is None:
+        if id_column_values is None:
             self.model.fit(
                 y_cal_gt=y_cal_gt,
                 y_cal_pred=y_cal_pred,  # ttm predicted values
@@ -287,8 +304,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         else:
             ### Initialize and fit a dictionary of models ###
             self.model = {}
-            for g in np.unique(id_column):
-                idx = np.where(id_column == g)[0]  # indices for this group
+            for g in np.unique(id_column_values):
+                idx = np.where(id_column_values == g)[0]  # indices for this group
                 y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
                 if y_cal_pred_g.shape[0] < self.critical_size:
                     raise ValueError(
@@ -312,19 +329,25 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         return self
 
     def predict(
-        self, y_test_pred: Union[pd.DataFrame, np.ndarray], quantiles: List[float] = [], id_column: np.ndarray = None
+        self,
+        y_test_pred: Union[pd.DataFrame, np.ndarray],
+        quantiles: List[float] = [],
+        id_column_values: np.ndarray = None,
     ) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
 
         Args:
             y_test_pred (Union[pd.DataFrame, np.ndarray]): nsamples x forecast_horizon x number_features
+            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
 
         Returns:
             y_test_prob_pred (np.ndarray): nsamples x forecast_horizon x number_features x len(quantiles)
         """
 
         if isinstance(y_test_pred, pd.DataFrame):
-            y_test_pred = self._get_numpy_input(y_test_pred)
+            id_column_values = y_test_pred[self.id_columns].values
+            y_test_pred = self._get_numpy_input(y_test_pred, id_columns=self.id_columns)
 
         if len(quantiles) == 0:
             quantiles = self.quantiles
@@ -334,21 +357,21 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         ), " y_test_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
 
         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
-        if id_column is None:
+        if id_column_values is None:
             assert not isinstance(
                 self.model, dict
             ), "Probabilistic processor models were trained with id_columns and no id_column was provided as an input. Please provide id_columns."
             groups_unique_dummy = [None]
         else:
-            groups_unique_dummy = np.unique(id_column)
+            groups_unique_dummy = np.unique(id_column_values)
         for g in groups_unique_dummy:
-            if id_column is None:
+            if id_column_values is None:
                 model = self.model
                 y_test_pred_g = y_test_pred
                 idx = np.arange(y_test_prob_pred.shape[0])
             else:
                 model = self.model[g]
-                idx = np.where(id_column == g)[0]
+                idx = np.where(id_column_values == g)[0]
                 y_test_pred_g = y_test_pred[idx]
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 ix_q = 0
@@ -387,7 +410,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self,
         y_gt: Union[pd.DataFrame, np.ndarray],
         y_pred: Union[pd.DataFrame, np.ndarray],
-        id_column: np.ndarray = None,
+        id_column_values: np.ndarray = None,
         X: np.ndarray = None,
         timestamps: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
@@ -397,23 +420,26 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         Args:
             y_gt (Union[pd.DataFrame, np.ndarray]): Ground truth values. Shape: (n_samples, forecast_length, num_features).
             y_pred (Union[pd.DataFrame, np.ndarray]): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
 
         if isinstance(y_gt, pd.DataFrame):
-            y_gt = self._get_numpy_input(y_gt)
+            id_column_values = y_gt[self.id_columns].values
+            y_gt = self._get_numpy_input(y_gt, id_columns=self.id_columns)
         if isinstance(y_pred, pd.DataFrame):
-            y_pred = self._get_numpy_input(y_pred)
+            y_pred = self._get_numpy_input(y_pred, id_columns=self.id_columns)
 
-        if id_column is None:
+        if id_column_values is None:
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
             if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model.update(y_gt=y_gt, y_pred=y_pred)
         else:
-            for g in np.unique(id_column):
-                idx = np.where(id_column == g)[0]
+            for g in np.unique(id_column_values):
+                idx = np.where(id_column_values == g)[0]
                 y_pred_g, y_gt_g = y_pred[idx], y_gt[idx]
                 X_g = X
                 timestamps_g = timestamps
