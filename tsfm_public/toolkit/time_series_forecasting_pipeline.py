@@ -482,7 +482,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         if self._probabilistic_processor is not None:
             # get the conformal bounds and add to the forecasts on the test set
             if "id_columns" in kwargs:
-                predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns], id_column=out[kwargs["id_columns"]].values)
+                predictions_conformal = self._probabilistic_processor.predict(
+                    out[prediction_columns], id_column=out[kwargs["id_columns"]].values
+                )
             else:
                 predictions_conformal = self._probabilistic_processor.predict(out[prediction_columns])
 
