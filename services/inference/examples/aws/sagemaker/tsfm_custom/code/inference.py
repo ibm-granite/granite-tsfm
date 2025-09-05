@@ -14,8 +14,13 @@ logger.setLevel(logging.DEBUG)
 
 
 # clue sagemaker runtime into some things
-os.environ["TSFM_ALLOW_LOAD_FROM_HF_HUB"] = "0"
-os.environ["TSFM_MODEL_DIR"] = os.path.join(os.path.dirname(__file__), "granite-tsfm/services/inference/mytest-tsfm")
+if not os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB"):
+    os.environ["TSFM_ALLOW_LOAD_FROM_HF_HUB"] = "0"
+
+if not os.getenv("TSFM_MODEL_DIR"):
+    os.environ["TSFM_MODEL_DIR"] = os.path.join(
+        os.path.dirname(__file__), "granite-tsfm/services/inference/mytest-tsfm"
+    )
 
 # service components are not git installable directly
 # so hack it a bit this way

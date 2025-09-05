@@ -290,7 +290,10 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             for g in np.unique(id_column):
                 idx = np.where(id_column == g)[0]  # indices for this group
                 y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
-                assert y_cal_pred_g.shape[0] >= self.critical_size, " Group id did not have enough calibration points."
+                if y_cal_pred_g.shape[0] < self.critical_size:
+                    raise ValueError(
+                        f"id {g} has only {y_cal_pred_g.shape[0]} rows of data which is less than the minimum number {self.critical_size}"
+                    )
                 if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                     self.model[g] = WeightedConformalForecasterWrapper(
                         window_size=self.window_size,
@@ -881,11 +884,11 @@ class WeightedConformalForecasterWrapper:
         window_critical_size = int(np.ceil(1 / self.false_alarm))
         if (self.window_size < window_critical_size) and (y_cal_pred.shape[0] >= window_critical_size):
             self.window_size = window_critical_size
-        assert (
-            self.window_size >= window_critical_size
-        ), "Not enough calibration points for the desired error rate. For an error rate of {} we need at least {} calibration points".format(
-            self.false_alarm, window_critical_size
-        )
+
+        if self.window_size < window_critical_size:
+            raise ValueError(f"""Not enough calibration points for the
+                             desired error rate. For an error rate of {self.false_alarm}
+                             we need at least {window_critical_size} calibration points""")
 
         self.univariate_wrappers = {}
         for ix_f in range(y_cal_pred.shape[2]):
@@ -1282,9 +1285,11 @@ class WeightedConformalWrapper:
 
         score_threshold = []
         n_cal_scores = cal_scores.shape[0]
-        assert n_cal_scores >= np.ceil(1 / false_alarm), " not enough calibration scores for error rate " + str(
-            false_alarm
-        )
+        min_required = np.ceil(1 / false_alarm)
+        if n_cal_scores < min_required:
+            raise ValueError(f"""There are not enough calibration scores for error rate of {false_alarm}.
+                             {n_cal_scores} provied but we require {min_required}, try increasing the
+                             the number of rows of calibration data.""")
         if self.threshold_function == ThresholdFunction.WEIGHTING.value:  # "weighting":
             if self.nonconformity_score in [s.value for s in PositiveNonconformityScores]:
                 if len(cal_weights.shape) == 1:  # same weights for all y
