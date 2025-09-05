@@ -274,7 +274,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
 
         if isinstance(y_cal_pred, pd.DataFrame):
-            id_column_values = y_cal_pred[self.id_columns].values
+            id_column_values = y_cal_pred[self.id_columns].values if self.id_columns else []
             y_cal_pred = self._get_numpy_input(y_cal_pred, id_columns=self.id_columns)
 
         if isinstance(y_cal_gt, pd.DataFrame):
@@ -346,7 +346,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
 
         if isinstance(y_test_pred, pd.DataFrame):
-            id_column_values = y_test_pred[self.id_columns].values
+            id_column_values = y_test_pred[self.id_columns].values if self.id_columns else []
             y_test_pred = self._get_numpy_input(y_test_pred, id_columns=self.id_columns)
 
         if len(quantiles) == 0:
@@ -427,7 +427,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
 
         if isinstance(y_gt, pd.DataFrame):
-            id_column_values = y_gt[self.id_columns].values
+            id_column_values = y_gt[self.id_columns].values if self.id_columns else []
             y_gt = self._get_numpy_input(y_gt, id_columns=self.id_columns)
         if isinstance(y_pred, pd.DataFrame):
             y_pred = self._get_numpy_input(y_pred, id_columns=self.id_columns)
