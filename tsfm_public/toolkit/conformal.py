@@ -283,8 +283,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if (isinstance(y_cal_pred, pd.DataFrame) and not isinstance(y_cal_gt, pd.DataFrame)) or (
             not isinstance(y_cal_pred, pd.DataFrame) and isinstance(y_cal_gt, pd.DataFrame)
         ):
-            # limits to our flexibility here
-            raise ValueError("Stop it")
+            raise ValueError("When one of y_cal_gt or y_cal_pred is a dataframe both are expected to be a dataframe.")
 
         #### !!!!!
         ### to do: ensure that y_cal_pred / y_cal_gt are ordered similarly (same dim and same id column values)
@@ -304,8 +303,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         else:
             ### Initialize and fit a dictionary of models ###
             self.model = {}
-            for g in np.unique(id_column_values):
-                idx = np.where(id_column_values == g)[0]  # indices for this group
+            for g in np.unique(id_column_values, axis=0):
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]  # indices for this group
+                g = tuple(g)  # tuple(gg.item() for gg in g)
                 y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
                 if y_cal_pred_g.shape[0] < self.critical_size:
                     raise ValueError(
@@ -363,15 +363,16 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             ), "Probabilistic processor models were trained with id_columns and no id_column was provided as an input. Please provide id_columns."
             groups_unique_dummy = [None]
         else:
-            groups_unique_dummy = np.unique(id_column_values)
+            groups_unique_dummy = np.unique(id_column_values, axis=0)
         for g in groups_unique_dummy:
+            g = tuple(g)  # tuple(gg.item() for gg in g)
             if id_column_values is None:
                 model = self.model
                 y_test_pred_g = y_test_pred
                 idx = np.arange(y_test_prob_pred.shape[0])
             else:
                 model = self.model[g]
-                idx = np.where(id_column_values == g)[0]
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 y_test_pred_g = y_test_pred[idx]
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 ix_q = 0
@@ -438,8 +439,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model.update(y_gt=y_gt, y_pred=y_pred)
         else:
-            for g in np.unique(id_column_values):
-                idx = np.where(id_column_values == g)[0]
+            for g in np.unique(id_column_values, axis=0):
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 y_pred_g, y_gt_g = y_pred[idx], y_gt[idx]
                 X_g = X
                 timestamps_g = timestamps

@@ -593,7 +593,8 @@ def example_dataset():
     return target_variables, df
 
 
-def test_posthoc_probabilistic_processor_with_id_columns():
+@pytest.mark.parametrize("id_columns", [["id_column"], ["id_column", "id_column2"]])
+def test_posthoc_probabilistic_processor_with_id_columns(id_columns):
     target_variables, dataset = example_dataset()
     forecast_horizon = 30
     model = TinyTimeMixerForPrediction(
@@ -601,8 +602,9 @@ def test_posthoc_probabilistic_processor_with_id_columns():
             context_length=120, prediction_length=forecast_horizon, num_input_channels=len(target_variables)
         )
     )
-    id_columns = ["id_column"]
     dataset[id_columns[0]] = [1 if x < len(dataset) / 2 else 2 for x in range(len(dataset))]
+    for col in id_columns[1:]:
+        dataset[col] = dataset[id_columns[0]]
     fpipe = TimeSeriesForecastingPipeline(
         model, timestamp_column="timestamp", id_columns=id_columns, target_columns=target_variables, device="cpu"
     )
@@ -626,7 +628,9 @@ def test_posthoc_probabilistic_processor_with_id_columns():
     sel_idx = g1_idx.append(g2_idx)
     y_cal_gt = y_gt.loc[sel_idx]
     y_cal_pred = y_pred.loc[sel_idx]
-    id_columns_cal = forecasts["id_column"].copy().loc[sel_idx]
+
+    id_columns_cal = forecasts[id_columns].drop_duplicates().values
+    # id_columns_cal = forecasts["id_column"].copy().loc[sel_idx].values.reshape(-1,1)
 
     # Test
     g1_idx = forecasts.loc[forecasts["id_column"].eq(1)].index
@@ -638,7 +642,7 @@ def test_posthoc_probabilistic_processor_with_id_columns():
     sel_idx = g1_idx.append(g2_idx)
     # y_test_gt = y_gt.loc[sel_idx]
     y_test_pred = y_pred.loc[sel_idx]
-    id_columns_test = forecasts["id_column"].copy().loc[sel_idx]
+    # id_columns_test = forecasts["id_column"].copy().loc[sel_idx]
 
     for method in [PostHocProbabilisticMethod.GAUSSIAN.value, PostHocProbabilisticMethod.CONFORMAL.value]:
         if method == PostHocProbabilisticMethod.CONFORMAL.value:
@@ -648,14 +652,14 @@ def test_posthoc_probabilistic_processor_with_id_columns():
         for nonconformity_score in nonconformity_score_list:
             # print(method,nonconformity_score )
             p = PostHocProbabilisticProcessor(
-                id_columns=["id_column"],
+                id_columns=id_columns,
                 window_size=window_size,
                 quantiles=quantiles,
                 nonconformity_score=nonconformity_score,
                 method=method,
             )
-            p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred, id_column_values=id_columns_cal)
-            y_test_prob_pred = p.predict(y_test_pred, id_column_values=id_columns_test)
+            p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)  # , id_column_values=id_columns_cal)
+            y_test_prob_pred = p.predict(y_test_pred)  #  id_column_values=id_columns_test)
 
             ### ASSERTIONS ###
 
@@ -681,10 +685,11 @@ def test_posthoc_probabilistic_processor_with_id_columns():
                 method, nonconformity_score
             )
 
-            for g in np.unique(id_columns_cal):
+            for g in id_columns_cal:
+                g = tuple(g)
                 assert (
                     p.model[g].window_size == window_size
-                ), " window_size attribute of processors model wasnt assigned properly for method {} nonconformity score {} for group {}".format(
+                ), " window_size attribute of processors model wasn't assigned properly for method {} nonconformity score {} for group {}".format(
                     method, nonconformity_score, g
                 )
 
