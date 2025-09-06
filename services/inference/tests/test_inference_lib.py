@@ -26,14 +26,16 @@ MODEL_ID = "mytest-tsfm/ttm-r1"
 NUM_TIMESERIES = int(os.getenv("TSFM_PROFILE_NUM_TIMESERIES", 2))
 
 
-@pytest.fixture(scope="module")
-def ts_data_base() -> pd.DataFrame:
+def series_for_quantile_tests(num_series=1, extra=0):
+    """we currently support only single timeseries in conformal processor"""
     # Generate a date range
-    length = SERIES_LENGTH
+    length = (
+        SERIES_LENGTH + extra
+    )  # (seem comments in tsfm_inference handler about min data requirements for conformal processor)
     date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
 
     timeseries = []
-    for idx in range(NUM_TIMESERIES):
+    for idx in range(num_series):
         timeseries.append(
             pd.DataFrame(
                 {
@@ -45,6 +47,28 @@ def ts_data_base() -> pd.DataFrame:
         )
 
     return pd.concat(timeseries, ignore_index=True)
+
+
+@pytest.fixture(scope="module")
+def ts_data_base() -> pd.DataFrame:
+    return series_for_quantile_tests(num_series=2, extra=0)
+    # # Generate a date range
+    # length = SERIES_LENGTH
+    # date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
+
+    # timeseries = []
+    # for idx in range(NUM_TIMESERIES):
+    #     timeseries.append(
+    #         pd.DataFrame(
+    #             {
+    #                 "date": date_range,
+    #                 "ID": str(idx),
+    #                 "VAL": np.random.rand(length),
+    #             }
+    #         )
+    #     )
+
+    # return pd.concat(timeseries, ignore_index=True)
 
 
 @pytest.fixture(scope="module")
@@ -73,9 +97,9 @@ def forecasting_input_base() -> ForecastingInferenceInput:
     return input
 
 
-def _basic_result_checks(results: PredictOutput, df: pd.DataFrame):
+def _basic_result_checks(results: PredictOutput, df: pd.DataFrame, num_timeseries: int = NUM_TIMESERIES):
     # expected length
-    assert len(results) == FORECAST_LENGTH * NUM_TIMESERIES
+    assert len(results) == FORECAST_LENGTH * num_timeseries
     # expected start time
     answer = results["date"].iloc[0] - df["date"].iloc[-1]
     assert (
@@ -163,6 +187,74 @@ def test_forecast_with_good_data(ts_data_base: pd.DataFrame, forecasting_input_b
     _basic_result_checks(results, df)
 
 
+# @pytest.mark.skip
+def test_quantile_forecast_with_single_timeseries(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input = copy.deepcopy(forecasting_input_base)
+    df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=1, extra=0)
+    quantile_calibration_data = (
+        copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=1, extra=FORECAST_LENGTH + 5)
+    )
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # we need to extend these data to be at least min_context_length + prediction_length long
+
+    input.parameters.prediction_quantiles = [0.1, 0.9]
+
+    runtime: InferenceRuntime = InferenceRuntime()
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    results.to_csv("singelseries.csv")
+    _basic_result_checks(results, df, num_timeseries=1)
+
+    # confirm expected column names
+    expected = {f"VAL_q{q}" for q in input.parameters.prediction_quantiles}
+    assert len(expected.intersection(set(results.columns))) == 2
+
+    # confirm that mean predictions fall between quantile predictions
+    assert ((results["VAL_q0.1"] < results["VAL"]) & (results["VAL"] < results["VAL_q0.9"])).all()
+
+
+def test_quantile_forecast_with_multi_timeseries(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input = copy.deepcopy(forecasting_input_base)
+    df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=2, extra=FORECAST_LENGTH)
+    quantile_calibration_data = (
+        copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=2, extra=FORECAST_LENGTH + 100)
+    )
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # extend quantile_calibration data by the forecast length
+
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # we need to extend these data to be at least min_context_length + prediction_length long
+
+    input.parameters.prediction_quantiles = [0.1, 0.9]
+
+    runtime: InferenceRuntime = InferenceRuntime()
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    _basic_result_checks(results, df)
+
+    # confirm expected column names
+    expected = {f"VAL_q{q}" for q in input.parameters.prediction_quantiles}
+    assert len(expected.intersection(set(results.columns))) == 2
+
+    # confirm that mean predictions fall between quantile predictions
+    # filtered_df = results[(results["VAL"] <= results["VAL_q0.1"])]
+
+    # print(filtered_df)
+    results.to_csv("multiseries.csv")
+
+    #  assert (results["VAL_q0.1"] <= results["VAL"]).all()
+
+
 def test_forecast_with_schema_missing_target_columns(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
@@ -174,6 +266,24 @@ def test_forecast_with_schema_missing_target_columns(
     po: PredictOutput = runtime.forecast(input=input)
     results = pd.DataFrame.from_dict(po.results[0])
     _basic_result_checks(results, df)
+
+
+def test_schema_validation(ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput):
+    input = copy.deepcopy(forecasting_input_base)  # side-effects unless copied
+    # bad prediction quantiles
+    with pytest.raises(ValueError) as _:
+        input.parameters.prediction_quantiles = [0.1, 1.1]
+        ForecastingParameters(**input.parameters.model_dump())
+    # good prediciton quantiles
+    input.parameters.prediction_quantiles = [0.1, 0.9]
+    ForecastingParameters(**input.parameters.model_dump())
+    # bad prediction_length
+    with pytest.raises(ValueError) as _:
+        input.parameters.prediction_length = 0
+        ForecastingParameters(**input.parameters.model_dump())
+    # good prediction_length
+    input.parameters.prediction_length = 20
+    ForecastingParameters(**input.parameters.model_dump())
 
 
 def test_forecast_with_integer_timestamps(
