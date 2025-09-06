@@ -13,7 +13,7 @@ import torch
 from scipy.stats import norm
 from transformers.feature_extraction_utils import PreTrainedFeatureExtractor
 
-from tsfm_public.toolkit.processor import BaseProcessor
+from tsfm_public.toolkit.processor import STRING_TO_TYPE, TYPE_TO_STRING, BaseProcessor
 
 
 LOGGER = logging.getLogger(__file__)
@@ -174,7 +174,28 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
         output = super().to_dict()
 
-        output["model"] = output["model"].to_dict()
+        if isinstance(output["model"], dict):
+            model_out = {}
+            for k, v in output["model"].items():
+                model_out[k] = v.to_dict()
+            has_keys = True
+        else:
+            model_out = output["model"].to_dict()
+            has_keys = False
+
+        output["model"] = model_out
+
+        # get type information
+        if has_keys:
+            akey = next(iter(output["model"].keys()))
+            if isinstance(akey, Tuple):
+                key_types = [type(k) for k in akey]
+            else:
+                key_types = [type(akey)]
+        else:
+            key_types = []
+
+        output["id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
 
         return output
 
@@ -187,19 +208,35 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
         dictionary = self.to_dict()
 
+        def serialize_np_scalar(value):
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.floating):
+                return float(value)
+            return value
+
         def recursive_check_ndarray(dictionary):
+            key_map = {}
             for key, value in dictionary.items():
+                if isinstance(key, tuple):
+                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
+                    key_map[key] = new_key
+
                 if key == "dtype":
                     # to do: ensure deserializable
                     dictionary[key] = value.__name__
                 elif isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
-                elif isinstance(value, np.int64):
-                    dictionary[key] = int(value)
+                elif isinstance(value, (np.integer, np.floating)):
+                    dictionary[key] = serialize_np_scalar(value)
                 elif isinstance(value, list):
                     dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
+
+            for key, new_key in key_map.items():
+                dictionary[new_key] = dictionary.pop(key)
+
             return dictionary
 
         dictionary = recursive_check_ndarray(dictionary)
@@ -230,15 +267,39 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
             parameters.
         """
+
+        def deserialize_helper(v, method):
+            if method == PostHocProbabilisticMethod.CONFORMAL.value:
+                return WeightedConformalForecasterWrapper.from_dict(v)
+
+            if method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                return PostHocGaussian.from_dict(v)
+
+            raise ValueError(f"Unknown method provided: {method}")
+
+        def deserialize_key(key, key_types=None):
+            if not key_types:
+                return key
+
+            key = json.loads(key)
+            if isinstance(key, (Tuple, List)):
+                return tuple([STRING_TO_TYPE[k_type](k_item) for k_item, k_type in zip(key, key_types)])
+            else:
+                return STRING_TO_TYPE[key_types[0]](key)
+
+        id_types = feature_extractor_dict.get("id_columns_types", None)
+
         model = feature_extractor_dict.get("model", None)
         if model is not None:
             method = feature_extractor_dict.get("method", None)
-            if method == PostHocProbabilisticMethod.CONFORMAL.value:
-                feature_extractor_dict["model"] = WeightedConformalForecasterWrapper.from_dict(model)
-            elif method == PostHocProbabilisticMethod.GAUSSIAN.value:
-                feature_extractor_dict["model"] = PostHocGaussian.from_dict(model)
+            if id_types:
+                feature_extractor_dict["model"] = {}
+                for k, v in model.items():
+                    feature_extractor_dict["model"][deserialize_key(k, key_types=id_types)] = deserialize_helper(
+                        v, method
+                    )
             else:
-                raise ValueError(f"Unknown method provided: {method}")
+                feature_extractor_dict["model"] = deserialize_helper(model, method)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
@@ -413,9 +474,9 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 y_test_pred_g = y_test_pred
                 idx = np.arange(y_test_prob_pred.shape[0])
             else:
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 g = tuple(g)  # tuple(gg.item() for gg in g)
                 model = self.model[g]
-                idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 y_test_pred_g = y_test_pred[idx]
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 ix_q = 0
