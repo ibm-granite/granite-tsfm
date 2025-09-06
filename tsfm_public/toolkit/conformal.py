@@ -258,23 +258,63 @@ class PostHocProbabilisticProcessor(BaseProcessor):
 
         return np.array([np.stack(z) for z in df[columns].values]).transpose(0, 2, 1)
 
+    @classmethod
+    def _get_unique_id_values(
+        cls,
+        data: Union[np.ndarray, pd.DataFrame],
+        id_column_values: Optional[np.ndarray] = None,
+        id_columns: List[str] = [],
+    ) -> Union[None, np.ndarray]:
+        """Get unique id column values from the data.
+
+        Args:
+            data (Union[np.ndarray, pd.DataFrame]): Either of the following:
+                Dataframe of input data including data for id_columns, in which case id_columns will be used to select the columns.
+                Ndarry of input data, in which case id_column_values should be passed.
+            id_column_values:(np.ndarray, optional): Array of id_column values.
+            id_columns (List[str], optional): ID columns used to select columns when dataframe input is given. Defaults to [].
+
+        Raises:
+            ValueError: When neither ndarray or dataframe input are given
+
+        Returns:
+            Union[None, np.ndarray]: Unique combinations of the id_column values extracted from data. None in the case
+                where no id_columns are specficied and dataframe input is given.
+        """
+
+        if isinstance(data, pd.DataFrame) and id_column_values is not None:
+            raise ValueError("Recevied dataframe input and ndarray of id_column_values")
+
+        if id_column_values is not None:
+            id_data = pd.DataFrame(id_column_values)
+        else:
+            if not id_columns:
+                return None
+            id_data = data[id_columns]
+
+        return id_data.drop_duplicates().values
+
     def train(
         self,
         y_cal_gt: Union[pd.DataFrame, np.ndarray],
         y_cal_pred: Union[pd.DataFrame, np.ndarray],
-        id_column_values: np.ndarray = None,
+        id_column_values: Optional[np.ndarray] = None,
     ) -> "PostHocProbabilisticProcessor":
         """Fit posthoc probabilistic wrapper.
 
         Args:
             y_cal_gt (Union[pd.DataFrame, np.ndarray]):  ground truth values, nsamples x forecast_horizon x number_features
             y_cal_pred (Union[pd.DataFrame, np.ndarray]): model perdictions, nsamples x forecast_horizon x number_features
-            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
                 are passed above
         """
 
+        unique_ids = self._get_unique_id_values(
+            data=y_cal_pred, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
         if isinstance(y_cal_pred, pd.DataFrame):
-            id_column_values = y_cal_pred[self.id_columns].values if self.id_columns else []
+            id_column_values = y_cal_pred[self.id_columns].values if self.id_columns else None
             y_cal_pred = self._get_numpy_input(y_cal_pred, id_columns=self.id_columns)
 
         if isinstance(y_cal_gt, pd.DataFrame):
@@ -285,8 +325,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         ):
             raise ValueError("When one of y_cal_gt or y_cal_pred is a dataframe both are expected to be a dataframe.")
 
-        #### !!!!!
-        ### to do: ensure that y_cal_pred / y_cal_gt are ordered similarly (same dim and same id column values)
+        # to do?: ensure that y_cal_pred / y_cal_gt are ordered similarly (same dim and same id column values)
 
         if len(y_cal_pred.shape) != 3:
             raise ValueError("y_cal_pred should have 3 dimensions: nsamples x forecast_horizon x number_features")
@@ -303,7 +342,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         else:
             ### Initialize and fit a dictionary of models ###
             self.model = {}
-            for g in np.unique(id_column_values, axis=0):
+            for g in unique_ids:
                 idx = np.where(np.all(id_column_values == g, axis=1))[0]  # indices for this group
                 g = tuple(g)  # tuple(gg.item() for gg in g)
                 y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
@@ -332,21 +371,25 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self,
         y_test_pred: Union[pd.DataFrame, np.ndarray],
         quantiles: List[float] = [],
-        id_column_values: np.ndarray = None,
+        id_column_values: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
 
         Args:
             y_test_pred (Union[pd.DataFrame, np.ndarray]): nsamples x forecast_horizon x number_features
-            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
                 are passed above
 
         Returns:
             y_test_prob_pred (np.ndarray): nsamples x forecast_horizon x number_features x len(quantiles)
         """
 
+        unique_ids = self._get_unique_id_values(
+            data=y_test_pred, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
         if isinstance(y_test_pred, pd.DataFrame):
-            id_column_values = y_test_pred[self.id_columns].values if self.id_columns else []
+            id_column_values = y_test_pred[self.id_columns].values if self.id_columns else None
             y_test_pred = self._get_numpy_input(y_test_pred, id_columns=self.id_columns)
 
         if len(quantiles) == 0:
@@ -363,14 +406,14 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             ), "Probabilistic processor models were trained with id_columns and no id_column was provided as an input. Please provide id_columns."
             groups_unique_dummy = [None]
         else:
-            groups_unique_dummy = np.unique(id_column_values, axis=0)
+            groups_unique_dummy = unique_ids
         for g in groups_unique_dummy:
-            g = tuple(g)  # tuple(gg.item() for gg in g)
             if id_column_values is None:
                 model = self.model
                 y_test_pred_g = y_test_pred
                 idx = np.arange(y_test_prob_pred.shape[0])
             else:
+                g = tuple(g)  # tuple(gg.item() for gg in g)
                 model = self.model[g]
                 idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 y_test_pred_g = y_test_pred[idx]
@@ -411,7 +454,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self,
         y_gt: Union[pd.DataFrame, np.ndarray],
         y_pred: Union[pd.DataFrame, np.ndarray],
-        id_column_values: np.ndarray = None,
+        id_column_values: Optional[np.ndarray] = None,
         X: np.ndarray = None,
         timestamps: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
@@ -421,14 +464,18 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         Args:
             y_gt (Union[pd.DataFrame, np.ndarray]): Ground truth values. Shape: (n_samples, forecast_length, num_features).
             y_pred (Union[pd.DataFrame, np.ndarray]): Predicted values. Shape: (n_samples,forecast_length, num_features).
-            id_column_values: (np.ndarray): array of id column values, used for handling multi-series input only when numpy arrays
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
                 are passed above
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
 
+        unique_ids = self._get_unique_id_values(
+            data=y_gt, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
         if isinstance(y_gt, pd.DataFrame):
-            id_column_values = y_gt[self.id_columns].values if self.id_columns else []
+            id_column_values = y_gt[self.id_columns].values if self.id_columns else None
             y_gt = self._get_numpy_input(y_gt, id_columns=self.id_columns)
         if isinstance(y_pred, pd.DataFrame):
             y_pred = self._get_numpy_input(y_pred, id_columns=self.id_columns)
@@ -439,7 +486,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model.update(y_gt=y_gt, y_pred=y_pred)
         else:
-            for g in np.unique(id_column_values, axis=0):
+            for g in unique_ids:
                 idx = np.where(np.all(id_column_values == g, axis=1))[0]
                 y_pred_g, y_gt_g = y_pred[idx], y_gt[idx]
                 X_g = X
