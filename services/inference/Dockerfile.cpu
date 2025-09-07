@@ -8,6 +8,7 @@ RUN microdnf upgrade -y \
     && microdnf install -y python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-pip \
     python${PYTHON_VERSION}-wheel \
+    git \
     && pip${PYTHON_VERSION} install pip -U \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && groupadd --system tsfm --gid 1001 \

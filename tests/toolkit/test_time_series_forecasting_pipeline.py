@@ -3,11 +3,13 @@
 
 """Tests the time series preprocessor and functions"""
 
+import numpy as np
 import pandas as pd
 import pytest
 from transformers import PatchTSTConfig, PatchTSTForPrediction
 
 from tsfm_public import TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public.toolkit.conformal import PostHocProbabilisticMethod, PostHocProbabilisticProcessor
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
@@ -284,3 +286,91 @@ def test_prediction_filter_length(etth_data):
     forecasts = forecast_pipeline(train_data.iloc[:200])
 
     assert len(forecasts[f"{target_columns[0]}_prediction"].iloc[0]) == pfl
+
+
+def test_probabilistic_forecasts(etth_data):
+    train_data, test_data, params = etth_data
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl)
+    model = TinyTimeMixerForPrediction(config=conf)
+
+    timestamp_column = params["timestamp_column"]
+    id_columns = params["id_columns"]
+    target_columns = params["target_columns"]
+    context_length = conf.context_length
+    prediction_length = conf.prediction_length
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        freq="1h",
+        scaling=True,
+    )
+
+    tsp.train(train_data)
+
+    assert model.config.prediction_filter_length == pfl
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=False,
+        inverse_scale_outputs=True,
+        device="cpu",
+        batch_size=100,
+    )
+
+    forecasts_cal = forecast_pipeline(train_data.iloc[-200:])
+
+    conformal = PostHocProbabilisticProcessor(
+        window=100, quantiles=[0.1, 0.9], method=PostHocProbabilisticMethod.CONFORMAL.value
+    )
+
+    # prepare calibration data
+    prediction_columns = [f"{c}_prediction" for c in target_columns]
+    ground_truth_columns = target_columns
+    y = forecasts_cal[prediction_columns].values
+    predictions_cal = np.array([np.stack(z) for z in y]).transpose(0, 2, 1)
+    predictions_cal = predictions_cal[:-prediction_length, ...]
+    x = forecasts_cal[ground_truth_columns].values
+    ground_truth_cal = np.array([np.stack(z) for z in x]).transpose(0, 2, 1)
+    ground_truth_cal = ground_truth_cal[:-prediction_length, :pfl, ...]
+
+    conformal.train(ground_truth_cal, predictions_cal)
+
+    # generate forecasts on test data with conformal bounds
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=False,
+        inverse_scale_outputs=True,
+        device="cpu",
+        probabilistic_processor=conformal,
+        batch_size=100,
+    )
+
+    forecasts = forecast_pipeline(test_data)
+
+    assert len(forecasts[f"{target_columns[0]}_prediction"].iloc[0]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_prediction_q{conformal.quantiles[0]}"].iloc[0]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_prediction_q{conformal.quantiles[1]}"].iloc[0]) == pfl
+
+    # with explode
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=True,
+        inverse_scale_outputs=True,
+        device="cpu",
+        probabilistic_processor=conformal,
+        batch_size=100,
+    )
+
+    forecasts = forecast_pipeline(test_data[-context_length:])
+
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[0]}"]) == pfl
+    assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[1]}"]) == pfl

@@ -4,7 +4,7 @@
 
 import inspect
 from collections import defaultdict
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ from transformers.pipelines.base import (
 from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils import add_end_docstrings, logging
 
+from .conformal import PostHocProbabilisticProcessor
 from .dataset import ForecastDFDataset
 from .time_series_preprocessor import create_timestamps, extend_time_series
 
@@ -126,6 +127,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         explode_forecasts: bool = False,
         inverse_scale_outputs: bool = True,
         add_known_ground_truth: bool = True,
+        probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         kwargs["explode_forecasts"] = explode_forecasts
@@ -167,6 +169,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
         else:
             kwargs["frequency_token"] = None
+
+        self._probabilistic_processor = probabilistic_processor
 
         super().__init__(model, *args, **kwargs)
 
@@ -467,6 +471,27 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
 
+        # inverse scale if we have a feature extractor
+        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
+            out = self.feature_extractor.inverse_scale_targets(out)
+            if add_known_ground_truth:
+                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+
+        # add probabilistic
+        conformal_cols = []
+        if self._probabilistic_processor is not None:
+            # get the conformal bounds and add to the forecasts on the test set
+            predictions_conformal = self._probabilistic_processor.predict(
+                out[prediction_columns + kwargs["id_columns"]]
+            )
+
+            for j, q in enumerate(self._probabilistic_processor.quantiles):
+                for i, c in enumerate(prediction_columns):
+                    col = f"{c}_q{q}"
+                    out[col] = predictions_conformal[..., i, j].tolist()
+                    conformal_cols.append(col)
+                    # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
             # explode == expand the lists in the dataframe
@@ -483,6 +508,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                         tmp[c] = row[c]
                 for p in prediction_columns:
                     tmp[p] = row[p]
+                for c in conformal_cols:
+                    tmp[c] = row[c]
 
                 out_explode.append(pd.DataFrame(tmp))
 
@@ -498,11 +525,5 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         cols_ordered.extend([c for c in cols if c not in cols_ordered])
 
         out = out[cols_ordered]
-
-        # inverse scale if we have a feature extractor
-        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out)
-            if add_known_ground_truth:
-                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out

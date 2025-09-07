@@ -114,7 +114,7 @@ class TinyTimeMixerADUtility(TSADHelperUtility):
                 outlier_label=False,
                 aggregation=None,  # aggregation is done outside this method
             )
-            print(f"Outlier score shape {outlier_score.shape}")
+            # print(f"Outlier score shape {outlier_score.shape}")
             scores[AnomalyScoreMethods.PROBABILISTIC.value] = (
                 outlier_score if expand_score else np.mean(outlier_score, axis=2)
             )
