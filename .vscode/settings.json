@@ -51,4 +51,7 @@
       "packageManager": "ms-python.python:pip"
     }
   ],
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
   }
