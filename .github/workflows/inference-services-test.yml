@@ -36,8 +36,6 @@ jobs:
         cd services/inference
         poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev
-        cd ../../
-        pip install -e .
     - name: Test local server
       run: |
         source .venv/bin/activate
