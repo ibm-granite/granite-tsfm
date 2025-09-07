@@ -247,6 +247,43 @@ def test_quantile_forecast_with_multi_timeseries(
     assert ((results["VAL_q0.1"] < results["VAL"]) & (results["VAL"] < results["VAL_q0.9"])).all()
 
 
+def test_quantile_forecast_with_multi_timeseries_and_compound_id(
+    ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
+):
+    input = copy.deepcopy(forecasting_input_base)
+    df = copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=2, extra=FORECAST_LENGTH)
+    quantile_calibration_data = (
+        copy.deepcopy(ts_data_base) if False else series_for_quantile_tests(num_series=2, extra=FORECAST_LENGTH + 100)
+    )
+
+    # add another id col
+    df.insert(1, "ID2", ["B" for _ in range(len(df))])
+    quantile_calibration_data.insert(1, "ID2", ["B" for _ in range(len(quantile_calibration_data))])
+    input.schema.id_columns.append("ID2")
+
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # extend quantile_calibration data by the forecast length
+
+    input.data = df.to_dict(orient="list")
+    input.quantile_calibration_data = quantile_calibration_data.to_dict(orient="list")
+
+    # we need to extend these data to be at least min_context_length + prediction_length long
+
+    input.parameters.prediction_quantiles = [0.1, 0.9]
+
+    runtime: InferenceRuntime = InferenceRuntime()
+    po: PredictOutput = runtime.forecast(input=input)
+    results = pd.DataFrame.from_dict(po.results[0])
+    _basic_result_checks(results, df)
+
+    # confirm expected column names
+    expected = {f"VAL_q{q}" for q in input.parameters.prediction_quantiles}
+    assert len(expected.intersection(set(results.columns))) == 2
+    assert ((results["VAL_q0.1"] < results["VAL"]) & (results["VAL"] < results["VAL_q0.9"])).all()
+
+
 def test_forecast_with_schema_missing_target_columns(
     ts_data_base: pd.DataFrame, forecasting_input_base: ForecastingInferenceInput
 ):
