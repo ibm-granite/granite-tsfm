@@ -1,3 +1,3 @@
 # Copyright contributors to the TSFM project
 #
-from . import tinytimemixer, tspulse
+from . import tinytimemixer, tspulse, flowstate

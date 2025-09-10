@@ -48,6 +48,7 @@ _import_structure = {
     "models": [],
     "models.tinytimemixer": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyTimeMixerConfig"],
     "models.tspulse": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TSPulseConfig"],
+    "models.flowstate": ["FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlowStateConfig"],
     "toolkit": [
         "TimeSeriesPreprocessor",
         "TimeSeriesForecastingPipeline",
@@ -91,6 +92,14 @@ _import_structure["models.tspulse"].extend(
         "TSPulseForClassification",
     ]
 )
+_import_structure["models.flowstate"].extend(
+    [
+        "FLOWSTATE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FlowStatePreTrainedModel",
+        "FlowStateModel",
+        "FlowStateForPrediction",
+    ]
+)
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -111,6 +120,14 @@ if TYPE_CHECKING:
         TSPulseForReconstruction,
         TSPulseModel,
         TSPulsePreTrainedModel,
+    )
+    from .models.flowstate import (
+        FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FLOWSTATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FlowStateConfig,
+        FlowStateForPrediction,
+        FlowStateModel,
+        FlowStatePreTrainedModel,
     )
     from .toolkit import (
         ClassificationDFDataset,
