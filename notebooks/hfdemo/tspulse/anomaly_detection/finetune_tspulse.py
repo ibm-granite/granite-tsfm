@@ -250,7 +250,7 @@ if __name__ == "__main__":
     print("Creating dataset from all data.")
     input_c = None
     for filename in tqdm(all_files):
-        df = pd.read_csv(os.path.join(args.data_direc, filename), index_col=None).dropna()
+        df = pd.read_csv(os.path.join(args.data_direc, filename), index_col=None)
         col_names = df.columns
 
         if args.target_columns is not None:
@@ -260,7 +260,8 @@ if __name__ == "__main__":
             skip_column_names = col_names[skip_columns]
             col_names = [c for c in col_names if c not in skip_column_names]
 
-        data = df[col_names].values.astype(float)
+        df = df[col_names].dropna()
+        data = df.values.astype(float)
 
         if input_c is None:
             input_c = data.shape[-1]
