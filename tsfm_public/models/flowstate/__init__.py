@@ -30,15 +30,7 @@ else:
         "FlowStateForPrediction",
     ]
 
-    _import_structure["utils_gift_utils"] = [
-        "get_fixed_factor"
-    ]
-    
-    _import_structure["utils_gift_wrapper"] = [
-        "FlowState_Gift_Wrapper",
-        "Gift_Forecast",
-    ]
-
+    _import_structure["utils_utils"] = ["get_fixed_factor"]
 
 if TYPE_CHECKING:
     from .configuration_flowstate import (
@@ -54,16 +46,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_flowstate import (
             FLOWSTATE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FlowStateModel,
             FlowStateForPrediction,
+            FlowStateModel,
         )
-        from .utils.gift_utils import (
-            get_fixed_factor
-        )
-        from .utils.gift_wrapper import (
-            SSM_Gift_Wrapper,
-            Gift_Forecast,
-        )
+        from .utils.utils import get_fixed_factor
 
 else:
     import sys

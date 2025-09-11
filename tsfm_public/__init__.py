@@ -103,6 +103,14 @@ _import_structure["models.flowstate"].extend(
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
+    from .models.flowstate import (
+        FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FLOWSTATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FlowStateConfig,
+        FlowStateForPrediction,
+        FlowStateModel,
+        FlowStatePreTrainedModel,
+    )
     from .models.tinytimemixer import (
         TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -120,14 +128,6 @@ if TYPE_CHECKING:
         TSPulseForReconstruction,
         TSPulseModel,
         TSPulsePreTrainedModel,
-    )
-    from .models.flowstate import (
-        FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FLOWSTATE_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FlowStateConfig,
-        FlowStateForPrediction,
-        FlowStateModel,
-        FlowStatePreTrainedModel,
     )
     from .toolkit import (
         ClassificationDFDataset,
