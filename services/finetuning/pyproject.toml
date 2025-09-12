@@ -46,7 +46,7 @@ urllib3 = { version = ">=1.26.19" }  # see https://github.com/urllib3/urllib3/se
 Jinja2 = { version = ">=3.1.6" }     # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
 torch = { version = "==2.8.0" }
 h11 = { version = ">=0.16.0" }       # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
-transformers = { version = ">=4.48.0,<4.51" } # https://github.com/huggingface/accelerate/issues/3542
+transformers = { version = ">=4.53,<4.54" } # https://github.com/huggingface/accelerate/issues/3542
 
 [tool.poetry.group.dev]
 optional = true
