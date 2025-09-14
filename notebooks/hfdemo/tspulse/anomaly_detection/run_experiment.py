@@ -38,12 +38,12 @@ def run_tsad_pipeline(
     num_epochs=20,
     freeze_backbone=False,
     validation_fraction=0.2,
-    decoder_mode='common_channels',
+    decoder_mode="common_channels",
     lr=1e-4,
     **kwargs,
 ):
     from utility.model import TSAD_Pipeline
-    
+
     finetune = finetune and (data_train is not None)
 
     clf = TSAD_Pipeline(
@@ -56,7 +56,7 @@ def run_tsad_pipeline(
         finetune_validation=validation_fraction,
         finetune_freeze_backbone=freeze_backbone,
         finetune_epochs=num_epochs,
-        finetune_lr=lr
+        finetune_lr=lr,
     )
     if finetune:
         clf.fit(data_train)
@@ -96,10 +96,10 @@ def process_file(filename, args):
             prediction_mode=args.mode,
             smoothing_window=args.smooth,
             batch_size=args.batch_size,
-            finetune_epochs=args.epochs, 
+            finetune_epochs=args.epochs,
             finetune_decoder_mode=args.decoder,
             finetune_freeze_backbone=args.freeze_bb,
-            finetune_seed=args.seed
+            finetune_seed=args.seed,
         )
 
         output = run_tsad_pipeline(data, **extra_kwargs)
@@ -161,12 +161,9 @@ if __name__ == "__main__":
         default="Datasets/File_List/TSB-AD-U-Eva.csv",
         help="file containing list of valid csv files.",
     )
-    
+
     parser.add_argument(
-        "--out_file", 
-        type=str, 
-        default="TSB_results.csv", 
-        help="output file where the results will be stored."
+        "--out_file", type=str, default="TSB_results.csv", help="output file where the results will be stored."
     )
     parser.add_argument(
         "--dataset",
@@ -175,71 +172,38 @@ if __name__ == "__main__":
         default="#",
         help="optional file selector parameter, if specified runs experiment only on the files containing the string.",
     )
+    parser.add_argument("--batch_size", type=int, default=128, help="batch size used by the TSAD pipeline.")
+
     parser.add_argument(
-        "--batch_size", 
-        type=int, 
-        default=128, 
-        help="batch size used by the TSAD pipeline."
+        "--score_window", type=int, default=96, help="optional parameter to specify the scoring window size."
     )
-    
+
     parser.add_argument(
-        "--score_window", 
-        type=int, 
-        default=96, 
-        help="optional parameter to specify the scoring window size."
+        "--mode", type=str, default="forecast+fft+time", help="running mode for the TSPulse AD pipeline."
     )
-    
+
+    parser.add_argument("--smooth", type=int, default=8, required=False, help="score smoothing window specification.")
+
     parser.add_argument(
-        "--mode", 
-        type=str,
-        default="forecast+fft+time", 
-        help="running mode for the TSPulse AD pipeline."
+        "--finetune", action="store_true", help="if provided model will be finetuned before inference!"
     )
-    
+
+    parser.add_argument("--epochs", type=int, default=20, required=False, help="Maximum number of epochs to run!")
+
     parser.add_argument(
-        "--smooth", 
-        type=int, 
-        default=8, 
-        required=False,
-        help="score smoothing window specification."
+        "--decoder", type=str, default="common_channel", required=False, help="decoder mode for the TSPulse model"
     )
-    
-    parser.add_argument(
-        "--finetune", 
-        action='store_true',
-        help="if provided model will be finetuned before inference!"
-    )
-    
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=20,
-        required=False,
-        help="Maximum number of epochs to run!"
-    )
-    
-    parser.add_argument(
-        "--decoder",
-        type=str,
-        default='common_channel',
-        required=False,
-        help="decoder mode for the TSPulse model"
-    )
-    
-    parser.add_argument(
-        "--freeze_bb",
-        action="store_true",
-        help="freeze the backbone during finetuning"
-    )
-    
+
+    parser.add_argument("--freeze_bb", action="store_true", help="freeze the backbone during finetuning")
+
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
         required=False,
-        help="seed for random number generation for result reproducibility!"
+        help="seed for random number generation for result reproducibility!",
     )
-    
+
     args = parser.parse_args()
     print(args)
 
