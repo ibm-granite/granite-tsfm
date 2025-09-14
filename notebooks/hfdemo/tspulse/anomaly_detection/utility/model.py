@@ -126,10 +126,9 @@ class TSAD_Pipeline(BaseDetector):
                 return
 
             tsTrain = X[: int((1 - self.validation_size) * len(X))]
+            context_length = self._model.config.context_length
             train_dataset = PatchMaskingDatasetWrapper(
-                TSPulseReconstructionDataset(
-                    tsTrain, window_size=self._pipeline_config.get("aggregation_length"), return_dict=True
-                ),
+                TSPulseReconstructionDataset(tsTrain, window_size=context_length, return_dict=True),
                 window_length=self._pipeline_config.get("aggregation_length"),
                 patch_length=self._model.config.patch_length,
                 window_position="last",
@@ -141,9 +140,7 @@ class TSAD_Pipeline(BaseDetector):
             if create_valid:
                 tsValid = X[int((1 - self.validation_size) * len(X)) :]
                 valid_dataset = PatchMaskingDatasetWrapper(
-                    TSPulseReconstructionDataset(
-                        tsValid, window_size=self._pipeline_config.get("aggregation_length"), return_dict=True
-                    ),
+                    TSPulseReconstructionDataset(tsValid, window_size=context_length, return_dict=True),
                     window_length=self._pipeline_config.get("aggregation_length"),
                     patch_length=self._model.config.patch_length,
                     window_position="last",

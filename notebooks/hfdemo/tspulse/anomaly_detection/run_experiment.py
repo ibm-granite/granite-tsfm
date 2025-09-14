@@ -58,10 +58,12 @@ def run_tsad_pipeline(
         finetune_epochs=num_epochs,
         finetune_lr=lr,
     )
+
     if finetune:
+        print("DEBUG: Running finetuning!")
         clf.fit(data_train)
-    else:
-        clf.zero_shot(data, label)
+
+    clf.zero_shot(data, label)
     score = clf.decision_scores_
     return score.ravel()
 
@@ -79,7 +81,7 @@ def process_file(filename, args):
         train_index = filename.split(".")[0].split("_")
         if len(train_index) > 3:
             train_index = int(train_index[-3])
-            data_train = data[: int(train_index), :]
+            data_train = data[:train_index:]
 
         if data.ndim == 1:
             in_channels = 1
@@ -96,6 +98,7 @@ def process_file(filename, args):
             prediction_mode=args.mode,
             smoothing_window=args.smooth,
             batch_size=args.batch_size,
+            finetune=args.finetune,
             finetune_epochs=args.epochs,
             finetune_decoder_mode=args.decoder,
             finetune_freeze_backbone=args.freeze_bb,
@@ -205,7 +208,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    print(args)
 
     file_filter = args.dataset if args.dataset != "#" else ".csv"
     if not os.path.isfile(args.eval_file):
