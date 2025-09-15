@@ -115,17 +115,18 @@ class TSAD_Pipeline(BaseDetector):
     def fit(self, X, y=None):
         try:
             print("Fine-tuning TSPulse.")
+            validation_size = float(self._finetune_params.get('finetune_validation', 0.2))
             create_valid = True
             if X.shape[0] < 3000:  # 20% of this should be > context_len
                 print("Data too small to create a validation set.")
                 create_valid = False
-                self.validation_size = 0.0
+                validation_size = 0.0
 
             if X.shape[0] < self._model.config.context_length:
                 print("Skipping fine-tuning due to very short length")
                 return
 
-            tsTrain = X[: int((1 - self.validation_size) * len(X))]
+            tsTrain = X[: int((1 - validation_size) * len(X))]
             context_length = self._model.config.context_length
             train_dataset = PatchMaskingDatasetWrapper(
                 TSPulseReconstructionDataset(tsTrain, window_size=context_length, return_dict=True),
@@ -138,7 +139,7 @@ class TSAD_Pipeline(BaseDetector):
                 return
 
             if create_valid:
-                tsValid = X[int((1 - self.validation_size) * len(X)) :]
+                tsValid = X[int((1 - validation_size) * len(X)) :]
                 valid_dataset = PatchMaskingDatasetWrapper(
                     TSPulseReconstructionDataset(tsValid, window_size=context_length, return_dict=True),
                     window_length=self._pipeline_config.get("aggregation_length"),
