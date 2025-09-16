@@ -16,7 +16,7 @@ create_prometheus_metrics_dir:
 	mkdir -m go+rwX prometheus_metrics
 
 # starts the tsfminference service (used mainly for test cases)
-start_service_local_watch: create_prometheus_metrics_dir boilerplate
+start_service_local_watch: create_prometheus_metrics_dir boilerplate clone_models
 	PROMETHEUS_MULTIPROC_DIR=./prometheus_metrics \
 	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./foobaz:./mytest-tsfm \
@@ -37,9 +37,9 @@ imagehardening:
 
 image: boilerplate imagehardening
 	find . -name "*.pyc" | xargs rm -f || true
-	$(CONTAINER_BUILDER) build --network host -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
+	$(CONTAINER_BUILDER) build --format docker --network host -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
-		$(CONTAINER_BUILDER) build --network host -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
+		$(CONTAINER_BUILDER) build --format docker --network host -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
 		echo "Skipping GPU build"; \
 	fi
@@ -49,13 +49,14 @@ start_service_image: create_prometheus_metrics_dir
 		-d \
 		--rm \
 		--name tsfmserver-cpu \
+		--privileged \
         -e TSFM_MODEL_DIR=/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
         -v ./mytest-tsfm:/mytest-tsfm \
 		-v ./prometheus_metrics:/prometheus_metrics \
         tsfminference-cpu python \
-		 -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
+		-m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
 	sleep 5
 
 stop_service_image:
@@ -78,6 +79,7 @@ install_dev: boilerplate
 
 clone_models:
 	git lfs install || true
+	rm -rf mytest_tsfm || true
 	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
 
 delete_models:
@@ -86,7 +88,7 @@ delete_models:
 # update any auto-generated files
 # used in example code
 update_examples:
-	# our sagemaker stuff
+        # our sagemaker stuff
 	poetry self add poetry-plugin-export
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
