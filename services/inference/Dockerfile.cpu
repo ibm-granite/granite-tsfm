@@ -9,8 +9,8 @@ RUN microdnf upgrade -y \
     python${PYTHON_VERSION}-wheel \
     && pip${PYTHON_VERSION} install pip -U \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
-    && groupadd --system tsfm --gid 1001 \
-    && adduser --system --uid 1001 --gid 1001 --groups tsfm \
+    && groupadd --system tsfm --gid 999 \
+    && adduser --system --uid 999 --gid 999 --groups tsfm \
     --create-home --home-dir /home/tsfm --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
     && chmod o+rX /home/tsfm \
