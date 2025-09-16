@@ -16,7 +16,15 @@ datasets
 </pre>
 
 ## Zero-Shot Experiments:
-Run the notebook imputation_zeroshot.ipynb and provide the dataset name (dset), mask ratios(m_r) and mask type(m_t) values in the notebook.
+Run the bash script `imputation_zeroshot.sh`.
+```bash
+bash imputation_zeroshot.sh
+```
+This will run the zeroshot imputation experiments for all the different datasets, mask type and mask ratios and will save the results in `tspulse_zeroshot_imputation_results.csv`
 
 ## Finetuning Experiments:
-Run the notebook imputation_finetune.ipynb and provide the DATASET, mask_ratio and mask_type values in the notebook 
+Run the bash script `imputation_finetune.sh`.
+```bash
+bash imputation_finetune.sh
+```
+This will run the finetuned imputation experiments for all the different datasets, mask type and mask ratios and will save the results in `tspulse_finetuned_imputation_results.csv`

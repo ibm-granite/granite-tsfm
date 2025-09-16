@@ -32,4 +32,8 @@ pip install -r ../tspulse_repro_libs.txt
 > To ensure reproducibility of the reported results, we have **fixed the versions** of `torch` and `transformers` libraries. Please use the specified versions in the `../tspulse_repro_libs.txt`, as different versions may lead to variations in numbers.
 
 ## Run classification benchmarking
-Run the python script `full_benchmarking_script.py`. It will run TSPulse classification benchmarking on datasets in the UEA classification archive and save all the results in `tspulse_uea_classification_accuracies.csv`.
+Run the bash script `full_benchmarking_script.sh`. 
+```bash
+bash full_benchmarking_script.sh
+```
+It will run TSPulse classification benchmarking on all the datasets in the UEA classification archive mentioned in the bash script and save all the results in `tspulse_uea_classification_accuracies.csv`.
