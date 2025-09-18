@@ -779,7 +779,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
 
         def explode_row(df_row, name, columns):
             df = pd.DataFrame(df_row[columns].to_dict())
-            inv_scale = self.target_scaler_dict[name].inverse_transform(df)
+            inv_scale = self.target_scaler_dict[name].inverse_transform(df[columns].values)
             df_out = df_row.copy()
             for idx, c in enumerate(columns):
                 df_out[c] = inv_scale[:, idx]
@@ -792,7 +792,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
                 name = grp.iloc[0][id_columns]
 
             if not np.any(col_has_list):
-                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale].values)
             else:
                 grp[cols_to_scale] = grp[cols_to_scale].apply(
                     lambda x: explode_row(x, name, cols_to_scale), axis="columns"
