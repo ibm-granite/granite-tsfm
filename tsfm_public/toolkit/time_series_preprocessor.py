@@ -513,6 +513,8 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         self.freq = freq
         self.scale_categorical_columns = scale_categorical_columns
 
+        self.other_columns_to_scale = kwargs.pop("other_columns_to_scale", None)
+
         kwargs["processor_class"] = self.__class__.__name__
 
         super().__init__(**kwargs)
@@ -557,6 +559,9 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         Returns:
             List[str]: List of column names
         """
+
+        if self.other_columns_to_scale:
+            return self.other_columns_to_scale
 
         column_lists = [
             self.observable_columns,
