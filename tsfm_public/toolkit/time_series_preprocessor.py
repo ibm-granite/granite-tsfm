@@ -560,7 +560,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
             List[str]: List of column names
         """
 
-        if self.other_columns_to_scale:
+        if self.other_columns_to_scale is not None:
             return self.other_columns_to_scale
 
         column_lists = [
