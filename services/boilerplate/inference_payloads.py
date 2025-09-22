@@ -118,6 +118,33 @@ class ForecastingMetadataInput(BaseMetadataInput):
     )
 
 
+class EmbeddingMetadataInput(BaseMetadataInput):
+    input_columns: List[EverythingPatternedString] = Field(
+        default_factory=list,
+        max_length=500,
+        min_length=1,
+        example=["FEAT1", "FEAT2"],
+        description="List of column names which identify the channels in the "
+        "input, these are the columns that will be used to determine the "
+        "classification.",
+    )
+    label_column: str = Field(
+        default=None,
+        max_length=500,
+        min_length=1,
+        example="TARGET",
+        description="Column name which identifies the label of the time series.",
+    )
+    static_categorical_columns: List[EverythingPatternedString] = Field(
+        default_factory=list,
+        max_length=500,
+        min_length=0,
+        example=["SCV1", "SCV2"],
+        description="An optional array of column headings which identify"
+        " categorical-valued channels in the input which are fixed over time.",
+    )
+
+
 class BaseParameters(BaseModel):
     model_config = ConfigDict(extra="allow", protected_namespaces=())
 
@@ -301,6 +328,90 @@ class ForecastingInferenceInput(BaseInferenceInput):
         " Given these `future_data` the model (when supported) will factor in `VAL2` when"
         " making predictions for `TARGET1`.",
         default=None,
+    )
+
+class EmbeddingInferenceInput(BaseInferenceInput):
+    schema: EmbeddingMetadataInput = Field(
+        description="An object of EmbeddingMetadataInput that contains the schema metadata of the data input.",
+    )
+
+    parameters: BaseParameters = Field(
+        description="additional parameters affecting behavior of the forecast.", default_factory=dict
+    )
+
+    data: Dict[str, List[Any]] = Field(
+        description="A payload of data matching the schema provided."
+        " Let's suppose you have columnar data that looks"
+        "  like this (this happens to be csv but it could also be pandas data, for example):\n"
+        """
+         date,ID1,ID2,TARGET1,VAL2
+         2024-10-18T01:00:21+00:00,I1,J1,1.05,10.0
+         2024-10-18T01:00:22+00:00,I1,J1,1.75,10.1
+         2024-10-18T01:00:21+00:00,I1,J2,2.01,12.8
+         2024-10-18T01:00:22+00:00,I1,J2,2.13,13.6\n"""
+        " If these data are for two timeseries (each beginning at"
+        " 2024-10-18T01:00:21 and ending at 2024-10-18T01:00:22)"
+        " given by the compound primary key comprised of ID1 and ID2"
+        " and you wish to create predictions only for 'TARGET1',"
+        " then your data and schema payload would like like this:\n"
+        """
+        {
+            "schema": {
+                "timestamp_column": "date",
+                "id_columns": [
+                    "ID1",
+                    "ID2"
+                ],
+                "target_columns": [
+                    "TARGET1"
+                ]
+            },
+            "data": {
+                "date": [
+                    "2024-10-18T01:00:21+00:00",
+                    "2024-10-18T01:00:22+00:00",
+                    "2024-10-18T01:00:21+00:00",
+                    "2024-10-18T01:00:22+00:00"
+                ],
+                "ID1": [
+                    "I1",
+                    "J1",
+                    "I1",
+                    "J1"
+                ],
+                "ID2": [
+                    "I1",
+                    "J2",
+                    "I1",
+                    "J2"
+                ],
+                "TARGET1": [
+                    1.05,
+                    1.75,
+                    2.01,
+                    2.13
+                ],
+                "VAL2": [
+                    10.0,
+                    10.1,
+                    12.8,
+                    13.6
+                ]
+            }
+        }\n"""
+        "Note that we make no mention of `VAL2` in the schema which means that it will"
+        " effectively be ignored by the model when making forecasting predictions."
+        " If no `target_columns` are specified, then all columns except `timestamp_column`"
+        " will be considered to be targets for prediction. Pandas users can generate the"
+        " `data` portion of this content by calling DataFrame.to_dict(orient='list')."
+        " The service makes a few assumptions about your data:"
+        " * All time series are of equal length and are uniform in nature (the time difference between"
+        " two successive rows is constant);"
+        " * The above implies that there are no missing rows of data;"
+        " * You can not have any missing cells of data within in a row (no null NaN values either);"
+        " * The above constraints mean that you are responsible for performing your own imputation on your"
+        " data before passing it to the service.",
+        min_length=1,
     )
 
 

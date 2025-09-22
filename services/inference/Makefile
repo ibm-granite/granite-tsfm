@@ -1,6 +1,6 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
-NO_DOCKER_CACHE ?= 
+NO_DOCKER_CACHE ?=
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -76,6 +76,8 @@ install_dev: boilerplate
 clone_models:
 	git lfs install || true
 	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
+	git clone https://huggingface.co/ibm-granite/granite-timeseries-tspulse-r1 mytest-tsfm/tspulse-r1 || true
+	echo '{\n    "inference_handler_module_path": "tsfminference.tsfm_inference_handler",\n    "inference_handler_class_name": "TSFMEmbeddingInferenceHandler",\n    "minimum_context_length": 512,\n    "maximum_context_length": 512,\n    "module_path": "tsfm_public",\n    "model_type": "tspulse",\n    "model_config_name": "TSPulseConfig",\n    "model_class_name": "TSPulseForReconstruction"\n}' > mytest-tsfm/tspulse-r1/tsfm_config.json
 
 delete_models:
 	rm -rf mytest-tsfm || true
