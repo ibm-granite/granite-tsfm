@@ -46,7 +46,7 @@ Jinja2 = { version = ">=3.1.6" }              # https://github.com/ibm-granite/g
 Werkzeug = { version = ">=3.0.6" }
 aiohttp = { version = ">=3.11.15" }           # see https://github.com/aio-libs/aiohttp/issues/10617
 urllib3 = { version = ">=1.26.19" }           # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-transformers = { version = ">=4.48.0,<4.51" } # https://github.com/huggingface/accelerate/issues/3542
+transformers = { version = ">=4.53,<4.54" } # https://github.com/huggingface/accelerate/issues/3542
 
 torch = { version = "==2.8.0" }
 h11 = { version = ">=0.16.0" }      # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
