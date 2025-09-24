@@ -129,6 +129,6 @@ def test_idempotency_on_fully_observed_data(tspulse_model, etth_data):
         original_vals = test_imputed[col].values
         imputed_vals = test_imputed[imputed_col].values
 
-        assert np.allclose(original_vals, imputed_vals), (
-            f"Imputed column '{imputed_col}' differs from original column '{col}'"
-        )
+        assert np.allclose(
+            original_vals, imputed_vals
+        ), f"Imputed column '{imputed_col}' differs from original column '{col}'"
