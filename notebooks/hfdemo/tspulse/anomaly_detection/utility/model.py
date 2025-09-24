@@ -115,7 +115,7 @@ class TSAD_Pipeline(BaseDetector):
     def fit(self, X, y=None):
         try:
             print("Fine-tuning TSPulse.")
-            validation_size = float(self._finetune_params.get('finetune_validation', 0.2))
+            validation_size = float(self._finetune_params.get("finetune_validation", 0.2))
             create_valid = True
             if X.shape[0] < 3000:  # 20% of this should be > context_len
                 print("Data too small to create a validation set.")
