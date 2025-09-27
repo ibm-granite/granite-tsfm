@@ -774,7 +774,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         batch_first: Optional[bool] = None,
         scale_factor: Optional[float] = None,
         prediction_length: Optional[int] = None,
-        prediction_type: Optional[bool] = None,
+        prediction_type: Optional[str] = None,
     ) -> FlowStateForPredictionOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -856,15 +856,15 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             model_output.last_hidden_state, prediction_length
         )
 
-        if self.config.prediction_type == "quantile":
+        if prediction_type == "quantile":
             pass
-        elif self.config.prediction_type == "mean":
+        elif prediction_type == "mean":
             # calculate an approximate mean from quantiles
             quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
             quant_prob /= quant_prob.sum()  # normalize quantile weights
             quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
             model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
-        elif self.config.prediction_type == "median":
+        elif prediction_type == "median":
             model_output.last_hidden_state = model_output.last_hidden_state[:, 4, :]
         else:
             raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
