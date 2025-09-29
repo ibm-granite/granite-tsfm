@@ -139,7 +139,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             NonconformityScores.ABSOLUTE_ERROR.value,
             NonconformityScores.ERROR.value,
         ]:
-            raise ValueError(f"Provided nonconformity_score {self.nonconformity_score } is not valid.")
+            raise ValueError(f"Provided nonconformity_score {self.nonconformity_score} is not valid.")
 
         self.weighting = weighting
         self.weighting_params = weighting_params
@@ -611,7 +611,12 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                     aggregation_axis = self.aggregation_axis
 
                 if aggregation is None:
-                    outliers = output["outliers"]
+                    outliers_scores = self.forecast_horizon_aggregation(
+                        outliers_scores, aggregation=aggregation
+                    )  # aligns forecast for the same sample
+                    filter = np.isnan(outliers_scores)
+                    outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
+                    outliers[filter] = np.nan
 
                 elif isinstance(aggregation, int):
                     outliers_scores = self.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
@@ -654,7 +659,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                     return outliers_scores
 
     def forecast_horizon_aggregation(
-        self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"
+        self, outliers_scores: np.ndarray, aggregation: Union[str, int, None] = "mean"
     ) -> np.ndarray:
         N, H, F = outliers_scores.shape
         # we want to align predictions/forecasts for each timestamp (observation)
@@ -685,6 +690,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 return np.nanmin(aligned, axis=1)
             else:
                 raise ValueError(f"Unsupported aggregation method: {aggregation}")
+        elif aggregation is None:  # just return aligned arrays
+            return aligned
         else:
             raise TypeError("aggregation must be either an int or a supported aggregation string")
 
@@ -1854,7 +1861,6 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         self.weighting = weighting
         self.weighting_params = weighting_params
-        self.window_size = window_size
         self.weights_optimizer = None  # initializaed in fit
         self.losses = []
 
@@ -1863,6 +1869,10 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         self.false_alarm = false_alarm
         self.weights_critical_norm = np.ceil(1 / self.false_alarm - 1)
+
+        self.window_size = (
+            window_size if window_size is not None else int(np.maximum(5000, self.weights_critical_norm))
+        )  # large memory
         if self.window_size is not None:
             assert (
                 self.window_size > self.weights_critical_norm
@@ -1875,9 +1885,11 @@ class AdaptiveWeightedConformalScoreWrapper:
         if "stride" not in self.weighting_params.keys():
             self.weighting_params["stride"] = int(1)
         if "epochs" not in self.weighting_params.keys():
-            self.weighting_params["epochs"] = int(1)
+            self.weighting_params["epochs"] = int(2)
         if "conformal_weights_update" not in self.weighting_params.keys():
             self.weighting_params["conformal_weights_update"] = False
+        if "prior_past_weights_value" not in self.weighting_params.keys():
+            self.weighting_params["prior_past_weights_value"] = "proximity"
 
         self.weights_average = None
         self.weights_average_count = 0
@@ -1908,8 +1920,12 @@ class AdaptiveWeightedConformalScoreWrapper:
         w_init = torch.zeros(self.window_size)
         w_init[-scores.shape[0] :] = 1
 
-        self.weights_parameters = torch.nn.Parameter(w_init)
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
 
+        self.weights_parameters = torch.nn.Parameter(w_init.to(self.device))
         self.weights_optimizer = torch.optim.AdamW([self.weights_parameters], lr=self.weighting_params["lr"])
         # self.weights_optimizer = torch.optim.RMSprop([self.weights_parameters], lr=self.weighting_params["lr"])
 
@@ -1923,17 +1939,18 @@ class AdaptiveWeightedConformalScoreWrapper:
         with torch.no_grad():
             betas = (
                 get_beta(
-                    self.cal_scores,
-                    torch_scores_past,
+                    self.cal_scores.to(self.device),
+                    torch_scores_past.to(self.device),
                     weights=self.weights_parameters[-scores.shape[0] :],
                     conformal_weights=True,
                 )
                 .clone()
                 .detach()
+                .cpu()
                 .numpy()
             )
 
-        return betas
+        return 1 - np.array(betas)
 
     def predict(self, scores: np.ndarray, verbose: bool = False) -> np.ndarray:
         """
@@ -1983,14 +2000,14 @@ class AdaptiveWeightedConformalScoreWrapper:
             n_batch_effective = int(n_batch_effective)
             # print(ini_t_i,end_t_i, scores_concat_i.shape, n_batch_effective, self.cal_scores.shape[0], self.weights_critical_norm, n_min_update)
             # print('Update feasible :', update_weights_feasible)
-            scores_i = scores_concat_i[-n_batch_effective:]  # Scores to compute the Wass1 distance
+            scores_i = scores_concat_i[-n_batch_effective:].to(self.device)  # Scores to compute the Wass1 distance
             cal_context_available = len(scores_concat_i) - n_batch_effective
             scores_matrix = [
                 scores_concat_i[j - cal_context_available : j]
                 for j in range(len(scores_concat_i) - n_batch_effective, len(scores_concat_i))
             ]
 
-            scores_matrix = torch.stack(scores_matrix)
+            scores_matrix = torch.stack(scores_matrix).to(self.device)
             # print(scores_matrix.shape)
 
             """Get Betas"""
@@ -2000,6 +2017,8 @@ class AdaptiveWeightedConformalScoreWrapper:
 
             with torch.no_grad():
                 n_scores_compute = int(scores_new_i.shape[0])
+                # print("n_scores_compute matrix :", scores_matrix.shape)
+                # print("cal shape :", self.cal_scores.shape[0])
                 betas = (
                     get_beta(
                         scores_i[-n_scores_compute:],
@@ -2010,6 +2029,7 @@ class AdaptiveWeightedConformalScoreWrapper:
                     )
                     .clone()
                     .detach()
+                    .cpu()
                     .numpy()
                 )
                 if verbose:
@@ -2021,6 +2041,8 @@ class AdaptiveWeightedConformalScoreWrapper:
             # if not update_weights_feasible:
 
             if update_weights_feasible:
+                # print("n_scores_compute matrix :", scores_matrix[-n_scores_compute:].shape)
+                # print("cal shape :", self.cal_scores.shape[0])
                 losses_i = []
                 for _ in range(n_epochs):
                     self.weights_optimizer.zero_grad()
@@ -2030,19 +2052,26 @@ class AdaptiveWeightedConformalScoreWrapper:
                         weights=self.weights_parameters[-scores_matrix.shape[1] :],
                         conformal_weights=conformal_weights_update,
                     )
-                    losses_i.append(loss.item())
+                    losses_i.append(loss.detach().item())
 
                     loss.backward()
                     self.weights_optimizer.step()
 
                     ## Project weights into the simplex
-                    self.weights_parameters.data = project_l1_box_torch(
-                        self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
-                    )
+                    # with torch.no_grad():
+                    #     self.weights_parameters.data = project_l1_box_torch(
+                    #         self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
+                    #     )
+                    with torch.no_grad():
+                        self.weights_parameters.copy_(
+                            project_l1_box_torch(
+                                self.weights_parameters, min_l1_norm=self.weights_critical_norm, max_value=1.0
+                            )
+                        )
                     if verbose:
                         LOGGER.info(
                             "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
-                                loss.item(),
+                                losses_i[-1],
                                 self.weights_parameters.data.sum(),
                                 self.weights_parameters.data.min(),
                                 self.weights_parameters.data.max(),
@@ -2054,7 +2083,7 @@ class AdaptiveWeightedConformalScoreWrapper:
                     # self.weights_parameters.data.clamp_(0, 1.0)
                 losses.append(losses_i)
                 # self.cal_weights = self.weights_average.clone().detach().numpy()/self.weights_average_count
-                self.cal_weights = self.weights_parameters.clone().detach().numpy()
+                self.cal_weights = self.weights_parameters.clone().detach().cpu().numpy()
             else:
                 if verbose:
                     LOGGER.info(
@@ -2070,11 +2099,31 @@ class AdaptiveWeightedConformalScoreWrapper:
                 # print('Minimum number of elements required are :', n_min_update, ' but in total we have :', scores_concat_i.shape[0])
             """ Update Past Calibration Scores """
             self.cal_scores = torch.cat((self.cal_scores, scores_new_i[0:stride]), dim=0)
+
+            if self.weighting_params["prior_past_weights_value"] == "proximity":
+                n = self.cal_scores.shape[0]
+                if n <= self.window_size:
+                    # print("BEFORE")
+                    # print(self.weights_parameters.data[-n:].shape)
+                    # print(n_batch_effective)
+                    # print(self.weights_parameters.data[-n : -n + n_batch_effective + 10])
+                    # self.weights_parameters.data[0 : -int(self.cal_scores.shape[0] + 1)] = (
+                    #     self.weights_parameters.data[-int(self.cal_scores.shape[0] + 1)]
+                    # )
+                    with torch.no_grad():
+                        self.weights_parameters[-n : -n + n_batch_effective].copy_(
+                            self.weights_parameters[-n + n_batch_effective]
+                        )
+                    # print("AFTER")
+                    # print(self.weights_parameters.data[-n :].shape)
+                    # print(self.weights_parameters.data[-n : -n + n_batch_effective + 10])
+
             self.cal_scores = self.cal_scores[-self.window_size :]
+            self.cal_weights = self.weights_parameters.clone().detach().cpu().numpy()
             # print('Cal scores updated to :', len(self.cal_scores))
         if len(losses) > 0:
             self.losses.extend(losses)
-        return np.array(beta_output)
+        return 1 - np.array(beta_output)
 
 
 """
@@ -2212,7 +2261,7 @@ def euclidean_proj_simplex_torch(vector: torch.Tensor, radius: int = 1) -> torch
     assert radius > 0, "radius parameter must be strictly positive"
     n = vector.shape[0]
     # Check if vector is on the simplex
-    if torch.isclose(vector.sum(), torch.tensor(radius)) and torch.all(vector >= 0):
+    if torch.isclose(vector.detach().clone().sum(), torch.tensor(radius)) and torch.all(vector >= 0):
         return vector
     v_sorted, _ = torch.sort(vector, descending=True)  # Sort vector in decreasing order
     cum_vector = torch.cumsum(v_sorted, dim=0)
