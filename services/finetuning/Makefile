@@ -1,5 +1,5 @@
 CONTAINER_BUILDER ?= docker
-EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
+EXTRA_DOCKER_BUILD_ARGS ?= "--format docker --network host"
 
 ifeq ($(CONTAINER_BUILDER),docker)
 EXTRA_DOCKER_BUILD_ARGS :=

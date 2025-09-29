@@ -1,7 +1,7 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
 NO_DOCKER_CACHE ?=
-EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
+EXTRA_DOCKER_BUILD_ARGS ?= "--format docker --network host"
 
 ifeq ($(CONTAINER_BUILDER),docker)
 EXTRA_DOCKER_BUILD_ARGS :=
