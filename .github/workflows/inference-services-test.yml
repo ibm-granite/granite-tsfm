@@ -40,7 +40,7 @@ jobs:
         source .venv/bin/activate
         cd services/inference
         make test_local
-        rm -rf $(find .venv -name "site-packages")/nvidia*
+        rm -rf $(find .venv -name "site-packages")/*
     - name: Test image
       run: |
         source .venv/bin/activate
