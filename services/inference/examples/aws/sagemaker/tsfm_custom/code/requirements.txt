@@ -1,4 +1,4 @@
-# This file was automatically generated on Tue Sep 16 09:33:57 AM EDT 2025, your edits will be replaced.
+# This file was automatically generated on Mon Sep 29 08:48:59 AM CDT 2025, your edits will be replaced.
 accelerate==1.10.1 ; python_version >= "3.10" and python_version < "3.13"
 aiohappyeyeballs==2.6.1 ; python_version >= "3.10" and python_version < "3.13"
 aiohttp==3.12.15 ; python_version >= "3.10" and python_version < "3.13"
@@ -19,7 +19,7 @@ fastapi==0.116.1 ; python_version >= "3.10" and python_version < "3.13"
 filelock==3.19.1 ; python_version >= "3.10" and python_version < "3.13"
 frozenlist==1.7.0 ; python_version >= "3.10" and python_version < "3.13"
 fsspec==2025.9.0 ; python_version >= "3.10" and python_version < "3.13"
-granite-tsfm==0.3.1 ; python_version >= "3.10" and python_version < "3.13"
+granite-tsfm @ git+https://github.com/ibm-granite/granite-tsfm.git@fdb4934a03ccc7bf724ab64364e0d50c3a1ef37d ; python_version >= "3.10" and python_version < "3.13"
 gunicorn==23.0.0 ; python_version >= "3.10" and python_version < "3.13"
 h11==0.16.0 ; python_version >= "3.10" and python_version < "3.13"
 hf-xet==1.1.10 ; python_version >= "3.10" and python_version < "3.13" and (platform_machine == "x86_64" or platform_machine == "amd64" or platform_machine == "arm64" or platform_machine == "aarch64")
