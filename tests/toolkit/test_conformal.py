@@ -530,7 +530,7 @@ def test_forecast_horizon_aggregation():
         # print()
         assert (
             outliers_aggregated.shape == (outliers_scores.shape[0], outliers_scores.shape[-1])
-        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0],outliers_scores.shape[-1])}"
+        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0], outliers_scores.shape[-1])}"
         assert (
             np.mean(np.abs(outliers_aggregated - expected_aggregation[aggregation])) == 0
         ), f"Expected forecast_horizon_aggregation for aggregation {aggregation} did not match the expected values"
