@@ -40,7 +40,6 @@ jobs:
         source .venv/bin/activate
         cd services/inference
         make test_local
-        rm -rf .venv/lib/python*/site-packages/*
     - name: Test image
       run: |
         sudo apt-get clean
@@ -49,4 +48,4 @@ jobs:
         rm -rf ~/.cache/pip
         source .venv/bin/activate
         cd services/inference
-        SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker make image
+        SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker make test_image
