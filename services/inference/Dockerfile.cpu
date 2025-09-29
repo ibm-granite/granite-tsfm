@@ -3,12 +3,13 @@
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 
 ARG PYTHON_VERSION=3.12
+# not all podman versions consume this correctly
 
 RUN microdnf upgrade -y \
-    && microdnf install -y python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-pip \
-    python${PYTHON_VERSION}-wheel \
-    && pip${PYTHON_VERSION} install pip -U \
+    && microdnf install -y python3.12 git \
+    python3.12-pip \
+    python3.12-wheel \
+    && pip3.12 install pip -U \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && groupadd --system tsfm --gid 999 \
     && adduser --system --uid 999 --gid 999 --groups tsfm \
@@ -36,7 +37,7 @@ COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml poetry.lock ${CODEDIR} ${HOME}
 
 WORKDIR ${HOME}
 
-RUN python${PYTHON_VERSION} -m venv --upgrade-deps ${HOME}/.venv \
+RUN python3.12 -m venv --upgrade-deps ${HOME}/.venv \
 && pip install --no-cache-dir poetry \
 && poetry install --no-cache \
 && pip uninstall -y torch \
