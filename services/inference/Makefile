@@ -1,6 +1,11 @@
 CONTAINER_BUILDER ?= docker
 SKIP_GPU_BUILD ?= "0"
-NO_DOCKER_CACHE ?= 
+NO_DOCKER_CACHE ?=
+EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
+
+ifeq ($(CONTAINER_BUILDER),docker)
+EXTRA_DOCKER_BUILD_ARGS :=
+endif
 
 # copies boilerplate code to suitable locations
 boilerplate:
@@ -34,9 +39,9 @@ stop_service_local:
 
 image: boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
-	$(CONTAINER_BUILDER) build --format docker --network host -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
+	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
-		$(CONTAINER_BUILDER) build --format docker --network host -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
+		$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
 		echo "Skipping GPU build"; \
 	fi
