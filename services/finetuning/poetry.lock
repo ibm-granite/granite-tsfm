@@ -704,7 +704,7 @@ urllib3 = ["packaging", "urllib3"]
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.2.dev43+gfdb4934a0"
+version = "0.3.2.dev70+gbc33e429e"
 description = "Public notebooks and utilities for TSFM"
 optional = false
 python-versions = "<3.13,>=3.9"
@@ -719,7 +719,7 @@ numpy = "<3"
 pandas = ">=2.2.0"
 scikit-learn = "*"
 torch = "<3"
-transformers = {version = ">=4.38.0,<4.51", extras = ["torch"]}
+transformers = {version = "<4.51", extras = ["torch"]}
 urllib3 = ">=1.26.19"
 
 [package.extras]
@@ -734,7 +734,7 @@ testing = ["granite-tsfm[notebooks]", "parameterized", "pytest", "pytest-coverag
 type = "git"
 url = "https://github.com/ibm-granite/granite-tsfm.git"
 reference = "cve"
-resolved_reference = "e6dfbebc533a82d9d5b71af802ea5654008ba834"
+resolved_reference = "bc33e429e2cfe912cc147f70a0dd8db8eefbb889"
 
 [[package]]
 name = "gunicorn"
