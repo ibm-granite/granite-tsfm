@@ -1,9 +1,7 @@
 CONTAINER_BUILDER ?= docker
-EXTRA_DOCKER_BUILD_ARGS ?= "--format docker --network host"
+EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
+EXTRA_DOCKER_BUILD_ARGS := $(if $(filter docker,$(CONTAINER_BUILDER)),,$(EXTRA_DOCKER_BUILD_ARGS))
 
-ifeq ($(CONTAINER_BUILDER),docker)
-EXTRA_DOCKER_BUILD_ARGS :=
-endif
 
 # copies boilerplate code to suitable locations
 boilerplate:
