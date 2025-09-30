@@ -1436,7 +1436,7 @@ testing = ["granite-tsfm[notebooks]", "parameterized", "pytest", "pytest-coverag
 type = "git"
 url = "https://github.com/ibm-granite/granite-tsfm.git"
 reference = "cve"
-resolved_reference = "bc33e429e2cfe912cc147f70a0dd8db8eefbb889"
+resolved_reference = "15b0c3f461d7609ac58f216ada5986bb45cc855d"
 
 [[package]]
 name = "graphene"
