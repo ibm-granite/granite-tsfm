@@ -5,7 +5,8 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 ARG PYTHON_VERSION=3.12
 # not all podman versions consume this correctly
 
-RUN microdnf install -y python3.12 git \
+RUN microdnf update -y \
+    && microdnf install -y python3.12 git \
     python3.12-pip \
     python3.12-wheel \
     && pip3.12 install pip -U \
@@ -45,6 +46,7 @@ RUN python3.12 -m venv --upgrade-deps ${HOME}/.venv \
     && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e \
     && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics \
-    && pip uninstall -y poetry || true
+    && pip uninstall -y poetry || true \
+    && microdnf remove git
 
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
