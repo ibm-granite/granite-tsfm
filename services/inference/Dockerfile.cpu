@@ -5,7 +5,7 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 ARG PYTHON_VERSION=3.12
 # not all podman versions consume this correctly
 
-RUN microdnf update -y \
+RUN microdnf upgrade -y \
     && microdnf install -y python3.12 git \
     python3.12-pip \
     python3.12-wheel \
