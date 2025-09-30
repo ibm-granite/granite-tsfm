@@ -615,7 +615,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                         outliers_scores, aggregation=aggregation
                     )  # aligns forecast for the same sample
                     filter = np.isnan(outliers_scores)
-                    outliers = np.array(np.array(outliers_scores) <= significance).astype("int")
+                    outliers = np.array(np.array(outliers_scores) <= significance).astype("float")
                     outliers[filter] = np.nan
 
                 elif isinstance(aggregation, int):
