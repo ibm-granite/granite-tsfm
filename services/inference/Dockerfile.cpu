@@ -5,11 +5,11 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
 ARG PYTHON_VERSION=3.12
 # not all podman versions consume this correctly
 
-RUN microdnf update -y \
+RUN microdnf upgrade -y \
     && microdnf install -y python3.12 git \
     python3.12-pip \
     python3.12-wheel \
-    && pip3.12 install pip -U \
+    && pip3.12 install pip setuptools wheel -U \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && useradd -U --create-home --home-dir /home/tsfm \
     --shell /sbin/nologin \
@@ -54,5 +54,9 @@ RUN python3.12 -m venv --upgrade-deps ${HOME}/.venv \
     && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics \
     && pip uninstall -y poetry || true
+
+USER root
+RUN microdnf remove -y git perl-Git
+USER tsfm
 
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
