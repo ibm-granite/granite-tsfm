@@ -23,11 +23,20 @@ FROM base AS tsfm-install
 ENV CUDA_VISIBLE_DEVICES=""
 
 # Image hardening start
+# You'd thinkg ImageHardenting would do all the cleanup, but no...
+# It leaves a lot of stuff behind. So we do some more cleanup here.
 COPY --chmod=755 ImageHardening/* /remediation/
 RUN sh /remediation/installRemediationTools.sh \
 && sh /remediation/remediation-script.sh \
 && sh /remediation/removeRemediationTools.sh \
 && rm -f /remediation/*.sh
+
+RUN microdnf remove -y gnutls-utils shadow-utils || true \
+&& microdnf remove -y subscription-manager || true \
+&& microdnf remove -y python3-subscription-manager-rhsm || true \
+&& microdnf remove -y python3-cloud-what || true \
+&& microdnf remove -y python3-requests || true \
+&& microdnf remove -y python3-urllib3 || true
 # # Image hardening stop
 
 USER tsfm
