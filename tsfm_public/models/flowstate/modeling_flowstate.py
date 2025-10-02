@@ -865,7 +865,10 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
             model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
         elif prediction_type == "median":
-            model_output.last_hidden_state = model_output.last_hidden_state[:, 4, :]
+            if 0.5 not in self.config.quantiles:
+                raise RuntimeError("Median requested but not part of the quantiles.")
+            ix = self.config.quantiles.index(0.5)
+            model_output.last_hidden_state = model_output.last_hidden_state[:, ix, :]
         else:
             raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
 
