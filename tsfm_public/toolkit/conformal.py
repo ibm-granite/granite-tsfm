@@ -666,7 +666,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         aligned = np.full(
             (N, H, F), np.nan
         )  # nan for padding initial items for which we have less than horizon H predictions.
-        for h in range(np.minimum(H,N)):
+        for h in range(np.minimum(H, N)):
             # shift each row of forecast horizon h by h steps into the future.
             aligned[h:N, h, :] = outliers_scores[
                 : N - h, h, :
