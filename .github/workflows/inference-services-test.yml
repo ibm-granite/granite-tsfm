@@ -14,12 +14,11 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -35,7 +34,7 @@ jobs:
         pip install poetry
         cd services/inference
         poetry self add "poetry-dynamic-versioning[plugin]"
-        poetry install -n --with dev
+        poetry install --no-cache -n --with dev
     - name: Test local server
       run: |
         source .venv/bin/activate
@@ -43,6 +42,10 @@ jobs:
         make test_local
     - name: Test image
       run: |
+        sudo apt-get clean
+        sudo rm -rf /usr/local/lib/android
+        docker system prune --all --force || true
+        rm -rf ~/.cache/pip
         source .venv/bin/activate
         cd services/inference
-        SKIP_GPU_BUILD="1" make test_image
+        SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker make test_image

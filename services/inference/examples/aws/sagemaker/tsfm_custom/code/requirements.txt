@@ -1,4 +1,4 @@
-# This file was automatically generated on Fri Oct  3 11:37:53 AM EDT 2025, your edits will be replaced.
+# This file was automatically generated on Fri Oct  3 03:48:40 PM EDT 2025, your edits will be replaced.
 accelerate==1.10.1 ; python_version >= "3.10" and python_version < "3.13"
 aiohappyeyeballs==2.6.1 ; python_version >= "3.10" and python_version < "3.13"
 aiohttp==3.12.15 ; python_version >= "3.10" and python_version < "3.13"
@@ -19,7 +19,7 @@ fastapi==0.118.0 ; python_version >= "3.10" and python_version < "3.13"
 filelock==3.19.1 ; python_version >= "3.10" and python_version < "3.13"
 frozenlist==1.7.0 ; python_version >= "3.10" and python_version < "3.13"
 fsspec==2025.9.0 ; python_version >= "3.10" and python_version < "3.13"
-granite-tsfm @ git+https://github.com/ibm-granite/granite-tsfm@f026c0b88291f043473d61a388d13f32dce21b0b ; python_version >= "3.10" and python_version < "3.13"
+granite-tsfm @ git+https://github.com/ibm-granite/granite-tsfm@8ecf2cb9ecc5f0e5718938343bae144ea00d6ebe ; python_version >= "3.10" and python_version < "3.13"
 gunicorn==23.0.0 ; python_version >= "3.10" and python_version < "3.13"
 h11==0.16.0 ; python_version >= "3.10" and python_version < "3.13"
 hf-xet==1.1.10 ; python_version >= "3.10" and python_version < "3.13" and (platform_machine == "x86_64" or platform_machine == "amd64" or platform_machine == "arm64" or platform_machine == "aarch64")
@@ -74,7 +74,7 @@ threadpoolctl==3.6.0 ; python_version >= "3.10" and python_version < "3.13"
 tokenizers==0.22.1 ; python_version >= "3.10" and python_version < "3.13"
 torch==2.8.0 ; python_version >= "3.10" and python_version < "3.13"
 tqdm==4.67.1 ; python_version >= "3.10" and python_version < "3.13"
-transformers==4.56.2 ; python_version >= "3.10" and python_version < "3.13"
+transformers==4.57.0 ; python_version >= "3.10" and python_version < "3.13"
 triton==3.4.0 ; python_version >= "3.10" and python_version < "3.13" and platform_system == "Linux" and platform_machine == "x86_64"
 typing-extensions==4.15.0 ; python_version >= "3.10" and python_version < "3.13"
 typing-inspection==0.4.2 ; python_version >= "3.10" and python_version < "3.13"
