@@ -1435,8 +1435,8 @@ testing = ["granite-tsfm[notebooks]", "parameterized", "pytest", "pytest-coverag
 [package.source]
 type = "git"
 url = "https://github.com/ibm-granite/granite-tsfm.git"
-reference = "cve"
-resolved_reference = "baca1ddf6308c017ace288440dfc2e506e585ee3"
+reference = "main"
+resolved_reference = "d5db9ddb595a476108fd35208bff6ecff29dd2e9"
 
 [[package]]
 name = "graphene"
@@ -5186,4 +5186,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "852de995075f3381dd1b9b63fae11ed1df31136db9ec1ddcacdc2bca44552197"
+content-hash = "2aa60a6cb57649710588b1b3ff67f3ac71231343ec34e568a0d028f7551c29f0"

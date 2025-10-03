@@ -32,7 +32,7 @@ poetry-plugin-export = ">=1.8"
 # including 3.9 causes poetry lock to run forever
 python = ">=3.10,<3.13"
 numpy = { version = "<2" }
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "cve" }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "main" }
 transformers = { version = ">=4.53.0,<4.60" }
 
 
