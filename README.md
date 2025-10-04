@@ -1,3 +1,12 @@
+# Disclaimer
+
+> This is a personal fork of [granite-tsfm](https://github.com/ibm-granite/granite-tsfm), maintained to support custom changes for [timecopilot](https://github.com/AzulGarza/TimeCopilot/) and publish pypi wheels at [`timecopilot-granite-tsfm`](https://pypi.org/project/timecopilot-granite-tsfm/). It may diverge from upstream.
+
+## Credits
+
+This project is a fork of by Original Author(s).  
+All credit for the original code belongs to them. This fork is maintained independently to support TimeCopilot-specific changes.
+
 # TSFM: Time Series Foundation Models
 Public notebooks, utilities, and serving components for working with Time Series Foundation Models (TSFM).
 
