@@ -421,7 +421,7 @@ class FlowStatePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
 
-        print("Should not reach here, all parameters should have been initialized!")
+        # print("Should not reach here, all parameters should have been initialized!")
         # For training, here would be place to initialize the parameters of FlowState
 
 

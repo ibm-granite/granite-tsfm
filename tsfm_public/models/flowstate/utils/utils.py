@@ -37,7 +37,7 @@ def get_fixed_factor(freq: str, domain=None):
         factor *= n
     elif freq == "W" or "W-" in freq:
         factor = BASE_SEASON / (365.0 / 7)
-    elif freq == "M" or "M-" in freq:
+    elif freq == "M" or "M-" in freq or freq.startswith("M"):
         factor = BASE_SEASON / 12
     elif "Q" in freq:
         factor = BASE_SEASON / 4.0  # 'Q' or 'Q-Month'
