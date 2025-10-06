@@ -6,24 +6,24 @@ authors = ["IBM"]
 license = "https://github.com/ibm-granite/granite-tsfm/blob/main/LICENSE"
 packages = [{ include = "tsfmfinetuning/**/*.py" }]
 
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
+#[tool.poetry-dynamic-versioning]
+#enable = true
+#vcs = "git"
 # latest-tag = true
 # style = "semver"
-format = "{base}"
+#format = "{base}"
 
 #[tool.poetry-dynamic-versioning.substitution]
 #files = ["tsfmfinetuning/_version.py"]
 #persistent-substitution = true
 
-[tool.poetry-dynamic-versioning.files."tsfmfinetuning/_version.py"]
+#[tool.poetry-dynamic-versioning.files."tsfmfinetuning/_version.py"]
 # persistent-substitution = true # useful for editable installs
-initial-content = """
+#initial-content = """
 # These version placeholders will be replaced later during substitution.
-__version__ = "0.0.0"
-__version_tuple__ = (0, 0, 0)
-"""
+#__version__ = "0.0.0"
+#__version_tuple__ = (0, 0, 0)
+#"""
 
 
 [tool.poetry.dependencies]
@@ -54,6 +54,10 @@ wget = "*"
 kubeflow-training = "*"
 ruff = { version = "0.5.7" }
 
+#[build-system]
+#requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+#build-backend = "poetry_dynamic_versioning.backend"
+
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
