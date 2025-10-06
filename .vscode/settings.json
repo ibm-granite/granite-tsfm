@@ -3,10 +3,6 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
   },
-  "python.testing.pytestArgs": [
-    "tests",
-    "services"
-  ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "editor.codeActionsOnSave": {
@@ -40,5 +36,25 @@
   "search.useGlobalIgnoreFiles": true,
   "search.useParentIgnoreFiles": true,
   "files.autoSave": "afterDelay",
-  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.typeCheckingMode": "off",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "charliermarsh.ruff",
+  "editor.formatOnPaste": false,
+  "search.exclude": {
+    "**/services/finetuning/tsfmfinetuning/service_handler.py": true,
+    "**/services/inference/tsfminference/service_handler.py": true
+  },
+  "python-envs.pythonProjects": [
+    {
+      "path": "",
+      "envManager": "ms-python.python:venv",
+      "packageManager": "ms-python.python:pip"
+    }
+  ],
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "python.testing.pytestArgs": [
+    "services/inference"
+  ],
 }
