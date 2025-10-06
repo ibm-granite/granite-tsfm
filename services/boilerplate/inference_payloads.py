@@ -151,6 +151,19 @@ class ForecastingParameters(BaseParameters):
         default=None,
     )
 
+    prediction_quantiles: Optional[List[float]] = Field(
+        description="A list of prediction quantiles."
+        " If given, the service will return probabilistic predictions for each target."
+        " For example, passing [0.1, 0.9] will produce two additional prediction"
+        " vectors for each target representing the 10th and 90th percentile values"
+        " for each point forecast over the prediction period."
+        " When omitted only point forecasts will be returned."
+        " All values given must be >0.0 and <1.0."
+        " If you use the parameter, you must also provide calibration data via"
+        " the `quantile_calibration_data` field.",
+        default=None,
+    )
+
     @field_validator("prediction_length")
     @classmethod
     def check_prediction_length(cls, v: int) -> float:
@@ -160,6 +173,13 @@ class ForecastingParameters(BaseParameters):
                 " and no more than the model default prediction length."
                 " When omitted the model default prediction_length will be used."
             )
+        return v
+
+    @field_validator("prediction_quantiles")
+    @classmethod
+    def check_prediction_quantiles(cls, v: List[float]) -> List[float]:
+        if v is not None and not all(0.0 < x < 1.0 for x in v):
+            raise ValueError("`prediction_quantiles` must must all be > 0.0 and < 1.0.")
         return v
 
 
@@ -300,6 +320,68 @@ class ForecastingInferenceInput(BaseInferenceInput):
         " that all timestamps are in the _future_ relative to the `data` you provided."
         " Given these `future_data` the model (when supported) will factor in `VAL2` when"
         " making predictions for `TARGET1`.",
+        default=None,
+    )
+
+    quantile_calibration_data: Optional[Dict[str, List[Any]]] = Field(
+        description="These data are used to support the creation of"
+        " probabilistic forecasts (generated when you use the `prediction_quantiles` parameter)."
+        " These data should be provided if and only if `prediction_quantiles` are provided."
+        " You should provide at least M + N values where M is the minimum context length for"
+        " the model you are using and N is at least (@TODO). This will ensure that there are"
+        " enough ground truth values to use to estimate the uncertainty of model predictions"
+        " and thus provide reliable quantile values for your predicted future values."
+        " Internally the service is generating a forecast for time periods beyond M and comparing"
+        " this forecast to the ground truth in N to generate its estimates for quantile values."
+        " The data you use should be taken from your original dataset and it should not align with what you used for"
+        " `data`. M and N should be in time ordered sequence where the first element of N occurs just"
+        " after the last element in M. The data are in the same format as `data`."
+        " Below we show an example which is identical to that for `data` excep taken from"
+        " one day earlier\n:"
+        """
+{
+            "schema": {
+                "timestamp_column": "date",
+                "id_columns": [
+                    "ID1",
+                    "ID2"
+                ],
+                "target_columns": [
+                    "TARGET1"
+                ]
+            },
+            "data": {
+                "date": [
+                    "2024-10-17T01:00:21+00:00",
+                    "2024-10-17T01:00:22+00:00",
+                    "2024-10-17T01:00:21+00:00",
+                    "2024-10-17T01:00:22+00:00"
+                ],
+                "ID1": [
+                    "I1",
+                    "J1",
+                    "I1",
+                    "J1"
+                ],
+                "ID2": [
+                    "I1",
+                    "J2",
+                    "I1",
+                    "J2"
+                ],
+                "TARGET1": [
+                    1.75,
+                    1.86,
+                    2.31,
+                    2.73
+                ],
+                "VAL2": [
+                    10.45,
+                    9.15,
+                    13.86,
+                    12.65
+                ]
+            }        }\n""",
         default=None,
     )
 
