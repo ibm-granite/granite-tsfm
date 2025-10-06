@@ -11,7 +11,11 @@ import pandas as pd
 import torch
 
 from tsfm_public import TimeSeriesForecastingPipeline
-from tsfm_public.toolkit.time_series_preprocessor import TimeSeriesPreprocessor, extend_time_series
+from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
+from tsfm_public.toolkit.time_series_preprocessor import (
+    TimeSeriesPreprocessor,
+    extend_time_series,
+)
 from tsfm_public.toolkit.tsfm_config import TSFMConfig
 from tsfm_public.toolkit.util import select_by_index
 
@@ -211,6 +215,7 @@ class TSFMForecastingInferenceHandler:
         self,
         data: pd.DataFrame,
         future_data: Optional[pd.DataFrame] = None,
+        quantile_calibration_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,
         **kwargs,
@@ -302,6 +307,76 @@ class TSFMForecastingInferenceHandler:
         device = "cpu" if not torch.cuda.is_available() else "cuda"
 
         extra_pipeline_args = getattr(self.handler_config, "extra_pipeline_arguments", {})
+
+        # if requested, add quantile predictions to our forecast
+        prediction_quantiles = parameters.prediction_quantiles if parameters.prediction_quantiles else None
+        if prediction_quantiles is None and quantile_calibration_data is not None:
+            raise ValueError("If you provide quantile_calibration_data, you must provide prediction_quantiles")
+        if prediction_quantiles is not None and quantile_calibration_data is None:
+            raise ValueError("Providing prediction_quantiles requires that you also provide quantile_calibration_data")
+
+        pp_processor: PostHocProbabilisticProcessor = None
+
+        if prediction_quantiles:
+            # quantile_calibration_data doesn't necessarily overlap with data
+            # we need to generated a new forecast over a region where we have
+            # ground truth in order to train PostHocProbabilisticProcessor
+            # suppose below represents period spanning quantile_calibration_data
+            # [t0, t1+fl] where t1-t0 is the minimum context length for a forecast
+            # |
+            # |
+            # |__________________________|_______________________________(time)
+            # t0                         t1                         t1+fl
+            # we pass up to t1 to forecast up to t1+fl then we have ground truth
+            # (from the original data) and predictions over [t1, t1+fl] to pass
+            # to PostHocProbabilisticProcessor
+
+            # 1st pass is generate forecasts using the calibration data to train
+            # PostHocProbabilisticProcessor
+
+            min_context_length = self.handler_config.minimum_context_length
+            max_prediction_length = self.handler_config.maximum_prediction_length
+
+            # check that each timeseries satisfies minimum length requirements
+            if schema.id_columns:
+                data_lengths = quantile_calibration_data.groupby(schema.id_columns)[schema.id_columns].apply(len)
+                min_len_index = data_lengths.argmin()
+                min_data_length = data_lengths.iloc[min_len_index]
+                max_data_length = data_lengths.max()
+            else:
+                min_data_length = max_data_length = len(quantile_calibration_data)
+            LOGGER.info(
+                f"quantile_calibration_data {len(quantile_calibration_data)}, minimum series length: {min_data_length}, maximum series length: {max_data_length}"
+            )
+
+            if min_data_length < min_context_length + max_prediction_length:
+                raise ValueError(
+                    f"""The size of each timeseries in the given quantile_calibration_data
+                    must be greater than or equal to the sum of the minimum_context_length {min_context_length}"
+                    plus the model's default prediction length of {max_prediction_length}"""
+                )
+
+            forecast_pipeline = TimeSeriesForecastingPipeline(
+                model=self.model,
+                feature_extractor=self.preprocessor,
+                freq=self.preprocessor.freq,
+                device=device,
+                batch_size=2000,
+                inverse_scale_outputs=True,
+                explode_forecasts=False,
+                **extra_pipeline_args,
+            )
+            forecasts = forecast_pipeline(quantile_calibration_data)
+            prediction_columns = [f"{c}_prediction" for c in schema.target_columns]
+            pp_processor = PostHocProbabilisticProcessor(
+                id_columns=schema.id_columns, window_size=100, method="conformal", quantiles=prediction_quantiles
+            )
+
+            pp_processor = pp_processor.train(
+                y_cal_gt=forecasts[schema.target_columns + schema.id_columns],
+                y_cal_pred=forecasts[prediction_columns + schema.id_columns],
+            )  # we use forecasts twice b/c it does contain the quantile calibration data in a better format via the call to forecast_pipeline(quantile_calibration_data)
+
         forecast_pipeline = TimeSeriesForecastingPipeline(
             model=self.model,
             explode_forecasts=True,
@@ -310,6 +385,7 @@ class TSFMForecastingInferenceHandler:
             freq=self.preprocessor.freq,
             device=device,
             batch_size=1000,
+            probabilistic_processor=pp_processor,
             **extra_pipeline_args,
         )
         forecasts = forecast_pipeline(data, future_time_series=future_data, inverse_scale_outputs=True)
@@ -320,6 +396,7 @@ class TSFMForecastingInferenceHandler:
         self,
         data: pd.DataFrame,
         future_data: Optional[pd.DataFrame] = None,
+        quantile_calibration_data: Optional[pd.DataFrame] = None,
         output_data: Optional[pd.DataFrame] = None,
         schema: Optional[ForecastingMetadataInput] = None,
         parameters: Optional[ForecastingParameters] = None,

@@ -24,7 +24,7 @@ from transformers.feature_extraction_utils import (
 )
 
 from .dataset import ForecastDFDataset
-from .processor import BaseProcessor
+from .processor import STRING_TO_TYPE, TYPE_TO_STRING, BaseProcessor
 from .util import (
     FractionLocation,
     convert_to_univariate,
@@ -54,9 +54,6 @@ DEFAULT_FREQUENCY_MAPPING = {
     "D": 8,  # daily
     "W": 9,  # weekly
 }
-
-TYPE_TO_STRING = {int: "int", np.int64: "numpy.int64", str: "str", float: "float", np.float64: "numpy.float64"}
-STRING_TO_TYPE = {_v: _k for _k, _v in TYPE_TO_STRING.items()}
 
 
 class SKLearnFeatureExtractionBase:
@@ -144,7 +141,7 @@ class TimeSeriesProcessorBase(BaseProcessor):
         else:
             input_scaler_dict = self.scaler_dict
 
-        # get type information; assume homogeneous types
+        # get type information
         if self.scaling_id_columns and self.scaling:
             akey = next(iter(input_scaler_dict.keys()))
             if isinstance(akey, Tuple):

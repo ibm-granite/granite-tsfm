@@ -11,6 +11,7 @@ import os
 import warnings
 from typing import Any, Union
 
+import numpy as np
 from transformers.dynamic_module_utils import custom_object_save
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
@@ -24,6 +25,9 @@ from transformers.utils import (
 
 
 LOGGER = logging.getLogger(__file__)
+
+TYPE_TO_STRING = {int: "int", np.int64: "numpy.int64", str: "str", float: "float", np.float64: "numpy.float64"}
+STRING_TO_TYPE = {_v: _k for _k, _v in TYPE_TO_STRING.items()}
 
 
 class BaseProcessor(FeatureExtractionMixin):
