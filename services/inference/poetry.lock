@@ -1486,8 +1486,8 @@ testing = ["granite-tsfm[notebooks]", "parameterized", "pytest", "pytest-coverag
 [package.source]
 type = "git"
 url = "https://github.com/ibm-granite/granite-tsfm.git"
-reference = "issue_55686"
-resolved_reference = "1248ba5d07f6a04a3e96f4dc2565aad8835c91f1"
+reference = "destiny"
+resolved_reference = "8f231e2ca3397b94bd3025adec26637594e1b07a"
 
 [[package]]
 name = "graphene"
@@ -5316,4 +5316,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "457f98fd096013f33402f87c7ecf9ab7f909772eaa68b4bc46fad9f28d3b76d0"
+content-hash = "e0178ee6f79143176c409e0f95f1eeef30b7afa7ac5e4c4fd54d786dc8326208"
