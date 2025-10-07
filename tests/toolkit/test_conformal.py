@@ -3,13 +3,16 @@
 
 """Tests conformal processor capabilities"""
 
+import itertools
 import tempfile
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
+from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
 from tsfm_public.toolkit.conformal import (
     AdaptiveWeightedConformalScoreWrapper,
     NonconformityScores,
@@ -18,6 +21,7 @@ from tsfm_public.toolkit.conformal import (
     PostHocProbabilisticProcessor,
     WeightedConformalForecasterWrapper,
 )
+from tsfm_public.toolkit.time_series_forecasting_pipeline import TimeSeriesForecastingPipeline
 
 
 @pytest.mark.parametrize(
@@ -412,6 +416,7 @@ def test_adaptive_conformal_wrapper():
     2. Initialization
     """
     n_batch_update = int(np.ceil(1 / false_alarm - 1) + 1)
+    # n_batch_update = 1
     weighting_params = {
         "lr": 0.05,
         "n_batch_update": n_batch_update,
@@ -525,7 +530,7 @@ def test_forecast_horizon_aggregation():
         # print()
         assert (
             outliers_aggregated.shape == (outliers_scores.shape[0], outliers_scores.shape[-1])
-        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0],outliers_scores.shape[-1])}"
+        ), f"forecast_horizon_aggregation should provide an output of shape {(outliers_scores.shape[0], outliers_scores.shape[-1])}"
         assert (
             np.mean(np.abs(outliers_aggregated - expected_aggregation[aggregation])) == 0
         ), f"Expected forecast_horizon_aggregation for aggregation {aggregation} did not match the expected values"
@@ -577,7 +582,197 @@ def test_forecast_horizon_aggregation():
         ), f"Number of outliers for aggregation {aggregation} did not match the expected values"
 
 
-if __name__ == "__main__":
-    # test_posthoc_probabilistic_processor_outlier_score()
-    # test_adaptive_conformal_wrapper()
-    test_forecast_horizon_aggregation()
+def example_dataset():
+    n_variables: int = 2
+    target_variables = [f"X{i + 1}" for i in range(n_variables)]
+    data = np.array(
+        [np.convolve(np.random.normal(0, 1, 1000), np.ones(15) / 15, "same") for _ in range(n_variables)]
+    ).T
+    timestamp = pd.date_range("2021-01-01", periods=len(data), freq=pd.Timedelta(5, "minute"))
+    df = pd.DataFrame(data, columns=target_variables)
+    df["timestamp"] = timestamp
+    return target_variables, df
+
+
+@pytest.mark.parametrize("id_columns,input_type", itertools.product(["single", "multiple"], ["ndarray", "dataframe"]))
+def test_posthoc_probabilistic_processor_with_id_columns(id_columns, input_type):
+    target_variables, dataset = example_dataset()
+    forecast_horizon = 30
+    model = TinyTimeMixerForPrediction(
+        TinyTimeMixerConfig(
+            context_length=120, prediction_length=forecast_horizon, num_input_channels=len(target_variables)
+        )
+    )
+
+    if id_columns == "single":
+        id_columns = ["id_column"]
+    elif id_columns == "multiple":
+        id_columns = ["id_column", "id_column2"]
+
+    dataset[id_columns[0]] = [1 if x < len(dataset) / 2 else 2 for x in range(len(dataset))]
+    for col in id_columns[1:]:
+        dataset[col] = dataset[id_columns[0]].astype(str)
+    fpipe = TimeSeriesForecastingPipeline(
+        model, timestamp_column="timestamp", id_columns=id_columns, target_columns=target_variables, device="cpu"
+    )
+    forecasts = fpipe(dataset)
+
+    window_size = 200
+    quantiles = [0.1, 0.5, 0.9]
+
+    n_features = len(target_variables)
+
+    y_pred = forecasts[["X1_prediction", "X2_prediction"] + id_columns].copy()
+    y_gt = forecasts[["X1", "X2"] + id_columns].copy()
+
+    g1_idx = forecasts.loc[forecasts["id_column"].eq(1)].index
+    g2_idx = forecasts.loc[forecasts["id_column"].eq(2)].index
+
+    # Calibration
+    g1_idx = g1_idx[:window_size]
+    g2_idx = g2_idx[:window_size]
+
+    sel_idx = g1_idx.append(g2_idx)
+    y_cal_gt = y_gt.loc[sel_idx]
+    y_cal_pred = y_pred.loc[sel_idx]
+
+    unique_id_columns_cal = forecasts[id_columns].drop_duplicates().values
+    id_columns_cal = forecasts[id_columns].copy().loc[sel_idx].values
+
+    # Test
+    g1_idx = forecasts.loc[forecasts["id_column"].eq(1)].index
+    g2_idx = forecasts.loc[forecasts["id_column"].eq(2)].index
+
+    g1_idx = g1_idx[window_size:]
+    g2_idx = g2_idx[window_size:]
+
+    sel_idx = g1_idx.append(g2_idx)
+    # y_test_gt = y_gt.loc[sel_idx]
+    y_test_pred = y_pred.loc[sel_idx]
+    id_columns_test = forecasts[id_columns].copy().loc[sel_idx].values
+
+    for method in [PostHocProbabilisticMethod.GAUSSIAN.value, PostHocProbabilisticMethod.CONFORMAL.value]:
+        if method == PostHocProbabilisticMethod.CONFORMAL.value:
+            nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value, NonconformityScores.ERROR.value]
+        else:
+            nonconformity_score_list = [NonconformityScores.ABSOLUTE_ERROR.value]
+        for nonconformity_score in nonconformity_score_list:
+            # print(method,nonconformity_score )
+
+            if input_type == "dataframe":
+                p = PostHocProbabilisticProcessor(
+                    id_columns=id_columns,
+                    window_size=window_size,
+                    quantiles=quantiles,
+                    nonconformity_score=nonconformity_score,
+                    method=method,
+                )
+                p.train(y_cal_gt=y_cal_gt, y_cal_pred=y_cal_pred)  # , id_column_values=id_columns_cal)
+                y_test_prob_pred = p.predict(y_test_pred)  #  id_column_values=id_columns_test)
+            elif input_type == "ndarray":
+                p = PostHocProbabilisticProcessor(
+                    window_size=window_size,
+                    quantiles=quantiles,
+                    nonconformity_score=nonconformity_score,
+                    method=method,
+                )
+                p.train(
+                    y_cal_gt=p._get_numpy_input(y_cal_gt[["X1", "X2"]]),
+                    y_cal_pred=p._get_numpy_input(y_cal_pred[["X1_prediction", "X2_prediction"]]),
+                    id_column_values=id_columns_cal,
+                )
+                y_test_prob_pred = p.predict(
+                    p._get_numpy_input(y_test_pred[["X1_prediction", "X2_prediction"]]),
+                    id_column_values=id_columns_test,
+                )
+
+            ### ASSERTIONS ###
+
+            ## Attributes checked correctly
+            assert (
+                p.method == method
+            ), " method attribute wasnt assigned properly for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+            assert (
+                p.window_size == window_size
+            ), " window_size attribute wasnt assigned properly for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+            assert (
+                p.quantiles == quantiles
+            ), " quantiles attribute wasnt assigned properly for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+            assert (
+                p.nonconformity_score == nonconformity_score
+            ), " nonconformity_score attribute wasnt assigned properly for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+            for g in unique_id_columns_cal:
+                g = tuple(g)
+                assert (
+                    p.model[g].window_size == window_size
+                ), " window_size attribute of processors model wasn't assigned properly for method {} nonconformity score {} for group {}".format(
+                    method, nonconformity_score, g
+                )
+
+                ## Check based on method
+                if method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                    assert isinstance(
+                        p.model[g], PostHocGaussian
+                    ), "model is not an instance of PostHocGaussian for method {} nonconformity score {} for group {}".format(
+                        method, nonconformity_score, g
+                    )
+
+                if method == PostHocProbabilisticMethod.CONFORMAL.value:
+                    assert isinstance(
+                        p.model[g], WeightedConformalForecasterWrapper
+                    ), "model is not an instance of WeightedConformalForecasterWrapper for method {} nonconformity score {} for group {}".format(
+                        method, nonconformity_score, g
+                    )
+
+            ## Prediction Output check
+            assert isinstance(
+                y_test_prob_pred, np.ndarray
+            ), "Unexpected output type from predict(), it should be np array for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+            assert y_test_prob_pred.shape == (
+                y_test_pred.shape[0],
+                forecast_horizon,
+                n_features,
+                len(quantiles),
+            ), "Unexpected output shape from predict() for method {} nonconformity score {}".format(
+                method, nonconformity_score
+            )
+
+            # Monotonicity check across quantiles
+            assert np.all(
+                y_test_prob_pred[..., 0] <= y_test_prob_pred[..., 1]
+            ), "Quantile 0.1 is not <= 0.5 for method {} nonconformity score {}".format(method, nonconformity_score)
+            assert np.all(
+                y_test_prob_pred[..., 1] <= y_test_prob_pred[..., 2]
+            ), "Quantile 0.5 is not <= 0.9 for method {} nonconformity score {}".format(method, nonconformity_score)
+
+            # save / load
+            with tempfile.TemporaryDirectory() as d:
+                p.save_pretrained(d)
+                p_new = PostHocProbabilisticProcessor.from_pretrained(d)
+                if isinstance(p.model, dict):
+                    assert len(p.model) == len(p_new.model)
+                    for k in p.model.keys():
+                        assert k in p_new.model.keys()
+
+                else:
+                    assert type(p_new.model) is type(p.model)
+
+
+# if __name__ == "__main__":
+#     test_posthoc_probabilistic_processor()
+#     test_posthoc_probabilistic_processor_online_update()
+#     test_posthoc_probabilistic_processor_outlier_score()
+#     test_adaptive_conformal_wrapper()
+#     test_forecast_horizon_aggregation()
+#     test_posthoc_probabilistic_processor_with_id_columns()
