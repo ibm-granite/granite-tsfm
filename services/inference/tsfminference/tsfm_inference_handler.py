@@ -392,8 +392,6 @@ class TSFMForecastingInferenceHandler:
             data,
             future_time_series=future_data,
             inverse_scale_outputs=True,
-            device_map=None,
-            low_cpu_mem_usage=False,
         )
 
         return forecasts
