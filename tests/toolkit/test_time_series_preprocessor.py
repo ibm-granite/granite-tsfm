@@ -177,6 +177,38 @@ def test_time_series_preprocessor_inv_scales_lists(ts_data):
     assert out_inv["value2"].mean()[0] == df["value2"].mean()
 
 
+def test_time_series_preprocessor_power_inv_scales_lists(ts_data):
+    df = ts_data
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        scaling=True,
+        scaler_type="power",
+        scaler_args={"standardize": False},
+    )
+
+    tsp.train(df)
+
+    # check scaled result
+    out = tsp.preprocess(df)
+
+    # construct artificial result
+    out["value1"] = out["value1"].apply(lambda x: np.array([x] * 3))
+    out["value2"] = out["value2"].apply(lambda x: np.array([x] * 3))
+    out["value1_prediction"] = out["value1"]
+    out["value2_prediction"] = out["value2"]
+
+    out_inv = tsp.inverse_scale_targets(out)
+    out_inv = tsp.inverse_scale_targets(out_inv, suffix="_prediction")
+
+    assert out_inv["value1"].mean()[0] == df["value1"].mean()
+    assert out_inv["value2"].mean()[0] == df["value2"].mean()
+
+
 def test_extend_time_series(ts_data):
     periods = 5
     a = extend_time_series(ts_data, timestamp_column="timestamp", grouping_columns=["id"], periods=periods)

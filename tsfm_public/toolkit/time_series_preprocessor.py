@@ -17,6 +17,7 @@ from pandas.tseries.frequencies import to_offset
 from sklearn.preprocessing import LabelEncoder as LabelEncoder_
 from sklearn.preprocessing import MinMaxScaler as MinMaxScaler_
 from sklearn.preprocessing import OrdinalEncoder as OrdinalEncoder_
+from sklearn.preprocessing import PowerTransformer as PowerTransformer_
 from sklearn.preprocessing import StandardScaler as StandardScaler_
 from torch.utils.data import Subset
 from transformers.feature_extraction_utils import (
@@ -90,6 +91,12 @@ class MinMaxScaler(MinMaxScaler_, SKLearnFeatureExtractionBase):
     """
 
 
+class PowerTransformer(PowerTransformer_, SKLearnFeatureExtractionBase):
+    """Simple wrapper class to adapt min/max scaler to work with the HF
+    serialization approach.
+    """
+
+
 class OrdinalEncoder(OrdinalEncoder_, SKLearnFeatureExtractionBase):
     """Simple wrapper class to adapt OrdinalEncoder to work with the HF
     serialization approach.
@@ -116,6 +123,7 @@ class ScalerType(enum.Enum):
 
     MINMAX = "minmax"
     STANDARD = "standard"
+    POWER = "power"
 
 
 class TimeSeriesProcessorBase(BaseProcessor):
@@ -270,6 +278,9 @@ class TimeSeriesProcessorBase(BaseProcessor):
         if scaler_type == ScalerType.STANDARD.value:
             return StandardScaler
 
+        if scaler_type == ScalerType.POWER.value:
+            return PowerTransformer
+
         raise ValueError(f"Unknown scaler type {scaler_type} specified.")
 
     def _standardize_dataframe(
@@ -411,6 +422,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         frequency_mapping: Dict[str, int] = DEFAULT_FREQUENCY_MAPPING,
         freq: Optional[Union[int, str]] = None,
         scale_categorical_columns: bool = True,
+        scaler_args: Dict[str, Any] = {},
         **kwargs,
     ):
         """Multi-time series aware data preprocessor. Provides functions for scaling data and facilitates downstream
@@ -480,6 +492,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         self.time_series_task = time_series_task
         # self.scale_outputs = scale_outputs
         self.scaler_type = scaler_type
+        self.scaler_args = scaler_args
 
         # check subset
         if scaling_id_columns is not None:
@@ -496,6 +509,8 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         self.frequency_mapping = frequency_mapping
         self.freq = freq
         self.scale_categorical_columns = scale_categorical_columns
+
+        self.other_columns_to_scale = kwargs.pop("other_columns_to_scale", None)
 
         kwargs["processor_class"] = self.__class__.__name__
 
@@ -532,58 +547,6 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
                     "Each specified categorical column must also be included in one of 'conditional_columns', 'control_columns', or 'observable_columns'."
                 )
 
-    @classmethod
-    def _get_scaler_class(cls, scaler_type):
-        if scaler_type == ScalerType.MINMAX.value:
-            return MinMaxScaler
-
-        if scaler_type == ScalerType.STANDARD.value:
-            return StandardScaler
-
-        raise ValueError(f"Unknown scaler type {scaler_type} specified.")
-
-    def _standardize_dataframe(
-        self,
-        dataset: Union[Dataset, pd.DataFrame],
-    ) -> pd.DataFrame:
-        """For given supported inputs, appropriately converts to a pandas dataframe. Adds an ID column
-        if needed.
-
-        Args:
-            dataset (Union[Dataset, pd.DataFrame]): Input dataset
-
-        Returns:
-            pd.DataFrame: Converted dataframe with ID column.
-        """
-        if isinstance(dataset, Dataset):
-            df = dataset.to_pandas()
-        else:
-            df = dataset.copy()
-
-        # add id column when there are no id or scaling_id columns
-        # or when scaling_id_columns == []
-        if not self.id_columns or self.scaling_id_columns == []:
-            df[INTERNAL_ID_COLUMN] = INTERNAL_ID_VALUE
-
-        return df
-
-    def _clean_up_dataframe(self, df: pd.DataFrame) -> None:
-        """Removes columns added during internal processing of the provided dataframe.
-
-        Currently, the following checks are done:
-         - Remove INTERNAL_ID_COLUMN if present
-
-        Args:
-            df (pd.DataFrame): Input pandas dataframe
-
-        Returns:
-            pd.DataFrame: Cleaned up dataframe
-        """
-
-        if not self.id_columns:
-            if INTERNAL_ID_COLUMN in df.columns:
-                df.drop(columns=INTERNAL_ID_COLUMN, inplace=True)
-
     def _get_other_columns_to_scale(
         self,
     ) -> List[str]:
@@ -593,6 +556,9 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         Returns:
             List[str]: List of column names
         """
+
+        if self.other_columns_to_scale is not None:
+            return self.other_columns_to_scale
 
         column_lists = [
             self.observable_columns,
@@ -633,10 +599,10 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
 
                 # train
                 if cols_to_scale:
-                    self.scaler_dict[name] = scaler_class()
+                    self.scaler_dict[name] = scaler_class(**self.scaler_args)
                     self.scaler_dict[name].fit(g[cols_to_scale])
 
-                self.target_scaler_dict[name] = scaler_class()
+                self.target_scaler_dict[name] = scaler_class(**self.scaler_args)
                 self.target_scaler_dict[name].fit(g[self.target_columns])
 
     def get_frequency_token(self, token_name: str):
@@ -815,7 +781,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
 
         def explode_row(df_row, name, columns):
             df = pd.DataFrame(df_row[columns].to_dict())
-            inv_scale = self.target_scaler_dict[name].inverse_transform(df)
+            inv_scale = self.target_scaler_dict[name].inverse_transform(df[columns].values)
             df_out = df_row.copy()
             for idx, c in enumerate(columns):
                 df_out[c] = inv_scale[:, idx]
@@ -828,7 +794,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
                 name = grp.iloc[0][id_columns]
 
             if not np.any(col_has_list):
-                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale])
+                grp[cols_to_scale] = self.target_scaler_dict[name].inverse_transform(grp[cols_to_scale].values)
             else:
                 grp[cols_to_scale] = grp[cols_to_scale].apply(
                     lambda x: explode_row(x, name, cols_to_scale), axis="columns"
