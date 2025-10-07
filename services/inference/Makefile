@@ -1,4 +1,4 @@
-CONTAINER_BUILDER ?= docker
+CONTAINER_BUILDER ?= podman
 SKIP_GPU_BUILD ?= "0"
 NO_DOCKER_CACHE ?=
 EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
@@ -73,6 +73,7 @@ test_local: clone_models boilerplate start_service_local
 
 test_image: clone_models start_service_image
 	pytest -s tests ../tests
+	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 
