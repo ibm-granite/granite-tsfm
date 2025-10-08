@@ -4,7 +4,7 @@ requires = ["setuptools>=78.1.1", "wheel", "Cython", "setuptools-scm>=8.0"]
 [project]
 name = "timecopilot-granite-tsfm"
 requires-python = ">=3.9,<3.13"
-version = "0.1.0"
+version = "0.1.1"
 description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
 license = { file = "LICENSE" }

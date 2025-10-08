@@ -19,7 +19,7 @@ def get_fixed_factor(freq: str, domain=None):
     elif freq[-1] == "T":
         n_min = int(freq[:-1])
         factor = BASE_SEASON / (24 * 60 / n_min)
-    elif freq == "H":
+    elif freq in ["H", "h"]:
         factor = BASE_SEASON / 24
     elif freq == "6H":
         factor = BASE_SEASON / 4  # only CMIP6 in pretraining --> 24. / 4 or 24 / 365*4 would be better!
