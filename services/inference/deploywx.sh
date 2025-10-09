@@ -42,7 +42,6 @@ make test_local
 echo "🛠️ Building container image..."
 set +e
 SKIP_GPU_BUILD=1 CONTAINER_BUILDER=podman make image
-make stop_service_image | true
 set -euo pipefail
 make test_image
 
