@@ -38,6 +38,7 @@ fi
 # --- build the image ---
 echo "🛠️ Building container image..."
 SKIP_GPU_BUILD=1 CONTAINER_BUILDER=podman make image
+make test_image
 
 # --- tag image ---
 image_local="localhost/tsfminference-cpu:latest"
