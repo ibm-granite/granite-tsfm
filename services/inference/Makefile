@@ -61,12 +61,15 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 run_locust_tests:
+	# we do this to empty the cache
 	$(MAKE) stop_service_local
 	$(MAKE) start_service_local
 	for i in $$(seq 1 10); do \
 		echo "Run $$i/10"; \
 		locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary; \
 	done
+	
+
 
 test_local: clone_models boilerplate stop_service_local start_service_local
 	pytest --cov=tsfminference --cov-report term-missing tests ../tests
