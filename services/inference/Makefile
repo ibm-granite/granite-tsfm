@@ -32,7 +32,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate clone_model
 start_service_local:
 	@make start_service_local_watch &
 stop_service_local:
-	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
+	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app' || true
 
 imagehardening:
 	cp -avr ../../NGP-runbook/ImageHardening .
@@ -64,16 +64,26 @@ start_service_image: create_prometheus_metrics_dir
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
-test_local: clone_models boilerplate start_service_local
-	pytest --cov=tsfminference --cov-report term-missing tests ../tests
-	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
+run_locust_tests:
+	# we do this to empty the cache
 	$(MAKE) stop_service_local
+	$(MAKE) start_service_local
+	for i in $$(seq 1 10); do \
+		echo "Run $$i/10"; \
+		locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary; \
+	done
+	
+
+
+test_local: clone_models boilerplate stop_service_local start_service_local
+	pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	$(MAKE) run_locust_tests
 	$(MAKE) delete_models
 	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
 	pytest -s tests ../tests
-	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
+	$(MAKE) run_locust_tests
 	$(MAKE) stop_service_image
 	$(MAKE) delete_models
 

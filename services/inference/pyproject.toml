@@ -34,6 +34,7 @@ python = ">=3.10,<3.13"
 numpy = { version = "<2" }
 granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
 transformers = { version = "==4.56.0" , extras = ["torch"] }
+filelock = "*"
 
 
 fastapi = { version = "*" }

@@ -3,12 +3,14 @@
 import copy
 import logging
 import tempfile
+import threading
 from functools import cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import pandas as pd
 import torch
+from filelock import FileLock
 
 from tsfm_public import TimeSeriesForecastingPipeline
 from tsfm_public.toolkit.conformal import PostHocProbabilisticProcessor
@@ -26,6 +28,10 @@ from .tsfm_util import load_config, load_model, register_config
 
 LOCAL_FILES_ONLY = not TSFM_ALLOW_LOAD_FROM_HF_HUB
 LOGGER = logging.getLogger(__file__)
+
+
+_THREAD_LOCK = threading.Lock()
+_, _IPROCESS_LOCK_FILE = tempfile.mkstemp()
 
 
 class TSFMForecastingInferenceHandler:
@@ -79,14 +85,16 @@ class TSFMForecastingInferenceHandler:
     @classmethod
     @cache
     def _cached_load_model(cls, model_path, config: str, module_path, config_class):
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=True) as tmp:
-            tmp.write(config)
-            tmp.flush()
-            return load_model(
-                model_path=model_path,
-                config=config_class.from_json_file(tmp.name),
-                module_path=module_path,
-            )
+        with FileLock(_IPROCESS_LOCK_FILE):
+            with _THREAD_LOCK:
+                with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=True) as tmp:
+                    tmp.write(config)
+                    tmp.flush()
+                    return load_model(
+                        model_path=model_path,
+                        config=config_class.from_json_file(tmp.name),
+                        module_path=module_path,
+                    )
 
     def prepare(
         self,
