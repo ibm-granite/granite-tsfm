@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 echo "Deployment checklist:"
 echo "✅ You pulled upstream changes (git fetch upstream && git merge upstream/destiny)."
-echo "✅ You've confirmed that you recursively cloned this repository so that NGP-runbook directory contains product security scripts."
+echo "✅ You've confirmed that you recursively cloned this repository so that the submodule NGP-runbook directory contains product security scripts."
 echo "✅ You've done a minimal test of the image via make test_local && test_image."
 echo "   (remember to run make stop_service_local and/or stop_service_image if tests fail)."
 echo "✅ You've pushed all your merges to the origin (aka the private copy of granite-tsfm) (git push origin destiny) after confirming tests pass."
