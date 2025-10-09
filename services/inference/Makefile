@@ -62,7 +62,7 @@ start_service_image: create_prometheus_metrics_dir
 	sleep 5
 
 stop_service_image:
-	$(CONTAINER_BUILDER) stop tsfmserver-cpu
+	$(CONTAINER_BUILDER) stop tsfmserver-cpu || true
 
 run_locust_tests:
 	# we do this to empty the cache
