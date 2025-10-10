@@ -1821,6 +1821,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
         freq_token: Optional[torch.Tensor] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerForPredictionOutput:
         r"""
         past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
@@ -1848,6 +1849,8 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
             Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
             TinyTimeMixerConfig param `categorical_vocab_size_list`
+        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
+            to support custom trainers. Defaults to None.
 
         Returns:
 
@@ -2085,7 +2088,7 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
         return_dict: Optional[bool] = None,
         freq_token: Optional[torch.Tensor] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
-        # metadata: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerForPredictionOutput:
         r"""
         past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
@@ -2113,6 +2116,8 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
         static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
             Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
             TinyTimeMixerConfig param `categorical_vocab_size_list`
+        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
+            to support custom trainers. Defaults to None.
 
         Returns:
 
@@ -2160,7 +2165,7 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
             return_dict=return_dict,
             freq_token=freq_token,
             static_categorical_values=static_categorical_values,
-            # metadata = metadata
+            metadata=metadata,
         )
 
 class AffineTransformed_Penalized(AffineTransformed):

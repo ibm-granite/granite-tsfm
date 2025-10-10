@@ -5,6 +5,7 @@
 import copy
 import enum
 from datetime import datetime
+from math import isnan
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1310,3 +1311,57 @@ def convert_tsfile(filename: str) -> pd.DataFrame:
     #     final_df["target"] = final_df["target"] - 1
 
     return final_df
+
+
+def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
+    """Encode data for sending when using services
+
+    Args:
+        df (pd.DataFrame): Input time series data
+        timestamp_column (str): Column in the input pandas dataframe where timestamp information resides.
+
+    Returns:
+        Dict[str, Any]: _description_
+    """
+    if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
+        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
+    data_payload = df.to_dict(orient="list")
+
+    for k, v in data_payload.items():
+        if isinstance(v[0], str):
+            continue
+        # rewrite all the nan to None
+        data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
+
+    return data_payload
+
+
+def is_nested_dataframe(df: pd.DataFrame, column: str) -> bool:
+    """Checks if a dataframe contains cell entries which are series.
+
+    Args:
+        df (pd.DataFrame): Input dataframe.
+        column (str): A column to check in the input dataframe.
+    Returns:
+        bool: True if the column contains pandas series, False otherwise.
+    """
+    return isinstance(df.iloc[0][column], pd.Series)
+
+
+def check_nested_lengths(df: pd.DataFrame, columns: List[str]):
+    """Check that each row contains series of the same length
+
+    Args:
+        df (pd.DataFrame): Input dataframe, assumed to contain nested series.
+        columns (List[str]): The columns of the dataframe to consider.
+
+    Raises:
+        ValueError: Raised if the dataframe does not contain rows where each series is
+        not equal length.
+    """
+    if len(columns) == 1:
+        return
+
+    l = df[columns].map(len).values
+    if not np.all(np.isclose(l, np.tile(l[:, :1], (1, l.shape[1])))):
+        raise ValueError("Input dataframe contains rows with series that are not equal length.")

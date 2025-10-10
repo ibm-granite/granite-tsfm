@@ -4,7 +4,7 @@
 
 import inspect
 from collections import defaultdict
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ from transformers.pipelines.base import (
 from transformers.trainer_utils import RemoveColumnsCollator
 from transformers.utils import add_end_docstrings, logging
 
+from .conformal import PostHocProbabilisticProcessor
 from .dataset import ForecastDFDataset
 from .time_series_preprocessor import create_timestamps, extend_time_series
 
@@ -52,7 +53,9 @@ class TimeSeriesPipeline(Pipeline):
             _type_: _description_
         """
         # our preprocess returns a dataset
-        dataset = self.preprocess(inputs, **preprocess_params)
+        dataset = self.preprocess(inputs, **preprocess_params)["dataset"]
+        model_output_key = getattr(self, "_model_output_key", None)
+        copy_dataset_keys = getattr(self, "_copy_dataset_keys", True)
 
         batch_size = forward_params["batch_size"]
         num_workers = forward_params["num_workers"]
@@ -77,27 +80,29 @@ class TimeSeriesPipeline(Pipeline):
         # iterate over dataloader
         it = iter(dataloader)
         accumulator = []
-        model_output_key = None
         while (batch := next(it, None)) is not None:
             item = self.forward(batch, **forward_params)
             if not model_output_key:
                 model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
             accumulator.append(item[model_output_key])
 
-        # collect all ouputs needed for post processing
-        model_outputs = defaultdict(list)
-        items = list(dataset[0].items())
-        for r in dataset:
+        if copy_dataset_keys:
+            # collect all ouputs needed for post processing
+            model_outputs = defaultdict(list)
+            items = list(dataset[0].items())
+            for r in dataset:
+                for k, v in items:
+                    model_outputs[k].append(r[k])
+
             for k, v in items:
-                model_outputs[k].append(r[k])
+                if isinstance(v, torch.Tensor):
+                    model_outputs[k] = torch.stack(model_outputs[k])
 
-        for k, v in items:
-            if isinstance(v, torch.Tensor):
-                model_outputs[k] = torch.stack(model_outputs[k])
-
-        # without shuffling in the dataloader above, we assume that order is preserved
-        # otherwise we need to incorporate sequence id somewhere and do a proper join
-        model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+            # without shuffling in the dataloader above, we assume that order is preserved
+            # otherwise we need to incorporate sequence id somewhere and do a proper join
+            model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+        else:
+            model_outputs = accumulator
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -122,6 +127,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         explode_forecasts: bool = False,
         inverse_scale_outputs: bool = True,
         add_known_ground_truth: bool = True,
+        probabilistic_processor: Optional[PostHocProbabilisticProcessor] = None,
         **kwargs,
     ):
         kwargs["explode_forecasts"] = explode_forecasts
@@ -153,10 +159,18 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
 
-        if use_frequency_token and "feature_extractor" in kwargs:
-            kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
+        if use_frequency_token and ("feature_extractor" not in kwargs) and "freq" in kwargs:
+            raise ValueError(
+                "Passing `freq` without a `feature_extractor` is not supported when the model requires a `frequency_token`."
+            )
+
+        if use_frequency_token:
+            if "feature_extractor" in kwargs:
+                kwargs["frequency_token"] = kwargs["feature_extractor"].get_frequency_token(kwargs["freq"])
         else:
             kwargs["frequency_token"] = None
+
+        self._probabilistic_processor = probabilistic_processor
 
         super().__init__(model, *args, **kwargs)
 
@@ -191,6 +205,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "categorical_columns",
             "static_categorical_columns",
             "future_time_series",
+            "impute_method",
         ]
         postprocess_params = [
             "prediction_length",
@@ -400,7 +415,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             **kwargs,
         )
 
-        return dataset
+        return {"dataset": dataset}
 
     def _forward(self, model_inputs, **kwargs):
         """Forward step
@@ -439,13 +454,13 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         prediction_columns = []
         for i, c in enumerate(kwargs["target_columns"]):
             prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
-            out[prediction_columns[-1]] = input[model_output_key][:, :, i].numpy().tolist()
+            out[prediction_columns[-1]] = input[model_output_key][:, :, i].detach().cpu().numpy().tolist()
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if add_known_ground_truth:
             for i, c in enumerate(kwargs["target_columns"]):
-                ground_truth = input["future_values"][:, :, i].numpy()
-                missing = ~input["future_observed_mask"][:, :, i].numpy()
+                ground_truth = input["future_values"][:, :, i].detach().cpu().numpy()
+                missing = ~input["future_observed_mask"][:, :, i].detach().cpu().numpy()
                 ground_truth[missing] = np.nan
                 out[c] = ground_truth.tolist()
 
@@ -455,6 +470,27 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         for i, c in enumerate(kwargs["id_columns"]):
             out[c] = [elem[i] for elem in input["id"]]
         out = pd.DataFrame(out)
+
+        # inverse scale if we have a feature extractor
+        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
+            out = self.feature_extractor.inverse_scale_targets(out)
+            if add_known_ground_truth:
+                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
+
+        # add probabilistic
+        conformal_cols = []
+        if self._probabilistic_processor is not None:
+            # get the conformal bounds and add to the forecasts on the test set
+            predictions_conformal = self._probabilistic_processor.predict(
+                out[prediction_columns + kwargs["id_columns"]]
+            )
+
+            for j, q in enumerate(self._probabilistic_processor.quantiles):
+                for i, c in enumerate(prediction_columns):
+                    col = f"{c}_q{q}"
+                    out[col] = predictions_conformal[..., i, j].tolist()
+                    conformal_cols.append(col)
+                    # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
 
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
@@ -472,6 +508,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                         tmp[c] = row[c]
                 for p in prediction_columns:
                     tmp[p] = row[p]
+                for c in conformal_cols:
+                    tmp[c] = row[c]
 
                 out_explode.append(pd.DataFrame(tmp))
 
@@ -487,11 +525,5 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         cols_ordered.extend([c for c in cols if c not in cols_ordered])
 
         out = out[cols_ordered]
-
-        # inverse scale if we have a feature extractor
-        if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
-            out = self.feature_extractor.inverse_scale_targets(out)
-            if add_known_ground_truth:
-                out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         return out

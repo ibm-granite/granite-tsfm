@@ -1,0 +1,16 @@
+# Copyright contributors to the TSFM project
+
+# Portions of this Dockerfile are taken from
+# https://gitlab.com/nvidia/container-images
+# Copyright (c) 2019,2020,2021 NVIDIA CORPORATION. All rights reserved.
+
+FROM tsfminference-gpu AS base
+
+# we just need to add the finetuning code
+
+USER tsfm
+ARG CODEDIR
+COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm pyproject.toml ${HOME}
+COPY --chown=tsfm:tsfm poetry.lock ${HOME}
+RUN poetry install

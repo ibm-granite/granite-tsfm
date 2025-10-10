@@ -3,6 +3,7 @@
 
 """Tests the time series preprocessor and functions"""
 
+import tempfile
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -55,14 +56,14 @@ def test_ordinal_encoder(sample_data):
         [
             [0.0, 0.0],
             [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 0.0],
-            [1.0, 1.0],
+            [0.0, 2.0],
+            [1.0, 3.0],
+            [0.0, 4.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 2.0],
+            [0.0, 3.0],
+            [1.0, 4.0],
         ]
     )
     np.testing.assert_allclose(result, expected)
@@ -87,6 +88,9 @@ def test_time_series_preprocessor_encodes(sample_data):
     for c in static_categorical_columns:
         assert sample_prep[c].dtype == float
 
+    # two static categoricals were defined
+    assert tsp.categorical_vocab_size_list == [2, 5]
+
     categorical_columns = ["cat", "cat2"]
     tsp = TimeSeriesPreprocessor(
         target_columns=["val", "val2"],
@@ -99,6 +103,9 @@ def test_time_series_preprocessor_encodes(sample_data):
 
     for c in categorical_columns:
         assert sample_prep[c].dtype == float
+
+    # no static categorical columns defined
+    assert tsp.categorical_vocab_size_list is None
 
 
 def test_time_series_preprocessor_scales(ts_data):
@@ -165,6 +172,38 @@ def test_time_series_preprocessor_inv_scales_lists(ts_data):
     out["value2"] = out["value2"].apply(lambda x: np.array([x] * 3))
 
     out_inv = tsp.inverse_scale_targets(out)
+
+    assert out_inv["value1"].mean()[0] == df["value1"].mean()
+    assert out_inv["value2"].mean()[0] == df["value2"].mean()
+
+
+def test_time_series_preprocessor_power_inv_scales_lists(ts_data):
+    df = ts_data
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["id", "id2"],
+        target_columns=["value1", "value2"],
+        scaling=True,
+        scaler_type="power",
+        scaler_args={"standardize": False},
+    )
+
+    tsp.train(df)
+
+    # check scaled result
+    out = tsp.preprocess(df)
+
+    # construct artificial result
+    out["value1"] = out["value1"].apply(lambda x: np.array([x] * 3))
+    out["value2"] = out["value2"].apply(lambda x: np.array([x] * 3))
+    out["value1_prediction"] = out["value1"]
+    out["value2_prediction"] = out["value2"]
+
+    out_inv = tsp.inverse_scale_targets(out)
+    out_inv = tsp.inverse_scale_targets(out_inv, suffix="_prediction")
 
     assert out_inv["value1"].mean()[0] == df["value1"].mean()
     assert out_inv["value2"].mean()[0] == df["value2"].mean()
@@ -455,6 +494,26 @@ def test_get_datasets(ts_data):
     assert len(train) == int(full_train_size * 0.2)
 
 
+def test__validate_columns(ts_data):
+    # should work
+    TimeSeriesPreprocessor(
+        id_columns=["id"],
+        target_columns=["value1", "value2"],
+        prediction_length=5,
+        context_length=13,
+    ).train(ts_data)
+
+    # should not work
+    with pytest.raises(ValueError):
+        TimeSeriesPreprocessor(
+            id_columns=["id"],
+            target_columns=["value1", "value2"],
+            control_columns=["value1"],
+            prediction_length=5,
+            context_length=13,
+        ).train(ts_data)
+
+
 def test_get_datasets_padding(ts_data):
     tsp = TimeSeriesPreprocessor(
         id_columns=["id"],
@@ -593,9 +652,39 @@ def test_id_columns_and_scaling_id_columns(ts_data_runs):
         scaling=True,
     )
 
-    ds_train, ds_valid, ds_test = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
 
     assert len(tsp.target_scaler_dict) == 2
+    assert len(ds_train.datasets) == 4
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        scaling_id_columns=[],
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+
+    assert len(tsp.target_scaler_dict) == 1
+    assert len(ds_train.datasets) == 4
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        scaling_id_columns=None,
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    ds_train, _, _ = get_datasets(tsp, df, split_config={"train": 0.7, "test": 0.2})
+
+    assert len(tsp.target_scaler_dict) == 4
     assert len(ds_train.datasets) == 4
 
 
@@ -635,3 +724,94 @@ def test_get_datasets_with_categoricical(ts_data):
     train, _, _ = get_datasets(tsp, ts_data, split_config={"train": 0.7, "test": 0.2})
     expected = np.array([0.0000, 0.7071, 1.4142, -1.4142, -0.7071])
     np.testing.assert_allclose(train[2]["past_values"][:, 2].numpy(), expected, rtol=1e-4)
+
+
+def test_time_series_preprocessor_serializes(ts_data_runs):
+    # two string ids
+    df = ts_data_runs.copy()
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert new_tsp.target_scaler_dict.keys() == tsp.target_scaler_dict.keys()
+
+    # mixed, str int
+    df = ts_data_runs.copy()
+    df["run_id2"] = df["run_id"].astype(int)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id2"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert new_tsp.target_scaler_dict.keys() == tsp.target_scaler_dict.keys()
+
+    # mixed, str int float
+    df = ts_data_runs.copy()
+    df["run_id2"] = df["run_id"].astype(int)
+    df["run_id3"] = df["run_id"].astype(float)
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id2", "run_id3"],
+        target_columns=["value1"],
+        scaling=True,
+    )
+
+    with pytest.raises(Exception):
+        tsp.train(df)
+
+    # no scaling
+    df = ts_data_runs.copy()
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        target_columns=["value1"],
+        id_columns=["asset_id", "run_id"],
+        scaling=False,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert len(new_tsp.target_scaler_dict.keys()) == 0
+
+    # no ids
+    df = ts_data_runs.copy()
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        target_columns=["value1"],
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert len(new_tsp.target_scaler_dict.keys()) == len(tsp.target_scaler_dict.keys())
+        assert len(new_tsp.target_scaler_dict.keys()) == 1

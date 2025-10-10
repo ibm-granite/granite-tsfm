@@ -2,12 +2,14 @@
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
 name: tsfmfinetuning Service Tests
+permissions:
+  contents: read
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "destiny", "destiny_v1_patches" ]
 
 jobs:
   build:
@@ -31,17 +33,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install poetry
         cd services/finetuning
-        poetry self add "poetry-dynamic-versioning[plugin]"
         poetry install -n --with dev
     # for not we're not really using the image
     # for much, we just want to make sure
     # that it continues to build until we
     # do so
-    - name: image build
-      run: |
-        source .venv/bin/activate
-        cd services/finetuning
-        make image
+    # No need as image is now dependent on instance build
+    # which gets run as part of instance tests
+    # - name: image build
+    #  run: |
+    #    source .venv/bin/activate
+    #    cd services/finetuning
+    #    make image
     - name: test local
       run: |
         source .venv/bin/activate

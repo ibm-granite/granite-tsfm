@@ -4,10 +4,11 @@
 
 import inspect
 import os
+import tempfile
 import uuid
 from cmath import inf
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -171,15 +172,11 @@ class LRFinder:
         save_model(fname, self.model, getattr(self, "opt", None), **kwargs)
         return fname
 
-    def load(
-        self, fname: Union[str, Path], with_opt: bool = False, device: str = "cuda", strict: bool = True, **kwargs
-    ):
+    def load(self, fname: Union[str, Path], with_opt: bool = False, strict: bool = True, **kwargs):
         """
         load the model
         """
-        if not torch.cuda.is_available():
-            device = "cpu"
-        load_model(fname, self.model, self.opt, with_opt, device=device, strict=strict)
+        load_model(fname, self.model, self.opt, with_opt, device=self.device, strict=strict)
 
     def before_fit(self):
         self.model.to(self.device)
@@ -191,7 +188,7 @@ class LRFinder:
 
         # save model to load back after fitting
         uid = uuid.uuid4().hex
-        self.temp_path = self.save("current_{}".format(uid), "temp", with_opt=False)
+        self.temp_path = self.save(f"current_{uid}", tempfile.gettempdir(), with_opt=False)
         # set base_lr for the optimizer
         self.set_lr(self.start_lr)
 
@@ -212,7 +209,7 @@ class LRFinder:
 
     def train_batch(self, batch: torch.Tensor):
         # forward + get loss + backward + optimize
-        pred, self.loss = self.train_step(batch)
+        self.loss = self.train_step(batch)
         # zero the parameter gradients
         self.opt.zero_grad()
         # gradient
@@ -224,27 +221,23 @@ class LRFinder:
         x, y = x.to(self.device), y.to(self.device)
         return x, y
 
-    def train_step(self, batch: torch.Tensor) -> Tuple[torch.Tensor, float]:
+    def train_step(self, batch: Union[Dict[str, Any], torch.Tensor]) -> Tuple[torch.Tensor, float]:
         # get the inputs
         if isinstance(batch, dict):
-            self.xb, self.yb = batch["past_values"], batch["future_values"]
+            signature = inspect.signature(self.model.forward)
+            signature_args = list(signature.parameters.keys())
+
+            args = {k: batch[k].to(self.device) for k in signature_args if k in batch}
+            pred_outputs = self.model(**args)
+            loss = pred_outputs.loss
+
         else:
             self.xb, self.yb = batch[0], batch[1]
-        self.xb, self.yb = self.process_data(self.xb, self.yb)
-        # forward
-        if isinstance(batch, dict):
-            if self.enable_prefix_tuning:
-                pred_outputs = self.model(
-                    past_values=self.xb, future_values=self.yb, freq_token=batch["freq_token"].to(self.device)
-                )
-            else:
-                pred_outputs = self.model(past_values=self.xb, future_values=self.yb)
-            pred, loss = pred_outputs.prediction_outputs, pred_outputs.loss
-        else:
+            self.xb, self.yb = self.process_data(self.xb, self.yb)
             pred = self.model(self.xb)
             loss = self.loss_func(self.yb, pred)
 
-        return pred, loss
+        return loss
 
     def after_batch_train(self):
         self.train_iter += 1
@@ -373,12 +366,24 @@ def optimal_lr_finder(
         "LR Finder: Running learning rate (LR) finder algorithm. If the suggested LR is very low, we suggest setting the LR manually."
     )
 
-    if torch.cuda.is_available():
-        device = torch.cuda.current_device()
-        logger.info(f"LR Finder: Using GPU:{device}.")
+    # default to cuda, our preference in order is: cuda, mps, cpu
+    if device is None:
+        device = "cuda"
+
+    # check that selected device is valid
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "mps"
+
+    if device == "mps" and not torch.backends.mps.is_available():
+        device = "cpu"
+
+    # device is valid, now set appropriately
+    if device == "cuda":
+        device = torch.device(f"cuda:{torch.cuda.current_device()}")
     else:
-        logger.info("LR Finder: Using CPU.")
-        device = torch.device("cpu")
+        device = torch.device(device)
+
+    logger.info(f"LR Finder: Using {device}.")
 
     # create the right collator in the style of HF
     signature = inspect.signature(model.forward)

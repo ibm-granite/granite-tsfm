@@ -3,10 +3,14 @@
 
 from .callbacks import TrackingCallback
 from .data_handling import load_dataset
-from .dataset import ForecastDFDataset, PretrainDFDataset, RegressionDFDataset
+from .dataset import ClassificationDFDataset, ForecastDFDataset, PretrainDFDataset, RegressionDFDataset
 from .get_model import get_model
 from .lr_finder import optimal_lr_finder
 from .recursive_predictor import RecursivePredictor, RecursivePredictorConfig, RecursivePredictorOutput
+from .time_series_anomaly_detection_pipeline import TimeSeriesAnomalyDetectionPipeline
+from .time_series_classification_pipeline import TimeSeriesClassificationPipeline
+from .time_series_classification_preprocessor import TimeSeriesClassificationPreprocessor
 from .time_series_forecasting_pipeline import TimeSeriesForecastingPipeline
+from .time_series_imputation_pipeline import TimeSeriesImputationPipeline
 from .time_series_preprocessor import TimeSeriesPreprocessor, get_datasets
 from .util import count_parameters

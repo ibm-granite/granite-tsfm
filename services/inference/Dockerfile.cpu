@@ -1,0 +1,55 @@
+# Copyright contributors to the TSFM project
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS base
+
+ARG PYTHON_VERSION=3.12
+# not all podman versions consume this correctly
+
+RUN microdnf upgrade -y \
+    && microdnf install -y python3.12 git \
+    python3.12-pip \
+    python3.12-wheel \
+    && pip3.12 install pip setuptools wheel -U \
+    && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
+    && groupadd --system tsfm --gid 999 \
+    && adduser --system --uid 999 --gid 999 --groups tsfm \
+    --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    --comment "tsfm user" tsfm \
+    && chmod o+rX /home/tsfm \
+    && microdnf clean all \
+    && rm -rf /var/cache/microdnf
+
+FROM base AS tsfm-install
+
+ENV CUDA_VISIBLE_DEVICES=""
+
+USER tsfm
+
+ENV HOME=/home/tsfm
+ENV PATH=${HOME}/.venv/bin:${HOME}/.local/bin:${PATH}
+ENV POETRY_VIRTUALENVS_IN_PROJECT=1
+ENV HF_HOME=/tmp
+ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
+
+ARG CODEDIR
+COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml poetry.lock ${CODEDIR} ${HOME}
+
+WORKDIR ${HOME}
+
+RUN python3.12 -m venv --upgrade-deps ${HOME}/.venv \
+    && . ${HOME}/.venv/bin/activate \
+    && pip install --no-cache-dir -U pip setuptools wheel \
+    && pip install --no-cache-dir "poetry==2.1.4" \
+    && poetry install --no-cache \
+    && for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
+    && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e \
+    && rm -rf ${HOME}/.cache \
+    && mkdir ${HOME}/prometheus_metrics \
+    && pip uninstall -y poetry || true
+
+USER root
+RUN microdnf remove -y git perl-Git
+USER tsfm
+
+HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1

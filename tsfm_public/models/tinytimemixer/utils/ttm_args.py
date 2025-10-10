@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import tempfile
 
 import torch
 
@@ -12,7 +13,7 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-def get_ttm_args():
+def get_ttm_args():  # pragma: no cover
     parser = argparse.ArgumentParser(description="TTM pretrain arguments.")
     # Adding a positional argument
     parser.add_argument(
@@ -119,7 +120,7 @@ def get_ttm_args():
         "-sd",
         type=str,
         required=False,
-        default="tmp/",
+        default=tempfile.gettempdir(),
         help="Data path",
     )
     parser.add_argument(
@@ -243,7 +244,7 @@ def get_ttm_args():
     return args
 
 
-def int_to_bool(value):
+def int_to_bool(value):  # pragma: no cover
     if value == 0:
         return False
     elif value == 1:

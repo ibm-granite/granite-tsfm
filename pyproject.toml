@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=66", "wheel", "Cython", "setuptools-scm>=8.0"]
+requires = ["setuptools>=78.1.1", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
 name = "granite-tsfm"
@@ -18,11 +18,12 @@ classifiers = [
 dependencies = [
     "pandas>=2.2.0",
     "scikit-learn",
-    "transformers[torch]>=4.38.0",
+    "transformers[torch]==4.56.0",
     "datasets",
     "deprecated",
-    "urllib3>=1.26.19,<2",         # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
-    "numpy<2",
+    "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
+    "numpy<3",
+    "torch<3",
 ]
 
 [tool.setuptools]
@@ -42,8 +43,13 @@ notebooks = [
     "kaleido",
     "tensorboard",
 ]
-testing = ["pytest", "granite-tsfm[notebooks]", "parameterized"]
-dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.4.4"]
+testing = [
+    "pytest",
+    "pytest-coverage",
+    "granite-tsfm[notebooks]",
+    "parameterized",
+]
+dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
