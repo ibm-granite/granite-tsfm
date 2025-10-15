@@ -2,6 +2,7 @@
 #
 import json
 import os
+import tempfile
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -168,7 +169,9 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out, counts = get_inference_response(msg, dumpfile="/tmp/test_zero_shot_forecast_inference.json")
+    df_out, counts = get_inference_response(
+        msg, dumpfile=os.path.join(tempfile.gettempdir(), "test_zero_shot_forecast_inference.json")
+    )
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
@@ -453,7 +456,10 @@ def test_future_data_forecast_inference(ts_data):
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
     out = get_inference_response(
-        msg, dumpfile="/tmp/test_future_data_forecast_inference.json" if DUMPPAYLOADS else None
+        msg,
+        dumpfile=os.path.join(tempfile.gettempdir(), "test_future_data_forecast_inference.json")
+        if DUMPPAYLOADS
+        else None,
     )
     assert (
         "Future data should have time series of length that is at least the specified prediction length." in out.text

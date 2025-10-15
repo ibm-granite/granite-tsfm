@@ -4,7 +4,8 @@ import json  # noqa: E402
 import os
 import shutil  # noqa: E402
 import tarfile  # noqa: E402
-from datetime import datetime  # noqa: E402
+import tempfile  # noqa: E402
+from datetime import datetime
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -60,7 +61,7 @@ def fetch_model(model_data):
     # this just emulates what sagemaker would do
     # on the cloud
 
-    model_dir = "/tmp/model"
+    model_dir = os.path.join(tempfile.gettempdir(), "model")
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
