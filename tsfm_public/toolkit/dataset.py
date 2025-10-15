@@ -74,12 +74,12 @@ class BaseDFDataset(torch.utils.data.Dataset):
             assert there, f"{missing} given in {y_cols} is not a valid column identifier in the data."
 
         if timestamp_column:
-            assert timestamp_column in list(
-                data_df.columns
-            ), f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
-            assert (
-                timestamp_column not in x_cols
-            ), f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            assert timestamp_column in list(data_df.columns), (
+                f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
+            )
+            assert timestamp_column not in x_cols, (
+                f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            )
 
         self.data_df = data_df
         self.datetime_col = timestamp_column
@@ -1251,14 +1251,17 @@ def ts_padding(
     if timestamp_column:
         if len(df) < 2:
             pad_df[timestamp_column] = None
-        elif (df[timestamp_column].dtype.type == np.datetime64) or (df[timestamp_column].dtype == int):
+        elif (
+            (df[timestamp_column].dtype.type == np.datetime64)
+            or (df[timestamp_column].dtype == int)
+            or (df[timestamp_column].dtype == np.int64)
+        ):
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
             prepended_timestamps = [last_timestamp + offset * period for offset in range(-fill_length, 0)]
             pad_df[timestamp_column] = prepended_timestamps
         else:
             pad_df[timestamp_column] = None
-        # Ensure same type
         pad_df[timestamp_column] = pad_df[timestamp_column].astype(df[timestamp_column].dtype)
 
     if id_columns:
