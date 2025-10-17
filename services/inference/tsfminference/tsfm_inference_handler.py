@@ -244,7 +244,6 @@ class TSFMForecastingInferenceHandler:
         Returns:
             pd.DataFrame: The forecasts produced by the model.
         """
-
         # warn if future data is not provided, but is needed by the model
         # Remember preprocessor.exogenous_channel_indices are the exogenous for which future data is available
         if self.preprocessor.exogenous_channel_indices and future_data is None:
