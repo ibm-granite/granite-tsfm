@@ -32,7 +32,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate
 start_service_local:
 	@make start_service_local_watch &
 stop_service_local:
-	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app'
+	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app' || true
 
 image: boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
@@ -60,17 +60,15 @@ start_service_image: create_prometheus_metrics_dir image
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
-test_local: clone_models boilerplate start_service_local
-	pytest --cov=tsfminference --cov-report term-missing tests ../tests
-	locust -f tests/locust/locustfile.py  --config tests/locust/locust.conf --headless --only-summary
-	$(MAKE) stop_service_local
-	$(MAKE) delete_models
+test_local: clone_models boilerplate stop_service_local start_service_local
+	locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
+	pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
+	locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
 	pytest -s tests ../tests
 	$(MAKE) stop_service_image
-	$(MAKE) delete_models
 
 install_dev: boilerplate
 	pip install poetry && poetry install --with dev
@@ -78,9 +76,6 @@ install_dev: boilerplate
 clone_models:
 	git lfs install || true
 	git clone -b refactor_v2 https://huggingface.co/ibm-research/test-tsfm mytest-tsfm || true
-
-delete_models:
-	rm -rf mytest-tsfm || true
 
 # update any auto-generated files
 # used in example code
@@ -90,10 +85,10 @@ update_examples:
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
-profile_inference: delete_models clone_models
+profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
 	TSFM_PROFILE_NUM_TIMESERIES=10000 \
 	python -m cProfile -o profile.out -s cumtime \
-	 -m pytest tests/test_inference_lib.py::test_forecast_with_good_data
+	 -m pytest -s tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"
