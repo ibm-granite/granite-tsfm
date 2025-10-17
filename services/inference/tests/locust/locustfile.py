@@ -48,7 +48,7 @@ def forecasting_input_base(model_id: str, series_length: int, num_timeseries: in
 
 
 class MyUser(FastHttpUser):
-    max_attempts = 1  # attempt a failed call at most this many times
+    max_attempts = 2  # attempt a failed call at most this many times
 
     @task
     def forecast_synchronous(self):
