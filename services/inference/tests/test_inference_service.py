@@ -2,6 +2,7 @@
 #
 import json
 import os
+import random
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -51,7 +52,8 @@ def ts_data(ts_data_base, request):
     # forecast_length = 96
     # context_length = 512
     model_id = request.param
-    prediction_length = model_param_map[model_id]["prediction_length"]
+    # make sure models can return less than max prediction length
+    prediction_length = random.randint(1, model_param_map[model_id]["prediction_length"])
     context_length = model_param_map[model_id]["context_length"]
     timestamp_column = "date"
 
