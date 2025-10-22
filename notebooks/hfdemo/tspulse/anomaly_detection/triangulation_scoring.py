@@ -155,7 +155,7 @@ if __name__ == "__main__":
         tuning_file_prefix=args.tuning_prefix,
         eval_file_prefix=args.eval_prefix,
     )
-    
+
     if args.detailed_report:
         print("=" * 60)
         print("Triangulation Results On Tuning Data")
