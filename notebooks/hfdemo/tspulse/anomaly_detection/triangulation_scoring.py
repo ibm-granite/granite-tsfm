@@ -135,6 +135,11 @@ if __name__ == "__main__":
         default="Tuning",
         help="File prefix for Tuning file selection.",
     )
+    parser.add_argument(
+        "--detailed_report",
+        action="store_true",
+        help="Report detailed triangulation result for the tuning data.",
+    )
     args = parser.parse_args()
     prefix = args.prefix
     prefix_tuning = args.prefix_tuning
@@ -150,9 +155,11 @@ if __name__ == "__main__":
         tuning_file_prefix=args.tuning_prefix,
         eval_file_prefix=args.eval_prefix,
     )
-    print("=" * 60)
-    print("Triangulation Results On Tuning Data")
-    print("=" * 60)
-    print(result["tuning"].sort_index())
-    print("=" * 60)
+    
+    if args.detailed_report:
+        print("=" * 60)
+        print("Triangulation Results On Tuning Data")
+        print("=" * 60)
+        print(result["tuning"].sort_index())
+        print("=" * 60)
     print(f"Triangulated {metric}: {result['metric']:0.3f}\n\n")
