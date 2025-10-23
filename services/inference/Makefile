@@ -32,7 +32,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate
 start_service_local:
 	@make start_service_local_watch &
 stop_service_local:
-	pkill  -f 'python.*gunicorn.*tsfminference\.main\:app' || true
+	pkill  -f '.*python.*gunicorn.*tsfminference\.main\:app' || true
 
 image: boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
@@ -71,7 +71,7 @@ test_image: clone_models start_service_image
 	$(MAKE) stop_service_image
 
 install_dev: boilerplate
-	pip install poetry && poetry install --with dev
+	uv sync --extra dev --editable
 
 clone_models:
 	git lfs install || true
@@ -80,15 +80,14 @@ clone_models:
 # update any auto-generated files
 # used in example code
 update_examples:
-	# our sagemaker stuff
-	poetry self add poetry-plugin-export
+# our sagemaker stuff
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
-	poetry export --without-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	uv export --omit-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
 	TSFM_PROFILE_NUM_TIMESERIES=10000 \
-	python -m cProfile -o profile.out -s cumtime \
+	uv run python -m cProfile -o profile.out -s cumtime \
 	 -m pytest -s tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"

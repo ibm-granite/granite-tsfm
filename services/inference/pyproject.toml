@@ -2,7 +2,7 @@
 name = "tsfminference"
 version = "0.0.0"
 description = "Service layer for TSFM granite models."
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 authors = [
   { name = "IBM" }
 ]
@@ -26,6 +26,7 @@ dependencies = [
   "torch==2.8.0",
   "h11>=0.16.0",
   "multidict>=4.6.0",
+  "granite-tsfm"
 ]
 
 [tool.uv.sources]
