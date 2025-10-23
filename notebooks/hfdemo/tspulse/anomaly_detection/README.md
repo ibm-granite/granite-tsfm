@@ -81,29 +81,28 @@ $ python run_experiment.py --data_direc "Datasets/TSB-AD-M" --eval_file "Dataset
 $ python run_experiment.py --data_direc "Datasets/TSB-AD-M" --eval_file "Datasets/File_List/TSB-AD-M-Eva.csv"  --mode "time+fft+forecast" --out_file "benchmarks/TSB-AD-M-FT-Eva-ebsemble.csv" --finetune --epochs 10 --decoder common_channel
 ``` 
 
-To reproduce the triangulation results can be reproduced using `triangulation_scoring.py` scripts.
+Zero-Shot triangulation results on univariate datasets can be reproduced using `triangulation_scoring.py` script by running the following command.
 ```bash
 $ python triangulation_scoring.py --root_directory benchmarks  --prefix "TSB-AD-U-" --suffix ".csv" --metric "VUS-PR" --eval_prefix "Eva" --tuning_prefix "Tuning" 
 
 Triangulated VUS-PR: 0.480
 ```
 
-The triangulation results on univariate dataset after finetuning can be reproduced by running the following command.
+Finetuned triangulation results on univariate datasets can be reproduced by running the following command.
 ```bash
 $ python triangulation_scoring.py --root_directory benchmarks  --prefix "TSB-AD-U-FT-" --suffix ".csv" --metric "VUS-PR" --eval_prefix "Eva" --tuning_prefix "Tuning"
 
 Triangulated VUS-PR: 0.558
 ```
 
-Following command will reproduce the multivariate triangulation results.
+Zero-Shot triangulation results on multi-variate datasets can be reproduced by running the following command.
 ```bash
 $ python triangulation_scoring.py --root_directory benchmarks  --prefix "TSB-AD-M-" --suffix ".csv" --metric "VUS-PR" --eval_prefix "Eva" --tuning_prefix "Tuning" 
 
 Triangulated VUS-PR: 0.361
 ```
 
-After finetuning the triangulation scores on multi-variate dataset, can be produced by running following command.
-
+Finetuned triangulation results on multi-variate datasets can be reproduced by running following command.
 ```bash
 $ python triangulation_scoring.py --root_directory benchmarks  --prefix "TSB-AD-M-FT-" --suffix ".csv" --metric "VUS-PR" --eval_prefix "Eva" --tuning_prefix "Tuning"
 
