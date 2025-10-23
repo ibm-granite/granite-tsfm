@@ -713,7 +713,7 @@ def absolute_error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     )
     error = np.abs(y - y_pred)
     if len(error.shape) > 1:
-        error = np.mean(error, axis=-1)
+        error = np.nanmean(error, axis=-1)
     return error
 
 
@@ -733,7 +733,7 @@ def error(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     )
     error = y - y_pred
     if len(error.shape) > 1:
-        error = np.mean(error, axis=-1)
+        error = np.nanmean(error, axis=-1)
     return error
 
 
@@ -1022,6 +1022,9 @@ class WeightedConformalForecasterWrapper:
             self.window_size = y_cal_pred.shape[0]
 
         window_critical_size = int(np.ceil(1 / self.false_alarm))
+        if self.nonconformity_score in [NonconformityScores.ERROR.value]:
+            window_critical_size = int(window_critical_size * 2)
+
         if (self.window_size < window_critical_size) and (y_cal_pred.shape[0] >= window_critical_size):
             self.window_size = window_critical_size
 
@@ -1047,38 +1050,116 @@ class WeightedConformalForecasterWrapper:
                     1. compute non-conformity scores.3
                     2. Initialize Wass1 weight adapter
                     """
-                    critical_efficient_size = int(np.ceil(1 / self.false_alarm))
-                    cal_scores = nonconformity_score_functions(
-                        y_cal_gt[:, :, ix_f],
-                        y_cal_pred[:, :, ix_f],
-                        X=X_cal,
-                        nonconformity_score=self.nonconformity_score,
-                    )
+
+                    critical_efficient_size = int(window_critical_size) + 1
 
                     stride = 1
-                    n_batch_update = int((critical_efficient_size + 2))
-                    n_updates = 100
-                    n_cal_optimization = (n_updates - 1) * stride + n_batch_update
-                    n_cal_init = np.maximum(int(critical_efficient_size) * 2, cal_scores.shape[0] - n_cal_optimization)
+                    n_batch_update = np.minimum(int((critical_efficient_size)), 10)
+                    n_updates = -1
                     lr = 0.001
+                    if "lr" not in weighting_params.keys():
+                        weighting_params["lr"] = lr
+                    if "stride" not in weighting_params.keys():
+                        weighting_params["stride"] = 1
+                    if "conformal_weights_update" not in weighting_params.keys():
+                        weighting_params["conformal_weights_update"] = False
+                    if "n_batch_update" not in weighting_params.keys():
+                        weighting_params["n_batch_update"] = n_batch_update
 
-                    if cal_scores.shape[0] >= n_cal_init + n_batch_update:
-                        awcsw = AdaptiveWeightedConformalScoreWrapper(
-                            false_alarm=self.false_alarm,
-                            window_size=self.window_size,
-                            weighting=Weighting.UNIFORM.value,
-                            weighting_params={
-                                "n_batch_update": n_batch_update,
-                                "conformal_weights_update": False,
-                                "stride": stride,
-                                "lr": lr,
-                            },
+                    if "n_updates" not in weighting_params.keys():
+                        n_updates = -1
+                    else:
+                        n_updates = weighting_params["n_updates"]
+
+                    if "fit_per_horizon" not in weighting_params.keys():
+                        weighting_params["fit_per_horizon"] = False
+                    print("FITTING ADAPTIVE WEIGHTS :", weighting_params)
+                    fit_per_horizon = weighting_params["fit_per_horizon"]
+                    if not fit_per_horizon:
+                        cal_scores = nonconformity_score_functions(
+                            y_cal_gt[:, :, ix_f],
+                            y_cal_pred[:, :, ix_f],
+                            # y_cal_gt[:, ix_h, ix_f],
+                            # y_cal_pred[:, ix_h, ix_f],
+                            X=X_cal,
+                            nonconformity_score=self.nonconformity_score,
+                            # nonconformity_score=NonconformityScores.ABSOLUTE_ERROR.value,
                         )
+                        if n_updates == -1:
+                            n_cal_init = int(critical_efficient_size + 2) + weighting_params["n_batch_update"] - 1
+                            n_cal_optimization = cal_scores.shape[0] - n_cal_init
+                        else:
+                            n_cal_optimization = (n_updates - 1) * stride + n_batch_update
+                            n_cal_init = np.maximum(
+                                int(critical_efficient_size) + n_batch_update, cal_scores.shape[0] - n_cal_optimization
+                            )
 
-                        # Need to call these because of side effects
-                        _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
-                        _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
-                        cal_weights = awcsw.cal_weights
+                        # print("AdaptiveWeights Learning with parameters:", weighting_params)
+                        # print(
+                        #     f"n_cal_ini {n_cal_init}, n_optimization {n_cal_optimization}, false alarm {self.false_alarm}, window_size {self.window_size}"
+                        # )
+                        if cal_scores.shape[0] >= n_cal_init + n_batch_update:
+                            awcsw = AdaptiveWeightedConformalScoreWrapper(
+                                false_alarm=self.false_alarm,
+                                window_size=self.window_size,
+                                weighting=Weighting.UNIFORM.value,
+                                weighting_params=weighting_params,
+                            )
+
+                            # Need to call these because of side effects
+                            _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
+                            _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
+                            # cal_weights = awcsw.cal_weights
+                            cal_weights = awcsw.cal_weights
+                            # print(np.sum(cal_weights))
+                            # print(awcsw.cal_scores.shape)
+                    else:
+                        cal_weights = {}
+                        for ix_h in range(y_cal_pred.shape[1]):
+                            y_cal_gt_i = y_cal_gt[:, ix_h, ix_f]
+                            y_cal_pred_i = y_cal_pred[:, ix_h, ix_f]
+                            filter = ~np.isnan(y_cal_gt_i) & ~np.isnan(y_cal_pred_i)
+                            cal_weights[ix_h] = None
+                            cal_scores = nonconformity_score_functions(
+                                # y_cal_gt[:, :, ix_f],
+                                # y_cal_pred[:, :, ix_f],
+                                y_cal_gt_i[filter],
+                                y_cal_pred_i[filter],
+                                X=X_cal,
+                                nonconformity_score=self.nonconformity_score,
+                                # nonconformity_score=NonconformityScores.ABSOLUTE_ERROR.value,
+                            )
+
+                            # print(f"total cal {cal_scores.shape}")
+                            if n_updates == -1:
+                                n_cal_init = int(critical_efficient_size + 2) + weighting_params["n_batch_update"] - 1
+                                n_cal_optimization = cal_scores.shape[0] - n_cal_init
+                            else:
+                                n_cal_optimization = (n_updates - 1) * stride + n_batch_update
+                                n_cal_init = np.maximum(
+                                    int(critical_efficient_size) + n_batch_update,
+                                    cal_scores.shape[0] - n_cal_optimization,
+                                )
+                            # print("AdaptiveWeights Learning with parameters:", weighting_params)
+                            # print(
+                            # f"n_cal_ini {n_cal_init}, n_optimization {n_cal_optimization}, false alarm {self.false_alarm}, window_size {self.window_size}"
+                            # )
+
+                            if cal_scores.shape[0] >= n_cal_init + n_batch_update:
+                                awcsw = AdaptiveWeightedConformalScoreWrapper(
+                                    false_alarm=self.false_alarm,
+                                    window_size=self.window_size,
+                                    weighting=Weighting.UNIFORM.value,
+                                    weighting_params=weighting_params,
+                                )
+
+                                # Need to call these because of side effects
+                                _ = awcsw.fit(cal_scores[0 : int(n_cal_init)])  # betas_fit
+                                _ = awcsw.predict(cal_scores[int(n_cal_init) :])  # betas_update
+                                # cal_weights = awcsw.cal_weights
+                                cal_weights[ix_h] = awcsw.cal_weights
+                                # print(np.sum(cal_weights[ix_h]))
+                                # print(awcsw.cal_scores.shape)
 
             for ix_h in range(y_cal_pred.shape[1]):
                 cal_timestamps_i = None
@@ -1093,11 +1174,19 @@ class WeightedConformalForecasterWrapper:
                     window_size=self.window_size,
                     online_size=self.online_size,
                 )
+                # print("BEFORE :: ", np.sum(self.univariate_wrappers[ix_h, ix_f].weights[-1]))
+                if cal_weights is not None:
+                    if fit_per_horizon:
+                        if cal_weights[ix_h] is not None:
+                            self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights[ix_h])
+                            # print("AFTER:", np.sum(self.univariate_wrappers[ix_h, ix_f].weights[-1]))
+                    else:
+                        self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
+                        # print("AFTER:", np.sum(self.univariate_wrappers[ix_h, ix_f].weights[-1]))
+
                 self.univariate_wrappers[ix_h, ix_f].fit(
                     y_cal_gt[:, ix_h, ix_f], y_cal_pred[:, ix_h, ix_f], X_cal=X_cal, cal_timestamps=cal_timestamps_i
                 )
-                if cal_weights is not None:
-                    self.univariate_wrappers[ix_h, ix_f].weights.append(cal_weights)
 
     def update(self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None):
         """
@@ -1167,7 +1256,7 @@ class WeightedConformalForecasterWrapper:
                 y_gt_i = None
                 if y_gt is not None:
                     y_gt_i = y_gt[:, ix_h, ix_f]
-
+                # print("AFTER:", np.sum(self.univariate_wrappers[ix_h, ix_f].weights[-1]))
                 output_i = self.univariate_wrappers[ix_h, ix_f].predict(
                     y_pred[:, ix_h, ix_f],
                     y_gt=y_gt_i,
