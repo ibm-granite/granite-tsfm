@@ -1,80 +1,51 @@
-[tool.poetry]
+[project]
 name = "tsfminference"
 version = "0.0.0"
 description = "Service layer for TSFM granite models."
-authors = ["IBM"]
-license = "https://github.com/ibm-granite/granite-tsfm/blob/main/LICENSE"
-packages = [{ include = "tsfminference/**/*.py" }]
+license = { file = "LICENSE" }
+authors = [
+  { name = "IBM" }
+]
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy<2",
+  "transformers[torch]==4.56.0",
+  "filelock",
+  "fastapi",
+  "pydantic>1,<3",
+  "gunicorn",
+  "uvicorn-worker",
+  "setuptools",
+  "prometheus_client",
+  "psutil",
+  "Jinja2>=3.1.6",
+  "Werkzeug>=3.0.6",
+  "aiohttp>=3.11.15",
+  "urllib3>=2.5.0",
+  "python-socketio>=5.14.0",
+  "torch==2.8.0",
+  "h11>=0.16.0",
+  "multidict>=4.6.0",
+]
 
-#[tool.poetry-dynamic-versioning]
-#enable = true
-#vcs = "git"
-# latest-tag = true
-# style = "semver"
-#format = "{base}"
-
-#[tool.poetry-dynamic-versioning.substitution]
-#files = ["tsfminference/_version.py"]
-#persistent-substitution = true
-
-#[tool.poetry-dynamic-versioning.files."tsfminference/_version.py"]
-# persistent-substitution = true # useful for editable installs
-#initial-content = """
-# This version placeholders will be replaced later during substitution.
-#__version__ = "0.0.0"
-#__version_tuple__ = (0, 0, 0)
-#"""
-
-[tool.poetry.requires-plugins]
-poetry-plugin-export = ">=1.8"
-
-[tool.poetry.dependencies]
-# including 3.9 causes poetry lock to run foreveroptax
-python = ">=3.10,<3.13"
-numpy = { version = "<2" }
+[tool.uv.sources]
 granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
-transformers = { version = "==4.56.0" , extras = ["torch"] }
-filelock = "*"
 
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "locust",
+  "inotify",
+  "pytest-coverage",
+  "gprof2dot",
+  "ruff==0.5.7",
+]
 
-fastapi = { version = "*" }
-pydantic = { version = ">1,<3" }
-gunicorn = { version = "*" }
-uvicorn-worker = { version = "*" }
-setuptools = { version = "*" }
-prometheus_client = { version = "*" }
-psutil = { version = "*" }            # to support memory use reporting in /metrics
-# ***********CVEs*************
-Jinja2 = { version = ">=3.1.6" }              # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18starlette = { version = ">=0.40.0" }
-Werkzeug = { version = ">=3.0.6" }
-aiohttp = { version = ">=3.11.15" }           # see https://github.com/aio-libs/aiohttp/issues/10617
-urllib3 = { version = ">=2.5.0" }           
-python-socketio = { version = ">=5.14.0" }
-torch = { version = "==2.8.0" }
-h11 = { version = ">=0.16.0" }      # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
-multidict = { version = ">=4.6.0" } # https://github.com/aio-libs/multidict/issues/1117
-
-[tool.poetry.group.dev]
-optional = true
-[tool.poetry.group.dev.dependencies]
-pytest = "*"
-locust = "*"
-inotify = "*"
-pytest-coverage = "*"
-gprof2dot = "*"
-ruff = { version = "0.5.7" }
-
-[tool.poetry.group.sagemaker]
-optional = true
-[tool.poetry.group.sagemaker.dependencies]
-sagemaker = "*"
-boto3 = "*"
-
-
-#[build-system]
-#requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-#build-backend = "poetry_dynamic_versioning.backend"
+sagemaker = [
+  "sagemaker",
+  "boto3",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
