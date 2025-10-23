@@ -49,13 +49,12 @@ def compute_average_performance(
 def triangulation_performance(
     root_directory: str,
     prefix: str,
-    prefix_tuning: str,
     suffix: str = ".csv",
     metric: str = "VUS-PR",
     tuning_file_prefix: str = "Tuning",
     eval_file_prefix: str = "Eva",
 ):
-    tuning_prefix = f"{prefix_tuning}{tuning_file_prefix}"
+    tuning_prefix = f"{prefix}{tuning_file_prefix}"
     eval_prefix = f"{prefix}{eval_file_prefix}"
 
     selected_files, modes = select_result_files(root_directory, prefix=tuning_prefix, suffix=suffix)
@@ -102,14 +101,7 @@ if __name__ == "__main__":
         "--prefix",
         type=str,
         default="TSB-AD-U-",
-        help="file name prefix for result file selection.",
-    )
-    parser.add_argument(
-        "--prefix_tuning",
-        type=str,
-        required=None,
-        default=None,
-        help="file name prefix for tuning result file selection.",
+        help="file name prefix for Univariate file selection.",
     )
     parser.add_argument(
         "--suffix",
@@ -141,15 +133,10 @@ if __name__ == "__main__":
         help="Report detailed triangulation result for the tuning data.",
     )
     args = parser.parse_args()
-    prefix = args.prefix
-    prefix_tuning = args.prefix_tuning
-    if prefix_tuning is None:
-        prefix_tuning = prefix
 
     result = triangulation_performance(
         root_directory=args.root_directory,
-        prefix=prefix,
-        prefix_tuning=prefix_tuning,
+        prefix=args.prefix,
         suffix=args.suffix,
         metric=args.metric,
         tuning_file_prefix=args.tuning_prefix,
