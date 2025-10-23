@@ -27,15 +27,24 @@ torch.backends.cudnn.deterministic = True
 
 def run_tsad_pipeline(
     data,
+    data_train=None,
     label=None,
     num_input_channels=1,
     win_size=96,
     batch_size=256,
     smoothing_window=8,
     prediction_mode="time+fft+forecast",
+    finetune=False,
+    num_epochs=20,
+    freeze_backbone=False,
+    validation_fraction=0.2,
+    decoder_mode="common_channels",
+    lr=1e-4,
     **kwargs,
 ):
     from utility.model import TSAD_Pipeline
+
+    finetune = finetune and (data_train is not None)
 
     clf = TSAD_Pipeline(
         num_input_channels=num_input_channels,
@@ -43,7 +52,17 @@ def run_tsad_pipeline(
         aggr_win_size=win_size,
         smoothing_window=smoothing_window,
         prediction_mode=prediction_mode,
+        finetune_decoder_mode=decoder_mode,
+        finetune_validation=validation_fraction,
+        finetune_freeze_backbone=freeze_backbone,
+        finetune_epochs=num_epochs,
+        finetune_lr=lr,
     )
+
+    if finetune:
+        print("DEBUG: Running finetuning!")
+        clf.fit(data_train)
+
     clf.zero_shot(data, label)
     score = clf.decision_scores_
     return score.ravel()
@@ -53,10 +72,16 @@ def process_file(filename, args):
     all_results = defaultdict(list)
     print(f"Running: {filename}")
     print(args)
+    data_train = None
     try:
         df = pd.read_csv(os.path.join(args.data_direc, filename)).dropna()
         data = df.iloc[:, 0:-1].values.astype(float)
         label = df["Label"].astype(int).to_numpy()
+
+        train_index = filename.split(".")[0].split("_")
+        if len(train_index) > 3:
+            train_index = int(train_index[-3])
+            data_train = data[:train_index:]
 
         if data.ndim == 1:
             in_channels = 1
@@ -67,11 +92,17 @@ def process_file(filename, args):
 
         extra_kwargs = {}
         extra_kwargs.update(
+            data_train=data_train,
             num_input_channels=in_channels,
             win_size=args.score_window,
             prediction_mode=args.mode,
             smoothing_window=args.smooth,
             batch_size=args.batch_size,
+            finetune=args.finetune,
+            finetune_epochs=args.epochs,
+            finetune_decoder_mode=args.decoder,
+            finetune_freeze_backbone=args.freeze_bb,
+            finetune_seed=args.seed,
         )
 
         output = run_tsad_pipeline(data, **extra_kwargs)
@@ -133,6 +164,7 @@ if __name__ == "__main__":
         default="Datasets/File_List/TSB-AD-U-Eva.csv",
         help="file containing list of valid csv files.",
     )
+
     parser.add_argument(
         "--out_file", type=str, default="TSB_results.csv", help="output file where the results will be stored."
     )
@@ -144,15 +176,38 @@ if __name__ == "__main__":
         help="optional file selector parameter, if specified runs experiment only on the files containing the string.",
     )
     parser.add_argument("--batch_size", type=int, default=128, help="batch size used by the TSAD pipeline.")
+
     parser.add_argument(
         "--score_window", type=int, default=96, help="optional parameter to specify the scoring window size."
     )
+
     parser.add_argument(
         "--mode", type=str, default="forecast+fft+time", help="running mode for the TSPulse AD pipeline."
     )
-    parser.add_argument("--smooth", type=int, default=8, help="score smoothing window specification.")
+
+    parser.add_argument("--smooth", type=int, default=8, required=False, help="score smoothing window specification.")
+
+    parser.add_argument(
+        "--finetune", action="store_true", help="if provided model will be finetuned before inference!"
+    )
+
+    parser.add_argument("--epochs", type=int, default=20, required=False, help="Maximum number of epochs to run!")
+
+    parser.add_argument(
+        "--decoder", type=str, default="common_channel", required=False, help="decoder mode for the TSPulse model"
+    )
+
+    parser.add_argument("--freeze_bb", action="store_true", help="freeze the backbone during finetuning")
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        required=False,
+        help="seed for random number generation for result reproducibility!",
+    )
+
     args = parser.parse_args()
-    print(args)
 
     file_filter = args.dataset if args.dataset != "#" else ".csv"
     if not os.path.isfile(args.eval_file):
