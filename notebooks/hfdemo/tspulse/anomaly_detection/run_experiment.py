@@ -27,6 +27,7 @@ torch.backends.cudnn.deterministic = True
 
 def run_tsad_pipeline(
     data,
+    model,
     data_train=None,
     label=None,
     num_input_channels=1,
@@ -47,6 +48,7 @@ def run_tsad_pipeline(
     finetune = finetune and (data_train is not None)
 
     clf = TSAD_Pipeline(
+        model_path=model,
         num_input_channels=num_input_channels,
         batch_size=batch_size,
         aggr_win_size=win_size,
@@ -105,7 +107,7 @@ def process_file(filename, args):
             finetune_seed=args.seed,
         )
 
-        output = run_tsad_pipeline(data, **extra_kwargs)
+        output = run_tsad_pipeline(data, args.model, **extra_kwargs)
         if isinstance(output, np.ndarray):
             output = MinMaxScaler(feature_range=(0, 1)).fit_transform(output.reshape(-1, 1)).ravel()
 
@@ -163,6 +165,14 @@ if __name__ == "__main__":
         type=str,
         default="Datasets/File_List/TSB-AD-U-Eva.csv",
         help="file containing list of valid csv files.",
+    )
+
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="ibm-granite/granite-timeseries-tspulse-r1",
+        required=False,
+        help="URL or filepath for tspulse model, defaults to huggingface tspulse r1 model (ibm-granite/granite-timeseries-tspulse-r1)",
     )
 
     parser.add_argument(

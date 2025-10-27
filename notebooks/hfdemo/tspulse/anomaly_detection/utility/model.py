@@ -4,7 +4,6 @@ import math
 import random
 import sys
 import tempfile
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -18,10 +17,7 @@ from tsfm_public.models.tspulse.utils.helpers import PatchMaskingDatasetWrapper
 from tsfm_public.toolkit.time_series_anomaly_detection_pipeline import TimeSeriesAnomalyDetectionPipeline
 
 from .base_model import BaseDetector
-from .datasets import TSPulseReconstructionDataset
-
-
-MODEL_PATH = "ibm-granite/granite-timeseries-tspulse-r1"
+from .datasets import TSBADFinetuneDataset
 
 
 def attach_timestamp_column(
@@ -36,7 +32,7 @@ def attach_timestamp_column(
 class TSAD_Pipeline(BaseDetector):
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str,
         batch_size: int = 256,
         aggr_win_size: int = 96,
         num_input_channels: int = 1,
@@ -52,8 +48,6 @@ class TSAD_Pipeline(BaseDetector):
     ):
         self._batch_size = batch_size
         self._headers = [f"x{i + 1}" for i in range(num_input_channels)]
-        if model_path is None:
-            model_path = MODEL_PATH
 
         if num_input_channels == 1:
             finetune_decoder_mode = "common_channel"
@@ -129,7 +123,7 @@ class TSAD_Pipeline(BaseDetector):
             tsTrain = X[: int((1 - validation_size) * len(X))]
             context_length = self._model.config.context_length
             train_dataset = PatchMaskingDatasetWrapper(
-                TSPulseReconstructionDataset(tsTrain, window_size=context_length, return_dict=True),
+                TSBADFinetuneDataset(tsTrain, window_size=context_length, return_dict=True),
                 window_length=self._pipeline_config.get("aggregation_length"),
                 patch_length=self._model.config.patch_length,
                 window_position="last",
@@ -141,7 +135,7 @@ class TSAD_Pipeline(BaseDetector):
             if create_valid:
                 tsValid = X[int((1 - validation_size) * len(X)) :]
                 valid_dataset = PatchMaskingDatasetWrapper(
-                    TSPulseReconstructionDataset(tsValid, window_size=context_length, return_dict=True),
+                    TSBADFinetuneDataset(tsValid, window_size=context_length, return_dict=True),
                     window_length=self._pipeline_config.get("aggregation_length"),
                     patch_length=self._model.config.patch_length,
                     window_position="last",
