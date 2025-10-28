@@ -1,0 +1,13 @@
+[project]
+name = "mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9, <3.13"
+dependencies = [
+    "litellm[proxy]>=1.63.14",
+    "granite-tsfm"
+]
+
+[tool.uv.sources]
+granite-tsfm = { workspace = true }
