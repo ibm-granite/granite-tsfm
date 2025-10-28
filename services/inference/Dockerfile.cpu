@@ -6,22 +6,20 @@ ARG PYTHON_VERSION=3.12
 # not all podman versions consume this correctly
 
 RUN microdnf upgrade -y \
-    && microdnf install -y python3.12 git \
+    && microdnf install -y python3.12 tar gzip git findutils \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && groupadd --system tsfm --gid 999 \
     && adduser --system --uid 999 --gid 999 --groups tsfm \
     --create-home --home-dir /home/tsfm --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
-    && chmod o+rX /home/tsfm \
-    && microdnf clean all \
-    && rm -rf /var/cache/microdnf
+    && chmod o+rX /home/tsfm 
+
 
 FROM base AS tsfm-install
 
 ENV CUDA_VISIBLE_DEVICES=""
 
 USER tsfm
-
 ENV HOME=/home/tsfm
 ENV PATH=${HOME}/.local/bin:${PATH}
 ENV HF_HOME=/tmp
@@ -34,15 +32,20 @@ COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml ${CODEDIR} ${HOME}
 WORKDIR ${HOME}
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && uv sync --directory=services/inference  \
-    && uv pip list | awk '/nvidia/ {print $1}' | xargs -r uv pip uninstall -y \
+    && uv sync \
+    && uv pip list | awk '/nvidia/ {print $1}' | xargs -r uv pip uninstall \
     && uv cache clean \
     && uv pip install "https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e" \
-    && rm -rf ${HOME}/.cache || true \
+    && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics
 
+ENV PATH=${HOME}/.venv/bin:${PATH}
+
 USER root
-RUN microdnf remove -y git perl-Git
+RUN microdnf remove -y git perl-Git tar findutils \
+    && microdnf clean all \
+    && rm -rf /var/cache/microdnf
+
 USER tsfm
 
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1

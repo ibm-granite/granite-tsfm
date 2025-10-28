@@ -28,10 +28,10 @@ clone_models:
 
 fetchdata:
 	rm -rf data || true
-	python tests/fetchdata.py
+	uv run python tests/fetchdata.py
 
 test_local: clone_models fetchdata boilerplate
-	pytest -s tests
+	uv run pytest -s tests
 
 install_dev: boilerplate
-	pip install poetry && poetry install --with dev
+	uv sync  --extra dev --editable

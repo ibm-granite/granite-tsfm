@@ -23,7 +23,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate
 	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./foobaz:./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
-	python -m gunicorn \
+	uv run python -m gunicorn \
 	-w 1 \
 	--reload \
 	-k uvicorn.workers.UvicornWorker \
@@ -61,13 +61,13 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
-	locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
-	pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
+	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
+	uv run pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
-	locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
-	pytest -s tests ../tests
+	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
+	uv run pytest -s tests ../tests
 	$(MAKE) stop_service_image
 
 install_dev: boilerplate
