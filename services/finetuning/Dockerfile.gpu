@@ -12,5 +12,5 @@ USER tsfm
 ARG CODEDIR
 COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
 COPY --chown=tsfm:tsfm pyproject.toml ${HOME}
-COPY --chown=tsfm:tsfm poetry.lock ${HOME}
+COPY --chown=tsfm:tsfm uv.lock ${HOME}
 RUN poetry install

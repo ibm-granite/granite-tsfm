@@ -28,23 +28,16 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install deps into a virtual enviroment
       run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install poetry
-        cd services/inference
-        poetry install --no-cache -n --with dev
+        curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
+        $HOME/.local/bin/uv sync --directory=services/inference --extra dev --editable
     - name: Test local server
       run: |
-        source .venv/bin/activate
-        cd services/inference
-        make test_local
+        $HOME/.local/bin/uv run --directory=services/inference make test_local
     - name: Test image
       run: |
         sudo apt-get clean
         sudo rm -rf /usr/local/lib/android
         docker system prune --all --force || true
-        rm -rf ~/.cache/pip
         source .venv/bin/activate
         cd services/inference
         SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker make test_image
