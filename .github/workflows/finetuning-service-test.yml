@@ -31,7 +31,7 @@ jobs:
         curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
         ls -la .
         ls -la $HOME/.local/bin
-        $HOME/.loca/bin/uv sync --locked --directory=services/finetuneing --extra dev --editable
+        $HOME/.local/bin/uv sync --locked --directory=services/finetuneing --extra dev --editable
     # for now we're not really using the image
     # for much, we just want to make sure
     # that it continues to build until we
