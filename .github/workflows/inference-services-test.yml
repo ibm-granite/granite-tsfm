@@ -32,7 +32,7 @@ jobs:
         /home/runner/.local/bin/uv sync --locked --directory=services/inference --extra dev --editable
     - name: Test local server
       run: |
-        $HOME/.local/bin/uv run --directory=services/inference make test_local
+        /home/runner/.local/bin/uv run --directory=services/inference make test_local
     - name: Test image
       run: |
         sudo apt-get clean
