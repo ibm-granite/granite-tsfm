@@ -43,5 +43,5 @@ jobs:
     #    make image
     - name: test local
       run: |
-        $HOME/.local/bin/uv run --directory=services/finetuneing  make test_local
+        $HOME/.local/bin/uv run --directory=services/finetuning  make test_local
         
