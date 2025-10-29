@@ -30,7 +30,7 @@ jobs:
       run: |
        curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh -s -- -v
         ls -lR /home
-        /home/runner/.local/bin/uv sync --locked --directory=services/inference --extra dev --editable
+        $HOME/.local/bin/uv sync --locked --directory=services/inference --extra dev --editable
     - name: Test local server
       run: |
         /home/runner/.local/bin/uv run --directory=services/inference make test_local
