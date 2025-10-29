@@ -29,7 +29,7 @@ jobs:
     - name: Install deps into a virtual enviroment
       run: |
         curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
-        uv sync --locked --directory=services/inference --extra dev --editable
+        /home/runner/.local/bin/uv sync --locked --directory=services/inference --extra dev --editable
     - name: Test local server
       run: |
         $HOME/.local/bin/uv run --directory=services/inference make test_local
