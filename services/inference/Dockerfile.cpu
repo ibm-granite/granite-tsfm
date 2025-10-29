@@ -27,12 +27,13 @@ ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
 
 ARG CODEDIR
 COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml ${CODEDIR} ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 uv.lock ${HOME}
 
 WORKDIR ${HOME}
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && uv sync \
+    && uv sync --locked \
     && uv pip list | awk '/nvidia/ {print $1}' | xargs -r uv pip uninstall \
     && uv cache clean \
     && uv pip install "https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e" \

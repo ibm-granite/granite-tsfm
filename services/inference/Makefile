@@ -71,7 +71,7 @@ test_image: clone_models start_service_image
 	$(MAKE) stop_service_image
 
 install_dev: boilerplate
-	uv sync --extra dev --editable
+	uv sync --locked --extra dev --editable
 
 clone_models:
 	git lfs install || true

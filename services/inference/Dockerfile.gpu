@@ -18,15 +18,19 @@ RUN NVIDIA_GPGKEY_SUM=d0664fbbdb8c32356d45de36c5984617217b2d0bef41b93ccecd326ba3
     echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
 
 # See https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/
+ENV NV_CUDA_VERSION="12-6"
+ENV LIB_NCCL_VERSION="2.24.3"
+ENV LIB_CUDNN_VERSION="13-9.14.0.64"
+
 RUN microdnf install -y yum && yum install -y \
-    cuda-cudart-12-6-12.6.77 \
-    cuda-compat-12-6-560.35.05 \
-    cuda-libraries-12-6-12.6.3 \
-    cuda-nvtx-12-6-12.6.77 \
-    libnpp-12-6-12.3.1.54 \
-    libcublas-12-6-12.6.4.1 \
-    libnccl-2.24.3 \
-    libcudnn9-cuda-13-9.14.0.64 \
+    cuda-cudart-${NV_CUDA_VERSION} \
+    cuda-compat-${NV_CUDA_VERSION} \
+    cuda-libraries-${NV_CUDA_VERSION} \
+    cuda-nvtx-${NV_CUDA_VERSION} \
+    libnpp-${NV_CUDA_VERSION} \
+    libcublas-${NV_CUDA_VERSION} \
+    libnccl-${LIB_NCCL_VERSION} \
+    libcudnn9-cuda-${LIB_CUDNN_VERSION} \
     && yum clean all \
     && microdnf clean all \
     && rm -rf /var/cache/yum/*

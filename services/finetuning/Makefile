@@ -34,4 +34,4 @@ test_local: clone_models fetchdata boilerplate
 	uv run pytest -s tests
 
 install_dev: boilerplate
-	uv sync  --extra dev --editable
+	uv sync --locked  --extra dev --editable
