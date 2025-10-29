@@ -23,7 +23,7 @@ dependencies = [
     "deprecated",
     "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
-    "torch<3",
+    "torch<2.9",
 ]
 
 [tool.setuptools]
