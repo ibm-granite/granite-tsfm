@@ -11,7 +11,5 @@ FROM tsfminference-gpu AS base
 USER tsfm
 ARG CODEDIR
 COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm pyproject.toml ${HOME}
-COPY --chown=tsfm:tsfm uv.lock ${HOME}
-COPY --chown=tsfm:tsfm LICENSE ${HOME}
+COPY --chown=tsfm:tsfm LICENSE README.md uv.lock pyproject.toml ${HOME}
 RUN uv sync --locked

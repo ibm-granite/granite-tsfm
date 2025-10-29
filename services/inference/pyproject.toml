@@ -34,6 +34,9 @@ sagemaker = [
   "boto3",
 ]
 
+[tool.setuptools.packages.find]
+include = ["tsfminference"]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"

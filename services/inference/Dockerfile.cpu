@@ -27,8 +27,7 @@ ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
 
 ARG CODEDIR
 COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml ${HOME}
-COPY --chown=tsfm:tsfm --chmod=755 uv.lock ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml uv.lock ${HOME}
 
 WORKDIR ${HOME}
 
