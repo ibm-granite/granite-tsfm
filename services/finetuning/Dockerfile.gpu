@@ -11,6 +11,5 @@ FROM tsfminference-gpu AS base
 USER tsfm
 ARG CODEDIR
 COPY --chown=tsfm:tsfm ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm pyproject.toml ${HOME}
-COPY --chown=tsfm:tsfm poetry.lock ${HOME}
-RUN poetry install
+COPY --chown=tsfm:tsfm LICENSE README.md uv.lock pyproject.toml ${HOME}
+RUN uv sync --locked

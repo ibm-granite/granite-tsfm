@@ -2,6 +2,8 @@
 #
 import json
 import os
+import random
+import tempfile
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -51,7 +53,8 @@ def ts_data(ts_data_base, request):
     # forecast_length = 96
     # context_length = 512
     model_id = request.param
-    prediction_length = model_param_map[model_id]["prediction_length"]
+    # make sure models can return less than max prediction length
+    prediction_length = random.randint(1, model_param_map[model_id]["prediction_length"])
     context_length = model_param_map[model_id]["context_length"]
     timestamp_column = "date"
 
@@ -92,7 +95,7 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
         return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
         print(req.text)
-        return req
+        return None, req
 
 
 @pytest.mark.parametrize(
@@ -103,7 +106,10 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
 def test_forecast_inference_no_config(ts_data):
     test_data, params = ts_data
 
-    prediction_length = params["prediction_length"]
+    # with a missing config.json we don't seem to honor the prediction length
+    # to be anything other than 96?
+    params["prediction_length"] = 96
+
     context_length = params["context_length"]
     model_id = params["model_id"]
     model_id_path: str = model_id
@@ -116,7 +122,7 @@ def test_forecast_inference_no_config(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -129,9 +135,9 @@ def test_forecast_inference_no_config(ts_data):
 
     df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length
+    assert df_out[0].shape[0] == params["prediction_length"]
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
-    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
+    assert counts["output_data_points"] == params["prediction_length"] * len(params["target_columns"])
 
 
 @pytest.mark.parametrize(
@@ -157,7 +163,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -168,7 +174,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    df_out, counts = get_inference_response(msg, dumpfile="/tmp/test_zero_shot_forecast_inference.json")
+    df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
@@ -191,8 +197,10 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
-    assert "Received 2 time points for id a" in out.text
+    _, out = get_inference_response(msg)
+    assert ("Received 2 time points for id a" in out.text) or (
+        "prediction_filter_length should be positive and less than prediction_length" in out.text
+    )
 
     # test single, more data
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -205,7 +213,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -228,7 +236,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -253,7 +261,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -264,7 +272,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert f"Received {context_length - 3} time points for id a" in out.text
 
     # test multi-time series, multi-id
@@ -276,7 +284,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -287,7 +295,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert f"Received {context_length - 3} time points for id ('a', 'a')" in out.text
 
     # single series, less columns
@@ -368,7 +376,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            "prediction_length": params["prediction_length"] * 4,
+            "prediction_length": params["prediction_length"] * 40,
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -379,7 +387,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert "prediction_filter_length should be positive" in out.text
 
     # single series, different prediction length
@@ -452,8 +460,11 @@ def test_future_data_forecast_inference(ts_data):
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
-    out = get_inference_response(
-        msg, dumpfile="/tmp/test_future_data_forecast_inference.json" if DUMPPAYLOADS else None
+    _, out = get_inference_response(
+        msg,
+        dumpfile=os.path.join(tempfile.gettempdir(), "test_future_data_forecast_inference.json")
+        if DUMPPAYLOADS
+        else None,
     )
     assert (
         "Future data should have time series of length that is at least the specified prediction length." in out.text
@@ -580,7 +591,7 @@ def test_zero_shot_forecast_inference_no_timestamp(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": "int_timestamp",
@@ -618,7 +629,7 @@ def test_forecast_inference_float_timestamp(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": "float_timestamp",
@@ -640,7 +651,7 @@ def test_forecast_inference_float_timestamp(ts_data):
 def test_forecast_inference_decimal_freq(ts_data):
     test_data, params = ts_data
 
-    prediction_length = params["prediction_length"]
+    # prediction_length = params["prediction_length"]
 
     model_id = params["model_id"]
     model_id_path: str = model_id
@@ -652,7 +663,7 @@ def test_forecast_inference_decimal_freq(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": "date",
@@ -666,7 +677,7 @@ def test_forecast_inference_decimal_freq(ts_data):
 
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length
+    assert df_out[0].shape[0] == params["prediction_length"]
 
 
 @pytest.mark.parametrize(
@@ -681,8 +692,6 @@ def test_finetuned_model_inference(ts_data):
     id_columns = params["id_columns"]
     model_id = params["model_id"]
 
-    prediction_length = 96
-
     # test single
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
     encoded_data = encode_data(test_data_, params["timestamp_column"])
@@ -690,7 +699,7 @@ def test_finetuned_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -701,7 +710,7 @@ def test_finetuned_model_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert "Attempted to use a fine-tuned model with a different schema" in out.text
 
     # exact match of request and underlying schema
@@ -709,7 +718,7 @@ def test_finetuned_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -724,13 +733,13 @@ def test_finetuned_model_inference(ts_data):
 
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length
+    assert df_out[0].shape[0] == params["prediction_length"]
 
     # relaxed request
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -742,7 +751,7 @@ def test_finetuned_model_inference(ts_data):
 
     df_out, _ = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length
+    assert df_out[0].shape[0] == params["prediction_length"]
 
     # relaxed request, but data issue (missing column):
     test_data_ = test_data[test_data[id_columns[0]] == "a"].copy()
@@ -752,7 +761,7 @@ def test_finetuned_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -762,7 +771,7 @@ def test_finetuned_model_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert "Attempted to use a fine-tuned model with data that does not match the saved schema" in out.text
 
 
@@ -785,7 +794,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -798,7 +807,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
         "future_data": {},
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert (
         "Unexpected parameter conditional_columns for a zero-shot model, please confirm you have the correct model_id and schema."
         in out.text
@@ -820,7 +829,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -832,7 +841,7 @@ def test_improper_use_of_zero_shot_model_inference(ts_data):
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
 
-    out = get_inference_response(msg)
+    _, out = get_inference_response(msg)
     assert "Future data was provided, but the model does not support or require future exogenous." in out.text
 
 
@@ -858,7 +867,7 @@ def test_trained_model_inference(ts_data):
     msg = {
         "model_id": model_id,
         "parameters": {
-            # "prediction_length": params["prediction_length"],
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],

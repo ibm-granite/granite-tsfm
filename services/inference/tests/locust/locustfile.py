@@ -48,12 +48,12 @@ def forecasting_input_base(model_id: str, series_length: int, num_timeseries: in
 
 
 class MyUser(FastHttpUser):
-    max_retries = 3  # custom retry count
+    max_attempts = 2  # attempt a failed call at most this many times
 
     @task
     def forecast_synchronous(self):
         forecasting_url = self.host + "/inference/forecasting"
-        for attempt in range(self.max_retries):
+        for attempt in range(self.max_attempts):
             try:
                 if attempt > 0:
                     print(f"retrying on attempt {attempt + 1}")
