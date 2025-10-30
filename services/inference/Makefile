@@ -61,12 +61,14 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
-	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
+	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+	  --headless --only-summary --check-fail-ratio 0.01
 	uv run pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	$(MAKE) stop_service_local
 
 test_image: clone_models start_service_image
-	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf --headless --only-summary
+	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+	 --headless --only-summary --check-fail-ratio 0.01
 	uv run pytest -s tests ../tests
 	$(MAKE) stop_service_image
 
