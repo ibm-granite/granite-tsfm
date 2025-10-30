@@ -43,6 +43,9 @@ image: boilerplate
 		echo "Skipping GPU build"; \
 	fi
 
+# it's very important that the below start statement
+# NOT use uv b/c we're emulating downstream cosumers
+# who might not deploy with that command
 start_service_image: create_prometheus_metrics_dir image
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
