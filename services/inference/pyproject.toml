@@ -25,6 +25,7 @@ granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch
 dev = [
   "pytest",
   "locust",
+  "locust-plugins",
   "inotify",
   "pytest-coverage",
 ]
