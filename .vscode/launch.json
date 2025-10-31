@@ -18,7 +18,7 @@
             "module": "uvicorn",
             "env": {
                 "TSFM_MODEL_DIR": "./mytest-tsfm",
-                "PROMETHEUS_MULTIPROC_DIR": "/tmp"
+                "PROMETHEUS_MULTIPROC_DIR": "${env:TEMP}"
             },
             "cwd": "${workspaceFolder}/services/inference",
             "justMyCode": false,
