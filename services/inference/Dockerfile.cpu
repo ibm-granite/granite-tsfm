@@ -32,10 +32,8 @@ COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml uv.lock ${HOME}
 WORKDIR ${HOME}
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && uv sync --locked \
-    && uv pip list | awk '/nvidia/ {print $1}' | xargs -r uv pip uninstall \
+    && uv sync --locked --index-strategy unsafe-best-match \
     && uv cache clean \
-    && uv pip install "https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e" \
     && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics
 
