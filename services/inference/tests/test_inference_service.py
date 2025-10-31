@@ -174,13 +174,7 @@ def test_zero_shot_forecast_inference(ts_data):
         "future_data": {},
     }
 
-<<<<<<< HEAD
-    df_out, counts = get_inference_response(
-        msg, dumpfile=os.path.join(tempfile.gettempdir(), "test_zero_shot_forecast_inference.json")
-    )
-=======
     df_out, counts = get_inference_response(msg)
->>>>>>> destiny
     assert len(df_out) == 1
     assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
@@ -466,11 +460,7 @@ def test_future_data_forecast_inference(ts_data):
         "data": encode_data(test_data_, params["timestamp_column"]),
         "future_data": encode_data(future_data, params["timestamp_column"]),
     }
-<<<<<<< HEAD
-    out = get_inference_response(
-=======
     _, out = get_inference_response(
->>>>>>> destiny
         msg,
         dumpfile=os.path.join(tempfile.gettempdir(), "test_future_data_forecast_inference.json")
         if DUMPPAYLOADS
