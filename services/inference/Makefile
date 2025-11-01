@@ -29,7 +29,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate
 	-k uvicorn.workers.UvicornWorker \
 	--bind 127.0.0.1:8000 \
 	tsfminference.main:app
-start_service_local: insert-torch-cpu-index
+start_service_local:
 	@make start_service_local_watch &
 stop_service_local:
 	pkill  -f '.*python.*gunicorn.*tsfminference\.main\:app' || true
@@ -47,15 +47,15 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-	# we insert the torch cpu index to avoid having to install
-	# all the nvidia-cuda packages
+        # we insert the torch cpu index to avoid having to instal
+        # all the nvidia-cuda packages
 	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
 	uv lock -U --index-strategy unsafe-best-match
 
 remove-torch-cpu-index:
 	git checkout uv.lock pyproject.toml
 	git checkout uv.lock
-	
+
 image: insert-torch-cpu-index boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
 	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu . || true
@@ -92,6 +92,7 @@ test_local: clone_models boilerplate stop_service_local start_service_local
 	  --headless --only-summary --check-fail-ratio 0.01
 	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	@make stop_service_local
+	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
 	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
