@@ -47,8 +47,8 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-        # we insert the torch cpu index to avoid having to instal
-        # all the nvidia-cuda packages
+    # we insert the torch cpu index to avoid having to instal
+    # all the nvidia-cuda packages
 	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
 	uv lock -U --index-strategy unsafe-best-match
 
@@ -88,16 +88,16 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
+	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
 	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
-	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
-	@make stop_service_local
+	@make stop_service_local || true
 	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
+	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
 	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
-	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
 	@make stop_service_image || true
 	@make remove-torch-cpu-index
 
