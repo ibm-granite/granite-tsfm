@@ -39,6 +39,6 @@ jobs:
         sudo rm -rf /usr/local/lib/android
         docker system prune --all --force || true
         SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker \
-         $HOME/.local/bin/uv run --locked --directory=services/inference \
-         make image
-         make test_image
+         $HOME/.local/bin/uv run --locked --directory=services/inference make image 
+         $HOME/.local/bin/uv run --locked --directory=services/inference make test_image
+         # ^^ because we removed make_image as a dep of image after the torch-cpu-index change
