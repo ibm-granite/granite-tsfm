@@ -23,7 +23,7 @@ start_service_local_watch: create_prometheus_metrics_dir boilerplate
 	TSFM_PYTHON_LOGGING_LEVEL="ERROR" \
 	TSFM_MODEL_DIR=./foobaz:./mytest-tsfm \
 	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
-	uv run python -m gunicorn \
+	uv run --locked python -m gunicorn \
 	-w 1 \
 	--reload \
 	-k uvicorn.workers.UvicornWorker \
@@ -34,19 +34,43 @@ start_service_local:
 stop_service_local:
 	pkill  -f '.*python.*gunicorn.*tsfminference\.main\:app' || true
 
-image: boilerplate
+FILES = pyproject.toml uv.lock
+.PHONY: check-clean
+check-clean:
+	@echo "Checking for uncommitted changes in: $(FILES)"
+	@for f in $(FILES); do \
+	  if ! git diff --quiet HEAD -- "$$f"; then \
+	    echo "❌ $$f differs from HEAD"; \
+	    git --no-pager diff --stat HEAD -- "$$f"; \
+	    exit 1; \
+	  fi; \
+	done
+
+insert-torch-cpu-index: check-clean
+    # we insert the torch cpu index to avoid having to instal
+    # all the nvidia-cuda packages
+	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
+	uv lock -U --index-strategy unsafe-best-match
+
+remove-torch-cpu-index:
+	git checkout uv.lock pyproject.toml
+	git checkout uv.lock
+
+image: insert-torch-cpu-index boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
-	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu .
+	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu . || true
+	@make remove-torch-cpu-index
 	@if [ "$$SKIP_GPU_BUILD" != "1" ]; then \
+		echo "Doing GPU build"; \
 		$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-gpu --build-arg CODEDIR="tsfminference" -f Dockerfile.gpu .; \
 	else \
 		echo "Skipping GPU build"; \
 	fi
 
-# it's very important that the below start statement
-# NOT use uv b/c we're emulating downstream cosumers
+# it's VERY important that the below start statement
+# NOT use uv b/c we're emulating downstream consumers
 # who might not deploy with that command
-start_service_image: create_prometheus_metrics_dir image
+start_service_image: create_prometheus_metrics_dir
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
@@ -64,16 +88,18 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfmserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
-	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
+	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
-	uv run pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
-	$(MAKE) stop_service_local
+	@make stop_service_local || true
+	@make remove-torch-cpu-index
 
-test_image: clone_models start_service_image
-	uv run locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+test_image: insert-torch-cpu-index clone_models start_service_image 
+	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
+	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
-	uv run pytest -s tests ../tests
-	$(MAKE) stop_service_image
+	@make stop_service_image || true
+	@make remove-torch-cpu-index
 
 install_dev: boilerplate
 	uv sync --locked --extra dev --editable
@@ -92,7 +118,7 @@ update_examples:
 profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
 	TSFM_PROFILE_NUM_TIMESERIES=10000 \
-	uv run python -m cProfile -o profile.out -s cumtime \
+	uv run --locked python -m cProfile -o profile.out -s cumtime \
 	 -m pytest -s tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"
