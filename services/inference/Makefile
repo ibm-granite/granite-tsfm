@@ -14,8 +14,8 @@ boilerplate:
 		done
 
 create_prometheus_metrics_dir:
-	rm -rf prometheus_metrics > /dev/null 2>&1 | true
-	mkdir -m go+rwX prometheus_metrics
+	rm -rf prometheus_metrics > /dev/null 2>&1 || true
+	mkdir -m go+rwX prometheus_metrics || true
 
 # starts the tsfminference service (used mainly for test cases)
 start_service_local_watch: create_prometheus_metrics_dir boilerplate
