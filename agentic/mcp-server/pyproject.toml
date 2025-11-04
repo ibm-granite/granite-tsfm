@@ -1,14 +1,34 @@
 [project]
 name = "tsfm-mcp-server"
 version = "0.0.1"
-description = "A MCP server for TSFM capabilities"
+description = "Agentic components for TSFM"
 readme = "README.md"
 requires-python = ">=3.9, <3.13"
 dependencies = [
     "granite-tsfm",
-    "tsfminference"
+    "tsfminference",
+    "tsfmfinetuning",
+    "pydantic>2,<3",
+    "fastmcp"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
 ]
 
 [tool.uv.sources]
-granite-tsfm = { workspace = true }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
 tsfminference= { workspace = true }
+tsfmfinetuning= { workspace = true }
+
+[tool.uv.workspace]
+members = ["../../services/inference","../../services/finetuning"]
+
+[tool.setuptools.packages.find]
+include = ["tsfm_mcp_server/*"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
