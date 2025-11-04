@@ -32,4 +32,5 @@ def load_timeseries(input: DataInput) -> pd.DataFrame:
                 os.unlink(tmp_file.name)
             except Exception as e:
                 import logging
+
                 logging.exception(f"Failed to delete temporary file {tmp_file.name}: {e}")

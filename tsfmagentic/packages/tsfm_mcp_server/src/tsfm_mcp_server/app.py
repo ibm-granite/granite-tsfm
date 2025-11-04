@@ -1,17 +1,22 @@
 from fastmcp import FastMCP
 
-from .tools import forecast_tool
+from tsfm_mcp_server.payloads import DataInput, ForecastResult
+from tsfm_mcp_server.tools import forecast_tool as iforecast_tool
 
 
 # Create the FastMCP server instance
 mcp = FastMCP(
     name="tsfm_mcp_server",
     version="1.0.0",
-    description="MCP server for TSFM capabilities.",
+    instructions="""This server provides tools for single and multivariate time series analytics. Use it to provide the following functionalities:
+    - Time series forecasting
+    """,
 )
 
 
-mcp.add_tool(forecast_tool)
+@mcp.tool()
+async def forecast_tool(data: DataInput, forecast_as_data: bool = True) -> ForecastResult:
+    return await iforecast_tool(data, forecast_as_data)
 
 
 if __name__ == "__main__":

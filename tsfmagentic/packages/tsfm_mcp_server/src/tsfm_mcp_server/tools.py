@@ -7,7 +7,7 @@ from .payloads import DataInput, ForecastResult
 # -----------------------------------------------------------------------------
 
 
-async def forecast_tool(data: DataInput, forecast_as_data: bool = True) -> ForecastResult:
+def forecast_tool(data: DataInput, forecast_as_data: bool = True) -> ForecastResult:
     """
     A forecasting tool definition that uses the hybrid DataInput data model.
 

@@ -50,7 +50,14 @@ class DataInput(BaseModel):
         description=(
             "Data as a string (currently only tab-separated CSV is supported with json support coming soon). If provided, this takes precedence over ``data_uri``."
         ),
-        example="timestamp\tidentifier\tvalue\n2024-11-03T10:00:00Z\tid1\t12.3\n2024-11-03T10:01:00Z\tid1\t7.8\n2024-11-03T10:02:00Z\tid1\t9.1",
+        json_schema_extra={
+            "example": (
+                "timestamp\tidentifier\tvalue\n"
+                "2024-11-03T10:00:00Z\tid1\t12.3\n"
+                "2024-11-03T10:01:00Z\tid1\t7.8\n"
+                "2024-11-03T10:02:00Z\tid1\t9.1"
+            )
+        },
     )
 
     data_uri: Optional[str] = Field(
@@ -61,13 +68,13 @@ class DataInput(BaseModel):
             " and `gcs://` to come later. Supported file formats are CSV with arrow"
             " table support to follow."
         ),
-        example="file://./data.csv",
+        json_schema_extra={"example": "file://./data.csv"},
     )
 
     timestamp_column: Optional[str] = Field(
         default=None,
         description=("The name of the column containing timestamps in the dataset."),
-        example="timestamp",
+        json_schema_extra={"example": "timestamp"},
     )
 
     identifier_column: Optional[str] = Field(
@@ -75,13 +82,13 @@ class DataInput(BaseModel):
         description=(
             "The name of the column containing identifiers in the dataset. This column distinguishes multiple time series within the same dataset."
         ),
-        example="identifier",
+        json_schema_extra={"example": "identifier"},
     )
 
     timestamp_column: Optional[str] = Field(
         default=None,
         description=("The name of the column containing timestamps in the dataset."),
-        example="timestamp",
+        json_schema_extra={"example": "timestamp"},
     )
 
     target_columns: List[str] = Field(
@@ -89,11 +96,13 @@ class DataInput(BaseModel):
         description=(
             "The names of the columns containing target values in the dataset. These are the values to be forecasted or analyzed."
         ),
-        example=["value"],
+        json_schema_extra={"example": ["value"]},
     )
 
     horizon: Optional[int] = Field(
-        default=10, description="The forecasting horizon (when performing forecasting).", example=10
+        default=10,
+        description="The forecasting horizon (when performing forecasting).",
+        json_schema_extra={"example": 10},
     )
 
 
@@ -111,7 +120,7 @@ class ForecastResult(BaseModel):
         description=(
             "The forecasted values for each target column for the given horizon. The values represent future values starting after the last timestamp in the input data."
         ),
-        example=[[12.5, 13.0, 13.5], [7.8, 8.1, 8.4]],  # two target columns, three steps each
+        json_schema_extra={"example": [[12.5, 13.0, 13.5], [7.8, 8.1, 8.4]]},  # two target columns, three steps each
     )
 
     forecast_uri: Optional[str] = Field(
@@ -119,7 +128,11 @@ class ForecastResult(BaseModel):
         description=(
             "A URI that points to the forecasted values. The saved results will be in the same format as the input data (e.g., CSV). With just the forecasted values starting one step after the last input timestamp."
         ),
-        example="file://./forecast.csv",
+        json_schema_extra={"example": "file://./forecast.csv"},
     )
 
-    context: Optional[str] = Field(description="Optional context or metadata about the forecast.", default=None)
+    context: Optional[str] = Field(
+        description="Optional context or metadata about the forecast.",
+        default=None,
+        json_schema_extra={"example": "WARNING: this forecast has the potential to be inaccurate."},
+    )
