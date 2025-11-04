@@ -1,0 +1,7 @@
+[project]
+name = "tsfm-mcp-server"
+version = "0.0.1"
+description = "Agentic components for TSFM"
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+dependencies = []

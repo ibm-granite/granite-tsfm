@@ -1,0 +1,28 @@
+[project]
+name = "tsfmagentic"
+version = "0.0.1"
+description = "Agentic components for TSFM"
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+dependencies = ["pydantic>2,<3", "fastmcp"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+notebooks = ["ipython"]
+
+[tool.uv.sources]
+# granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+# tsfminference = { path = "../services/inference" }
+# tsfmfinetuning = { path = "../services/finetuning" }
+
+[tool.uv.workspace]
+members = ["packages/tsfm_mcp_server"]
+
+[tool.setuptools.packages.find]
+include = ["tsfm_mcp_server/**"]
+exclude = ["tsfm_public/**"]
+
+
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"
