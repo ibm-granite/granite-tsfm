@@ -55,7 +55,9 @@
     "editor.defaultFormatter": "vscode.json-language-features"
   },
   "python.testing.pytestArgs": [
-    "services/inference"
+    "services/inference",
+    "tsfmagentic",
+    "services/finetuning"
   ],
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
