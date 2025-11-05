@@ -4,16 +4,18 @@ version = "0.0.1"
 description = "Agentic components for TSFM"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
-dependencies = ["fastmcp", "pydantic>2,<3", "tsfmfinetuning"]
+dependencies = ["fastmcp", "pydantic>2,<3", "tsfminference", "granite-tsfm"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
 notebooks = ["ipython"]
 
 [tool.uv.sources]
-# granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
-# tsfminference = { path = "../services/inference" }
-tsfmfinetuning = { path = "../../../services/finetuning" }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+# until the time we create a formal release for these
+# we're going to use local paths
+tsfminference = { path = "../../../services/inference" }
+# tsfmfinetuning = { path = "../../../services/finetuning" }
 
 
 [build-system]

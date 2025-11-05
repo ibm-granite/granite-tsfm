@@ -1,24 +1,18 @@
+import logging
+
 from .datautil import load_timeseries
 from .payloads import DataInput, ForecastResult
 
+
+LOGGER = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 # 4. FastMCP tool definitions
 # -----------------------------------------------------------------------------
 
 
-def forecast_tool(data: DataInput, forecast_as_data: bool = True) -> ForecastResult:
-    """
-    A forecasting tool definition that uses the hybrid DataInput data model.
-
-    Args:
-        data: A DataInput object containing either inline numeric arrays or a URI to tabular data.
-        forecast_as_data: Boolean flag indicating whether to return the forecast as inline data or a URI pointing to the results.
-        Currently only local file system CSV output is supported.
-
-    Returns:
-        ForecastResult object with forecasted values.
-    """
+def forecast_tool(data: DataInput) -> ForecastResult:
+    """See docstring in app.py for details."""
     ts = load_timeseries(data)
 
     # Very simple dummy forecast: repeat last value

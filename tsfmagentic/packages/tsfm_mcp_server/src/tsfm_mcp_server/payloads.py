@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # -----------------------------------------------------------------------------
@@ -10,98 +10,67 @@ from pydantic import BaseModel, Field
 
 class DataInput(BaseModel):
     """
-    Input payload for tools that accepts either a string
-    of tab separated CSV data or an external URI reference.
+    Input payload for tools that operate on time series data loaded from an external URI.
 
-    The model is intentionally flexible: you may provide the raw CSV data as a string, or point to a remote source via
-    ``data_uri``.  **Exactly one should be supplied** – if
-    both are present, the CSV content takes
-    precedence and the URI is ignored. In either case, the data should be tabular and contain one or more of the following elements:
+    The dataset referenced by ``data_uri`` should be a tabular file (e.g., CSV)
+    containing at least the following elements:
 
-    * A timestamp column which should contain either a string that's parsable as a pandas datetime type,
-    or a numeric value representing epoch time or a time offset (e.g, 0, 1, 2, ...).
-    * One or more numeric measurement columns representing the target values for tasks such as forecasting.
-    * A identifier column is optional, but may be included to distinguish multiple time series within the same dataset.
+    - **timestamp_column** (required): The name of the column containing timestamps.
+      Timestamps may be ISO-8601 strings or numeric epoch values.
+    - **target_columns** (required): One or more numeric columns representing the
+      target variable(s) to forecast or analyze.
+    - **identifier_column** (optional): A column distinguishing multiple time series
+      within the same dataset.
 
-    See the detailed payload documentation for more information regarding which columns are required for specific tasks.
-
-    Your data needs to contain sufficient historical context for the task at hand (e.g., forecasting). Typically this is at least 96 historical points but can be
-    as much as 1024 historical points for improved accuracy. This tool will internally select the appropriate choice of model based on the historical context length.
-
-    Example (inline data)
+    Example Input:
         >>> DataInput(
-                data="timestamp\tidentifier\tvalue\n2024-11-03T10:00:00Z\tid1\t12.3\n2024-11-03T10:01:00Z\tid1\t7.8\n2024-11-03T10:02:00Z\tid1\t9.1",
-                timestamp_column="timestamp",
-                target_columns=["value"],
-                identifier_column="identifier"
-            )
+        ...     data_uri="file://./data.csv",
+        ...     timestamp_column="timestamp",
+        ...     target_columns=["value1", "value2"],
+        ...     identifier_column="identifier"
+        ... )
 
-    Example (URI)
-        # echo "timestamp,identifier,value\n2024-11-03T10:00:00Z,id1,12.3\n2024-11-03T10:01:00Z,id1,7.8\n2024-11-03T10:02:00Z,id1,9.1" > data.csv
-        >>> DataInput(data_uri="file://./data.csv",
-                timestamp_column="timestamp",
-                target_columns=["value"],
-                identifier_column="identifier"
-            )
+
+    Example CSV (comma-separated, with header) format for multivariate forecast:
+        timestamp,identifier,value1,value2
+        2024-11-03T10:15:00Z,id1,14.8,28.4
+        2024-11-03T10:20:00Z,id1,15.2,29.1
+        2024-11-03T10:25:00Z,id1,15.6,29.8
+        2024-11-03T10:30:00Z,id1,15.9,30.2
+
+    **Column headers are required and you must use a comma delimiter.**
     """
 
-    data: Optional[str] = Field(
-        default=None,
-        description=(
-            "Data as a string (currently only tab-separated CSV is supported with json support coming soon). If provided, this takes precedence over ``data_uri``."
-        ),
-        json_schema_extra={
-            "example": (
-                "timestamp\tidentifier\tvalue\n"
-                "2024-11-03T10:00:00Z\tid1\t12.3\n"
-                "2024-11-03T10:01:00Z\tid1\t7.8\n"
-                "2024-11-03T10:02:00Z\tid1\t9.1"
-            )
-        },
-    )
+    model_config = ConfigDict(json_schema_extra={"required": ["data_uri", "timestamp_column", "target_columns"]})
 
-    data_uri: Optional[str] = Field(
-        default=None,
+    data_uri: str = Field(
         description=(
-            "A URI that points to an external dataset. Currently supported schemes"
-            " are `file://` with additional schemes such as `https://`, `http://`, `s3://`,"
-            " and `gcs://` to come later. Supported file formats are CSV with arrow"
-            " table support to follow."
+            "URI pointing to the external dataset. Supported schemes include `file://`, "
+            "with others (e.g., `s3://`, `gcs://`) planned in the future. "
+            "The referenced file should be in CSV format with tabular structure."
         ),
         json_schema_extra={"example": "file://./data.csv"},
     )
 
-    timestamp_column: Optional[str] = Field(
-        default=None,
-        description=("The name of the column containing timestamps in the dataset."),
+    timestamp_column: str = Field(
+        description="**Required.** The name of the column containing timestamps.",
         json_schema_extra={"example": "timestamp"},
     )
 
     identifier_column: Optional[str] = Field(
         default=None,
-        description=(
-            "The name of the column containing identifiers in the dataset. This column distinguishes multiple time series within the same dataset."
-        ),
+        description=("Optional. The name of the column distinguishing multiple series within the dataset."),
         json_schema_extra={"example": "identifier"},
     )
 
-    timestamp_column: Optional[str] = Field(
-        default=None,
-        description=("The name of the column containing timestamps in the dataset."),
-        json_schema_extra={"example": "timestamp"},
-    )
-
     target_columns: List[str] = Field(
-        default=None,
-        description=(
-            "The names of the columns containing target values in the dataset. These are the values to be forecasted or analyzed."
-        ),
+        description="**Required.** Columns containing target values for forecasting or analysis.",
         json_schema_extra={"example": ["value"]},
     )
 
     horizon: Optional[int] = Field(
         default=10,
-        description="The forecasting horizon (when performing forecasting).",
+        description="Forecasting horizon (number of future time steps). Defaults to 10.",
         json_schema_extra={"example": 10},
     )
 
@@ -112,27 +81,50 @@ class DataInput(BaseModel):
 
 
 class ForecastResult(BaseModel):
-    """Example forecast output. This can contain either inline forecast data or a URI to the results.
-    The behavior is dependent on the boolean parameter `forecast_as_data` in the definition of forecast_tool."""
+    """
+    Output payload for forecast results produced by time series tools.
 
-    forecast_data: Optional[List[List[float]]] = Field(
-        default=None,
-        description=(
-            "The forecasted values for each target column for the given horizon. The values represent future values starting after the last timestamp in the input data."
-        ),
-        json_schema_extra={"example": [[12.5, 13.0, 13.5], [7.8, 8.1, 8.4]]},  # two target columns, three steps each
-    )
+    The forecast results are provided as a **URI** reference that points to a
+    tabular file (e.g., CSV) containing the predicted values for each target column.
+    This file will typically match the format of the input dataset, beginning
+    immediately after the last timestamp observed in the input.
 
-    forecast_uri: Optional[str] = Field(
-        default=None,
+    The model may also include optional context or metadata describing the forecast or
+    any error conditions that may have occurred during processing.
+
+    Example CSV (comma-separated, with header) format for multivariate forecast:
+        timestamp,identifier,value1,value2
+        2024-11-03T10:35:00Z,id1,14.8,28.4
+        2024-11-03T10:40:00Z,id1,15.2,29.1
+        2024-11-03T10:45:00Z,id1,15.6,29.8
+        2024-11-03T10:50:00Z,id1,15.9,30.2
+
+    Example instance:
+        >>> ForecastResult(
+        ...     forecast_uri="file://./forecast.csv",
+        ...     context="Forecast generated using default temporal model with horizon=4."
+        ... )
+    """
+
+    model_config = ConfigDict(json_schema_extra={"required": ["forecast_uri"]})
+
+    forecast_uri: str = Field(
         description=(
-            "A URI that points to the forecasted values. The saved results will be in the same format as the input data (e.g., CSV). With just the forecasted values starting one step after the last input timestamp."
+            "URI pointing to the forecasted results. The file should contain the "
+            "predicted future values starting one step after the last timestamp "
+            "in the input data. The format typically matches the input dataset "
+            "(e.g., CSV with the same column names)."
         ),
         json_schema_extra={"example": "file://./forecast.csv"},
     )
 
     context: Optional[str] = Field(
-        description="Optional context or metadata about the forecast.",
         default=None,
-        json_schema_extra={"example": "WARNING: this forecast has the potential to be inaccurate."},
+        description="Optional context, notes, or metadata about the forecast.",
+        json_schema_extra={
+            "example": (
+                "Forecast generated using default temporal model (horizon=4). "
+                "WARNING: results may be less accurate due to short context length."
+            )
+        },
     )
