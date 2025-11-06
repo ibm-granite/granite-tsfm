@@ -29,8 +29,6 @@ logging.getLogger("asyncio").setLevel(logging.ERROR)
 logging.getLogger("uvicorn").setLevel(logging.ERROR)
 logging.getLogger("fastapi").setLevel(logging.ERROR)
 
-LOGGER = logging.getLogger(__name__)
-
 # Create the FastMCP server instance
 mcp = FastMCP(
     name="tsfm_mcp_server",
@@ -44,19 +42,26 @@ mcp = FastMCP(
 @mcp.tool(
     name="forecast_timeseries",
     description=(
-        """Forecasts a time series from a URI that points to CSV data.
-         At present, the only acceptable form of uri is a file:// URI.
-         You must include both `timestamp_column` and `target_columns`
-         in your input payload. You should confirm with the user that your
-         choice of these columns is correct before proceeding with the forecast.
-         The forecast results will be written to a temporary file in CSV format
-         in the system's temporary directory, with a unique filename prefixed by
-         "forecast_result". The output file will be in the same format as
-         the input file and will contain predicted values for each target column,
-         beginning immediately after the last timestamp in the input data.
+        """
+        Forecasts a time series from a URI that points to CSV data.
+         You must include `timestamp_column`,`target_columns` and `data_uri`
+         in your input payload. The `horizon` parameter is optional (default=96).`
 
-         You will receive a `ForecastResult` object containing a `forecast_uri`
-         that points to the generated results file, along with optional metadata
+         Here is an example input payload:
+
+         ```json
+         {
+             "data_uri": "file://./data.csv",
+             "timestamp_column": "timestamp",
+             "target_columns": ["value"],
+             "identifier_column": "identifier",
+             "horizon": 96
+         }
+         ```
+
+         **You should confirm your choices of these parameters with the user.**
+         ** You should be reluctant to read the full content of the data_uri except to validate its format. **
+
          """
     ),
 )
@@ -89,7 +94,7 @@ async def forecast_tool(input_pydantic_model: DataInput) -> ForecastResult:
         ...         timestamp_column="timestamp",
         ...         target_columns=["value"],
         ...         identifier_column="identifier",
-        ...         horizon=4
+        ...         horizon=96
         ...     )
         ... )
         ForecastResult(
@@ -97,11 +102,11 @@ async def forecast_tool(input_pydantic_model: DataInput) -> ForecastResult:
         ...     context="Forecast generated using default temporal model with horizon=4."
         ... )
     """
-    LOGGER.info("Received forecast_tool request with input_pydantic_model: %s", input_pydantic_model)
-    return await iforecast_tool(input_pydantic_model)
+    root_logger.info("Received forecast_tool request with input_pydantic_model: %s", input_pydantic_model)
+    return iforecast_tool(input_pydantic_model)
 
 
 if __name__ == "__main__":
     # Start the MCP server
-    LOGGER.info("Starting TSFM MCP server...")
+    root_logger.info("Starting TSFM MCP server...")
     mcp.run()
