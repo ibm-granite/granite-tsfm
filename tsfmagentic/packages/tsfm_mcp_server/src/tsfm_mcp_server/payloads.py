@@ -69,9 +69,9 @@ class DataInput(BaseModel):
     )
 
     horizon: Optional[int] = Field(
-        default=10,
-        description="Forecasting horizon (number of future time steps). Defaults to 10.",
-        json_schema_extra={"example": 10},
+        default=96,
+        description="Forecasting horizon (number of future time steps). Defaults to 96.",
+        json_schema_extra={"example": 96},
     )
 
 
