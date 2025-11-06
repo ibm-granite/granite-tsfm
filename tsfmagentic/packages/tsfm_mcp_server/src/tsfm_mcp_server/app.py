@@ -44,12 +44,23 @@ mcp = FastMCP(
 @mcp.tool(
     name="forecast_timeseries",
     description=(
-        "Forecasts a time series from CSV data. "
-        "You must include both `timestamp_column` and `target_columns` "
-        "in your input payload."
+        """Forecasts a time series from a URI that points to CSV data.
+         At present, the only acceptable form of uri is a file:// URI.
+         You must include both `timestamp_column` and `target_columns`
+         in your input payload. You should confirm with the user that your
+         choice of these columns is correct before proceeding with the forecast.
+         The forecast results will be written to a temporary file in CSV format
+         in the system's temporary directory, with a unique filename prefixed by
+         "forecast_result". The output file will be in the same format as
+         the input file and will contain predicted values for each target column,
+         beginning immediately after the last timestamp in the input data.
+
+         You will receive a `ForecastResult` object containing a `forecast_uri`
+         that points to the generated results file, along with optional metadata
+         """
     ),
 )
-async def forecast_tool(data: DataInput) -> ForecastResult:
+async def forecast_tool(input_pydantic_model: DataInput) -> ForecastResult:
     """
     Generate time series forecasts from tabular data referenced by a URI.
 
@@ -86,8 +97,8 @@ async def forecast_tool(data: DataInput) -> ForecastResult:
         ...     context="Forecast generated using default temporal model with horizon=4."
         ... )
     """
-    LOGGER.info("Received forecast_tool request with data: %s", data)
-    return await iforecast_tool(data, forecast_as_data)
+    LOGGER.info("Received forecast_tool request with input_pydantic_model: %s", input_pydantic_model)
+    return await iforecast_tool(input_pydantic_model)
 
 
 if __name__ == "__main__":
