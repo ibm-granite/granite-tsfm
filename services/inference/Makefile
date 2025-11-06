@@ -9,9 +9,12 @@ boilerplate:
 	for f in ../boilerplate/*.py; do \
 		echo $$f; \
 		cat ../boilerplate/warning.txt > tsfminference/$$(basename $$f); \
-		cat $$f>>tsfminference/$$(basename $$f); \
-		if ! grep $$(basename $$f) tsfminference/.gitignore; then echo $$(basename $$f) >> tsfminference/.gitignore; fi \
-		done
+		cat $$f >> tsfminference/$$(basename $$f); \
+		if ! grep $$(basename $$f) tsfminference/.gitignore; then echo $$(basename $$f) >> tsfminference/.gitignore; fi; \
+	done
+	grep -Ev "ioutils.py" tsfminference/.gitignore > tsfminference/.gitignore.tmp || true
+	mv tsfminference/.gitignore.tmp tsfminference/.gitignore || true
+
 
 create_prometheus_metrics_dir:
 	rm -rf prometheus_metrics > /dev/null 2>&1 || true
@@ -113,7 +116,7 @@ clone_models:
 update_examples:
 # our sagemaker stuff
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
-	uv export --omit-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	uv export --no-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
