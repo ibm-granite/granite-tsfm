@@ -38,7 +38,8 @@ mcp = FastMCP(
     """,
 )
 
-
+# conditional guidance -- you are acting as a agent.. or automated
+# proxy user
 @mcp.tool(
     name="forecast_timeseries",
     description=(
@@ -60,7 +61,7 @@ mcp = FastMCP(
          ```
 
          **You should confirm your choices of these parameters with the user.**
-         ** You should be reluctant to read the full content of the data_uri except to validate its format. **
+         **You should be reluctant to read the full content of the data_uri except to validate its format.**
 
          """
     ),
