@@ -617,7 +617,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 seq_x_imputed = impute_forward_fill(seq_x, self.fill_value)
             elif self.impute_method == ImputeMethod.LINEAR.value:
                 # interpolate for each channel
-                seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
+                seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x, extrapolate_right=True)
             elif self.impute_method is None:
                 seq_x_imputed = np.nan_to_num(seq_x, nan=self.fill_value)
             else:
@@ -1317,7 +1317,7 @@ def apply_masking_specification(
     return past_values_tensor
 
 
-def interpolate_by_var(miss_seq: np.ndarray) -> np.ndarray:
+def interpolate_by_var(miss_seq: np.ndarray, extrapolate_right: bool = False) -> np.ndarray:
     """Interpolate each column of the input numpy array using np.interpolate.
 
     Args:
@@ -1333,6 +1333,19 @@ def interpolate_by_var(miss_seq: np.ndarray) -> np.ndarray:
     imputed = np.interp(np.where(nans)[0], np.where(~nans)[0], miss_seq[~nans])
     miss_seq_copy = miss_seq.copy()
     miss_seq_copy[nans] = imputed
+
+    if not extrapolate_right:
+        return miss_seq_copy
+
+    l = len(miss_seq)
+    last_valid_idx = np.argmax(np.where(~nans, np.arange(l), -1))
+
+    if last_valid_idx > -1 and last_valid_idx < l - 1:
+        # linearly extrapolate to end
+        miss_seq_copy[last_valid_idx + 1 :] = miss_seq_copy[last_valid_idx] + (
+            miss_seq_copy[last_valid_idx] - miss_seq_copy[last_valid_idx - 1]
+        ) * np.arange(1, l - last_valid_idx)
+
     return miss_seq_copy
 
 
