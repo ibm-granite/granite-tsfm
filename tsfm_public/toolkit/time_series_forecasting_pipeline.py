@@ -206,6 +206,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "static_categorical_columns",
             "future_time_series",
             "impute_method",
+            "masking_specification",
         ]
         postprocess_params = [
             "prediction_length",
@@ -410,6 +411,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             )
 
         # use forecasting dataset to do the preprocessing
+        logger.info(f"Creating dataset for forecasting... {kwargs}")
         dataset = ForecastDFDataset(
             time_series,
             **kwargs,
