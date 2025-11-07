@@ -1,3 +1,6 @@
 {
-  "settingsInheritedFrom": "ibm-mend-config/mend-config@main"
+  "settingsInheritedFrom": "whitesource-config/whitesource-config@master",
+  "scanSettings": {
+      "configMode": "LOCAL"
+  }
 }
