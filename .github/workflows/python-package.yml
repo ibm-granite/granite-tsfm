@@ -7,9 +7,9 @@ permissions:
 
 on:
   push:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
   pull_request:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
 
 jobs:
   build:
