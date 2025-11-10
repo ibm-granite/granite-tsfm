@@ -2,9 +2,7 @@
 name = "tsfminference"
 version = "0.0.0"
 description = "Service layer for TSFM granite models."
-authors = [
-  { name = "IBM" }
-]
+authors = [{ name = "IBM" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
   "filelock",
@@ -18,21 +16,12 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+granite-tsfm = { workspace = true }
 
 [project.optional-dependencies]
-dev = [
-  "pytest",
-  "locust",
-  "locust-plugins",
-  "inotify",
-  "pytest-coverage",
-]
+dev = ["pytest", "locust", "locust-plugins", "inotify", "pytest-coverage"]
 
-sagemaker = [
-  "sagemaker",
-  "boto3",
-]
+sagemaker = ["sagemaker", "boto3"]
 
 [tool.setuptools.packages.find]
 include = ["tsfminference"]
@@ -40,5 +29,3 @@ include = ["tsfminference"]
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
-
-

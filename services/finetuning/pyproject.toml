@@ -7,22 +7,13 @@ license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 
-dependencies = [
-    "pydantic>1,<3",
-    "granite-tsfm",
-    "fastapi>=0.120.2",
-]
+dependencies = ["tsfminference"]
 
 [tool.uv.sources]
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+tsfminference = { workspace = true }
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "wget",
-    "kubeflow-training",
-    "pytest-coverage",
-]
+dev = ["pytest", "wget", "kubeflow-training", "pytest-coverage"]
 
 [tool.setuptools.packages.find]
 include = ["tsfmfinetuning"]
