@@ -12,11 +12,12 @@ dependencies = [
   "uvicorn-worker",
   "prometheus_client",
   "psutil",
-  "granite-tsfm"
+  "granite-tsfm",
 ]
 
 [tool.uv.sources]
-granite-tsfm = { workspace = true }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+
 
 [project.optional-dependencies]
 dev = ["pytest", "locust", "locust-plugins", "inotify", "pytest-coverage"]
