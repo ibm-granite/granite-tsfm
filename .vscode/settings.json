@@ -62,4 +62,9 @@
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
   },
+  "python.analysis.diagnosticSeverityOverrides": {},
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.analysis.extraPaths": [
+    "services/inference"
+  ],
 }
