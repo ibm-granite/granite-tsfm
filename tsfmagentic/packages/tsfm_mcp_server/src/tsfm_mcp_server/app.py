@@ -47,7 +47,7 @@ mcp = FastMCP(
         """
         Forecasts a time series from a URI that points to CSV data.
          You must include `timestamp_column`,`target_columns` and `data_uri`
-         in your input payload. The `horizon` parameter is optional and defaults to 96.
+         in your input payload. The `forecast_length` parameter is optional and defaults to 96.
 
          Here is an example input payload:
 
@@ -57,7 +57,7 @@ mcp = FastMCP(
              "timestamp_column": "timestamp",
              "target_columns": ["value"],
              "identifier_column": "identifier",
-             "horizon": 96
+             "forecast_length": 96
          }
          ```
 
@@ -82,7 +82,7 @@ async def forecast_tool(input_pydantic_model: DataInput) -> ForecastResult:
 
     Args:
         input (DataInput): Input specification containing a URI reference to the source data,
-            column mappings, and optional forecasting parameters (e.g., `horizon`).
+            column mappings, and optional forecasting parameters (e.g., `forecast_length`).
 
     Returns:
         ForecastResult: A model containing the URI to the forecasted results and
@@ -95,12 +95,12 @@ async def forecast_tool(input_pydantic_model: DataInput) -> ForecastResult:
         ...         timestamp_column="timestamp",
         ...         target_columns=["value"],
         ...         identifier_column="identifier",
-        ...         horizon=96
+        ...         forecast_length=96
         ...     )
         ... )
         ForecastResult(
         ...     forecast_uri="file:///tmp/forecast_result_abcd1234.csv",
-        ...     context="Forecast generated using default temporal model with horizon=4."
+        ...     context="Forecast generated using default temporal model with forecast_length=96."
         ... )
     """
     root_logger.info("Received forecast_tool request with input_pydantic_model: %s", input_pydantic_model)

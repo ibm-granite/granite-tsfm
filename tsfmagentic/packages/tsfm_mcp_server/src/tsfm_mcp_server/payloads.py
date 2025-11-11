@@ -68,9 +68,9 @@ class DataInput(BaseModel):
         json_schema_extra={"example": ["value"]},
     )
 
-    horizon: Optional[int] = Field(
+    forecast_length: Optional[int] = Field(
         default=96,
-        description="Forecasting horizon (number of future time steps). Defaults to 96.",
+        description="Forecasting forecast_length (number of future time steps). Defaults to 96.",
         json_schema_extra={"example": 96},
     )
 
@@ -102,7 +102,7 @@ class ForecastResult(BaseModel):
     Example instance:
         >>> ForecastResult(
         ...     forecast_uri="file://./forecast.csv",
-        ...     context="Forecast generated using default temporal model with horizon=4."
+        ...     context="Forecast generated using default temporal model with forecast_length=96."
         ... )
     """
 
@@ -123,7 +123,7 @@ class ForecastResult(BaseModel):
         description="Optional context, notes, or metadata about the forecast.",
         json_schema_extra={
             "example": (
-                "Forecast generated using default temporal model (horizon=4). "
+                "Forecast generated using default temporal model (forecast_length=96). "
                 "WARNING: results may be less accurate due to short context length."
             )
         },

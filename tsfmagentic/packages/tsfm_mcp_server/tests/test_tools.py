@@ -21,7 +21,7 @@ def test_forecast_tool():
             data_uri=f"file:///{tmp_file.name}" if sys.platform == "win32" else f"file://{tmp_file.name}",
             timestamp_column="date",
             target_columns=["value"],
-            horizon=96,
+            forecast_length=96,
         )
         result: ForecastResult = forecast_tool(data_input)
         assert result.forecast_uri.startswith("file://")

@@ -41,7 +41,9 @@ def forecast_tool(data: DataInput) -> ForecastResult:
         id_columns=[data.identifier_column] if data.identifier_column else [],
         target_columns=data.target_columns,
     )
-    params: ForecastingParameters = ForecastingParameters(prediction_length=data.horizon if data.horizon else None)
+    params: ForecastingParameters = ForecastingParameters(
+        prediction_length=data.forecast_length if data.forecast_length else None
+    )
     input: ForecastingInferenceInput = ForecastingInferenceInput(
         model_id="ttm-1024-96-r2", data=df.to_dict(orient="list"), schema=schema, parameters=params
     )
