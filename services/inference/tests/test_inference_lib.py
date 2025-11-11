@@ -52,23 +52,6 @@ def series_for_quantile_tests(num_series=1, extra=0):
 @pytest.fixture(scope="module")
 def ts_data_base() -> pd.DataFrame:
     return series_for_quantile_tests(num_series=2, extra=0)
-    # # Generate a date range
-    # length = SERIES_LENGTH
-    # date_range = pd.date_range(start="2023-10-01", periods=length, freq="h")
-
-    # timeseries = []
-    # for idx in range(NUM_TIMESERIES):
-    #     timeseries.append(
-    #         pd.DataFrame(
-    #             {
-    #                 "date": date_range,
-    #                 "ID": str(idx),
-    #                 "VAL": np.random.rand(length),
-    #             }
-    #         )
-    #     )
-
-    # return pd.concat(timeseries, ignore_index=True)
 
 
 @pytest.fixture(scope="module")
