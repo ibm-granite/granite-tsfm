@@ -142,3 +142,4 @@ notebooks/thinklab/checkpoint/**
 /tsfm_public/_version.py
 **/checkpoint**/**
 NGP-runbook
+agentic/mcp/config.yaml

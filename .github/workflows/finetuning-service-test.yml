@@ -7,9 +7,9 @@ permissions:
 
 on:
   push:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
   pull_request:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
 
 jobs:
   build:
@@ -28,13 +28,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install deps into a virtual enviroment
       run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install poetry
-        cd services/finetuning
-        poetry install -n --with dev
-    # for not we're not really using the image
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        $HOME/.local/bin/uv sync --locked --directory=services/finetuning --extra dev --editable
+    # for now we're not really using the image
     # for much, we just want to make sure
     # that it continues to build until we
     # do so
@@ -47,7 +43,5 @@ jobs:
     #    make image
     - name: test local
       run: |
-        source .venv/bin/activate
-        cd services/finetuning
-        make test_local
+        $HOME/.local/bin/uv run --locked --directory=services/finetuning  make test_local
         

@@ -1,0 +1,18 @@
+repos:
+  # ...
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # until Mend supports `uv` directly, an export to requirements.txt is needed.
+    # the .whitesource.config is adjusted accordingly
+    # uv version.
+    rev: 0.6.5
+    hooks:
+      - id: uv-export
+        args:
+          [
+            "--no-hashes",
+            "--no-emit-project",
+            "--frozen",
+            "--output-file=requirements.txt",
+            "--no-dev",
+            "--all-extras",
+          ]

@@ -28,14 +28,14 @@ class BaseMetadataInput(BaseModel):
         pattern=r"^\S.*\S$|^\S$",
         min_length=1,
         max_length=100,
-        example="date",
+        json_schema_extra={"example": "date"},
     )
     id_columns: List[EverythingPatternedString] = Field(
         description="Columns that define a unique key for time series."
         " This is similar to a compound primary key in a database table.",
         default_factory=list,
         max_length=10,
-        example=["ID1", "ID2"],
+        json_schema_extra={"example": ["ID1", "ID2"]},
         min_length=0,
     )
     scaling_id_columns: Optional[List[EverythingPatternedString]] = Field(
@@ -44,7 +44,7 @@ class BaseMetadataInput(BaseModel):
         " must be a subset of the id_columns.",
         default=None,
         max_length=10,
-        example=["ID2"],
+        json_schema_extra={"example": ["ID2"]},
         min_length=0,
     )
     freq: Optional[str] = Field(
@@ -55,7 +55,7 @@ class BaseMetadataInput(BaseModel):
         pattern=r"^\d*\.?\d*(B|D|W|M|Q|Y|h|min|s|ms|us|ns)?$",
         min_length=0,
         max_length=100,
-        example="1h",
+        json_schema_extra={"example": "1h"},
     )
 
 
@@ -64,7 +64,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["TARGET1", "TARGET2"],
+        json_schema_extra={"example": ["TARGET1", "TARGET2"]},
         description="An array of column headings which constitute the target variables in the data."
         " These are the data that will be forecasted.",
     )
@@ -72,7 +72,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["OBS1", "OBS2"],
+        json_schema_extra={"example": ["OBS1", "OBS2"]},
         description="An optional array of column headings which identify"
         " the observables in the data. Observables are features (commonly called channels in timeseries forecasting problems)"
         " which we have knowledge about in the past and future. For example, weather"
@@ -84,7 +84,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["CNTRL1", "CNTRL2"],
+        json_schema_extra={"example": ["CNTRL1", "CNTRL2"]},
         description="An optional array of column headings which identify the control channels in the input."
         " Control channels are similar to observable channels, except that future values may be controlled."
         " For example, the discount percentage of a particular product is known and controllable in the future."
@@ -95,7 +95,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["CONDL1", "CONDL2"],
+        json_schema_extra={"example": ["CONDL1", "CONDL2"]},
         description="An optional array of column headings which constitute the conditional variables."
         " The conditional_columns in the data are those known in the past, but not known in the future.",
     )
@@ -103,7 +103,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["SCV1", "SCV2"],
+        json_schema_extra={"example": ["SCV1", "SCV2"]},
         description="An optional array of column headings which identify"
         " categorical-valued channels in the input which are fixed over time.",
     )
@@ -112,7 +112,7 @@ class ForecastingMetadataInput(BaseMetadataInput):
         default_factory=list,
         max_length=500,
         min_length=0,
-        example=["CV1", "CV2"],
+        json_schema_extra={"example": ["CV1", "CV2"]},
         description="An optional array of column headings which identify"
         " categorical-valued channels in the input which can vary over time.",
     )
@@ -191,7 +191,7 @@ class BaseInferenceInput(BaseModel):
         pattern=r"^\S.*\S$",
         min_length=1,
         max_length=256,
-        example="ibm/tinytimemixer-monash-fl_96",
+        json_schema_extra={"example": "ibm/tinytimemixer-monash-fl_96"},
     )
 
 

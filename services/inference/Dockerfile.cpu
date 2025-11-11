@@ -6,17 +6,13 @@ ARG PYTHON_VERSION=3.12
 # not all podman versions consume this correctly
 
 RUN microdnf upgrade -y \
-    && microdnf install -y python3.12 git \
-    python3.12-pip \
-    python3.12-wheel \
-    && pip3.12 install pip setuptools wheel -U \
+    && microdnf install -y python3.12 tar gzip git findutils \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
     && useradd -U --create-home --home-dir /home/tsfm \
     --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
-    && chmod o+rX /home/tsfm \
-    && microdnf clean all \
-    && rm -rf /var/cache/microdnf
+    && chmod o+rX /home/tsfm 
+
 
 FROM base AS tsfm-install
 
@@ -40,32 +36,30 @@ RUN microdnf remove -y gnutls-utils shadow-utils || true \
 # # Image hardening stop
 
 USER tsfm
-
 ENV HOME=/home/tsfm
-ENV PATH=${HOME}/.venv/bin:${HOME}/.local/bin:${PATH}
-ENV POETRY_VIRTUALENVS_IN_PROJECT=1
+ENV PATH=${HOME}/.local/bin:${PATH}
 ENV HF_HOME=/tmp
 ENV PROMETHEUS_MULTIPROC_DIR=${HOME}/prometheus_metrics
 
 ARG CODEDIR
 COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
-COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml poetry.lock ${CODEDIR} ${HOME}
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml uv.lock ${HOME}
 
 WORKDIR ${HOME}
 
-RUN python3.12 -m venv --upgrade-deps ${HOME}/.venv \
-    && . ${HOME}/.venv/bin/activate \
-    && pip install --no-cache-dir -U pip setuptools wheel \
-    && pip install --no-cache-dir "poetry==2.1.4" \
-    && poetry install --no-cache \
-    && for p in $(pip list | grep nvidia | cut -d " " -f1); do pip uninstall -y $p; done \
-    && pip install --no-cache-dir https://download.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e \
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv sync --locked --index-strategy unsafe-best-match \
+    && uv cache clean \
     && rm -rf ${HOME}/.cache \
-    && mkdir ${HOME}/prometheus_metrics \
-    && pip uninstall -y poetry || true
+    && mkdir ${HOME}/prometheus_metrics
+
+ENV PATH=${HOME}/.venv/bin:${PATH}
 
 USER root
-RUN microdnf remove -y git perl-Git
+RUN microdnf remove -y git perl-Git tar findutils \
+    && microdnf clean all \
+    && rm -rf /var/cache/microdnf
+
 USER tsfm
 
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1

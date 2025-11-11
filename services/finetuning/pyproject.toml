@@ -1,64 +1,23 @@
-[tool.poetry]
+[project]
 name = "tsfmfinetuning"
 version = "0.0.0"
-description = "Service layer for TSFM granite models."
-authors = ["IBM"]
-license = "https://github.com/ibm-granite/granite-tsfm/blob/main/LICENSE"
-packages = [{ include = "tsfmfinetuning/**/*.py" }]
+description = "Finetuning capabilities for IBM Granite TSFM Models"
+authors = [{ name = "IBM" }]
+license-files = ["LICENSE"]
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
 
-#[tool.poetry-dynamic-versioning]
-#enable = true
-#vcs = "git"
-# latest-tag = true
-# style = "semver"
-#format = "{base}"
+dependencies = ["tsfminference"]
 
-#[tool.poetry-dynamic-versioning.substitution]
-#files = ["tsfmfinetuning/_version.py"]
-#persistent-substitution = true
+[tool.uv.sources]
+tsfminference = { workspace = true }
 
-#[tool.poetry-dynamic-versioning.files."tsfmfinetuning/_version.py"]
-# persistent-substitution = true # useful for editable installs
-#initial-content = """
-# These version placeholders will be replaced later during substitution.
-#__version__ = "0.0.0"
-#__version_tuple__ = (0, 0, 0)
-#"""
+[project.optional-dependencies]
+dev = ["pytest", "wget", "kubeflow-training", "pytest-coverage"]
 
-
-[tool.poetry.dependencies]
-# including 3.9 causes poetry lock to run forever
-python = ">=3.10,<3.13"
-numpy = { version = "<2" }
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "conformal_pipeline" }
-transformers = { version = "==4.56.0", extras = ["torch"] }
-
-fastapi = { version = "*" }
-pydantic = { version = ">1,<3" }
-uvicorn-worker = { version = "*" }
-gunicorn = { version = "*" }
-setuptools = { version = "*" }
-
-# ***********CVEs*************
-starlette = { version = ">=0.40.0" }
-Werkzeug = { version = ">=3.0.6" }
-aiohttp = { version = ">=3.10.15" }
-urllib3 = { version = ">=2.5.0" }   
-Jinja2 = { version = ">=3.1.6" }     # https://github.com/ibm-granite/granite-tsfm/security/dependabot/18
-h11 = { version = ">=0.16.0" }       # https://github.com/ibm-granite/granite-tsfm/security/dependabot/25
-
-[tool.poetry.group.dev]
-optional = true
-[tool.poetry.group.dev.dependencies]
-pytest = "*"
-wget = "*"
-kubeflow-training = "*"
-ruff = { version = "0.5.7" }
-
-#[build-system]
-#requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-#build-backend = "poetry_dynamic_versioning.backend"
+[tool.setuptools.packages.find]
+include = ["tsfmfinetuning"]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

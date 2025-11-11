@@ -14,15 +14,15 @@ a finetuneing job on a kubernetes-based system.
 - git
 - git-lfs (available in many system package managers such as apt, dnf, and brew)
 - python >=3.10, <3.13
-- poetry (`pip install poetry`)
+- uv (see [this page](https://docs.astral.sh/uv/getting-started/installation/) for installation instruction)
 - zsh or bash
 - docker or podman (to run examples, we have not tested well with podman)
-- kubectl for deploying a local test cluster
+- kubectl (necessary only for deploying a local test cluster)
 
 ## Installation
 
 ```sh
-pip install poetry && poetry install --with dev
+uv sync --locked  --extra dev --editable
 ```
 
 ### Testing locally
@@ -41,7 +41,10 @@ work. You must also have proper permissions on your system to build images. We a
 or `podman` that has been aliased as `docker` or has been installed with the podman-docker package that will do this for you.
 
 ```zsh
-make image
+# If you are using podman, you must prefix the next command with
+# CONTAINER_BUILDER=podman
+# For finetuning, we only support building the GPU image
+CONTAINER_BUILDER=docker make image
 ```
 
 Note that be default we build an image **without** GPU support. This makes the development image much smaller

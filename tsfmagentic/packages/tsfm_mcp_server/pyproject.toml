@@ -1,0 +1,18 @@
+[project]
+name = "tsfm-mcp-server"
+version = "0.0.1"
+description = "Agentic components for TSFM"
+readme = "README.md"
+requires-python = ">=3.10, <3.13"
+dependencies = ["fastmcp", "tsfminference"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "pre-commit"]
+notebooks = ["ipython"]
+
+[tool.uv.sources]
+tsfminference = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"

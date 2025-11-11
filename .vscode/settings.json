@@ -55,6 +55,16 @@
     "editor.defaultFormatter": "vscode.json-language-features"
   },
   "python.testing.pytestArgs": [
+    "services/inference",
+    "tsfmagentic",
+    "services/finetuning"
+  ],
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml"
+  },
+  "python.analysis.diagnosticSeverityOverrides": {},
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.analysis.extraPaths": [
     "services/inference"
   ],
 }

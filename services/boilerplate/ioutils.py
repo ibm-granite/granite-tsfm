@@ -11,6 +11,8 @@ import re
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Union
+from urllib.parse import unquote, urlparse
+from urllib.request import pathname2url, url2pathname
 
 import numpy as np
 import pandas as pd
@@ -24,6 +26,7 @@ from tsfm_public import TinyTimeMixerConfig
 AutoConfig.register("tinytimemixer", TinyTimeMixerConfig)
 
 LOGGER = logging.getLogger(__file__)
+root_logger = logging.getLogger()
 
 
 def bytes_to_b64(data: bytes) -> str:
@@ -37,6 +40,51 @@ def get_bucket_name(s3_uri):
 def get_object_name(s3_uri):
     bn = get_bucket_name(s3_uri=s3_uri)
     return s3_uri[s3_uri.find(bn) + len(bn) + 1 :]
+
+
+def resolve_file_uri(uri: str) -> Path:
+    """Convert a file:// URI to a local Path, supporting both absolute and relative paths."""
+    parsed = urlparse(uri)
+
+    if parsed.scheme != "file":
+        raise ValueError(f"Unsupported URI scheme: {parsed.scheme}")
+
+    # --- Handle relative URIs (file:./data/file.csv, file://./data/file.csv)
+    if parsed.netloc in ("", "."):
+        if uri.startswith("file://./") or uri.startswith("file:./"):
+            rel_path = unquote(parsed.path.lstrip("./"))
+            return (Path.cwd() / rel_path).resolve()
+        if not parsed.path.startswith("/"):
+            rel_path = unquote(parsed.path)
+            return (Path.cwd() / rel_path).resolve()
+
+    # --- Handle absolute file paths (Windows or POSIX)
+    path = url2pathname(parsed.path)
+
+    # Handle UNC or localhost paths
+    if parsed.netloc and parsed.netloc not in ("localhost", "", "."):
+        path = f"//{parsed.netloc}{path}"
+
+    answer = Path(path).resolve()
+    root_logger.info(f"Resolved file URI {uri} to path {answer}")
+    return answer
+
+
+def path_to_uri(path: Path, relative_ok: bool = True) -> str:
+    """
+    Convert a Path to a file:// URI.
+    If `relative_ok` is True and the path is relative, return a relative URI (file:./path).
+    Otherwise return an absolute file:/// URI.
+    """
+    path = Path(path)
+
+    if relative_ok and not path.is_absolute():
+        # Construct RFC 8089-compatible relative file URI
+        # Use `./` prefix so it round-trips correctly
+        return f"file:./{pathname2url(str(path))}"
+
+    # For absolute paths, just use pathlib’s built-in converter
+    return path.resolve().as_uri()
 
 
 def _to_pandas(
@@ -103,8 +151,8 @@ def _iscsv(uri: str):
     # we require that it contains **only** files ending with CSV
     #                          0123456
     if uri.upper().startswith("FILE://"):
-        if os.path.isdir(uri[7:]):
-            contents: List[Tuple] = list(os.walk(uri[7:]))
+        if os.path.isdir(resolve_file_uri(uri)):
+            contents: List[Tuple] = list(os.walk(resolve_file_uri(uri)))
             # we do not allow nested directories
             if len(contents) > 1:
                 raise ValueError(f"{uri} must not have subdirectories.")
@@ -168,9 +216,11 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
     timestamp_column = kwargs.get("timestamp_column", None)
     # we're reading from file                              0123456
     if not received_bytes and uri[0:7].upper().startswith("FILE://"):
-        if not os.path.exists(uri[7:]):
-            raise ValueError(f"{uri[7:]} does not exist.")
-        return _to_pandas(iscsv=_iscsv(uri), isfeather=_isfeather(uri), buf=uri[7:], timestamp_column=timestamp_column)
+        thepath = resolve_file_uri(uri)
+        LOGGER.info(f"Loading data from file uri: {uri}")
+        if not os.path.exists(thepath):
+            raise ValueError(f"{thepath} does not exist.")
+        return _to_pandas(iscsv=_iscsv(uri), isfeather=_isfeather(uri), buf=thepath, timestamp_column=timestamp_column)
     if os.path.exists(uri):
         raise NotImplementedError(f"{uri} is not a proper URI. Absolute or relative path specifies are not allowed.")
 

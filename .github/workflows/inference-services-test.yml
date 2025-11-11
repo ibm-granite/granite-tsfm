@@ -28,23 +28,17 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install deps into a virtual enviroment
       run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        python -m pip install --upgrade pip
-        pip install poetry
-        cd services/inference
-        poetry install --no-cache -n --with dev
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        $HOME/.local/bin/uv sync --locked --directory=services/inference --extra dev --editable
     - name: Test local server
       run: |
-        source .venv/bin/activate
-        cd services/inference
-        make test_local
+        $HOME/.local/bin/uv run --locked --directory=services/inference make test_local
     - name: Test image
       run: |
         sudo apt-get clean
         sudo rm -rf /usr/local/lib/android
         docker system prune --all --force || true
-        rm -rf ~/.cache/pip
-        source .venv/bin/activate
-        cd services/inference
-        SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker make test_image
+        SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker \
+         $HOME/.local/bin/uv run --locked --directory=services/inference make image 
+         $HOME/.local/bin/uv run --locked --directory=services/inference make test_image
+         # ^^ because we removed make_image as a dep of image after the torch-cpu-index change
