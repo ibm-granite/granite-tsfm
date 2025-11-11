@@ -7,9 +7,9 @@ permissions:
 
 on:
   push:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
   pull_request:
-    branches: [ "main", "destiny", "destiny_v1_patches" ]
+    branches: [ "main", "destiny", "development" ]
 
 jobs:
   build:
@@ -33,7 +33,7 @@ jobs:
     - name: Ruff quality checks
       run: |
         # use hf-style check
-        $HOME/.local/bin/uv run make quality
+        $HOME/.local/bin/uv run --locked make quality
     - name: Test with pytest
       run: |
-        $HOME/.local/bin/uv run pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests
+        $HOME/.local/bin/uv run --locked pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests

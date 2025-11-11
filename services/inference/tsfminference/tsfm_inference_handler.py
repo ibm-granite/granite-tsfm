@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import os
 import tempfile
 import threading
 from functools import cache
@@ -87,14 +88,22 @@ class TSFMForecastingInferenceHandler:
     def _cached_load_model(cls, model_path, config: str, module_path, config_class):
         with FileLock(_IPROCESS_LOCK_FILE):
             with _THREAD_LOCK:
-                with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=True) as tmp:
+                tmp = tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False)
+                try:
                     tmp.write(config)
                     tmp.flush()
+                    tmp.close()  # ✅ close handle before reading
                     return load_model(
                         model_path=model_path,
                         config=config_class.from_json_file(tmp.name),
                         module_path=module_path,
                     )
+                finally:
+                    # cleanup
+                    try:
+                        os.unlink(tmp.name)
+                    except OSError:
+                        pass
 
     def prepare(
         self,

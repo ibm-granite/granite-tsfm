@@ -28,10 +28,10 @@ clone_models:
 
 fetchdata:
 	rm -rf data || true
-	uv run python tests/fetchdata.py
+	uv run --locked python tests/fetchdata.py
 
-test_local: clone_models fetchdata boilerplate
-	uv run pytest -s tests
+test_local: boilerplate clone_models fetchdata
+	uv run --locked pytest -s tests
 
 install_dev: boilerplate
 	uv sync --locked  --extra dev --editable
