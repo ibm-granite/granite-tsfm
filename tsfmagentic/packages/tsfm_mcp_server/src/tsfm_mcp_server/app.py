@@ -38,6 +38,7 @@ mcp = FastMCP(
     """,
 )
 
+
 # conditional guidance -- you are acting as a agent.. or automated
 # proxy user
 @mcp.tool(
@@ -46,7 +47,7 @@ mcp = FastMCP(
         """
         Forecasts a time series from a URI that points to CSV data.
          You must include `timestamp_column`,`target_columns` and `data_uri`
-         in your input payload. The `horizon` parameter is optional (default=96).`
+         in your input payload. The `horizon` parameter is optional and defaults to 96.
 
          Here is an example input payload:
 
@@ -62,7 +63,6 @@ mcp = FastMCP(
 
          **You should confirm your choices of these parameters with the user.**
          **You should be reluctant to read the full content of the data_uri except to validate its format.**
-
          """
     ),
 )
