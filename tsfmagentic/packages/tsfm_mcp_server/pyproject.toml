@@ -7,7 +7,7 @@ requires-python = ">=3.10, <3.13"
 dependencies = ["fastmcp", "tsfminference"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "pre-commit"]
 notebooks = ["ipython"]
 
 [tool.uv.sources]
