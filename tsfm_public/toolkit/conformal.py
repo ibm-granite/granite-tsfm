@@ -8,11 +8,12 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 import torch
 from scipy.stats import norm
 from transformers.feature_extraction_utils import PreTrainedFeatureExtractor
 
-from tsfm_public.toolkit.processor import BaseProcessor
+from tsfm_public.toolkit.processor import STRING_TO_TYPE, TYPE_TO_STRING, BaseProcessor
 
 
 LOGGER = logging.getLogger(__file__)
@@ -81,6 +82,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         threshold_function: str = ThresholdFunction.WEIGHTING.value,
         aggregation: Union[str, int] = "median",
         aggregation_axis: Union[int, Tuple[int, ...]] = 1,
+        id_columns: List[str] = [],
         **kwargs,
     ):
         """
@@ -111,6 +113,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 - If None, returns outlier scores for all dimensions independently without aggregation.
             aggregation_axis (tuple of int, optional) to consider in outlier_score:
                 Specifies the axes over which to aggregate when `aggregation` is a string.
+            id_columns (List[str]): List of column names which identify different time series in a multi-time series input. Defaults to [].
         """
 
         self.window_size = window_size
@@ -120,11 +123,14 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         self.method = method
         self.aggregation = aggregation
         self.aggregation_axis = aggregation_axis
+        self.id_columns = id_columns
 
-        if self.nonconformity_score in [NonconformityScores.ERROR.value]:
-            self.false_alarm = np.min(quantiles).item()
+        # if self.nonconformity_score in [NonconformityScores.ERROR.value]:
+        # self.false_alarm = np.min(quantiles).item()
 
         self.critical_size = np.ceil(1 / self.false_alarm).item()
+        if self.nonconformity_score in [NonconformityScores.ERROR.value]:
+            self.critical_size = 2 * self.critical_size
 
         if self.method not in [PostHocProbabilisticMethod.CONFORMAL.value, PostHocProbabilisticMethod.GAUSSIAN.value]:
             raise ValueError(f"Provided Post Hoc probabilistic method {self.method} is not valid.")
@@ -133,18 +139,23 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             NonconformityScores.ABSOLUTE_ERROR.value,
             NonconformityScores.ERROR.value,
         ]:
-            raise ValueError(f"Provided nonconformity_score {self.nonconformity_score } is not valid.")
+            raise ValueError(f"Provided nonconformity_score {self.nonconformity_score} is not valid.")
+
+        self.weighting = weighting
+        self.weighting_params = weighting_params
+        self.threshold_function = threshold_function
 
         self.model = kwargs.pop("model", None)
+
         if self.model is None:
             if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
                 self.model = WeightedConformalForecasterWrapper(
                     window_size=self.window_size,
                     false_alarm=self.false_alarm,
                     nonconformity_score=self.nonconformity_score,
-                    weighting=weighting,
-                    weighting_params=weighting_params,
-                    threshold_function=threshold_function,
+                    weighting=self.weighting,
+                    weighting_params=self.weighting_params,
+                    threshold_function=self.threshold_function,
                 )
             elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
                 self.model = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
@@ -163,7 +174,28 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
         output = super().to_dict()
 
-        output["model"] = output["model"].to_dict()
+        if isinstance(output["model"], dict):
+            model_out = {}
+            for k, v in output["model"].items():
+                model_out[k] = v.to_dict()
+            has_keys = True
+        else:
+            model_out = output["model"].to_dict()
+            has_keys = False
+
+        output["model"] = model_out
+
+        # get type information
+        if has_keys:
+            akey = next(iter(output["model"].keys()))
+            if isinstance(akey, Tuple):
+                key_types = [type(k) for k in akey]
+            else:
+                key_types = [type(akey)]
+        else:
+            key_types = []
+
+        output["id_columns_types"] = [TYPE_TO_STRING[k] for k in key_types]
 
         return output
 
@@ -176,19 +208,35 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         """
         dictionary = self.to_dict()
 
+        def serialize_np_scalar(value):
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.floating):
+                return float(value)
+            return value
+
         def recursive_check_ndarray(dictionary):
+            key_map = {}
             for key, value in dictionary.items():
+                if isinstance(key, tuple):
+                    new_key = json.dumps([serialize_np_scalar(k) for k in key])
+                    key_map[key] = new_key
+
                 if key == "dtype":
                     # to do: ensure deserializable
                     dictionary[key] = value.__name__
                 elif isinstance(value, np.ndarray):
                     dictionary[key] = value.tolist()
-                elif isinstance(value, np.int64):
-                    dictionary[key] = int(value)
+                elif isinstance(value, (np.integer, np.floating)):
+                    dictionary[key] = serialize_np_scalar(value)
                 elif isinstance(value, list):
                     dictionary[key] = [vv.tolist() if isinstance(vv, np.ndarray) else vv for vv in value]
                 elif isinstance(value, dict):
                     dictionary[key] = recursive_check_ndarray(value)
+
+            for key, new_key in key_map.items():
+                dictionary[new_key] = dictionary.pop(key)
+
             return dictionary
 
         dictionary = recursive_check_ndarray(dictionary)
@@ -219,52 +267,192 @@ class PostHocProbabilisticProcessor(BaseProcessor):
             [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
             parameters.
         """
+
+        def deserialize_helper(v, method):
+            if method == PostHocProbabilisticMethod.CONFORMAL.value:
+                return WeightedConformalForecasterWrapper.from_dict(v)
+
+            if method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                return PostHocGaussian.from_dict(v)
+
+            raise ValueError(f"Unknown method provided: {method}")
+
+        def deserialize_key(key, key_types=None):
+            if not key_types:
+                return key
+
+            key = json.loads(key)
+            if isinstance(key, (Tuple, List)):
+                return tuple([STRING_TO_TYPE[k_type](k_item) for k_item, k_type in zip(key, key_types)])
+            else:
+                return STRING_TO_TYPE[key_types[0]](key)
+
+        id_types = feature_extractor_dict.get("id_columns_types", None)
+
         model = feature_extractor_dict.get("model", None)
         if model is not None:
             method = feature_extractor_dict.get("method", None)
-            if method == PostHocProbabilisticMethod.CONFORMAL.value:
-                feature_extractor_dict["model"] = WeightedConformalForecasterWrapper.from_dict(model)
-            elif method == PostHocProbabilisticMethod.GAUSSIAN.value:
-                feature_extractor_dict["model"] = PostHocGaussian.from_dict(model)
+            if id_types:
+                feature_extractor_dict["model"] = {}
+                for k, v in model.items():
+                    feature_extractor_dict["model"][deserialize_key(k, key_types=id_types)] = deserialize_helper(
+                        v, method
+                    )
             else:
-                raise ValueError(f"Unknown method provided: {method}")
+                feature_extractor_dict["model"] = deserialize_helper(model, method)
 
         return super().from_dict(feature_extractor_dict, **kwargs)
 
-    def train(self, y_cal_pred: np.ndarray, y_cal_gt: np.ndarray) -> "PostHocProbabilisticProcessor":
-        """Fit posthoc probabilistic wrapper.
-        Input:
-        y_cal_pred model perdictions: nsamples x forecast_horizon x number_features
-        y_cal_gt ground truth values: nsamples x forecast_horizon x number_features
+    @classmethod
+    def _get_numpy_input(cls, df: pd.DataFrame, id_columns: List[str] = []) -> np.ndarray:
+        """Convert dataframe output from the forecasting pipeline in the numpy array format needed
+        for conformal.
 
+        Args:
+            df (pd.DataFrame): Input dataframe from the output of the forecasting pipeline.
+
+        Returns:
+            np.ndarray: Tensor with the following shape: number of samples x prediction length x number of features
         """
+
+        columns = [c for c in df.columns if c not in id_columns]
+
+        return np.array([np.stack(z) for z in df[columns].values]).transpose(0, 2, 1)
+
+    @classmethod
+    def _get_unique_id_values(
+        cls,
+        data: Union[np.ndarray, pd.DataFrame],
+        id_column_values: Optional[np.ndarray] = None,
+        id_columns: List[str] = [],
+    ) -> Union[None, np.ndarray]:
+        """Get unique id column values from the data.
+
+        Args:
+            data (Union[np.ndarray, pd.DataFrame]): Either of the following:
+                Dataframe of input data including data for id_columns, in which case id_columns will be used to select the columns.
+                Ndarry of input data, in which case id_column_values should be passed.
+            id_column_values:(np.ndarray, optional): Array of id_column values.
+            id_columns (List[str], optional): ID columns used to select columns when dataframe input is given. Defaults to [].
+
+        Raises:
+            ValueError: When neither ndarray or dataframe input are given
+
+        Returns:
+            Union[None, np.ndarray]: Unique combinations of the id_column values extracted from data. None in the case
+                where no id_columns are specficied and dataframe input is given.
+        """
+
+        if isinstance(data, pd.DataFrame) and id_column_values is not None:
+            raise ValueError("Recevied dataframe input and ndarray of id_column_values")
+
+        if id_column_values is not None:
+            id_data = pd.DataFrame(id_column_values)
+        else:
+            if not id_columns:
+                return None
+            id_data = data[id_columns]
+
+        return id_data.drop_duplicates().values
+
+    def train(
+        self,
+        y_cal_gt: Union[pd.DataFrame, np.ndarray],
+        y_cal_pred: Union[pd.DataFrame, np.ndarray],
+        id_column_values: Optional[np.ndarray] = None,
+    ) -> "PostHocProbabilisticProcessor":
+        """Fit posthoc probabilistic wrapper.
+
+        Args:
+            y_cal_gt (Union[pd.DataFrame, np.ndarray]):  ground truth values, nsamples x forecast_horizon x number_features
+            y_cal_pred (Union[pd.DataFrame, np.ndarray]): model perdictions, nsamples x forecast_horizon x number_features
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
+        """
+
+        unique_ids = self._get_unique_id_values(
+            data=y_cal_pred, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
+        if isinstance(y_cal_pred, pd.DataFrame):
+            id_column_values = y_cal_pred[self.id_columns].values if self.id_columns else None
+            y_cal_pred = self._get_numpy_input(y_cal_pred, id_columns=self.id_columns)
+
+        if isinstance(y_cal_gt, pd.DataFrame):
+            y_cal_gt = self._get_numpy_input(y_cal_gt, id_columns=self.id_columns)
+
+        if (isinstance(y_cal_pred, pd.DataFrame) and not isinstance(y_cal_gt, pd.DataFrame)) or (
+            not isinstance(y_cal_pred, pd.DataFrame) and isinstance(y_cal_gt, pd.DataFrame)
+        ):
+            raise ValueError("When one of y_cal_gt or y_cal_pred is a dataframe both are expected to be a dataframe.")
+
+        # to do?: ensure that y_cal_pred / y_cal_gt are ordered similarly (same dim and same id column values)
+
         if len(y_cal_pred.shape) != 3:
             raise ValueError("y_cal_pred should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
         if len(y_cal_gt.shape) != 3:
             raise ValueError("y_cal_gt should have 3 dimensions: nsamples x forecast_horizon x number_features")
 
-        # WMG to do: check that updated window size is used in the fit call
-        # (update) WMG: I don't think we need this
-        # if self.window_size is None:
-        #     window_size = y_cal_gt.shape[0]
-        # else:
-        #     window_size = self.window_size
-
-        self.model.fit(
-            y_cal_gt=y_cal_gt,
-            y_cal_pred=y_cal_pred,  # ttm predicted values
-            # ttm corresponding gt values
-        )
+        if id_column_values is None:
+            self.model.fit(
+                y_cal_gt=y_cal_gt,
+                y_cal_pred=y_cal_pred,  # ttm predicted values
+                # ttm corresponding gt values
+            )
+        else:
+            ### Initialize and fit a dictionary of models ###
+            self.model = {}
+            for g in unique_ids:
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]  # indices for this group
+                g = tuple(g)  # tuple(gg.item() for gg in g)
+                y_cal_pred_g, y_cal_gt_g = y_cal_pred[idx], y_cal_gt[idx]
+                if y_cal_pred_g.shape[0] < self.critical_size:
+                    raise ValueError(
+                        f"id {g} has only {y_cal_pred_g.shape[0]} rows of data which is less than the minimum number {self.critical_size}"
+                    )
+                if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                    self.model[g] = WeightedConformalForecasterWrapper(
+                        window_size=self.window_size,
+                        false_alarm=self.false_alarm,
+                        nonconformity_score=self.nonconformity_score,
+                        weighting=self.weighting,
+                        weighting_params=self.weighting_params,
+                        threshold_function=self.threshold_function,
+                    )
+                elif self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                    self.model[g] = PostHocGaussian(window_size=self.window_size, quantiles=self.quantiles)
+                self.model[g].fit(
+                    y_cal_gt=y_cal_gt_g,
+                    y_cal_pred=y_cal_pred_g,
+                )
         return self
 
-    def predict(self, y_test_pred: np.ndarray, quantiles: List[float] = []) -> np.ndarray:
+    def predict(
+        self,
+        y_test_pred: Union[pd.DataFrame, np.ndarray],
+        quantiles: List[float] = [],
+        id_column_values: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """Predict posthoc probabilistic wrapper.
-        Input:
-        y_test_pred: nsamples x forecast_horizon x number_features
+
+        Args:
+            y_test_pred (Union[pd.DataFrame, np.ndarray]): nsamples x forecast_horizon x number_features
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
+
         Returns:
-        y_test_prob_pred: nsamples x forecast_horizon x number_features x len(quantiles)
+            y_test_prob_pred (np.ndarray): nsamples x forecast_horizon x number_features x len(quantiles)
         """
+
+        unique_ids = self._get_unique_id_values(
+            data=y_test_pred, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
+        if isinstance(y_test_pred, pd.DataFrame):
+            id_column_values = y_test_pred[self.id_columns].values if self.id_columns else None
+            y_test_pred = self._get_numpy_input(y_test_pred, id_columns=self.id_columns)
+
         if len(quantiles) == 0:
             quantiles = self.quantiles
 
@@ -273,51 +461,103 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         ), " y_test_pred should have 3 dimensions : nsamples x forecast_horizon x number_features"
 
         y_test_prob_pred = np.zeros([y_test_pred.shape[0], y_test_pred.shape[1], y_test_pred.shape[2], len(quantiles)])
-        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
-            ix_q = 0
-            for q in quantiles:
-                if self.model.nonconformity_score in [
-                    NonconformityScores.ABSOLUTE_ERROR.value,
-                    NonconformityScores.ERROR.value,
-                ]:
-                    if q < 0.5:
-                        q_pi_error_rate = q * 2
-                        output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                        y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_low"]
-                    elif q > 0.5:
-                        q_pi_error_rate = (1 - q) * 2
-                        output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                        y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
-                    else:
-                        if self.model.nonconformity_score in [NonconformityScores.ERROR.value]:
-                            q_pi_error_rate = 0.5
-                            output_q = self.model.predict(y_test_pred, false_alarm=q_pi_error_rate)
-                            y_test_prob_pred[..., ix_q] = output_q["prediction_interval"]["y_high"]
+        if id_column_values is None:
+            assert not isinstance(
+                self.model, dict
+            ), "Probabilistic processor models were trained with id_columns and no id_column was provided as an input. Please provide id_columns."
+            groups_unique_dummy = [None]
+        else:
+            groups_unique_dummy = unique_ids
+        for g in groups_unique_dummy:
+            if id_column_values is None:
+                model = self.model
+                y_test_pred_g = y_test_pred
+                idx = np.arange(y_test_prob_pred.shape[0])
+            else:
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]
+                g = tuple(g)  # tuple(gg.item() for gg in g)
+                model = self.model[g]
+                y_test_pred_g = y_test_pred[idx]
+            if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                ix_q = 0
+                # print('QUANTILES : ', quantiles, self.model.false_alarm)
+                # print('NON CONFORMITY SCORE :', self.model.nonconformity_score)
+                for q in quantiles:
+                    # print(q)
+                    if model.nonconformity_score in [
+                        NonconformityScores.ABSOLUTE_ERROR.value,
+                        NonconformityScores.ERROR.value,
+                    ]:
+                        if q < 0.5:
+                            q_pi_error_rate = q * 2
+                            output_q = model.predict(y_test_pred_g, false_alarm=q_pi_error_rate)
+                            y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_low"]
+                        elif q > 0.5:
+                            q_pi_error_rate = (1 - q) * 2
+                            output_q = model.predict(y_test_pred_g, false_alarm=q_pi_error_rate)
+                            y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_high"]
                         else:
-                            y_test_prob_pred[..., ix_q] = y_test_pred
+                            if model.nonconformity_score in [NonconformityScores.ERROR.value]:
+                                q_pi_error_rate = 0.5
+                                # print('Quantile q = ',q_pi_error_rate)
+                                output_q = model.predict(y_test_pred_g, false_alarm=2 * q_pi_error_rate)
+                                y_test_prob_pred[idx, :, :, ix_q] = output_q["prediction_interval"]["y_high"]
+                            else:
+                                y_test_prob_pred[idx, :, :, ix_q] = y_test_pred_g
 
-                ix_q += 1
-        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
-            y_test_prob_pred = self.model.predict(y_test_pred)
+                    ix_q += 1
+            if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                y_test_prob_pred[idx, ...] = model.predict(y_test_pred_g)
 
         return y_test_prob_pred
 
     def update(
-        self, y_gt: np.ndarray, y_pred: np.ndarray, X: np.ndarray = None, timestamps: np.ndarray = None
+        self,
+        y_gt: Union[pd.DataFrame, np.ndarray],
+        y_pred: Union[pd.DataFrame, np.ndarray],
+        id_column_values: Optional[np.ndarray] = None,
+        X: np.ndarray = None,
+        timestamps: np.ndarray = None,
     ) -> "PostHocProbabilisticProcessor":
         """
         Update the probabilistic post hoc model
 
         Args:
-            y_gt (np.ndarray): Ground truth values. Shape: (n_samples, forecast_length, num_features).
-            y_pred (np.ndarray): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            y_gt (Union[pd.DataFrame, np.ndarray]): Ground truth values. Shape: (n_samples, forecast_length, num_features).
+            y_pred (Union[pd.DataFrame, np.ndarray]): Predicted values. Shape: (n_samples,forecast_length, num_features).
+            id_column_values: (np.ndarray, optional): array of id column values, used for handling multi-series input only when numpy arrays
+                are passed above
             X (np.ndarray, optional): Input covariates for input-dependent methods. Shape: (n_samples, n_features).
             timestamps (np.ndarray, optional): Timestamps associated with each predicted value. Shape: (n_samples,).
         """
-        if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
-            self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
-        if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
-            self.model.update(y_gt=y_gt, y_pred=y_pred)
+
+        unique_ids = self._get_unique_id_values(
+            data=y_gt, id_column_values=id_column_values, id_columns=self.id_columns
+        )
+
+        if isinstance(y_gt, pd.DataFrame):
+            id_column_values = y_gt[self.id_columns].values if self.id_columns else None
+            y_gt = self._get_numpy_input(y_gt, id_columns=self.id_columns)
+        if isinstance(y_pred, pd.DataFrame):
+            y_pred = self._get_numpy_input(y_pred, id_columns=self.id_columns)
+
+        if id_column_values is None:
+            if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
+                self.model.update(y_gt=y_gt, y_pred=y_pred, X=X, timestamps=timestamps)
+            if self.method == PostHocProbabilisticMethod.GAUSSIAN.value:
+                self.model.update(y_gt=y_gt, y_pred=y_pred)
+        else:
+            for g in unique_ids:
+                idx = np.where(np.all(id_column_values == g, axis=1))[0]
+                y_pred_g, y_gt_g = y_pred[idx], y_gt[idx]
+                X_g = X
+                timestamps_g = timestamps
+                if X is not None:
+                    X_g = X[idx]
+                if timestamps is not None:
+                    timestamps_g = timestamps[idx]
+
+                self.model.update(y_gt=y_gt_g, y_pred=y_pred_g, X=X_g, timestamps=timestamps_g)
 
         return self
 
@@ -355,6 +595,7 @@ class PostHocProbabilisticProcessor(BaseProcessor):
         if self.method == PostHocProbabilisticMethod.CONFORMAL.value:
             if self.model.nonconformity_score in [
                 NonconformityScores.ABSOLUTE_ERROR.value,
+                NonconformityScores.ERROR.value,
             ]:
                 output = self.model.predict(
                     y_pred=y_pred, y_gt=y_gt, X=X, timestamps=timestamps, false_alarm=significance
@@ -370,7 +611,12 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                     aggregation_axis = self.aggregation_axis
 
                 if aggregation is None:
-                    outliers = output["outliers"]
+                    outliers_scores = self.forecast_horizon_aggregation(
+                        outliers_scores, aggregation=aggregation
+                    )  # aligns forecast for the same sample
+                    filter = np.isnan(outliers_scores)
+                    outliers = np.array(np.array(outliers_scores) <= significance).astype("float")
+                    outliers[filter] = np.nan
 
                 elif isinstance(aggregation, int):
                     outliers_scores = self.forecast_horizon_aggregation(outliers_scores, aggregation=aggregation)
@@ -413,14 +659,14 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                     return outliers_scores
 
     def forecast_horizon_aggregation(
-        self, outliers_scores: np.ndarray, aggregation: Union[str, int] = "mean"
+        self, outliers_scores: np.ndarray, aggregation: Union[str, int, None] = "mean"
     ) -> np.ndarray:
         N, H, F = outliers_scores.shape
         # we want to align predictions/forecasts for each timestamp (observation)
         aligned = np.full(
             (N, H, F), np.nan
         )  # nan for padding initial items for which we have less than horizon H predictions.
-        for h in range(H):
+        for h in range(np.minimum(H, N)):
             # shift each row of forecast horizon h by h steps into the future.
             aligned[h:N, h, :] = outliers_scores[
                 : N - h, h, :
@@ -444,6 +690,8 @@ class PostHocProbabilisticProcessor(BaseProcessor):
                 return np.nanmin(aligned, axis=1)
             else:
                 raise ValueError(f"Unsupported aggregation method: {aggregation}")
+        elif aggregation is None:  # just return aligned arrays
+            return aligned
         else:
             raise TypeError("aggregation must be either an int or a supported aggregation string")
 
@@ -776,11 +1024,11 @@ class WeightedConformalForecasterWrapper:
         window_critical_size = int(np.ceil(1 / self.false_alarm))
         if (self.window_size < window_critical_size) and (y_cal_pred.shape[0] >= window_critical_size):
             self.window_size = window_critical_size
-        assert (
-            self.window_size >= window_critical_size
-        ), "Not enough calibration points for the desired error rate. For an error rate of {} we need at least {} calibration points".format(
-            self.false_alarm, window_critical_size
-        )
+
+        if self.window_size < window_critical_size:
+            raise ValueError(f"""Not enough calibration points for the
+                             desired error rate. For an error rate of {self.false_alarm}
+                             we need at least {window_critical_size} calibration points""")
 
         self.univariate_wrappers = {}
         for ix_f in range(y_cal_pred.shape[2]):
@@ -1067,6 +1315,11 @@ class WeightedConformalWrapper:
             cal_timestamps (np.ndarray, optional): Timestamps corresponding to each forecasted value. Shape: (num_samples).
         """
 
+        # check and remove nans
+        filter = ~np.isnan(y_cal_gt) & ~np.isnan(y_cal_pred)
+        y_cal_gt = y_cal_gt[filter]
+        y_cal_pred = y_cal_pred[filter]
+
         if self.window_size is None:
             self.window_size = y_cal_pred.shape[0]
         self.cal_scores = nonconformity_score_functions(
@@ -1076,10 +1329,10 @@ class WeightedConformalWrapper:
         self.cal_scores = self.cal_scores[-self.window_size :]
 
         if X_cal is not None:
-            self.cal_X = X_cal[-self.window_size :]
+            self.cal_X = X_cal[filter][-self.window_size :]
 
         if cal_timestamps is not None:
-            self.cal_timestamps = cal_timestamps[-self.window_size :]
+            self.cal_timestamps = cal_timestamps[filter][-self.window_size :]
 
         critical_efficient_size = int(np.ceil(1 / self.false_alarm))
 
@@ -1172,9 +1425,11 @@ class WeightedConformalWrapper:
 
         score_threshold = []
         n_cal_scores = cal_scores.shape[0]
-        assert n_cal_scores >= np.ceil(1 / false_alarm), " not enough calibration scores for error rate " + str(
-            false_alarm
-        )
+        min_required = np.ceil(1 / false_alarm)
+        if n_cal_scores < min_required:
+            raise ValueError(f"""There are not enough calibration scores for error rate of {false_alarm}.
+                             {n_cal_scores} provied but we require {min_required}, try increasing the
+                             the number of rows of calibration data.""")
         if self.threshold_function == ThresholdFunction.WEIGHTING.value:  # "weighting":
             if self.nonconformity_score in [s.value for s in PositiveNonconformityScores]:
                 if len(cal_weights.shape) == 1:  # same weights for all y
@@ -1208,6 +1463,12 @@ class WeightedConformalWrapper:
                     score_threshold_up = weighted_conformal_quantile(
                         cal_scores_infty, cal_weights_infty, alpha=np.minimum(false_alarm / 2, 1 - (false_alarm / 2))
                     )
+                    # if score_threshold_up >= score_threshold_low:
+                    # print('SCORE UP LOWER THAN SCORE LOW!!')
+                    # print('FALSE ALARM :: ', false_alarm, ' cal scores/weights size :', cal_scores_infty.shape[0], cal_weights_infty.shape[0])
+                    # print('MAX/MIN/MEAN scores :', np.mean(cal_scores), np.min(cal_scores), np.max(cal_scores))
+                    # print(np.maximum(false_alarm / 2, 1 - (false_alarm / 2)), np.minimum(false_alarm / 2, 1 - (false_alarm / 2)))
+                    # print(score_threshold_up,score_threshold_low)
                     assert (
                         score_threshold_up >= score_threshold_low
                     ), " score_threshold_up is not greater than score_threshold_low"
@@ -1279,7 +1540,9 @@ class WeightedConformalWrapper:
             update = self.online
 
         # Weight Computation
-        cal_weights = self.get_weights(y_pred, X=X, timestamps=timestamps, false_alarm=false_alarm)
+        cal_weights = self.get_weights(y_pred, X=X, timestamps=timestamps, false_alarm=false_alarm)[
+            -self.cal_scores.shape[0] :
+        ]
 
         # Score Threshold
         if (
@@ -1302,18 +1565,34 @@ class WeightedConformalWrapper:
             test_scores = nonconformity_score_functions(
                 y_gt, y_pred, X=X, nonconformity_score=self.nonconformity_score
             )
+            # print('TEST SCORES :', test_scores.shape, test_scores, score_threshold)
 
             # Outlier Flag and Outlier Scores
-            test_outliers = np.array(test_scores > score_threshold).astype("int")
+            test_outliers = None
             test_ad_scores = []
-            for score in test_scores:
-                ad_score = weighted_conformal_alpha(
-                    np.append(self.cal_scores, np.array([np.inf]), axis=0),
-                    np.append(cal_weights, np.array([1]), axis=0),
-                    score,
-                )
-                # test_ad_scores.append(1 - ad_score)
-                test_ad_scores.append(ad_score)  # p-value (significance)
+            if self.nonconformity_score in [NonconformityScores.ABSOLUTE_ERROR.value]:
+                test_outliers = np.array(test_scores > score_threshold).astype("int")
+                for score in test_scores:
+                    ad_score = weighted_conformal_alpha(
+                        np.append(self.cal_scores, np.array([np.inf]), axis=0),
+                        np.append(cal_weights, np.array([1]), axis=0),
+                        score,
+                    )
+                    # test_ad_scores.append(1 - ad_score)
+                    test_ad_scores.append(ad_score)  # p-value (significance)
+            elif self.nonconformity_score in [NonconformityScores.ERROR.value]:
+                test_outliers = np.array(
+                    (test_scores < score_threshold[0]) | (test_scores > score_threshold[1])
+                ).astype("int")
+                for score in test_scores:
+                    ad_score = weighted_conformal_alpha(
+                        np.append(self.cal_scores, np.array([np.inf, -np.inf]), axis=0),
+                        np.append(cal_weights, np.array([1, 1]), axis=0),
+                        score,
+                    )
+                    # test_ad_scores.append(1 - ad_score)
+                    # test_ad_scores.append(ad_score)  # p-value (significance)
+                    test_ad_scores.append(np.minimum(float(ad_score), 1 - float(ad_score)))
 
             # Update
             if update:
@@ -1582,7 +1861,6 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         self.weighting = weighting
         self.weighting_params = weighting_params
-        self.window_size = window_size
         self.weights_optimizer = None  # initializaed in fit
         self.losses = []
 
@@ -1591,6 +1869,10 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         self.false_alarm = false_alarm
         self.weights_critical_norm = np.ceil(1 / self.false_alarm - 1)
+
+        self.window_size = (
+            window_size if window_size is not None else int(np.maximum(5000, self.weights_critical_norm))
+        )  # large memory
         if self.window_size is not None:
             assert (
                 self.window_size > self.weights_critical_norm
@@ -1603,16 +1885,18 @@ class AdaptiveWeightedConformalScoreWrapper:
         if "stride" not in self.weighting_params.keys():
             self.weighting_params["stride"] = int(1)
         if "epochs" not in self.weighting_params.keys():
-            self.weighting_params["epochs"] = int(1)
+            self.weighting_params["epochs"] = int(2)
         if "conformal_weights_update" not in self.weighting_params.keys():
             self.weighting_params["conformal_weights_update"] = False
+        if "prior_past_weights_value" not in self.weighting_params.keys():
+            self.weighting_params["prior_past_weights_value"] = "proximity"
 
         self.weights_average = None
         self.weights_average_count = 0
 
-        assert (
-            self.weighting_params["n_batch_update"] > self.weights_critical_norm
-        ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
+        # assert (
+        #     self.weighting_params["n_batch_update"] > self.weights_critical_norm
+        # ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
 
     def fit(self, scores: np.ndarray) -> np.ndarray:
         """
@@ -1636,9 +1920,14 @@ class AdaptiveWeightedConformalScoreWrapper:
         w_init = torch.zeros(self.window_size)
         w_init[-scores.shape[0] :] = 1
 
-        self.weights_parameters = torch.nn.Parameter(w_init)
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
 
-        self.weights_optimizer = torch.optim.Adam([self.weights_parameters], lr=self.weighting_params["lr"])
+        self.weights_parameters = torch.nn.Parameter(w_init.to(self.device))
+        self.weights_optimizer = torch.optim.AdamW([self.weights_parameters], lr=self.weighting_params["lr"])
+        # self.weights_optimizer = torch.optim.RMSprop([self.weights_parameters], lr=self.weighting_params["lr"])
 
         """
         2. Compute p-values for the given scores (should be ignored)
@@ -1650,17 +1939,18 @@ class AdaptiveWeightedConformalScoreWrapper:
         with torch.no_grad():
             betas = (
                 get_beta(
-                    self.cal_scores,
-                    torch_scores_past,
+                    self.cal_scores.to(self.device),
+                    torch_scores_past.to(self.device),
                     weights=self.weights_parameters[-scores.shape[0] :],
                     conformal_weights=True,
                 )
                 .clone()
                 .detach()
+                .cpu()
                 .numpy()
             )
 
-        return betas
+        return 1 - np.array(betas)
 
     def predict(self, scores: np.ndarray, verbose: bool = False) -> np.ndarray:
         """
@@ -1677,31 +1967,48 @@ class AdaptiveWeightedConformalScoreWrapper:
             np.ndarray: Array of weighted p-scores (beta_t) for each test score. Shape: (n_samples,).
         """
 
+        # print('scores :', scores.shape[0])
+
         n_scores = scores.shape[0]
         n_batch = int(self.weighting_params["n_batch_update"])
         n_epochs = int(self.weighting_params["epochs"])
         stride = int(self.weighting_params["stride"])
         conformal_weights_update = self.weighting_params["conformal_weights_update"]
 
-        n_batch_updates = (n_scores - n_batch) / stride + 1
+        n_min_update = int(
+            self.weights_critical_norm + n_batch
+        )  # Minimum previous scores needed to update weights with Wass1
+
+        # n_batch_updates = (n_scores - n_batch) / stride + 1
+        n_batch_updates = n_scores / stride  # + 1
         n_batch_updates = int(np.ceil(n_batch_updates))
 
         losses = []
         beta_output = []
         for i in range(n_batch_updates):
             ini_t_i = int(i * stride)
-            end_t_i = int(i * stride + n_batch)
+            end_t_i = np.minimum(int(i * stride + stride), scores.shape[0])
             if verbose:
                 LOGGER.info("ini/end batch :", ini_t_i, end_t_i)
-            scores_i = torch.tensor(scores[ini_t_i:end_t_i])
-
-            """Generate Matrix With Past Scores per batch observation"""
-            scores_concat_i = torch.cat((self.cal_scores, scores_i), dim=0)
+            scores_new_i = torch.tensor(scores[ini_t_i:end_t_i])
+            if len(scores_new_i) == 0:
+                continue
+            """Generate Matrix With Past Scores per batch observation and "present" scores to compute Wass1"""
+            scores_concat_i = torch.cat((self.cal_scores, scores_new_i), dim=0)
+            update_weights_feasible = len(scores_concat_i) >= n_min_update
+            n_batch_effective = n_batch if update_weights_feasible else scores_new_i.shape[0]
+            n_batch_effective = int(n_batch_effective)
+            # print(ini_t_i,end_t_i, scores_concat_i.shape, n_batch_effective, self.cal_scores.shape[0], self.weights_critical_norm, n_min_update)
+            # print('Update feasible :', update_weights_feasible)
+            scores_i = scores_concat_i[-n_batch_effective:].to(self.device)  # Scores to compute the Wass1 distance
+            cal_context_available = len(scores_concat_i) - n_batch_effective
             scores_matrix = [
-                scores_concat_i[i - self.cal_scores.shape[0] : i]
-                for i in range(self.cal_scores.shape[0], len(scores_concat_i))
+                scores_concat_i[j - cal_context_available : j]
+                for j in range(len(scores_concat_i) - n_batch_effective, len(scores_concat_i))
             ]
-            scores_matrix = torch.stack(scores_matrix)
+
+            scores_matrix = torch.stack(scores_matrix).to(self.device)
+            # print(scores_matrix.shape)
 
             """Get Betas"""
             if self.weights_average is None:
@@ -1709,80 +2016,114 @@ class AdaptiveWeightedConformalScoreWrapper:
                 self.weights_average_count = 1
 
             with torch.no_grad():
-                if (i < n_batch_updates - 1) & (i > 0):
-                    ## Only inference for the stride items (betas should rely on weoghts updated with past observations)
-                    betas = (
-                        get_beta(
-                            scores_i[-stride:],
-                            scores_matrix[-stride:, :],
-                            weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                            # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
-                            conformal_weights=True,
-                        )
-                        .clone()
-                        .detach()
-                        .numpy()
+                n_scores_compute = int(scores_new_i.shape[0])
+                # print("n_scores_compute matrix :", scores_matrix.shape)
+                # print("cal shape :", self.cal_scores.shape[0])
+                betas = (
+                    get_beta(
+                        scores_i[-n_scores_compute:],
+                        scores_matrix[-n_scores_compute:],
+                        weights=self.weights_parameters[-scores_matrix.shape[1] :],
+                        # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
+                        conformal_weights=True,
                     )
-                else:
-                    betas = (
-                        get_beta(
-                            scores_i,
-                            scores_matrix,
-                            weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                            # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
-                            conformal_weights=True,
-                        )
-                        .clone()
-                        .detach()
-                        .numpy()
-                    )
+                    .clone()
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
                 if verbose:
                     LOGGER.info("Beta shape :", betas.shape)
                 beta_output.extend(betas.tolist())
+                # print('beta length :', len(beta_output), '; new scores shapes :', scores_i[-n_scores_compute:].shape)
 
             """Optimize Weights"""
-            losses_i = []
-            for _ in range(n_epochs):
-                self.weights_optimizer.zero_grad()
-                loss = get_w1_distance(
-                    scores_i,
-                    scores_matrix,
-                    weights=self.weights_parameters[-scores_matrix.shape[1] :],
-                    conformal_weights=conformal_weights_update,
-                )
-                losses_i.append(loss.item())
+            # if not update_weights_feasible:
 
-                loss.backward()
-                self.weights_optimizer.step()
+            if update_weights_feasible:
+                # print("n_scores_compute matrix :", scores_matrix[-n_scores_compute:].shape)
+                # print("cal shape :", self.cal_scores.shape[0])
+                losses_i = []
+                for _ in range(n_epochs):
+                    self.weights_optimizer.zero_grad()
+                    loss = get_w1_distance(
+                        scores_i,
+                        scores_matrix,
+                        weights=self.weights_parameters[-scores_matrix.shape[1] :],
+                        conformal_weights=conformal_weights_update,
+                    )
+                    losses_i.append(loss.detach().item())
 
-                ## Project weights into the simplex
-                self.weights_parameters.data = project_l1_box_torch(
-                    self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
-                )
+                    loss.backward()
+                    self.weights_optimizer.step()
+
+                    ## Project weights into the simplex
+                    # with torch.no_grad():
+                    #     self.weights_parameters.data = project_l1_box_torch(
+                    #         self.weights_parameters.data, min_l1_norm=self.weights_critical_norm, max_value=1.0
+                    #     )
+                    with torch.no_grad():
+                        self.weights_parameters.copy_(
+                            project_l1_box_torch(
+                                self.weights_parameters, min_l1_norm=self.weights_critical_norm, max_value=1.0
+                            )
+                        )
+                    if verbose:
+                        LOGGER.info(
+                            "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
+                                losses_i[-1],
+                                self.weights_parameters.data.sum(),
+                                self.weights_parameters.data.min(),
+                                self.weights_parameters.data.max(),
+                            )
+                        )
+
+                    self.weights_average = self.weights_average + self.weights_parameters.clone().detach()
+                    self.weights_average_count += 1
+                    # self.weights_parameters.data.clamp_(0, 1.0)
+                losses.append(losses_i)
+                # self.cal_weights = self.weights_average.clone().detach().numpy()/self.weights_average_count
+                self.cal_weights = self.weights_parameters.clone().detach().cpu().numpy()
+            else:
                 if verbose:
                     LOGGER.info(
-                        "loss {}, w_norm_l1 {}, w_min {}, w_max {}".format(
-                            loss.item(),
-                            self.weights_parameters.data.sum(),
-                            self.weights_parameters.data.min(),
-                            self.weights_parameters.data.max(),
+                        "Update not feasible for indexes {} to {}; all available past scores are {} minimum number required are {} ".format(
+                            ini_t_i,
+                            end_t_i,
+                            len(scores_concat_i),
+                            n_min_update,
                         )
                     )
-
-                self.weights_average = self.weights_average + self.weights_parameters.clone().detach()
-                self.weights_average_count += 1
-                # self.weights_parameters.data.clamp_(0, 1.0)
-            losses.append(losses_i)
-
+                # print('Update not feasible for indexes :',ini_t_i, end_t_i )
+                # print('Cal scores size :', len(self.cal_scores))
+                # print('Minimum number of elements required are :', n_min_update, ' but in total we have :', scores_concat_i.shape[0])
             """ Update Past Calibration Scores """
-            self.cal_scores = torch.cat((self.cal_scores, scores_i[0:stride]), dim=0)
+            self.cal_scores = torch.cat((self.cal_scores, scores_new_i[0:stride]), dim=0)
+
+            if self.weighting_params["prior_past_weights_value"] == "proximity":
+                n = self.cal_scores.shape[0]
+                if n <= self.window_size:
+                    # print("BEFORE")
+                    # print(self.weights_parameters.data[-n:].shape)
+                    # print(n_batch_effective)
+                    # print(self.weights_parameters.data[-n : -n + n_batch_effective + 10])
+                    # self.weights_parameters.data[0 : -int(self.cal_scores.shape[0] + 1)] = (
+                    #     self.weights_parameters.data[-int(self.cal_scores.shape[0] + 1)]
+                    # )
+                    with torch.no_grad():
+                        self.weights_parameters[-n : -n + n_batch_effective].copy_(
+                            self.weights_parameters[-n + n_batch_effective]
+                        )
+                    # print("AFTER")
+                    # print(self.weights_parameters.data[-n :].shape)
+                    # print(self.weights_parameters.data[-n : -n + n_batch_effective + 10])
+
             self.cal_scores = self.cal_scores[-self.window_size :]
-            # self.cal_weights = self.weights_average.clone().detach().numpy()/self.weights_average_count
-            self.cal_weights = self.weights_parameters.clone().detach().numpy()
-
-        self.losses.extend(losses)
-
-        return np.array(beta_output)
+            self.cal_weights = self.weights_parameters.clone().detach().cpu().numpy()
+            # print('Cal scores updated to :', len(self.cal_scores))
+        if len(losses) > 0:
+            self.losses.extend(losses)
+        return 1 - np.array(beta_output)
 
 
 """
@@ -1920,7 +2261,7 @@ def euclidean_proj_simplex_torch(vector: torch.Tensor, radius: int = 1) -> torch
     assert radius > 0, "radius parameter must be strictly positive"
     n = vector.shape[0]
     # Check if vector is on the simplex
-    if torch.isclose(vector.sum(), torch.tensor(radius)) and torch.all(vector >= 0):
+    if torch.isclose(vector.detach().clone().sum(), torch.tensor(radius)) and torch.all(vector >= 0):
         return vector
     v_sorted, _ = torch.sort(vector, descending=True)  # Sort vector in decreasing order
     cum_vector = torch.cumsum(v_sorted, dim=0)
@@ -1932,7 +2273,7 @@ def euclidean_proj_simplex_torch(vector: torch.Tensor, radius: int = 1) -> torch
     return w
 
 
-def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1) -> torch.Tensor:
+def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1, verbose: bool = False) -> torch.Tensor:
     w = torch.clamp(v, min=0, max=max_value)
     if v.sum() > torch.tensor(min_l1_norm):
         return w
@@ -1957,10 +2298,14 @@ def project_l1_box_torch(v, min_l1_norm: float = 1, max_value: float = 1) -> tor
 
             n_iter += 1
             condition = n_iter > 10
-            LOGGER.info("iter : ", n_iter)
+            if verbose:
+                LOGGER.info("iter : ", n_iter)
 
         w_i = torch.clamp(w_i, max=max_value, min=0)
-        LOGGER.info(
-            "proj ending due to max iterations, norm_l1 is {} and objective was >= {}".format(w_i.sum(), min_l1_norm)
-        )
+        if verbose:
+            LOGGER.info(
+                "proj ending due to max iterations, norm_l1 is {} and objective was >= {}".format(
+                    w_i.sum(), min_l1_norm
+                )
+            )
         return w_i

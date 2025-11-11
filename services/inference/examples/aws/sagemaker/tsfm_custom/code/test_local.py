@@ -1,10 +1,7 @@
-import os
-
-
 # this needs to come before any tsfm imports
-os.environ["TSFM_MODEL_DIR"] = "granite-tsfm/services/inference/mytest-tsfm"
-
+# os.environ["TSFM_MODEL_DIR"] = "granite-tsfm/services/inference/mytest-tsfm"
 import json  # noqa: E402
+import os
 import shutil  # noqa: E402
 import tarfile  # noqa: E402
 from datetime import datetime  # noqa: E402
