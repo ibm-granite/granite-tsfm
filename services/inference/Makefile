@@ -59,7 +59,7 @@ remove-torch-cpu-index:
 	git checkout uv.lock pyproject.toml
 	git checkout uv.lock
 
-image: insert-torch-cpu-index boilerplate
+image: insert-torch-cpu-index boilerplate imagehardening
 	find . -name "*.pyc" | xargs rm -f || true
 	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu . || true
 	@make remove-torch-cpu-index
@@ -125,3 +125,7 @@ profile_inference: clone_models
 	 -m pytest -s tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"
+
+
+imagehardening:
+	cp -avr ../../NGP-runbook/ImageHardening .
