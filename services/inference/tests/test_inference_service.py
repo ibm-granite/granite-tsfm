@@ -1,6 +1,7 @@
 # Copyright contributors to the TSFM project
 #
 import json
+import logging
 import os
 import random
 import tempfile
@@ -15,6 +16,7 @@ from tsfm_public.toolkit.time_series_preprocessor import extend_time_series
 from tsfm_public.toolkit.util import encode_data, select_by_index
 
 
+logger = logging.getLogger(__name__)
 DUMPPAYLOADS = int(os.getenv("TSFM_TESTS_DUMP_PAYLOADS", "0")) == 1
 
 model_param_map = {
@@ -94,7 +96,7 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
         return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
-        print(req.text)
+        logger.error("Request failed with status code %s: %s", req.status_code, req.text)
         return None, req
 
 
@@ -255,8 +257,7 @@ def test_zero_shot_forecast_inference(ts_data):
     assert counts["output_data_points"] == prediction_length * len(params["target_columns"]) * num_ids
 
     # test multi-time series, errors
-    test_data_ = test_data.copy()
-    test_data_ = test_data_.iloc[3:]
+    test_data_ = test_data.iloc[3:].copy()
 
     msg = {
         "model_id": model_id_path,
