@@ -65,6 +65,7 @@ tsfminference                                             latest               d
 ### Using the built image
 
 ```sh
+make image
 make test_image
 
 docker run -p 8000:8000 -d --rm --name tsfmserver tsfminference
