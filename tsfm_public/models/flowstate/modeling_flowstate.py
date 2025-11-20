@@ -719,12 +719,14 @@ class FlowStateForPredictionOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, len(quantiles), prediction_length, 1)`):
-            Prediction output from FlowState model.
+        prediction_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, prediction_length, 1)`):
+            Point prediction output (mean) from FlowState model.
         backbone_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Last hidden state at the output of the backbone before passing through the decoder
         decoder_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Last hidden state of the decoder embeddings.
+        quantile_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, len(quantiles), prediction_length, 1)`):
+            Quantile prediction outputs from FlowState model.
     """
 
     loss: Optional[torch.FloatTensor] = None
