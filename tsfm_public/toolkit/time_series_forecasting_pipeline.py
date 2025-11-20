@@ -39,6 +39,9 @@ logger = logging.get_logger(__name__)
 
 
 class TimeSeriesPipeline(Pipeline):
+    quantile_output_key = "quantile_outputs"
+    prediction_output_key = "prediction_outputs"
+
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
         """Replaces base `run_single` method which does batching during inference. This is needed to support
         large inference requests.
@@ -79,12 +82,19 @@ class TimeSeriesPipeline(Pipeline):
 
         # iterate over dataloader
         it = iter(dataloader)
-        accumulator = []
+        accumulator = defaultdict(list)
         while (batch := next(it, None)) is not None:
             item = self.forward(batch, **forward_params)
             if not model_output_key:
-                model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
-            accumulator.append(item[model_output_key])
+                model_output_key = (
+                    self.__class__.prediction_output_key
+                    if self.__class__.prediction_output_key in item.keys()
+                    else "prediction_logits"
+                )
+
+            accumulator[self.__class__.prediction_output_key].append(item[model_output_key])
+            if self.__class__.quantile_output_key in item.keys():
+                accumulator[self.__class__.quantile_output_key].append(item[self.__class__.quantile_output_key])
 
         if copy_dataset_keys:
             # collect all ouputs needed for post processing
@@ -100,9 +110,17 @@ class TimeSeriesPipeline(Pipeline):
 
             # without shuffling in the dataloader above, we assume that order is preserved
             # otherwise we need to incorporate sequence id somewhere and do a proper join
-            model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+            model_outputs[self.__class__.prediction_output_key] = torch.cat(
+                accumulator[self.__class__.prediction_output_key], axis=0
+            )
+            if self.__class__.quantile_output_key in accumulator.keys():
+                model_outputs[self.__class__.quantile_output_key] = torch.cat(
+                    accumulator[self.__class__.quantile_output_key], axis=0
+                )
         else:
             model_outputs = accumulator
+
+        print(f"Model_outputs.keys() {model_outputs.keys()}")
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -443,8 +461,10 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         """
         out = {}
 
-        model_output_key = "prediction_outputs"  #  if "prediction_outputs" in input.keys() else "prediction_logits"
+        model_output_key = self.__class__.prediction_output_key
+        quantile_output_key = self.__class__.quantile_output_key
 
+        print(f"Input keys: {input.keys()}")
         # name the predictions of target columns
         # outputs should only have size equal to target columns
 
@@ -455,6 +475,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         for i, c in enumerate(kwargs["target_columns"]):
             prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
             out[prediction_columns[-1]] = input[model_output_key][:, :, i].detach().cpu().numpy().tolist()
+
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if add_known_ground_truth:
@@ -478,7 +499,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         # add probabilistic
-        conformal_cols = []
+        quantile_cols = []
         if self._probabilistic_processor is not None:
             # get the conformal bounds and add to the forecasts on the test set
             predictions_conformal = self._probabilistic_processor.predict(
@@ -489,8 +510,15 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 for i, c in enumerate(prediction_columns):
                     col = f"{c}_q{q}"
                     out[col] = predictions_conformal[..., i, j].tolist()
-                    conformal_cols.append(col)
+                    quantile_cols.append(col)
                     # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+        elif quantile_output_key in input.keys():
+            # model has native support for quantiles
+            for i, q in enumerate(self.model.config.quantiles):
+                for j, c in enumerate(prediction_columns):
+                    col = f"{c}_q{q}"
+                    out[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
+                    quantile_cols.append(col)
 
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
@@ -508,7 +536,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                         tmp[c] = row[c]
                 for p in prediction_columns:
                     tmp[p] = row[p]
-                for c in conformal_cols:
+                for c in quantile_cols:
                     tmp[c] = row[c]
 
                 out_explode.append(pd.DataFrame(tmp))
