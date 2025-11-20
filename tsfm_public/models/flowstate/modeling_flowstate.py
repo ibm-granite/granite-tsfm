@@ -732,6 +732,7 @@ class FlowStateForPredictionOutput(ModelOutput):
     backbone_hidden_state: torch.FloatTensor = None
     decoder_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    quantile_outputs: torch.FloatTensor = None
 
 
 class FlowStateForPrediction(FlowStatePreTrainedModel):
@@ -856,21 +857,29 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             model_output.last_hidden_state, prediction_length
         )
 
-        if prediction_type == "quantile":
-            pass
-        elif prediction_type == "mean":
-            # calculate an approximate mean from quantiles
-            quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
-            quant_prob /= quant_prob.sum()  # normalize quantile weights
-            quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
-            model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
-        elif prediction_type == "median":
-            if 0.5 not in self.config.quantiles:
-                raise RuntimeError("Median requested but not part of the quantiles.")
-            ix = self.config.quantiles.index(0.5)
-            model_output.last_hidden_state = model_output.last_hidden_state[:, ix, :]
-        else:
-            raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+        # if prediction_type == "quantile":
+        #     pass
+        # elif prediction_type == "mean":
+        #     # calculate an approximate mean from quantiles
+        #     quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
+        #     quant_prob /= quant_prob.sum()  # normalize quantile weights
+        #     quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
+        #     model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
+        # elif prediction_type == "median":
+        #     if 0.5 not in self.config.quantiles:
+        #         raise RuntimeError("Median requested but not part of the quantiles.")
+        #     ix = self.config.quantiles.index(0.5)
+        #     model_output.last_hidden_state = model_output.last_hidden_state[:, ix, :]
+        # else:
+        #     raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+
+        quantiles = model_output.last_hidden_state
+
+        # calculate an approximate mean from quantiles
+        quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
+        quant_prob /= quant_prob.sum()  # normalize quantile weights
+        quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
+        point_predictions = (model_output.last_hidden_state * quant_prob).sum(dim=1)
 
         loss_val = None
 
@@ -879,17 +888,19 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
                 v
                 for v in [
                     loss_val,
-                    model_output.last_hidden_state,
+                    point_predictions,
                     model_output.backbone_hidden_state,
                     model_output.decoder_hidden_state,
                     model_output.hidden_states,
+                    quantiles,
                 ]
             )
 
         return FlowStateForPredictionOutput(
             loss=loss_val,
-            prediction_outputs=model_output.last_hidden_state,  # tensor [batch_size x prediction_length x num_input_channels]
+            prediction_outputs=point_predictions,  # tensor [batch_size x prediction_length x num_input_channels]
             backbone_hidden_state=model_output.backbone_hidden_state,
             decoder_hidden_state=model_output.decoder_hidden_state,
             hidden_states=model_output.hidden_states,
+            quantile_outputs=quantiles,
         )
