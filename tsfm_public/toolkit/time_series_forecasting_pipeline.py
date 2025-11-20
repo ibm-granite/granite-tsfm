@@ -118,9 +118,7 @@ class TimeSeriesPipeline(Pipeline):
                     accumulator[self.__class__.quantile_output_key], axis=0
                 )
         else:
-            model_outputs = accumulator
-
-        print(f"Model_outputs.keys() {model_outputs.keys()}")
+            model_outputs = accumulator[self.__class__.prediction_output_key]
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -464,7 +462,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         model_output_key = self.__class__.prediction_output_key
         quantile_output_key = self.__class__.quantile_output_key
 
-        print(f"Input keys: {input.keys()}")
         # name the predictions of target columns
         # outputs should only have size equal to target columns
 
