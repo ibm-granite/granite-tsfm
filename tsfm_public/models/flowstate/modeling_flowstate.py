@@ -177,7 +177,7 @@ def FlowStateLegendreBasis(x, degree):
     Returns:
         `torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`: The basis function values at x
     """
-    retvar = torch.ones(*x.shape, degree + 1).type(x.type()).to(x.device)
+    retvar = torch.ones(*x.shape, degree + 1, dtype=x.dtype, device=x.device)
     if retvar.ndim == 3:
         retvar = retvar.permute(1, 2, 0)
         x = x.transpose(0, -1)
@@ -202,7 +202,7 @@ def FlowStateFourierBasis(x, degree):
     Returns:
         `torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`: The basis function values at x
     """
-    retvar = torch.ones(*x.shape, degree + 1).type(x.type()).to(x.device)
+    retvar = torch.ones(*x.shape, degree + 1, dtype=x.dtype, device=x.device)
     if retvar.ndim == 3:
         retvar = retvar.permute(1, 2, 0)
         x = x.transpose(0, -1)
