@@ -222,6 +222,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "static_categorical_columns",
             "future_time_series",
             "impute_method",
+            "fill_value",
+            "maximum_context_length",
         ]
         postprocess_params = [
             "prediction_length",

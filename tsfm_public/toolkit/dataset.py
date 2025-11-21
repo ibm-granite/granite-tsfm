@@ -21,6 +21,7 @@ LOGGER = logging.getLogger(__file__)
 class ImputeMethod(enum.Enum):
     """`Enum` for the different imputation methods ."""
 
+    FILL = "fill"
     FORWARD_FILL = "forward_fill"
     LINEAR = "linear"
 
@@ -440,8 +441,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
             Defaults to [].
         impute_method (str, optional): Enables imputation in the past_values of the dataset output. Possible options are in the
             ImputeMethod enum, "forward_fill" fills the values using previous values. Any values which cannot be filled are filled with
-            `fill_value`. "linear" use linear interpolation to imput the missing values. None: use regular filling with `fill_value`.
-            Defaults to None.
+            `fill_value`. "linear" use linear interpolation to impute the missing values. "fill": use regular filling with `fill_value`. "None"
+            do not fill.
+            Defaults to "fill".
 
     The resulting dataset returns records (dictionaries) containing:
         past_values: tensor of past values of the target columns of length equal to context length (context_length x number of features)
@@ -478,7 +480,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
         masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
         enable_padding: bool = True,
         metadata_columns: List[str] = [],
-        impute_method: Optional[str] = None,
+        impute_method: Optional[str] = ImputeMethod.FILL.value,
+        max_context_length: Optional[int] = None,
     ):
         # output_columns_tmp = input_columns if output_columns == [] else output_columns
 
@@ -486,8 +489,12 @@ class ForecastDFDataset(BaseConcatDFDataset):
             impute_method is None
             or impute_method == ImputeMethod.FORWARD_FILL.value
             or impute_method == ImputeMethod.LINEAR.value
+            or impute_method == ImputeMethod.FILL.value
         ):
             raise ValueError(f"Unknown impute_method {self.impute_method}.")
+
+        if max_context_length is None:
+            max_context_length = context_length
 
         super().__init__(
             data_df=data,
@@ -512,6 +519,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             masking_specification=masking_specification,
             metadata_columns=metadata_columns,
             impute_method=impute_method,
+            max_context_length=max_context_length,
         )
         self.n_inp = 2
         # for forecasting, the number of targets is the same as number of X variables
@@ -544,7 +552,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             masking_specification: Optional[List[Tuple[str, Union[int, Tuple[int, int]]]]] = None,
             enable_padding: bool = True,
             metadata_columns: List[str] = [],
-            impute_method: Optional[str] = ImputeMethod.FORWARD_FILL.value,
+            impute_method: Optional[str] = ImputeMethod.FILL.value,
+            max_context_length: Optional[int] = None,
         ):
             self.frequency_token = frequency_token
             self.target_columns = target_columns
@@ -557,6 +566,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
             self.masking_specification = masking_specification
             self.metadata_columns = metadata_columns
             self.impute_method = impute_method
+            self.max_context_length = max_context_length
+
+            self.expanding_window = max_context_length > context_length
 
             x_cols = join_list_without_repeat(
                 target_columns,
@@ -602,7 +614,14 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             time_id = index * self.stride
 
-            seq_x = self.X.iloc[time_id : time_id + self.context_length].values.astype(np.float32)
+            context_start = (
+                time_id if not self.expanding_window else max(0, time_id - self.max_context_length)
+            )  # check me
+            seq_x = np.ones((self.max_context_length, self.X.shape[1]), dtype=np.float32) * np.NaN
+            seq_x[context_start - time_id - self.context_length :, :] = self.X.iloc[
+                context_start : time_id + self.context_length
+            ].values.astype(np.float32)
+
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
 
@@ -618,8 +637,10 @@ class ForecastDFDataset(BaseConcatDFDataset):
             elif self.impute_method == ImputeMethod.LINEAR.value:
                 # interpolate for each channel
                 seq_x_imputed = np.apply_along_axis(interpolate_by_var, 0, seq_x)
-            elif self.impute_method is None:
+            elif self.impute_method == ImputeMethod.FILL.value:
                 seq_x_imputed = np.nan_to_num(seq_x, nan=self.fill_value)
+            elif self.impute_method is None:
+                seq_x_imputed = seq_x.copy()
             else:
                 raise ValueError(f"Unknown impute_method {self.impute_method}.")
 
@@ -631,7 +652,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             ret = {
                 "past_values": np_to_torch(seq_x_imputed),
-                "future_values": np_to_torch(np.nan_to_num(seq_y, nan=self.fill_value)),
+                "future_values": np_to_torch(
+                    np.nan_to_num(seq_y, nan=self.fill_value) if self.impute_method is not None else seq_y
+                ),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
             }
@@ -651,7 +674,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
 
             if self.metadata_columns:
                 ret["metadata"] = self.data_df[self.metadata_columns].values[
-                    time_id : time_id + self.context_length + self.prediction_length, :
+                    context_start : time_id + self.context_length + self.prediction_length, :
                 ]
 
             return ret
