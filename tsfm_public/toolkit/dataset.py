@@ -619,7 +619,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 if not self.expanding_window
                 else max(0, time_id - self.max_context_length + self.context_length)
             )  # check me
-            seq_x = np.ones((self.max_context_length, self.X.shape[1]), dtype=np.float32) * np.NaN
+            seq_x = np.ones((self.max_context_length, self.X.shape[1]), dtype=np.float32) * np.nan
             seq_x[context_start - time_id - self.context_length :, :] = self.X.iloc[
                 context_start : time_id + self.context_length
             ].values.astype(np.float32)
