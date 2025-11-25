@@ -223,7 +223,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "future_time_series",
             "impute_method",
             "fill_value",
-            "maximum_context_length",
+            "max_context_length",
         ]
         postprocess_params = [
             "prediction_length",
@@ -266,22 +266,6 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 num_workers = self._num_workers
 
         forward_kwargs = {"batch_size": batch_size, "num_workers": num_workers}
-
-        # if "id_columns" in kwargs:
-        #     preprocess_kwargs["id_columns"] = kwargs["id_columns"]
-        #     postprocess_kwargs["id_columns"] = kwargs["id_columns"]
-        # if "timestamp_column" in kwargs:
-        #     preprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-        #     postprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-        # if "input_columns" in kwargs:
-        #     preprocess_kwargs["input_columns"] = kwargs["input_columns"]
-        #     postprocess_kwargs["input_columns"] = kwargs["input_columns"]
-        # if "output_columns" in kwargs:
-        #     preprocess_kwargs["output_columns"] = kwargs["output_columns"]
-        #     postprocess_kwargs["output_columns"] = kwargs["output_columns"]
-        # elif "input_columns" in kwargs:
-        #     preprocess_kwargs["output_columns"] = kwargs["input_columns"]
-        #     postprocess_kwargs["output_columns"] = kwargs["input_columns"]
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
@@ -518,6 +502,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                     col = f"{c}_q{q}"
                     out[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
                     quantile_cols.append(col)
+                if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
+                    out = self.feature_extractor.inverse_scale_targets(out, suffix=f"_prediction_q{q}")
 
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
