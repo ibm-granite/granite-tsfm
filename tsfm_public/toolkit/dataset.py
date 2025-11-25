@@ -615,7 +615,9 @@ class ForecastDFDataset(BaseConcatDFDataset):
             time_id = index * self.stride
 
             context_start = (
-                time_id if not self.expanding_window else max(0, time_id - self.max_context_length)
+                time_id
+                if not self.expanding_window
+                else max(0, time_id - self.max_context_length + self.context_length)
             )  # check me
             seq_x = np.ones((self.max_context_length, self.X.shape[1]), dtype=np.float32) * np.NaN
             seq_x[context_start - time_id - self.context_length :, :] = self.X.iloc[
