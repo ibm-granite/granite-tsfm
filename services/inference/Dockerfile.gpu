@@ -67,7 +67,7 @@ ENV LD_LIBRARY_PATH=${HOME}/.venv/lib/python${PYTHON_VERSION}/site-packages/nvid
 
 USER tsfm
 # get back our gpu-enabled version of torch and all the nvidia packages
-RUN  uv sync --locked
+RUN  uv sync --locked --reinstall-package torch
 
 ENV CUDA_VISIBLE_DEVICES=0
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
