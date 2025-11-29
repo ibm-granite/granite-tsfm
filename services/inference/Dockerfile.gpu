@@ -65,9 +65,12 @@ RUN yum install -y \
 
 ENV LD_LIBRARY_PATH=${HOME}/.venv/lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${HOME}/.venv/lib//lib/python${PYTHON_VERSION}/site-packages/nvidia/cuda_cupti/lib:${HOME}/.venv/lib//lib/python${PYTHON_VERSION}/site-packages/cusparselt/lib/:${LD_LIBRARY_PATH}
 
+COPY --chown=tsfm:tsfm --chmod=755 ${CODEDIR}/* ${HOME}/${CODEDIR}/
+COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml uv.lock ${HOME}
 USER tsfm
+
 # get back our gpu-enabled version of torch and all the nvidia packages
-RUN  uv sync --locked --reinstall-package torch
+RUN  uv lock && uv sync --locked --reinstall-package torch
 
 ENV CUDA_VISIBLE_DEVICES=0
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1

@@ -50,7 +50,7 @@ insert-torch-cpu-index: check-clean
     # we insert the torch cpu index to avoid having to install
     # all the nvidia-cuda packages
 	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
-	uv lock -U --index-strategy unsafe-best-match
+	uv lock --index-strategy unsafe-best-match
 
 remove-torch-cpu-index:
 	git checkout pyproject.toml uv.lock
