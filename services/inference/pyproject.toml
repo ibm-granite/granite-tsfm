@@ -14,7 +14,8 @@ dependencies = [
   "uvicorn-worker",
   "prometheus_client",
   "psutil",
-  "granite-tsfm"
+  "granite-tsfm",
+  "torch"
 ]
 
 [tool.uv.sources]
