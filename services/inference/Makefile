@@ -80,8 +80,7 @@ start_service_image: create_prometheus_metrics_dir
 		-d \
 		--rm \
 		--name tsfmserver-cpu \
-		--privileged \
-        -e TSFM_MODEL_DIR=/mytest-tsfm \
+	        -e TSFM_MODEL_DIR=/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
         -v ./mytest-tsfm:/mytest-tsfm \
