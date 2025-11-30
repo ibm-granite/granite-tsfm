@@ -79,18 +79,18 @@ start_service_image: create_prometheus_metrics_dir
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
-		--name tsfmserver-cpu \
-	        -e TSFM_MODEL_DIR=/mytest-tsfm \
+		--name tsfminferenceserver-cpu \
+        -e TSFM_MODEL_DIR=/home/tsfm/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
-        -v ./mytest-tsfm:/mytest-tsfm \
 		-v ./prometheus_metrics:/prometheus_metrics \
         tsfminference-cpu python \
 		 -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
 	sleep 5
+	$(CONTAINER_BUILDER) cp mytest-tsfm tsfminferenceserver-cpu:/home/tsfm
 
 stop_service_image:
-	$(CONTAINER_BUILDER) stop tsfmserver-cpu
+	$(CONTAINER_BUILDER) stop tsfminferenceserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
 	uv run --locked pytest --cov=tsfminference --cov-report term-missing tests ../tests
