@@ -49,7 +49,7 @@ testing = [
     "granite-tsfm[notebooks]",
     "parameterized",
 ]
-dev = ["pre-commit", "granite-tsfm[testing]", "ruff==0.5.7"]
+dev = ["granite-tsfm[testing]", "ruff==0.5.7"]
 
 # ogv deployments will already have jupyter
 # and we don't want to mess with RH's tested version
