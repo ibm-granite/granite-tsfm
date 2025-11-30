@@ -91,7 +91,8 @@ start_service_image: create_prometheus_metrics_dir
 stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfminferenceserver-cpu
 
-test_local: clone_models boilerplate stop_service_local start_service_local
+test_local: clone_models boilerplate stop_service_local start_service_local insert-torch-cpu-index
+	uv sync --extra dev
 	uv run --locked pytest --cov=tsfminference --cov-report term-missing tests ../tests
 	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
