@@ -40,7 +40,7 @@ stop_service_local:
 imagehardening:
 	cp -avr ../../NGP-runbook/ImageHardening .
 
-FILES = pyproject.toml uv.lock
+FILES = uv.lock
 .PHONY: check-clean
 check-clean:
 	@echo "Checking for uncommitted changes in: $(FILES)"
@@ -53,13 +53,12 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-    # we insert the torch cpu index to avoid having to install
-    # all the nvidia-cuda packages
-	printf '%s\n' '[[tool.uv.index]]' 'name = "torch"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
-	uv lock --index-strategy unsafe-best-match
+    # update the torch dependency to use the cpu-only whl
+    # this makes the cpu image about 4GB smaller
+	@uv lock --index-strategy unsafe-best-match -P torch --index https://download.pytorch.org/whl/cpu
 
 remove-torch-cpu-index:
-	git checkout pyproject.toml uv.lock
+	git checkout uv.lock
 
 image: insert-torch-cpu-index boilerplate imagehardening
 	find . -name "*.pyc" | xargs rm -f || true

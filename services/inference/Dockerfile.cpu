@@ -49,6 +49,7 @@ WORKDIR ${HOME}
 
 RUN curl -LsSf https://astral.sh/uv/0.9.13/install.sh| sh \
     && uv sync --locked --index-strategy unsafe-best-match \
+    && uv pip list | grep torch | grep -q cpu \
     && uv cache clean \
     && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics \
