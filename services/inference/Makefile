@@ -1,4 +1,4 @@
-CONTAINER_BUILDER ?= docker
+CONTAINER_BUILDER ?= podman
 SKIP_GPU_BUILD ?= "0"
 NO_DOCKER_CACHE ?=
 EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
@@ -37,6 +37,9 @@ start_service_local:
 stop_service_local:
 	pkill  -f '.*python.*gunicorn.*tsfminference\.main\:app' || true
 
+imagehardening:
+	cp -avr ../../NGP-runbook/ImageHardening .
+
 FILES = pyproject.toml uv.lock
 .PHONY: check-clean
 check-clean:
@@ -58,7 +61,7 @@ insert-torch-cpu-index: check-clean
 remove-torch-cpu-index:
 	git checkout pyproject.toml uv.lock
 
-image: insert-torch-cpu-index boilerplate
+image: insert-torch-cpu-index boilerplate imagehardening
 	find . -name "*.pyc" | xargs rm -f || true
 	$(CONTAINER_BUILDER) build $(EXTRA_DOCKER_BUILD_ARGS) -t tsfminference-cpu --build-arg CODEDIR="tsfminference" -f Dockerfile.cpu . || true
 	@make remove-torch-cpu-index
@@ -77,6 +80,7 @@ start_service_image: create_prometheus_metrics_dir
 		-d \
 		--rm \
 		--name tsfmserver-cpu \
+		--privileged \
         -e TSFM_MODEL_DIR=/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
