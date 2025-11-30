@@ -127,3 +127,7 @@ profile_inference: clone_models
 	 -m pytest -s tests/test_inference_lib.py::test_forecast_with_good_data
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"
+
+grype:
+	podman system service --time=0 unix:///tmp/podman.sock &
+	$(CONTAINER_BUILDER) run --rm -it -v /tmp/podman.sock:/var/run/docker.sock --name Grype docker.io/anchore/grype:latest tsfminference-cpu:latest
