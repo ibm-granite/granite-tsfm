@@ -2758,7 +2758,6 @@ dependencies = [
     { name = "prometheus-client" },
     { name = "psutil" },
     { name = "pydantic" },
-    { name = "torch" },
     { name = "uvicorn-worker" },
 ]
 
@@ -2773,6 +2772,9 @@ dev = [
 sagemaker = [
     { name = "boto3" },
     { name = "sagemaker" },
+]
+torch-cpu = [
+    { name = "torch" },
 ]
 
 [package.metadata]
@@ -2791,10 +2793,10 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-coverage", marker = "extra == 'dev'" },
     { name = "sagemaker", marker = "extra == 'sagemaker'" },
-    { name = "torch" },
+    { name = "torch", marker = "extra == 'torch-cpu'" },
     { name = "uvicorn-worker" },
 ]
-provides-extras = ["dev", "sagemaker"]
+provides-extras = ["dev", "torch-cpu", "sagemaker"]
 
 [[package]]
 name = "typing-extensions"
