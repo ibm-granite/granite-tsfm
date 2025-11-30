@@ -102,6 +102,5 @@ line-ending = "auto"
 [tool.uv.workspace]
 members = [
     "tsfmagentic/packages/tsfm_mcp_server",
-    "services/inference",
     "services/finetuning"
 ]
