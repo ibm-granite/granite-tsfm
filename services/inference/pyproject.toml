@@ -30,7 +30,6 @@ sagemaker = [
   "boto3",
 ]
 
-
 [tool.setuptools.packages.find]
 include = ["tsfminference"]
 
