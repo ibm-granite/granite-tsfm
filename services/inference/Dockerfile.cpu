@@ -8,9 +8,8 @@ ARG PYTHON_VERSION=3.12
 RUN microdnf upgrade -y \
     && microdnf install -y python3.12 tar gzip git findutils \
     && rm -f /usr/share/doc/perl-Net-SSLeay/examples/server_key.pem \
-    && groupadd --system tsfm --gid 999 \
-    && adduser --system --uid 999 --gid 999 --groups tsfm \
-    --create-home --home-dir /home/tsfm --shell /sbin/nologin \
+    && useradd -U --create-home --home-dir /home/tsfm \
+    --shell /sbin/nologin \
     --comment "tsfm user" tsfm \
     && chmod o+rX /home/tsfm 
 
@@ -33,6 +32,7 @@ WORKDIR ${HOME}
 
 RUN curl -LsSf https://astral.sh/uv/0.9.13/install.sh| sh \
     && uv sync --locked --index-strategy unsafe-best-match \
+    && uv pip list | grep torch | grep -q cpu \
     && uv cache clean \
     && rm -rf ${HOME}/.cache \
     && mkdir ${HOME}/prometheus_metrics \
@@ -42,7 +42,7 @@ RUN curl -LsSf https://astral.sh/uv/0.9.13/install.sh| sh \
 ENV PATH=${HOME}/.venv/bin:${PATH}
 
 USER root
-RUN microdnf remove -y git perl-Git findutils \
+RUN microdnf remove -y git perl-Git tar findutils \
     && microdnf clean all \
     && rm -rf /var/cache/microdnf
 

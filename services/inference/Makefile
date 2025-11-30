@@ -47,13 +47,12 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-    # we insert the torch cpu index to avoid having to install
-    # all the nvidia-cuda packages
-	printf '%s\n' '[[tool.uv.index]]' 'name = "torch"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
-	uv lock --index-strategy unsafe-best-match
+    # update the torch dependency to use the cpu-only whl
+    # this makes the cpu image about 4GB smaller
+	@uv lock --index-strategy unsafe-best-match -P torch --index https://download.pytorch.org/whl/cpu
 
 remove-torch-cpu-index:
-	git checkout pyproject.toml uv.lock
+	git checkout uv.lock
 
 image: insert-torch-cpu-index boilerplate
 	find . -name "*.pyc" | xargs rm -f || true
@@ -112,7 +111,7 @@ clone_models:
 update_examples:
 # our sagemaker stuff
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
-	uv export --omit-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	uv export --no-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
