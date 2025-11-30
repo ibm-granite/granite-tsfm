@@ -13,8 +13,7 @@ dependencies = [
   "prometheus_client",
   "psutil",
   "granite-tsfm",
-  "torch"
-]
+  ]
 
 [tool.uv.sources]
 granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
@@ -22,7 +21,15 @@ granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch
 [project.optional-dependencies]
 dev = ["pytest", "locust", "locust-plugins", "inotify", "pytest-coverage"]
 
-sagemaker = ["sagemaker", "boto3"]
+torch-cpu = [
+  "torch"
+]
+
+sagemaker = [
+  "sagemaker",
+  "boto3",
+]
+
 
 [tool.setuptools.packages.find]
 include = ["tsfminference"]
