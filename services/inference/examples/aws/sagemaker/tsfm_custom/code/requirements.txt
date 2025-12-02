@@ -1,93 +1,282 @@
-# This file was automatically generated on Tue Oct  7 13:34:36 EDT 2025, your edits will be replaced.
-accelerate==1.10.1 ; python_version >= "3.10" and python_version < "3.13"
-aiohappyeyeballs==2.6.1 ; python_version >= "3.10" and python_version < "3.13"
-aiohttp==3.12.15 ; python_version >= "3.10" and python_version < "3.13"
-aiosignal==1.4.0 ; python_version >= "3.10" and python_version < "3.13"
-annotated-types==0.7.0 ; python_version >= "3.10" and python_version < "3.13"
-anyio==4.11.0 ; python_version >= "3.10" and python_version < "3.13"
-async-timeout==5.0.1 ; python_version == "3.10"
-attrs==25.4.0 ; python_version >= "3.10" and python_version < "3.13"
-bidict==0.23.1 ; python_version >= "3.10" and python_version < "3.13"
-certifi==2025.10.5 ; python_version >= "3.10" and python_version < "3.13"
-charset-normalizer==3.4.3 ; python_version >= "3.10" and python_version < "3.13"
-click==8.3.0 ; python_version >= "3.10" and python_version < "3.13"
-colorama==0.4.6 ; python_version >= "3.10" and python_version < "3.13" and platform_system == "Windows"
-datasets==4.1.1 ; python_version >= "3.10" and python_version < "3.13"
-deprecated==1.2.18 ; python_version >= "3.10" and python_version < "3.13"
-dill==0.4.0 ; python_version >= "3.10" and python_version < "3.13"
-exceptiongroup==1.3.0 ; python_version == "3.10"
-fastapi==0.118.0 ; python_version >= "3.10" and python_version < "3.13"
-filelock==3.19.1 ; python_version >= "3.10" and python_version < "3.13"
-frozenlist==1.8.0 ; python_version >= "3.10" and python_version < "3.13"
-fsspec==2025.9.0 ; python_version >= "3.10" and python_version < "3.13"
-granite-tsfm @ git+https://github.com/ibm-granite/granite-tsfm.git@1248ba5d07f6a04a3e96f4dc2565aad8835c91f1 ; python_version >= "3.10" and python_version < "3.13"
-gunicorn==23.0.0 ; python_version >= "3.10" and python_version < "3.13"
-h11==0.16.0 ; python_version >= "3.10" and python_version < "3.13"
-hf-xet==1.1.10 ; python_version >= "3.10" and python_version < "3.13" and (platform_machine == "x86_64" or platform_machine == "amd64" or platform_machine == "arm64" or platform_machine == "aarch64")
-huggingface-hub==0.35.3 ; python_version >= "3.10" and python_version < "3.13"
-idna==3.10 ; python_version >= "3.10" and python_version < "3.13"
-jinja2==3.1.6 ; python_version >= "3.10" and python_version < "3.13"
-joblib==1.5.2 ; python_version >= "3.10" and python_version < "3.13"
-markupsafe==3.0.3 ; python_version >= "3.10" and python_version < "3.13"
-mpmath==1.3.0 ; python_version >= "3.10" and python_version < "3.13"
-multidict==6.7.0 ; python_version >= "3.10" and python_version < "3.13"
-multiprocess==0.70.16 ; python_version >= "3.10" and python_version < "3.13"
-networkx==3.4.2 ; python_version == "3.10"
-networkx==3.5 ; python_version >= "3.11" and python_version < "3.13"
-numpy==1.26.4 ; python_version >= "3.10" and python_version < "3.13"
-nvidia-cublas-cu12==12.8.4.1 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cuda-cupti-cu12==12.8.90 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cuda-nvrtc-cu12==12.8.93 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cuda-runtime-cu12==12.8.90 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cudnn-cu12==9.10.2.21 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cufft-cu12==11.3.3.83 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cufile-cu12==1.13.1.3 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-curand-cu12==10.3.9.90 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cusolver-cu12==11.7.3.90 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cusparse-cu12==12.5.8.93 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-cusparselt-cu12==0.7.1 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-nccl-cu12==2.27.3 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-nvjitlink-cu12==12.8.93 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-nvidia-nvtx-cu12==12.8.90 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-packaging==24.2 ; python_version >= "3.10" and python_version < "3.13"
-pandas==2.3.3 ; python_version >= "3.10" and python_version < "3.13"
-prometheus-client==0.23.1 ; python_version >= "3.10" and python_version < "3.13"
-propcache==0.4.0 ; python_version >= "3.10" and python_version < "3.13"
-psutil==7.1.0 ; python_version >= "3.10" and python_version < "3.13"
-pyarrow==21.0.0 ; python_version >= "3.10" and python_version < "3.13"
-pydantic-core==2.33.2 ; python_version >= "3.10" and python_version < "3.13"
-pydantic==2.11.10 ; python_version >= "3.10" and python_version < "3.13"
-python-dateutil==2.9.0.post0 ; python_version >= "3.10" and python_version < "3.13"
-python-engineio==4.12.3 ; python_version >= "3.10" and python_version < "3.13"
-python-socketio==5.14.1 ; python_version >= "3.10" and python_version < "3.13"
-pytz==2025.2 ; python_version >= "3.10" and python_version < "3.13"
-pyyaml==6.0.3 ; python_version >= "3.10" and python_version < "3.13"
-regex==2025.9.18 ; python_version >= "3.10" and python_version < "3.13"
-requests==2.32.5 ; python_version >= "3.10" and python_version < "3.13"
-safetensors==0.6.2 ; python_version >= "3.10" and python_version < "3.13"
-scikit-learn==1.7.2 ; python_version >= "3.10" and python_version < "3.13"
-scipy==1.15.3 ; python_version == "3.10"
-scipy==1.16.2 ; python_version >= "3.11" and python_version < "3.13"
-setuptools==80.9.0 ; python_version >= "3.10" and python_version < "3.13"
-simple-websocket==1.1.0 ; python_version >= "3.10" and python_version < "3.13"
-six==1.17.0 ; python_version >= "3.10" and python_version < "3.13"
-sniffio==1.3.1 ; python_version >= "3.10" and python_version < "3.13"
-starlette==0.48.0 ; python_version >= "3.10" and python_version < "3.13"
-sympy==1.14.0 ; python_version >= "3.10" and python_version < "3.13"
-threadpoolctl==3.6.0 ; python_version >= "3.10" and python_version < "3.13"
-tokenizers==0.22.1 ; python_version >= "3.10" and python_version < "3.13"
-torch==2.8.0 ; python_version >= "3.10" and python_version < "3.13"
-tqdm==4.67.1 ; python_version >= "3.10" and python_version < "3.13"
-transformers==4.56.0 ; python_version >= "3.10" and python_version < "3.13"
-triton==3.4.0 ; python_version >= "3.10" and python_version < "3.13" and platform_machine == "x86_64" and platform_system == "Linux"
-typing-extensions==4.15.0 ; python_version >= "3.10" and python_version < "3.13"
-typing-inspection==0.4.2 ; python_version >= "3.10" and python_version < "3.13"
-tzdata==2025.2 ; python_version >= "3.10" and python_version < "3.13"
-urllib3==2.5.0 ; python_version >= "3.10" and python_version < "3.13"
-uvicorn-worker==0.4.0 ; python_version >= "3.10" and python_version < "3.13"
-uvicorn==0.37.0 ; python_version >= "3.10" and python_version < "3.13"
-werkzeug==3.1.3 ; python_version >= "3.10" and python_version < "3.13"
-wrapt==1.17.3 ; python_version >= "3.10" and python_version < "3.13"
-wsproto==1.2.0 ; python_version >= "3.10" and python_version < "3.13"
-xxhash==3.6.0 ; python_version >= "3.10" and python_version < "3.13"
-yarl==1.22.0 ; python_version >= "3.10" and python_version < "3.13"
+"# This file was automatically generated on The current date is: Tue 12/02/2025  Enter the new date: (mm-dd-yy) , your edits will be replaced." 
+# This file was autogenerated by uv via the following command:
+#    uv export --no-hashes
+-e .
+accelerate==1.12.0
+    # via transformers
+aiohappyeyeballs==2.6.1
+    # via aiohttp
+aiohttp==3.13.2
+    # via fsspec
+aiosignal==1.4.0
+    # via aiohttp
+annotated-doc==0.0.4
+    # via fastapi
+annotated-types==0.7.0
+    # via pydantic
+anyio==4.12.0
+    # via
+    #   httpx
+    #   starlette
+async-timeout==5.0.1 ; python_full_version < '3.11'
+    # via aiohttp
+attrs==25.4.0
+    # via aiohttp
+certifi==2025.11.12
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
+charset-normalizer==3.4.4
+    # via requests
+click==8.3.1
+    # via uvicorn
+colorama==0.4.6 ; sys_platform == 'win32'
+    # via
+    #   click
+    #   tqdm
+datasets==4.4.1
+    # via granite-tsfm
+deprecated==1.3.1
+    # via granite-tsfm
+dill==0.4.0
+    # via
+    #   datasets
+    #   multiprocess
+exceptiongroup==1.3.1 ; python_full_version < '3.11'
+    # via anyio
+fastapi==0.123.4
+    # via tsfminference
+filelock==3.20.0
+    # via
+    #   datasets
+    #   huggingface-hub
+    #   torch
+    #   transformers
+    #   tsfminference
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+fsspec==2025.10.0
+    # via
+    #   datasets
+    #   huggingface-hub
+    #   torch
+granite-tsfm @ git+https://github.com/ibm-granite/granite-tsfm.git@27fbdae10842e8a473b5513da03087637105f0dc
+    # via tsfminference
+gunicorn==23.0.0
+    # via
+    #   tsfminference
+    #   uvicorn-worker
+h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
+hf-xet==1.2.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+    # via huggingface-hub
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via datasets
+huggingface-hub==0.36.0
+    # via
+    #   accelerate
+    #   datasets
+    #   tokenizers
+    #   transformers
+idna==3.11
+    # via
+    #   anyio
+    #   httpx
+    #   requests
+    #   yarl
+jinja2==3.1.6
+    # via torch
+joblib==1.5.2
+    # via scikit-learn
+markupsafe==3.0.3
+    # via jinja2
+mpmath==1.3.0
+    # via sympy
+multidict==6.7.0
+    # via
+    #   aiohttp
+    #   yarl
+multiprocess==0.70.18
+    # via datasets
+networkx==3.4.2 ; python_full_version < '3.11'
+    # via torch
+networkx==3.6 ; python_full_version >= '3.11'
+    # via torch
+numpy==2.2.6 ; python_full_version < '3.11'
+    # via
+    #   accelerate
+    #   datasets
+    #   granite-tsfm
+    #   pandas
+    #   scikit-learn
+    #   scipy
+    #   transformers
+numpy==2.3.5 ; python_full_version >= '3.11'
+    # via
+    #   accelerate
+    #   datasets
+    #   granite-tsfm
+    #   pandas
+    #   scikit-learn
+    #   scipy
+    #   transformers
+nvidia-cublas-cu12==12.8.4.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via
+    #   nvidia-cudnn-cu12
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cuda-cupti-cu12==12.8.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cuda-nvrtc-cu12==12.8.93 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cuda-runtime-cu12==12.8.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cudnn-cu12==9.10.2.21 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cufft-cu12==11.3.3.83 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cufile-cu12==1.13.1.3 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-curand-cu12==10.3.9.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cusolver-cu12==11.7.3.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-cusparse-cu12==12.5.8.93 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cusparselt-cu12==0.7.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-nccl-cu12==2.27.3 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+nvidia-nvjitlink-cu12==12.8.93 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via
+    #   nvidia-cufft-cu12
+    #   nvidia-cusolver-cu12
+    #   nvidia-cusparse-cu12
+    #   torch
+nvidia-nvtx-cu12==12.8.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+packaging==25.0
+    # via
+    #   accelerate
+    #   datasets
+    #   gunicorn
+    #   huggingface-hub
+    #   transformers
+pandas==2.3.3
+    # via
+    #   datasets
+    #   granite-tsfm
+prometheus-client==0.23.1
+    # via tsfminference
+propcache==0.4.1
+    # via
+    #   aiohttp
+    #   yarl
+psutil==7.1.3
+    # via
+    #   accelerate
+    #   tsfminference
+pyarrow==22.0.0
+    # via datasets
+pydantic==2.12.5
+    # via
+    #   fastapi
+    #   tsfminference
+pydantic-core==2.41.5
+    # via pydantic
+python-dateutil==2.9.0.post0
+    # via pandas
+pytz==2025.2
+    # via pandas
+pyyaml==6.0.3
+    # via
+    #   accelerate
+    #   datasets
+    #   huggingface-hub
+    #   transformers
+regex==2025.11.3
+    # via transformers
+requests==2.32.4
+    # via
+    #   datasets
+    #   huggingface-hub
+    #   transformers
+safetensors==0.7.0
+    # via
+    #   accelerate
+    #   transformers
+scikit-learn==1.7.2
+    # via granite-tsfm
+scipy==1.15.3 ; python_full_version < '3.11'
+    # via scikit-learn
+scipy==1.16.3 ; python_full_version >= '3.11'
+    # via scikit-learn
+setuptools==80.9.0 ; (python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via
+    #   torch
+    #   triton
+six==1.17.0
+    # via python-dateutil
+starlette==0.50.0
+    # via fastapi
+sympy==1.14.0
+    # via torch
+threadpoolctl==3.6.0
+    # via scikit-learn
+tokenizers==0.22.1
+    # via transformers
+torch==2.8.0
+    # via
+    #   accelerate
+    #   granite-tsfm
+    #   transformers
+tqdm==4.67.1
+    # via
+    #   datasets
+    #   huggingface-hub
+    #   transformers
+transformers==4.56.0
+    # via granite-tsfm
+triton==3.4.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    # via torch
+typing-extensions==4.15.0
+    # via
+    #   aiosignal
+    #   anyio
+    #   exceptiongroup
+    #   fastapi
+    #   huggingface-hub
+    #   multidict
+    #   pydantic
+    #   pydantic-core
+    #   starlette
+    #   torch
+    #   typing-inspection
+    #   uvicorn
+typing-inspection==0.4.2
+    # via pydantic
+tzdata==2025.2
+    # via pandas
+urllib3==2.5.0
+    # via
+    #   granite-tsfm
+    #   requests
+uvicorn==0.38.0
+    # via uvicorn-worker
+uvicorn-worker==0.4.0
+    # via tsfminference
+wrapt==2.0.1
+    # via deprecated
+xxhash==3.6.0
+    # via datasets
+yarl==1.22.0
+    # via aiohttp
