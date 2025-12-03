@@ -2,7 +2,6 @@
 name = "tsfminference"
 version = "0.0.0"
 description = "Service layer for TSFM granite models."
-license-files = ["LICENSE"]
 authors = [
   { name = "IBM" }
 ]
@@ -15,11 +14,11 @@ dependencies = [
   "uvicorn-worker",
   "prometheus_client",
   "psutil",
-  "granite-tsfm"
-]
+  "granite-tsfm",
+  ]
 
 [tool.uv.sources]
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "uv" }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
 
 [project.optional-dependencies]
 dev = [
@@ -28,6 +27,10 @@ dev = [
   "locust-plugins",
   "inotify",
   "pytest-coverage",
+]
+
+torch-cpu = [
+  "torch"
 ]
 
 sagemaker = [
@@ -41,3 +44,5 @@ include = ["tsfminference"]
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+
