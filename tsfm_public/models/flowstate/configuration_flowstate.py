@@ -154,6 +154,11 @@ class FlowStateConfig(PretrainedConfig):
         if not hasattr(self, "quantiles") or min(self.quantiles) < 0.0 or max(self.quantiles) > 1.0:
             raise ValueError("The values of quantiles must be provided and between [0, 1]")
 
-        if not hasattr(self, "prediction_type") and self.prediction_type not in ["quantile", "mean", "median"]:
-            raise ValueError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+        if self.prediction_type == "quantile":
+            logger.warn(
+                "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
+            )
+            self.prediction_type = "mean"
 
+        if not hasattr(self, "prediction_type") or self.prediction_type not in ["mean", "median"]:
+            raise ValueError("Unknown prediction_type detected. Should be one of ['mean', 'median']")
