@@ -93,7 +93,7 @@ class FlowStateConfig(PretrainedConfig):
         decoder_type: str = "legs",
         # Loss function / Prediction
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        prediction_type: str = "quantile",
+        prediction_type: str = "mean",
         **kwargs,
     ):
         self.init_processing = False
@@ -156,3 +156,4 @@ class FlowStateConfig(PretrainedConfig):
 
         if not hasattr(self, "prediction_type") and self.prediction_type not in ["quantile", "mean", "median"]:
             raise ValueError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+

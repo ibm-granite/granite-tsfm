@@ -42,7 +42,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
             decoder_type="legs",
             # Loss function / Prediction
             quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-            prediction_type="quantile",
+            prediction_type="mean",
             num_input_channels=1,
         )
 
@@ -1176,6 +1176,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 backbone_hidden_state=output[2],
                 decoder_hidden_state=output[3],
                 hidden_states=output[4],
+                quantile_outputs=output[5],
             )
         elif not config.return_dict and task == "model":
             output = FlowStateModelOutput(
@@ -1199,7 +1200,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
         ]
 
         if task == "forecast":
-            compare(output.prediction_outputs, target_output, msg="The final output does not match!")
+            compare(output.quantile_outputs, target_output, msg="The final output does not match!")
             self.assertEqual(output.loss, None)
         elif task == "model":
             compare(output.last_hidden_state, target_output, msg="The final output does not match!")
