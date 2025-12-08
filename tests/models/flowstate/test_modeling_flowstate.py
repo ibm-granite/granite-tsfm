@@ -1186,10 +1186,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 decoder_hidden_state=model_output[5],
             )
             
-        try:
-            self.compare_outputs(input_data, model_output, target_output, task, check_values)
-        except:
-            print('aaa')
+        self.compare_outputs(input_data, model_output, target_output, task, check_values)
 
     def _compare(self, value1, value2, check_values, msg=""):
         if not check_values:
@@ -1239,9 +1236,11 @@ class FlowStateFunctionalTests(unittest.TestCase):
         ]
     )
     def test_checkshapesandvalues(self, batch_first, task, return_dict, check_values):
+        device = 'cpu'
+        
         input_data = (
             self.__class__.constant_data if batch_first else torch.transpose(self.__class__.constant_data, 1, 0)
-        )
+        ).to(device)
 
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
@@ -1272,16 +1271,18 @@ class FlowStateFunctionalTests(unittest.TestCase):
         ]
     )
     def test_hfmodel(self, batch_first, task, return_dict, check_values):
+        device = 'cpu'
+        
         input_data = (
             self.__class__.constant_data if batch_first else torch.transpose(self.__class__.constant_data, 1, 0)
-        )
+        ).to(device)
 
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
 
         config = FlowStateConfig.from_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hf_granite-flowstate-r1_config.json'))
         config.batch_first = batch_first
-        model = FlowStateForPrediction(copy.deepcopy(config))
+        model = FlowStateForPrediction(copy.deepcopy(config)).to(device)
 
         if task == "forecast":
             target_output = torch.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), f'hf_granite_FlowStateForPrediction_batch_size-{batch_first}_return_dict-{return_dict}.pkl'), weights_only=False)
