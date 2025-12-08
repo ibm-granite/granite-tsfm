@@ -2,8 +2,9 @@
 #
 """Testing suite for the PyTorch FlowState model."""
 
-# import torchinfo
+import copy
 import unittest
+import os
 
 import torch
 from parameterized import parameterized
@@ -1127,23 +1128,25 @@ class FlowStateFunctionalTests(unittest.TestCase):
             input_data = self.__class__.constant_data
         config = FlowStateConfig(**params)
 
+        target_output = {}
+
         if task == "forecast":
             mdl = FlowStateForPrediction(config)
 
-            target_output = self.__class__.correct_forecast_output
-            enc_output_hidden_states = self.__class__.enc_output_forprediction_hidden_states
-            enc_output_last_hidden_state = self.__class__.enc_output_forprediction_last_hidden_state
-            dec_output_last_hidden_state = self.__class__.dec_output_forprediction_last_hidden_state
-            dec_output_hidden_states = self.__class__.dec_output_forprediction_hidden_states
+            target_output['target_output'] = self.__class__.correct_forecast_output
+            target_output['enc_output_hidden_states'] = self.__class__.enc_output_forprediction_hidden_states
+            target_output['enc_output_last_hidden_state'] = self.__class__.enc_output_forprediction_last_hidden_state
+            target_output['dec_output_last_hidden_state'] = self.__class__.dec_output_forprediction_last_hidden_state
+            target_output['dec_output_hidden_states'] = self.__class__.dec_output_forprediction_hidden_states
 
         elif task == "model":
             mdl = FlowStateModel(config)
 
-            target_output = self.__class__.correct_pred_output
-            enc_output_hidden_states = self.__class__.enc_output_hidden_states
-            enc_output_last_hidden_state = self.__class__.enc_output_last_hidden_state
-            dec_output_last_hidden_state = self.__class__.dec_output_last_hidden_state
-            dec_output_hidden_states = self.__class__.dec_output_hidden_states
+            target_output['target_output'] = self.__class__.correct_pred_output
+            target_output['enc_output_hidden_states'] = self.__class__.enc_output_hidden_states
+            target_output['enc_output_last_hidden_state'] = self.__class__.enc_output_last_hidden_state
+            target_output['dec_output_last_hidden_state'] = self.__class__.dec_output_last_hidden_state
+            target_output['dec_output_hidden_states'] = self.__class__.dec_output_hidden_states
         else:
             raise ValueError(f"Unknown task {task}")
 
@@ -1164,13 +1167,8 @@ class FlowStateFunctionalTests(unittest.TestCase):
         else:
             pass
 
-        def compare(value1, value2, msg=""):
-            if not check_values:
-                value1, value2 = value1.shape, value2.shape
-            torch.testing.assert_close(value1, value2, rtol=TOLERANCE, atol=TOLERANCE, msg=msg)
-
         if not config.return_dict and task == "forecast":
-            output = FlowStateForPredictionOutput(
+            model_output = FlowStateForPredictionOutput(
                 loss=output[0],
                 prediction_outputs=output[1],  # tensor [batch_size x prediction_length x num_input_channels]
                 backbone_hidden_state=output[2],
@@ -1179,7 +1177,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 quantile_outputs=output[5],
             )
         elif not config.return_dict and task == "model":
-            output = FlowStateModelOutput(
+            model_output = FlowStateModelOutput(
                 last_hidden_state=output[0],
                 hidden_states=output[1],
                 embedded_input=output[2],
@@ -1187,26 +1185,34 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 backbone_hidden_state=output[4],
                 decoder_hidden_state=output[5],
             )
+            
+        self.compare_outputs(input_data, model_output, target_output, task, check_values)
 
-        compare(output.backbone_hidden_state, enc_output_last_hidden_state, msg="The encoder outputs do not match!")
-        compare(output.decoder_hidden_state, dec_output_last_hidden_state, msg="The decoder outputs do not match!")
+    def _compare(self, value1, value2, check_values, msg=""):
+        if not check_values:
+            value1, value2 = value1.shape, value2.shape
+        torch.testing.assert_close(value1, value2, rtol=TOLERANCE, atol=TOLERANCE, msg=msg)
+
+    def compare_outputs(self, input_data, model_output, target_output, task, check_values):
+        self._compare(model_output.backbone_hidden_state, target_output['enc_output_last_hidden_state'], check_values, msg="The encoder outputs do not match!")
+        self._compare(model_output.decoder_hidden_state, target_output['dec_output_last_hidden_state'], check_values, msg="The decoder outputs do not match!")
         [
-            compare(out, tar, msg="The hidden states of the encoder are different!")
-            for out, tar in zip(output.hidden_states[:-1], enc_output_hidden_states)
+            self._compare(out, tar, check_values, msg="The hidden states of the encoder are different!")
+            for out, tar in zip(model_output.hidden_states[:-1], target_output['enc_output_hidden_states'])
         ]
         [
-            compare(out, tar, msg="The hidden states of the decoder are different!")
-            for out, tar in zip(output.hidden_states[-1:], dec_output_hidden_states)
+            self._compare(out, tar, check_values, msg="The hidden states of the decoder are different!")
+            for out, tar in zip(model_output.hidden_states[-1:], target_output['dec_output_hidden_states'])
         ]
 
         if task == "forecast":
-            compare(output.quantile_outputs, target_output, msg="The final output does not match!")
-            self.assertEqual(output.loss, None)
+            self._compare(model_output.quantile_outputs, target_output['target_output'], check_values, msg="The final output does not match!")
+            self.assertEqual(model_output.loss, None)
         elif task == "model":
-            compare(output.last_hidden_state, target_output, msg="The final output does not match!")
-            compare(output.embedded_input, input_data, msg="The input of the embedding does not match!")
-            compare(
-                output.embedded_output, self.__class__.embed_output, msg="The output of the embedding does not match!"
+            self._compare(model_output.last_hidden_state, target_output['target_output'], check_values, msg="The final output does not match!")
+            self._compare(model_output.embedded_input, input_data, check_values, msg="The input of the embedding does not match!")
+            self._compare(
+                model_output.embedded_output, self.__class__.embed_output, check_values, msg="The output of the embedding does not match!"
             )
 
     @parameterized.expand(
@@ -1241,3 +1247,71 @@ class FlowStateFunctionalTests(unittest.TestCase):
         params.update(return_dict=return_dict, batch_first=batch_first)
 
         self.check_module(task=task, params=params, input_data=input_data, check_values=check_values)
+        
+    @parameterized.expand(
+        [
+            [True, "forecast", True, False],
+            [False, "forecast", True, False],
+            [True, "model", True, False],
+            [False, "model", True, False],
+            [True, "forecast", False, False],
+            [False, "forecast", False, False],
+            [True, "model", False, False],
+            [False, "model", False, False],
+            [True, "forecast", True, True],
+            [False, "forecast", True, True],
+            [True, "model", True, True],
+            [False, "model", True, True],
+            [True, "forecast", False, True],
+            [False, "forecast", False, True],
+            [True, "model", False, True],
+            [False, "model", False, True],
+        ]
+    )
+    def test_hfmodel(self, batch_first, task, return_dict, check_values):
+        input_data = (
+            self.__class__.constant_data if batch_first else torch.transpose(self.__class__.constant_data, 1, 0)
+        )
+
+        torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+
+        config = FlowStateConfig.from_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hf_granite-flowstate-r1_config.json'))
+        config.batch_first = batch_first
+        model = FlowStateForPrediction(copy.deepcopy(config))
+
+        if task == "forecast":
+            target_output = torch.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), f'hf_granite_FlowStateForPrediction_batch_size-{batch_first}_return_dict-{return_dict}.pkl'), weights_only=False)
+        if task == "model":
+            model = model.model
+            target_output = torch.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), f'hf_granite_FlowStateModel_batch_size-{batch_first}_return_dict-{return_dict}.pkl'), weights_only=False)
+
+        model_output = model(input_data, return_dict=return_dict)
+
+        if not return_dict:
+            for ind in range(len(model_output) - 1):
+                if target_output[ind] is not None:
+                    if type(model_output[ind]) == list:
+                        for sub_ind, (out, tar) in enumerate(zip(model_output[ind], target_output[ind])):
+                            self._compare(out, tar, check_values, msg=f"The values of the model outputs and the target outputs at index {ind}, subindex {sub_ind} do not match!")
+                    else:
+                        model_ind = ind
+                        if ind == 1:
+                            model_ind = -1
+                        self._compare(model_output[model_ind], target_output[ind], check_values, msg=f"The values of the model outputs and the target outputs at index {ind} do not match!")
+
+        else:
+            for key in model_output.keys():
+                if key == 'prediction_outputs' and config.prediction_type == 'quantile':
+                    # In case of an old config where the prediction type `quantile` was used, 
+                    # compare the `quantile_outputs` to the the `prediction_outputs` instead
+                    self._compare(model_output['quantile_outputs'], target_output[key], check_values, msg=f"The values of the model outputs and the target outputs for {key} do not match!")
+                    continue
+                if key == 'quantile_outputs':
+                    continue
+                
+                if type(model_output[key]) == list:
+                    for ind, (out, tar) in enumerate(zip(model_output[key], target_output[key])):
+                        self._compare(out, tar, check_values, msg=f"The values at index {ind} of the model outputs and the target outputs for {key} do not match!")
+                else:
+                    self._compare(model_output[key], target_output[key], check_values, msg=f"The values of the model outputs and the target outputs for {key} do not match!")

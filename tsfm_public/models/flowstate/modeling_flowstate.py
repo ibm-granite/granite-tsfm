@@ -776,7 +776,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             ix = self.config.quantiles.index(0.5)
             return quantiles[:, ix, :]
         else:
-            raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+            raise RuntimeError(f"Unknown prediction_type detected. Should be one of ['mean', 'median'], but found {prediction_type}")
 
     @add_start_docstrings_to_model_forward(FLOWSTATE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlowStateForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -836,6 +836,12 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             prediction_length = self.config.prediction_length
         if prediction_type is None:
             prediction_type = self.config.prediction_type
+            
+            # In case of an older config where the quantile prediction was not always part of the `FlowStateForPredictionOutput`
+            # and prediction_type == 'quantile', fallback to a mean prediction, as the quantiles are now always part of the 
+            # `FlowStateForPredictionOutput`
+            if prediction_type == 'quantile':
+                prediction_type = 'mean'
 
         if past_values.dim() != 3:
             raise ValueError(

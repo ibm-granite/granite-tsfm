@@ -148,12 +148,16 @@ class FlowStateConfig(PretrainedConfig):
         if not hasattr(self, "decoder_dim") or self.decoder_dim <= 0:
             raise ValueError("decoder_dim must be provided and positive")
         if not hasattr(self, "decoder_type") or self.decoder_type not in ["legs", "hlegs", "four"]:
-            raise ValueError("decoder_type must be provided and one of `['legs', 'hlegs', 'four']`")
+            raise ValueError(f"decoder_type must be provided and one of `['legs', 'hlegs', 'four']`, but found {self.decoder_type}")
 
         # Check loss paramter
         if not hasattr(self, "quantiles") or min(self.quantiles) < 0.0 or max(self.quantiles) > 1.0:
             raise ValueError("The values of quantiles must be provided and between [0, 1]")
 
         if not hasattr(self, "prediction_type") and self.prediction_type not in ["quantile", "mean", "median"]:
-            raise ValueError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+            raise ValueError(f"Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median'], but found {self.prediction_type}")
+        elif hasattr(self, "prediction_type") and self.prediction_type == 'quantile':
+            # In order to support older configs with prediction_type == 'quantile', 
+            # fallback to a mean prediction, as the quantiles are now always part of the `FlowStateForPredictionOutput`
+            self.prediction_type = 'mean'
 
