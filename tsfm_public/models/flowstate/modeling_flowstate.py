@@ -762,7 +762,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             pred = torch.cat((pred, rest[:, :, -(pred_len - pred.shape[2]) :]), dim=2)
         pred = pred[:, :, :pred_len]
         return pred
-    
+
     def _transform_quantiles_to(self, quantiles, prediction_type):
         if prediction_type == "mean":
             # calculate an approximate mean from quantiles
@@ -776,7 +776,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             ix = self.config.quantiles.index(0.5)
             return quantiles[:, ix, :]
         else:
-            raise RuntimeError(f"Unknown prediction_type detected. Should be one of ['mean', 'median'], but found {prediction_type}")
+            raise RuntimeError(f"Unknown `prediction_type` detected. Should be one of ['mean', 'median'], but found {prediction_type}")
 
     @add_start_docstrings_to_model_forward(FLOWSTATE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlowStateForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -841,6 +841,9 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             # and prediction_type == 'quantile', fallback to a mean prediction, as the quantiles are now always part of the 
             # `FlowStateForPredictionOutput`
             if prediction_type == 'quantile':
+                logger.warning(
+                    "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
+                )
                 prediction_type = 'mean'
 
         if past_values.dim() != 3:
