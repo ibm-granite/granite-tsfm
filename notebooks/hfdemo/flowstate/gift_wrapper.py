@@ -27,8 +27,6 @@ class FlowState_Gift_Wrapper:
         self.prediction_length = prediction_length
         self.f = f
         self.pretrain_context = cfg["context_length"]
-        if cfg["prediction_type"] != "quantile":
-            raise ValueError("Only quantile loss is supported.")
         self.quantiles = cfg["quantiles"]
 
         self.replace_nan = False
@@ -118,7 +116,7 @@ class FlowState_Gift_Wrapper:
                 scale_factor=self.scale_factor,
                 prediction_length=self.prediction_length,
                 batch_first=False,
-            ).prediction_outputs
+            ).quantile_outputs
             pred = pred.squeeze(-1).transpose(-1, -2)  # pred has shape: batch, forecast_len, quantiles
             preds.extend(self.forecasts_from_batch(pred[:, : self.prediction_length].cpu()))
         # reorder back to original order

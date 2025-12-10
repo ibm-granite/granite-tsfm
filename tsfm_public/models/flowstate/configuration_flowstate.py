@@ -148,14 +148,14 @@ class FlowStateConfig(PretrainedConfig):
         if not hasattr(self, "decoder_dim") or self.decoder_dim <= 0:
             raise ValueError("decoder_dim must be provided and positive")
         if not hasattr(self, "decoder_type") or self.decoder_type not in ["legs", "hlegs", "four"]:
-            raise ValueError("decoder_type must be provided and one of `['legs', 'hlegs', 'four']`")
+            raise ValueError(f"decoder_type must be provided and one of `['legs', 'hlegs', 'four']`, but found {self.decoder_type}")
 
         # Check loss paramter
         if not hasattr(self, "quantiles") or min(self.quantiles) < 0.0 or max(self.quantiles) > 1.0:
             raise ValueError("The values of quantiles must be provided and between [0, 1]")
 
         if self.prediction_type == "quantile":
-            logger.warn(
+            logger.warning(
                 "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
             )
             self.prediction_type = "mean"
