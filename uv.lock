@@ -1312,6 +1312,7 @@ requires-dist = [
     { name = "pytest-coverage", marker = "extra == 'testing'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.5.7" },
     { name = "scikit-learn" },
+    { name = "scikit-learn", specifier = "<1.8" },
     { name = "streamlit", marker = "extra == 'demos'" },
     { name = "streamlit-aggrid", marker = "extra == 'demos'" },
     { name = "tensorboard", marker = "extra == 'notebooks'" },
