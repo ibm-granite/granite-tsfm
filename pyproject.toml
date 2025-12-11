@@ -24,6 +24,7 @@ dependencies = [
     "urllib3>=1.26.19",
     "numpy<3",
     "torch<2.9",
+    "scikit-learn<1.8"
 ]
 
 [tool.setuptools]
