@@ -14,8 +14,8 @@ boilerplate:
 		done
 
 create_prometheus_metrics_dir:
-	rm -rf prometheus_metrics > /dev/null 2>&1 || true
-	mkdir -m go+rwX prometheus_metrics || true
+	rm -rf prometheus_metrics > /dev/null 2>&1 | true
+	mkdir -m go+rwX prometheus_metrics
 
 # starts the tsfminference service (used mainly for test cases)
 start_service_local_watch: create_prometheus_metrics_dir boilerplate
@@ -47,13 +47,11 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-    # we insert the torch cpu index to avoid having to instal
-    # all the nvidia-cuda packages
-	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
-	uv lock -U --index-strategy unsafe-best-match
+    # update the torch dependency to use the cpu-only whl
+    # this makes the cpu image about 4GB smaller
+	@uv lock --index-strategy unsafe-best-match -P torch --index https://download.pytorch.org/whl/cpu
 
 remove-torch-cpu-index:
-	git checkout uv.lock pyproject.toml
 	git checkout uv.lock
 
 image: insert-torch-cpu-index boilerplate
@@ -74,28 +72,28 @@ start_service_image: create_prometheus_metrics_dir
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
-		--name tsfmserver-cpu \
-        -e TSFM_MODEL_DIR=/mytest-tsfm \
+		--name tsfminferenceserver-cpu \
+        -e TSFM_MODEL_DIR=/home/tsfm/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
-        -v ./mytest-tsfm:/mytest-tsfm \
 		-v ./prometheus_metrics:/prometheus_metrics \
         tsfminference-cpu python \
 		 -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
 	sleep 5
+	$(CONTAINER_BUILDER) cp mytest-tsfm tsfminferenceserver-cpu:/home/tsfm
 
 stop_service_image:
-	$(CONTAINER_BUILDER) stop tsfmserver-cpu
+	$(CONTAINER_BUILDER) stop tsfminferenceserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
-	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
+	uv run --locked pytest --cov=tsfminference --cov-report term-missing tests ../tests
 	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_local || true
 	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
-	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
+	uv run --locked --index-strategy unsafe-best-match pytest tests ../tests
 	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_image || true
@@ -113,7 +111,7 @@ clone_models:
 update_examples:
 # our sagemaker stuff
 	echo "# This file was automatically generated on $(shell date), your edits will be replaced." > examples/aws/sagemaker/tsfm_custom/code/requirements.txt
-	uv export --omit-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
+	uv export --no-hashes >> examples/aws/sagemaker/tsfm_custom/code/requirements.txt
 
 profile_inference: clone_models
 	TSFM_TESTS_AS_PROFILER=1 \
