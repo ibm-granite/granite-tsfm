@@ -1,4 +1,4 @@
-CONTAINER_BUILDER ?= docker
+CONTAINER_BUILDER ?= podman
 SKIP_GPU_BUILD ?= "0"
 NO_DOCKER_CACHE ?=
 EXTRA_DOCKER_BUILD_ARGS ?= --format docker --network host
@@ -37,7 +37,10 @@ start_service_local:
 stop_service_local:
 	pkill  -f '.*python.*gunicorn.*tsfminference\.main\:app' || true
 
-FILES = pyproject.toml uv.lock
+imagehardening:
+	cp -avr ../../NGP-runbook/ImageHardening .
+
+FILES = uv.lock
 .PHONY: check-clean
 check-clean:
 	@echo "Checking for uncommitted changes in: $(FILES)"
@@ -50,13 +53,11 @@ check-clean:
 	done
 
 insert-torch-cpu-index: check-clean
-    # we insert the torch cpu index to avoid having to instal
-    # all the nvidia-cuda packages
-	printf '%s\n' '[[tool.uv.index]]' 'name = "pytorch-cpu"' 'url = "https://download.pytorch.org/whl/cpu"' >> pyproject.toml; \
-	uv lock -U --index-strategy unsafe-best-match
+    # update the torch dependency to use the cpu-only whl
+    # this makes the cpu image about 4GB smaller
+	@uv lock --index-strategy unsafe-best-match -P torch --index https://download.pytorch.org/whl/cpu
 
 remove-torch-cpu-index:
-	git checkout uv.lock pyproject.toml
 	git checkout uv.lock
 
 image: insert-torch-cpu-index boilerplate imagehardening
@@ -77,28 +78,29 @@ start_service_image: create_prometheus_metrics_dir
 	$(CONTAINER_BUILDER) run -p 8000:8000 \
 		-d \
 		--rm \
-		--name tsfmserver-cpu \
-        -e TSFM_MODEL_DIR=/mytest-tsfm \
+		--name tsfminferenceserver-cpu \
+        -e TSFM_MODEL_DIR=/home/tsfm/mytest-tsfm \
         -e TSFM_ALLOW_LOAD_FROM_HF_HUB=1 \
 		-e PROMETHEUS_MULTIPROC_DIR=/prometheus_metrics \
-        -v ./mytest-tsfm:/mytest-tsfm \
 		-v ./prometheus_metrics:/prometheus_metrics \
         tsfminference-cpu python \
 		 -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 tsfminference.main:app
 	sleep 5
+	$(CONTAINER_BUILDER) cp mytest-tsfm tsfminferenceserver-cpu:/home/tsfm
 
 stop_service_image:
-	$(CONTAINER_BUILDER) stop tsfmserver-cpu
+	$(CONTAINER_BUILDER) stop tsfminferenceserver-cpu
 
-test_local: clone_models boilerplate stop_service_local start_service_local
-	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
+test_local: clone_models boilerplate stop_service_local start_service_local insert-torch-cpu-index
+	uv sync --extra dev
+	uv run --locked pytest --cov=tsfminference --cov-report term-missing tests ../tests
 	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_local || true
 	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
-	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
+	uv run --locked --index-strategy unsafe-best-match pytest tests ../tests
 	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_image || true
@@ -126,6 +128,8 @@ profile_inference: clone_models
 	gprof2dot -f pstats profile.out | dot -Tpng -o profile_tree.png
 	echo "generated profile_tree.png"
 
-
 imagehardening:
 	cp -avr ../../NGP-runbook/ImageHardening .
+grype:
+	podman system service --time=0 unix:///tmp/podman.sock &
+	$(CONTAINER_BUILDER) run --rm -it -v /tmp/podman.sock:/var/run/docker.sock --name Grype docker.io/anchore/grype:latest tsfminference-cpu:latest

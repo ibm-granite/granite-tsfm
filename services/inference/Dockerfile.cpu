@@ -47,11 +47,14 @@ COPY --chown=tsfm:tsfm --chmod=755 pyproject.toml uv.lock ${HOME}
 
 WORKDIR ${HOME}
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+RUN curl -LsSf https://astral.sh/uv/0.9.13/install.sh| sh \
     && uv sync --locked --index-strategy unsafe-best-match \
+    && uv pip list | grep torch | grep -q cpu \
     && uv cache clean \
     && rm -rf ${HOME}/.cache \
-    && mkdir ${HOME}/prometheus_metrics
+    && mkdir ${HOME}/prometheus_metrics \
+    && rm ${HOME}/pyproject.toml \
+    && rm ${HOME}/uv.lock
 
 ENV PATH=${HOME}/.venv/bin:${PATH}
 

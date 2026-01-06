@@ -18,9 +18,10 @@ dependencies = [
 [tool.uv.sources]
 granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
 
-
 [project.optional-dependencies]
 dev = ["pytest", "locust", "locust-plugins", "inotify", "pytest-coverage"]
+
+torch-cpu = ["torch"]
 
 sagemaker = ["sagemaker", "boto3"]
 
