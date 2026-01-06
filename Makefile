@@ -16,3 +16,11 @@ style:
 	ruff check $(check_dirs) --fix 
 	ruff format $(check_dirs)
 
+# update uv lock files
+# for cve compliance
+update_lock_files:
+	uv lock -U
+	uv lock --directory services/inference -U
+	uv lock --directory services/finetuning -U
+	uv run --directory services/inference make update_examples
+
