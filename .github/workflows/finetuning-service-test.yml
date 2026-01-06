@@ -29,7 +29,6 @@ jobs:
     - name: Install deps into a virtual enviroment
       run: |
         curl -LsSf https://astral.sh/uv/0.9.13/install.sh| sh
-        $HOME/.local/bin/uv sync --locked --directory=services/finetuning --extra dev --editable
     # for now we're not really using the image
     # for much, we just want to make sure
     # that it continues to build until we
@@ -43,5 +42,5 @@ jobs:
     #    make image
     - name: test local
       run: |
-        $HOME/.local/bin/uv run --locked --directory=services/finetuning  make test_local
+        $HOME/.local/bin/uv run --locked --directory=services/finetuning --extra dev --editable make test_local
         

@@ -11,6 +11,11 @@ boilerplate:
 		cat $$f>>tsfmfinetuning/$$(basename $$f); \
 		if ! grep $$(basename $$f) tsfmfinetuning/.gitignore; then echo $$(basename $$f) >> tsfmfinetuning/.gitignore; fi \
 		done
+# undoes boilerplate, used for workflow configuration purposes
+deboilerplate:
+	for f in ../boilerplate/*.py; do \
+		rm -v tsfmfinetuning/$$(basename $$f); \
+		done
 
 image: boilerplate
         # build our base inference images first
@@ -30,7 +35,7 @@ fetchdata:
 	rm -rf data || true
 	uv run --locked python tests/fetchdata.py
 
-test_local: clone_models fetchdata boilerplate
+test_local: boilerplate clone_models fetchdata 
 	uv run --locked pytest tests
 
 install_dev: boilerplate
