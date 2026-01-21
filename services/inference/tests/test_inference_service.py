@@ -5,7 +5,6 @@ import logging
 import os
 import random
 import tempfile
-import time
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -89,14 +88,7 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
     if dumpfile:
         json.dump(msg, fp=open(dumpfile, "w"), indent=4)
 
-    req = None
-    for attempt in range(3):
-        print(f"attempt {attempt}")
-        req = requests.post(URL, json=msg, headers=headers)
-        if req and req.ok:
-            break
-        time.sleep(1)
-
+    req = requests.post(URL, json=msg, headers=headers)
     #
     if req.ok:
         resp = req.json()
@@ -362,7 +354,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            "prediction_length": params["prediction_length"] // 4,
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -375,9 +367,9 @@ def test_zero_shot_forecast_inference(ts_data):
 
     df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length // 4
+    assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"])
-    assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"])
 
     # single series
     # error wrong prediction length
@@ -406,7 +398,7 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            "prediction_length": params["prediction_length"] // 4,
+            "prediction_length": params["prediction_length"],
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
@@ -419,9 +411,9 @@ def test_zero_shot_forecast_inference(ts_data):
 
     df_out, counts = get_inference_response(msg)
     assert len(df_out) == 1
-    assert df_out[0].shape[0] == prediction_length // 4
+    assert df_out[0].shape[0] == prediction_length
     assert counts["input_data_points"] == context_length * len(params["target_columns"][1:])
-    assert counts["output_data_points"] == (prediction_length // 4) * len(params["target_columns"][1:])
+    assert counts["output_data_points"] == prediction_length * len(params["target_columns"][1:])
 
 
 @pytest.mark.parametrize("ts_data", ["ttm-r2-etth-finetuned-control"], indirect=True)
