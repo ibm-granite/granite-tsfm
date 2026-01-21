@@ -24,7 +24,8 @@ dependencies = [
     "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
     "torch<2.9",
-    "scikit-learn<1.8"
+    "scikit-learn<1.8",
+    "pandas<3"
 ]
 
 [tool.setuptools]
