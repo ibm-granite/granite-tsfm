@@ -1324,7 +1324,7 @@ def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
         Dict[str, Any]: _description_
     """
     if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
-        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
+        df.loc[:, "timestamp_column"] = df["timestamp_column"].apply(lambda x: x.isoformat())
     data_payload = df.to_dict(orient="list")
 
     for k, v in data_payload.items():

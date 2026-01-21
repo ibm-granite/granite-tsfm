@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import tempfile
+import time
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
@@ -87,7 +88,14 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
     headers = {}
     if dumpfile:
         json.dump(msg, fp=open(dumpfile, "w"), indent=4)
-    req = requests.post(URL, json=msg, headers=headers)
+
+    req = None
+    for attempt in range(3):
+        print(f"attempt {attempt}")
+        req = requests.post(URL, json=msg, headers=headers)
+        if req and req.ok:
+            break
+        time.sleep(1)
 
     #
     if req.ok:
@@ -97,6 +105,7 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
         return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
         logger.error("Request failed with status code %s: %s", req.status_code, req.text)
+        print(f"Request failed with status code {req.status_code}: {req.text}")
         return None, req
 
 
