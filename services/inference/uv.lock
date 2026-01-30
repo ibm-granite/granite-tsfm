@@ -983,8 +983,8 @@ wheels = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.4.dev7+gdcd3d486e"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3#dcd3d486e2b7779c70dc8c07651d00de90a3a9dc" }
+version = "0.3.4.dev10+g541db1c7e"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3#541db1c7e4a376bef86f9e8820e0ef7046f413ae" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
