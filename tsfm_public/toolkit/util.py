@@ -1035,7 +1035,7 @@ def convert_tsfile_to_dataframe(
         elif metadata_started and data_started and len(instance_list) == 0:
             raise IOError("file contained metadata but no data")
         # Create a DataFrame from the data parsed above
-        data = pd.DataFrame(dtype=np.float32)
+        data = pd.DataFrame()
         for dim in range(0, num_dimensions):
             data["dim_" + str(dim)] = instance_list[dim]
         # Check if we should return any associated class labels separately
@@ -1183,7 +1183,7 @@ def convert_tsf(filename: str) -> pd.DataFrame:
         )
 
     df = pd.concat(dfs)
-    df.reset_index(inplace=True, drop=True)
+    df = df.reset_index(drop=True)
     return df
 
 
