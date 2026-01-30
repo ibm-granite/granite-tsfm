@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "pandas3" }
 
 [project.optional-dependencies]
 dev = [
