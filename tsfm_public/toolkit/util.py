@@ -1323,15 +1323,19 @@ def encode_data(df: pd.DataFrame, timestamp_column: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: _description_
     """
+    # Make a copy to avoid modifying the original dataframe
+    df = df.copy()
     if pd.api.types.is_datetime64_dtype(df[timestamp_column]):
-        df.loc[:, "timestamp_column"] = df["timestamp_column"].apply(lambda x: x.isoformat())
+        df[timestamp_column] = df[timestamp_column].apply(lambda x: x.isoformat())
     data_payload = df.to_dict(orient="list")
 
     for k, v in data_payload.items():
         if isinstance(v[0], str):
             continue
         # rewrite all the nan to None
-        data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
+        # Handle numeric types only - skip Timestamp or other non-numeric types
+        if len(v) > 0 and isinstance(v[0], (int, float, type(None))):
+            data_payload[k] = [vv if (vv is None) or (not isnan(vv)) else None for vv in v]
 
     return data_payload
 
