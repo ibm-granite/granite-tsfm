@@ -3,7 +3,7 @@ requires = ["setuptools>=78.1.1", "wheel", "Cython", "setuptools-scm>=8.0"]
 
 [project]
 name = "granite-tsfm"
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.11,<3.14"
 # version = "0.0.1"
 dynamic = ["version"]
 authors = [{ name = "IBM" }]
@@ -16,7 +16,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "pandas>=2.2.0",
     "scikit-learn",
     "transformers[torch]==4.56.0",
     "datasets",
@@ -24,7 +23,8 @@ dependencies = [
     "urllib3>=1.26.19",            # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
     "torch<2.9",
-    "scikit-learn<1.8"
+    "scikit-learn<1.8",
+    "pandas>=3,<4"
 ]
 
 [tool.setuptools]
