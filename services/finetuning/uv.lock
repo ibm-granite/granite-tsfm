@@ -467,8 +467,8 @@ http = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.4.dev6+gcfc177efb"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3#cfc177efb7d8528974578d8c30838cd9a2c1f5fd" }
+version = "0.3.4.dev7+gdcd3d486e"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3#dcd3d486e2b7779c70dc8c07651d00de90a3a9dc" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
