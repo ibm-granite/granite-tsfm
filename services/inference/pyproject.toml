@@ -5,7 +5,7 @@ description = "Service layer for TSFM granite models."
 authors = [
   { name = "IBM" }
 ]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "filelock",
   "fastapi",
