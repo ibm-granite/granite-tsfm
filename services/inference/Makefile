@@ -86,14 +86,14 @@ stop_service_image:
 	$(CONTAINER_BUILDER) stop tsfminferenceserver-cpu
 
 test_local: clone_models boilerplate stop_service_local start_service_local
-	uv run --locked pytest -s --cov=tsfminference --cov-report term-missing tests ../tests
+	uv run --locked pytest --cov=tsfminference --cov-report term-missing tests ../tests
 	uv run --locked locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_local || true
 	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
-	uv run --locked --index-strategy unsafe-best-match pytest -s tests ../tests
+	uv run --locked --index-strategy unsafe-best-match pytest tests ../tests
 	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_image || true
