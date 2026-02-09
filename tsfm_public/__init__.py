@@ -49,6 +49,7 @@ _import_structure = {
     "models.tinytimemixer": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyTimeMixerConfig"],
     "models.tspulse": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TSPulseConfig"],
     "models.flowstate": ["FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlowStateConfig"],
+    "models.patchtst_fm": ["PATCHTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTFMConfig"],
     "toolkit": [
         "TimeSeriesPreprocessor",
         "TimeSeriesForecastingPipeline",
@@ -100,6 +101,14 @@ _import_structure["models.flowstate"].extend(
         "FlowStateForPrediction",
     ]
 )
+_import_structure["models.patchtst_fm"].extend(
+    [
+        "PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PatchTSTFMPretrainedModel",
+        "PatchTSTFMModel",
+        "PatchTSTFMForPrediction",
+    ]
+)
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -110,6 +119,14 @@ if TYPE_CHECKING:
         FlowStateForPrediction,
         FlowStateModel,
         FlowStatePreTrainedModel,
+    )
+    from .models.patchtst_fm import (
+        PATCHTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        PatchTSTFMConfig,
+        PatchTSTFMForPrediction,
+        PatchTSTFMModel,
+        PatchTSTFMPreTrainedModel,
     )
     from .models.tinytimemixer import (
         TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
