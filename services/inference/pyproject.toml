@@ -15,6 +15,7 @@ dependencies = [
   "prometheus_client",
   "psutil",
   "granite-tsfm",
+  "datasets>=4.5", # with python3.12 this gets back versioned without this for some reason
   ]
 
 [tool.uv.sources]
