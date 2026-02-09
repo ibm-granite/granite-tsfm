@@ -113,7 +113,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
 
     def model_summary(self):
         s = ""
-        model_name = "DecoderTSFM"
+        model_name = "PatchTST-FM"
         s += f"{'=' * 5:<10} {model_name} {'=' * 5:>9}\n"
         s += f"{'Transformer:':<20} {count_parameters(self.blocks)[0] / 1e6:>8.2f}M\n"
         s += f"{'=' * 30}\n"
@@ -227,7 +227,7 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
 
         if return_loss:
             x_target = x_target.unsqueeze(-1)
-            quantiles = torch.tensor(self.quantile_levels, device=x_target.device).view(1, 1, -1)
+            quantiles = torch.tensor(self.backbone.quantile_levels, device=x_target.device).view(1, 1, -1)
             loss = 2 * torch.abs((x_target - q_pred) * ((x_target <= q_pred).float() - quantiles))
             loss = loss * loss_mask.unsqueeze(-1)
             loss = loss.sum(dim=1) / torch.clamp(loss_mask.sum(dim=1, keepdim=True), min=1)
@@ -246,6 +246,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         self.config = config
         self.backbone = PatchTSTFMModel(config)
+
+    def model_summary(self) -> str:
+        return self.backbone.model_summary()
 
     def forward(
         self,
@@ -285,7 +288,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         forecast_samples = torch.stack(forecast_samples, dim=0)[:, :, :forecast_len]
 
         if quantile_levels is not None:
-            quantile_indices = [self.quantile_levels.index(q) for q in quantile_levels]
+            quantile_indices = [self.backbone.quantile_levels.index(q) for q in quantile_levels]
             forecast_samples = forecast_samples[:, quantile_indices, :]
         return PatchTSTFMPredictionOutput(quantile_predictions=forecast_samples, hidden_states=hidden_states)
 
@@ -413,7 +416,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else torch.float16
         )
         device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
-        logger.info(inputs)
 
         with torch.autocast(device_type=device, dtype=precision, enabled=True):
             model_output = self.backbone(
@@ -424,7 +426,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 return_loss=False,
                 output_hidden_states=output_hidden_states,
             )
-            logger.info(model_output)
             outputs = model_output.quantile_predictions
 
         outputs = outputs.permute(0, 2, 1)
