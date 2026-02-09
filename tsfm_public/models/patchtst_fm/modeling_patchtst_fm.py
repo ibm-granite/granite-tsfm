@@ -80,6 +80,12 @@ class PatchTSTFMPretrainingOutput(ModelOutput):
     quanitle_predictions: torch.Tensor = None
 
 
+@dataclass
+class PatchTSTFMPredictionOutput(ModelOutput):
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    quantile_predictions: torch.Tensor = None
+
+
 class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
     def __init__(self, config: PatchTSTFMConfig):
         super().__init__(config)
@@ -273,20 +279,23 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
             )
         ] * len(inputs)
-        forecast_samples = self.forecast_single_step(inputs, fl, context_len=cl)
+        forecast_samples, hidden_states = self.forecast_single_step(
+            inputs, fl, context_len=cl, output_hidden_states=output_hidden_states
+        )
         forecast_samples = torch.stack(forecast_samples, dim=0)[:, :, :forecast_len]
 
         if quantile_levels is not None:
             quantile_indices = [self.quantile_levels.index(q) for q in quantile_levels]
             forecast_samples = forecast_samples[:, quantile_indices, :]
-        return forecast_samples
+        return PatchTSTFMPredictionOutput(quantile_predictions=forecast_samples, hidden_states=hidden_states)
 
     def forecast_single_step(
         self,
         x: List[torch.Tensor],
         forecast_len: List[int],
         context_len: List[int],
-        **kwargs,
+        output_hidden_states: Optional[bool] = False,
+        # **kwargs,
     ):
         """
         x: list of torch.Tensor of time series, can be of different lengths
@@ -398,15 +407,25 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         ts_ends = torch.stack(ts_ends, dim=0)
 
         # precision = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        precision = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
-        with torch.autocast(device_type="cuda", dtype=precision, enabled=True):
-            outputs = self.backbone(
+        precision = (
+            torch.bfloat16
+            if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
+            else torch.float16
+        )
+        device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
+        logger.info(inputs)
+
+        with torch.autocast(device_type=device, dtype=precision, enabled=True):
+            model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
                 miss_mask=miss_mask,
                 pad_mask=pad_mask,
                 return_loss=False,
-            ).quantile_predictions
+                output_hidden_states=output_hidden_states,
+            )
+            logger.info(model_output)
+            outputs = model_output.quantile_predictions
 
         outputs = outputs.permute(0, 2, 1)
         outputs = self.backbone.norm_fn.inverse_transform(outputs)
@@ -418,4 +437,4 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else:
                 x_pred = F.interpolate(outputs[i].unsqueeze(1), size=sample_lengths[i], mode="linear").squeeze(1)
             x_preds.append(x_pred[:, -forecast_len[i] :])
-        return x_preds
+        return x_preds, model_output.hidden_states
