@@ -13,7 +13,7 @@ from transformers.utils import (
 
 _import_structure = {
     "configuration_patchtst_fm": [
-        "PatchTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PATCHTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "PatchTSTFMConfig",
     ],
 }
@@ -26,6 +26,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_patchtst_fm"] = [
         "PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PatchTSTFMPreTrainedModel",
         "PatchTSTFMModel",
         "PatchTSTFMForPrediction",
     ]
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
             PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTFMForModel,
             PatchTSTFMForPrediction,
+            PatchTSTFMPreTrainedModel,
         )
 
 else:
