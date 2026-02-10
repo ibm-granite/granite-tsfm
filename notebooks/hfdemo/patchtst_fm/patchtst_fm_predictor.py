@@ -22,7 +22,6 @@ class PatchTSTFMEvalPredictor:
         model,
         prediction_length,
         dataset_name,
-        seasonality=None,
         quantile_levels=None,
     ):
         self.model = model
@@ -35,12 +34,10 @@ class PatchTSTFMEvalPredictor:
         cur_path = Path(__file__).parent.resolve()
         self.dataset_properties = pd.read_csv(os.path.join(cur_path, "GIFT_EVAL_META.csv"), index_col="dataset")
         self.freq = self.dataset_properties.loc[self.dataset_name, "freq"]
-        self.seasonality = seasonality
         self.quantile_levels = quantile_levels
         logging.info(f"{'=' * 10} Dataset Info {'=' * 10}")
         logging.info(f"Dataset name: {self.dataset_name}")
         logging.info(f"Frequency: {self.freq}")
-        logging.info(f"Seasonality: {self.seasonality if self.seasonality is not None else 'None'}")
         logging.info(f"Device {self.device}")
         logging.info("=" * 35)
 
@@ -73,7 +70,6 @@ class PatchTSTFMEvalPredictor:
                     model_outputs = self.model(
                         inputs=target,
                         prediction_length=self.prediction_length,
-                        seasonality=self.seasonality,
                         quantile_levels=self.quantile_levels,
                     )
                     pred_quantiles = [x.cpu().numpy() for x in model_outputs.quantile_predictions]
