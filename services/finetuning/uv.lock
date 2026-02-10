@@ -466,8 +466,8 @@ http = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.4.dev104+g028bf6665"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny#028bf666523d8007383d0cc5aada111972598cd2" }
+version = "0.3.4.dev105+g7b50a4a67"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny#7b50a4a6779224d1b244c0784eebbc1c2306a72f" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
