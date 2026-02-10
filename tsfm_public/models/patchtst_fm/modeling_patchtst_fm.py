@@ -235,8 +235,11 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
         else:
             loss = None
 
+        x_pred = q_pred.permute(0, 2, 1)
+        x_pred = self.backbone.norm_fn.inverse_transform(x_pred)
+
         return PatchTSTFMPretrainingOutput(
-            quantile_predictions=q_pred, loss=loss, hidden_states=model_outputs.hidden_states
+            quantile_predictions=x_pred, loss=loss, hidden_states=model_outputs.hidden_states
         )
 
 
@@ -254,7 +257,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         self,
         inputs: List[torch.Tensor] | torch.Tensor,
         prediction_length: Optional[int] = None,
-        seasonality: Optional[float] = None,
         quantile_levels: Optional[List[float]] = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
@@ -262,17 +264,10 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
     ):
         forecast_len = prediction_length if prediction_length else self.config.prediction_length
 
-        # ul = max(forecast_len, seasonality)
-        # ul = seasonality
-        # if ul > self.config.context_length // 8:
-        #     cl = ul * 16
-        # else:
-        #     # cl = min(self.config.context_length, ul * 16)
-        #     cl = self.config.context_length
         cl = self.config.context_length
         ul = -1
         logger.info(
-            f"Context Len: {cl} | Forecast Len: {forecast_len} | Seasonality: {seasonality}",
+            f"Context Len: {cl} | Forecast Len: {forecast_len} ",
         )
         cl = [cl] * len(inputs)
         fl = [
@@ -298,7 +293,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         forecast_len: List[int],
         context_len: List[int],
         output_hidden_states: Optional[bool] = False,
-        # **kwargs,
     ):
         """
         x: list of torch.Tensor of time series, can be of different lengths
@@ -313,13 +307,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         sample_lengths = []
 
         for x_i, c_i, f_i in zip(x, context_len, forecast_len):
-            # print(x_i.shape, c_i, f_i)
             c_i = min(x_i.shape[0] + f_i, c_i)
             s_i = c_i - f_i
             x_in = x_i[-s_i:]
-            # pad_mask_i = (~torch.isfinite(x_in)).float()
-            # if pad_mask_i.mean() > 0.6:
-            #     pad_mask_i = torch.zeros_like(x_in)
             pad_mask_i = torch.zeros_like(x_in)
             miss_mask_i = torch.zeros_like(x_in)
             x_in = torch.nan_to_num(x_in, nan=x_in.nanmean().item())
@@ -398,10 +388,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 ts_ends.append(torch.tensor([0, self.config.context_length]).float())
                 sample_lengths.append(sample_len)
 
-            # if mask_i.shape[0] != self.scale_schedule[-1]:
-            #     mask_i = F.interpolate(mask_i.view(1, 1, -1), size=self.scale_schedule[-1], mode='area').squeeze()
-            #     mask_i = mask_i.gt(0.)
-
         inputs = torch.stack(inputs, dim=0)
         pred_mask = torch.stack(pred_mask, dim=0)
         pad_mask = torch.stack(pad_mask, dim=0)
@@ -409,7 +395,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         time_index = torch.stack(time_index, dim=0)
         ts_ends = torch.stack(ts_ends, dim=0)
 
-        # precision = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         precision = (
             torch.bfloat16
             if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
