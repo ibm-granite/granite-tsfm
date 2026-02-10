@@ -1,0 +1,20 @@
+{
+    "folders": [
+        {
+            "path": "../../../../github.ibm.com/granite-tsfm-private"
+        },
+        {
+            "path": "../../../../github.ibm.com/tsfm"
+        },
+        {
+            "path": "../.."
+        },
+        {
+            "path": "../../../MCP-Universe"
+        }
+    ],
+    "settings": {
+        "makefile.configureOnOpen": false,
+        "python.testing.pytestEnabled": true
+    }
+}

@@ -380,7 +380,8 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            "prediction_length": params["prediction_length"] * 40,
+            "prediction_length": params["prediction_length"]
+            * 400,  # something larger than the model's max prediction length
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],
