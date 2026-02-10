@@ -51,6 +51,13 @@ ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
 
 FROM base AS runtime-base
 
+# Re-declare ARGs needed in this stage (ARGs don't carry across stages)
+ARG CUDA_MAJOR_VERSION=12
+ARG CUDA_MINOR_VERSION=4
+ARG CUDA_PKG_VERSION=${CUDA_MAJOR_VERSION}-${CUDA_MINOR_VERSION}
+ARG PYTHON_VERSION=3.12
+ARG CODEDIR=tsfminference
+
 # Define library versions as build arguments for easier updates
 ARG NV_CUDA_LIB_VERSION=12.4.1-1
 ARG NV_NVTX_VERSION=12.4.127-1
@@ -96,5 +103,3 @@ RUN uv lock && uv sync --locked --reinstall-package torch
 
 ENV CUDA_VISIBLE_DEVICES=0
 HEALTHCHECK CMD curl --fail http://localhost:8000/healthcheck || exit 1
-
-
