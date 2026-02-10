@@ -37,6 +37,7 @@ torch-cpu = [
 sagemaker = [
   "sagemaker",
   "boto3",
+  "mlflow>=2.2.1"
 ]
 
 [tool.setuptools.packages.find]
