@@ -245,6 +245,153 @@ class PinballLoss(nn.Module):
 
 class TinyTimeMixerGatedAttention(nn.Module):
     """
+    Backward-compatible gated attention operating on last dim: x[..., C].
+
+    Config:
+      - config.gate_mode   : {"softmax", "sigmoid", "glu", "group_sigmoid"}
+                             default = "softmax"
+      - config.gate_groups : int (default = 8, used only for group_sigmoid)
+      - config.use_register_context_gating : bool (default = False)
+            If True, the gate will depend on both x and a context tensor
+            (typically derived from register tokens): [x || context].
+    """
+
+    def __init__(self, config, in_size: int, out_size: int):
+        super().__init__()
+        assert in_size == out_size, "Gated attention expects in_size == out_size"
+
+        self.C = in_size
+        self.mode = getattr(config, "gate_mode", "softmax")  # backward compatible
+        self.groups = getattr(config, "gate_groups", 8)
+
+        # NEW: whether to use register context as extra input to the gate
+        self.use_reg_context = getattr(config, "use_register_context_gating", False)
+
+        requested = getattr(config, "gate_groups", 8)
+        self.groups = self.pick_gate_groups(self.C, requested)
+        self.group_size = self.C // self.groups
+
+        if self.mode == "group_sigmoid":
+            assert (
+                self.C % self.groups == 0
+            ), "channels must be divisible by gate_groups"
+            self.group_size = self.C // self.groups
+
+        # ---- Projection ----
+        # Input to the gate:
+        #   - normally: x      → dim = C
+        #   - with context: [x || ctx] → dim = 2C
+        gate_in_dim = self.C * (2 if self.use_reg_context else 1)
+
+        if self.mode == "glu":
+            # GLU needs 2*C outputs (content + gate)
+            self.attn_layer = nn.Linear(gate_in_dim, 2 * self.C)
+        else:
+            self.attn_layer = nn.Linear(gate_in_dim, self.C)
+
+        # Optional: call this from outside after construction if you want identity-ish init
+        # self._init_identity_weights()
+
+    def pick_gate_groups(self, C: int, requested_G: int) -> int:
+        if requested_G <= 1:
+            return 1
+
+        if C % requested_G == 0:
+            return requested_G
+
+        for g in range(min(requested_G, C), 0, -1):
+            if C % g == 0:
+                return g
+
+        return 1
+
+    def _init_identity_weights(self):
+        if self.mode == "softmax":
+            nn.init.zeros_(self.attn_layer.weight)
+            nn.init.zeros_(self.attn_layer.bias)
+
+        elif self.mode in ("sigmoid", "group_sigmoid"):
+            nn.init.zeros_(self.attn_layer.weight)
+            nn.init.zeros_(self.attn_layer.bias)
+
+        elif self.mode == "glu":
+            weight = self.attn_layer.weight
+            bias = self.attn_layer.bias
+
+            a_w, b_w = weight.chunk(2, dim=0)
+            a_b, b_b = bias.chunk(2, dim=0)
+
+            nn.init.xavier_uniform_(a_w)
+            nn.init.zeros_(b_w)
+
+            nn.init.zeros_(a_b)
+            nn.init.zeros_(b_b)
+
+        else:
+            raise ValueError(f"Unknown gate_mode: {self.mode}")
+
+    def forward(
+        self, x: torch.Tensor, context: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        x:       [..., C]
+        context: [..., C] or broadcastable to x (e.g. [B, 1, C])
+                 Only used if self.use_reg_context == True.
+
+        If use_reg_context is False, 'context' is ignored and behavior is
+        identical to the original implementation.
+        """
+        if self.use_reg_context:
+            if context is None:
+                raise ValueError(
+                    "TinyTimeMixerGatedAttention: use_reg_context=True "
+                    "but no context tensor was provided to forward()."
+                )
+
+            # Broadcast context to match x shape (except last dim)
+            # e.g., context [B, 1, C] -> [B, T, C]
+            # or [B, C] -> [B, T, C] depending on your call site.
+            # This relies on standard PyTorch broadcasting rules.
+            ctx = context
+            # Ensure last dim matches
+            assert (
+                ctx.shape[-1] == self.C
+            ), f"context last dim must be {self.C}, got {ctx.shape[-1]}"
+
+            # Let broadcasting handle missing dims as long as they are compatible
+            # (e.g., x [B,T,C], ctx [B,1,C] or [1,1,C])
+            z = torch.cat([x, ctx.expand_as(x)], dim=-1)
+        else:
+            z = x  # no context → behave exactly as before
+
+        if self.mode == "glu":
+            a, b = self.attn_layer(z).chunk(2, dim=-1)
+            gate = torch.sigmoid(b)
+            return a * gate
+
+        logits = self.attn_layer(z)
+
+        if self.mode == "softmax":
+            gate = F.softmax(logits, dim=-1)
+
+        elif self.mode == "sigmoid":
+            gate = torch.sigmoid(logits)
+
+        elif self.mode == "group_sigmoid":
+            g = logits.view(*z.shape[:-1], self.groups, self.group_size)
+            g = g.mean(dim=-1, keepdim=True)
+            gate = torch.sigmoid(g)
+            gate = gate.expand(*z.shape[:-1], self.groups, self.group_size)
+            gate = gate.reshape(*z.shape[:-1], self.C)
+
+        else:
+            raise ValueError(f"Unknown gate_mode: {self.mode}")
+
+        return x * gate
+
+
+class TinyTimeMixerGatedAttentionOLD(nn.Module):
+    """
     Module that applies gated attention to input data.
 
     Args:
@@ -470,7 +617,9 @@ class TinyTimeMixerChannelFeatureMixerBlock(nn.Module):
 
         if config.gated_attn:
             self.gating_block = TinyTimeMixerGatedAttention(
-                in_size=config.num_input_channels, out_size=config.num_input_channels
+                config=config,
+                in_size=config.num_input_channels,
+                out_size=config.num_input_channels,
             )
 
     def forward(self, inputs: torch.Tensor):
@@ -694,7 +843,7 @@ class PatchMixerBlock(nn.Module):
 
         if config.gated_attn:
             self.gating_block = TinyTimeMixerGatedAttention(
-                in_size=config.num_patches, out_size=config.num_patches
+                config=config, in_size=config.num_patches, out_size=config.num_patches
             )
 
         if config.self_attn:
@@ -769,7 +918,7 @@ class FeatureMixerBlock(nn.Module):
 
         if config.gated_attn:
             self.gating_block = TinyTimeMixerGatedAttention(
-                in_size=config.d_model, out_size=config.d_model
+                config=config, in_size=config.d_model, out_size=config.d_model
             )
 
     def forward(self, hidden: torch.Tensor):
@@ -852,6 +1001,7 @@ class ForecastChannelHeadMixer(nn.Module):
         )
         if config.fcm_gated_attn:
             self.fcm_gating_block = TinyTimeMixerGatedAttention(
+                config=config,
                 in_size=self.total_channel_count * (scl_features),
                 out_size=self.total_channel_count * (scl_features),
             )
@@ -1491,6 +1641,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(module.weight)
             else:
                 module.reset_parameters()
+        elif isinstance(module, nn.Conv1d):
+            nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
 
 
 class TinyTimeMixerPatchify(nn.Module):
@@ -1790,7 +1942,6 @@ class MultiScaleFromPatchedSequence(nn.Module):
                 patches.reshape(B * C * num_patch_i, self.patch_len)
             )
             projected = projected.reshape(B, C, num_patch_i, self.d_model)
-
             # summed = projected.sum(dim=2)
             outputs.append(projected)
             # num_patches_per_scale.append(num_patch_i)
@@ -2147,7 +2298,6 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
-
         if self.resolution_prefix_tuning:
             if freq_token is not None:
                 freq_embedding = self.freq_mod(freq_token.long())  # bs x d_model
@@ -2177,6 +2327,13 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         # add positional encoder
         if self.positional_encoder is not None:
             patches = self.positional_encoder(patches)
+
+        if self.base_norm is not None:
+            B, C, P, D = patches.shape
+
+            patches = patches.reshape(B, C, P * D)
+            patches = self.base_norm(patches)
+            patches = patches.reshape(B, C, P, D)
 
         last_hidden_state, hidden_states = self.mlp_mixer_encoder(
             patches, output_hidden_states=output_hidden_states

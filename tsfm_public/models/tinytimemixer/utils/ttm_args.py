@@ -9,7 +9,6 @@ import tempfile
 
 import torch
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -72,8 +71,12 @@ def get_ttm_args():  # pragma: no cover
         default=None,
         help="Number of GPUs",
     )
-    parser.add_argument("--random_seed", "-rs", type=int, required=False, default=42, help="Random seed")
-    parser.add_argument("--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size")
+    parser.add_argument(
+        "--random_seed", "-rs", type=int, required=False, default=42, help="Random seed"
+    )
+    parser.add_argument(
+        "--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size"
+    )
     parser.add_argument(
         "--num_epochs",
         "-ne",
@@ -219,6 +222,41 @@ def get_ttm_args():  # pragma: no cover
         required=False,
         default=0.2,
         help="head_dropout",
+    )
+
+    parser.add_argument("--multi_scale", action="store_true")
+
+    parser.add_argument(
+        "--register_tokens",
+        type=int,
+        required=False,
+        default=0,
+        help="Number of  register tokens",
+    )
+
+    parser.add_argument(
+        "--fft_length",
+        type=int,
+        required=False,
+        default=0,
+        help="FFT Length",
+    )
+
+    parser.add_argument(
+        "--point_extra_weight",
+        type=float,
+        required=False,
+        default=1,
+        help="Extra weight to add to median quantile along with other quantiles.",
+    )
+
+    parser.add_argument("--multi_quantile_head", action="store_true")
+
+    parser.add_argument(
+        "-i",
+        "--use_internal_tsfm",
+        action="store_true",
+        help="Use internal tsfm.models.tinytimemixer",
     )
 
     # Parsing the arguments

@@ -8,4 +8,9 @@ python ttm_pretrain_sample.py  --context_length 90 \
                                --head_dropout 0.2 \
                                --early_stopping 1 \
                                --adaptive_patching_levels 0 \
-                               --num_epochs 10
+                               --num_epochs 10 \
+                               --multi_scale \
+                               --register_tokens 2 \
+                               --fft_length 2 \
+                               --multi_quantile_head \
+                               --save_dir ../g_fig_new \

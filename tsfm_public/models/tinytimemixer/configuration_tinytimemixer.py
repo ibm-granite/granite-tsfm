@@ -219,7 +219,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         multi_scale: bool = False,
         register_tokens: int = 0,
         fft_length: int = 0,
-        use_fft_embedding: bool = False,
+        use_fft_embedding: bool = True,
         multi_quantile_head: bool = False,
         point_extra_weight: Optional[int] = 0,
         **kwargs,
@@ -346,6 +346,15 @@ class TinyTimeMixerConfig(PretrainedConfig):
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
+
+            if self.register_tokens > 0:
+                self.num_patches += self.register_tokens
+
+            if self.fft_length > 0:
+                if getattr(self, "get_one_freq_emb", False):
+                    self.num_patches += 1
+                else:
+                    self.num_patches += self.fft_length
 
         if self.prediction_filter_length is not None:
             if (
