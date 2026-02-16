@@ -44,8 +44,6 @@ jobs:
           --cov=tsfm_public \
           --cov-fail-under=75 \
           --cov-report=term-missing \
-          --cov-report=xml:coverage-pandas2.xml \
-          --verbose \
           tests
         echo "::endgroup::"
         
@@ -54,7 +52,6 @@ jobs:
         $HOME/.local/bin/uv add "pandas>=3,<4"
         $HOME/.local/bin/uv lock -P pandas
         $HOME/.local/bin/uv run --locked pytest \
-          --verbose \
           tests
         echo "::endgroup::"
 
