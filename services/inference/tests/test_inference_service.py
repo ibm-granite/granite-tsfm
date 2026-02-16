@@ -78,7 +78,9 @@ def ts_data(ts_data_base, request):
     }
 
 
-def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, None]] = None) -> pd.DataFrame:
+def get_inference_response(
+    msg: Dict[str, Any], dumpfile: Optional[Union[str, None]] = None, suppresslog: bool = True
+) -> pd.DataFrame:
     URL = (
         "http://127.0.0.1:8000/v1/inference/forecasting"
         if os.environ.get("TSFM_FORECASTING_ENDPOINT", None) is None
@@ -96,8 +98,8 @@ def get_inference_response(msg: Dict[str, Any], dumpfile: Optional[Union[str, No
         df = [pd.DataFrame.from_dict(r) for r in resp["results"]]
         return df, {k: v for k, v in resp.items() if "data_point" in k}
     else:
-        logger.error("Request failed with status code %s: %s", req.status_code, req.text)
-        print(f"Request failed with status code {req.status_code}: {req.text}")
+        if not suppresslog:
+            logger.error("Request failed with status code %s: %s", req.status_code, req)
         return None, req
 
 
@@ -378,7 +380,8 @@ def test_zero_shot_forecast_inference(ts_data):
     msg = {
         "model_id": model_id_path,
         "parameters": {
-            "prediction_length": params["prediction_length"] * 40,
+            "prediction_length": params["prediction_length"]
+            * 400,  # something larger than the model's max prediction length
         },
         "schema": {
             "timestamp_column": params["timestamp_column"],

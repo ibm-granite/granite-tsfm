@@ -24,7 +24,8 @@ dependencies = [
     "numpy<3",
     "torch<2.9",
     "scikit-learn<1.8",
-    "pandas>=3,<4"
+    "pandas>=3,<4",
+    "filelock>=3.20.3"
 ]
 
 [tool.setuptools]
