@@ -446,7 +446,7 @@ def test_future_data_forecast_inference(ts_data):
     )
     future_data = future_data.fillna(0)
     # target data not used for future data (but no harm in keeping it)
-    future_data.drop("OT", axis=1, inplace=True)
+    future_data = future_data.drop("OT", axis=1)
 
     prediction_length = 30
 
