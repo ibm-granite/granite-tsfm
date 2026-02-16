@@ -222,6 +222,20 @@ class TinyTimeMixerConfig(PretrainedConfig):
         use_fft_embedding: bool = True,
         multi_quantile_head: bool = False,
         point_extra_weight: Optional[int] = 0,
+        residual_context_length: int = None,
+        trend_patch_length: int = None,
+        trend_patch_stride: int = None,
+        trend_d_model: int = None,
+        trend_decoder_d_model: int = None,
+        trend_num_layers: int = None,
+        trend_decoder_num_layers: int = None,
+        trend_register_tokens: int = None,
+        trend_head_d_model: Optional[int] = None,
+        trend_loss_weight: Optional[float] = 1,
+        residual_loss_weight: Optional[float] = 1,
+        joint_loss_weight: Optional[float] = 1,
+        forecast_loss_type: Optional[str] = "joint",
+        decompose: bool = False,
         **kwargs,
     ):
 
@@ -282,12 +296,27 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.mask_value = mask_value
         self.masked_context_length = None
 
+        # r3 params
         self.multi_scale = multi_scale
         self.register_tokens = register_tokens
         self.fft_length = fft_length
         self.use_fft_embedding = use_fft_embedding
         self.multi_quantile_head = multi_quantile_head
         self.point_extra_weight = point_extra_weight
+        self.residual_context_length = residual_context_length
+        self.trend_patch_length = trend_patch_length
+        self.trend_patch_stride = trend_patch_stride
+        self.trend_d_model = trend_d_model
+        self.trend_decoder_d_model = trend_decoder_d_model
+        self.trend_num_layers = trend_num_layers
+        self.trend_decoder_num_layers = trend_decoder_num_layers
+        self.trend_register_tokens = trend_register_tokens
+        self.trend_loss_weight = trend_loss_weight
+        self.residual_loss_weight = residual_loss_weight
+        self.joint_loss_weight = joint_loss_weight
+        self.forecast_loss_type = forecast_loss_type
+        self.trend_head_d_model = trend_head_d_model
+        self.decompose = decompose
 
         super().__init__(**kwargs)
 
@@ -325,8 +354,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         if self.patch_length != self.patch_stride:
             raise Exception("patch_length should be same as patch_stride")
 
-        if not hasattr(self, "num_patches"):
-
+        if not hasattr(self, "num_patches") or self.num_patches is None:
             if self.multi_scale:
                 if self.masked_context_length is not None:
                     raise Exception(
