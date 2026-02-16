@@ -36,9 +36,10 @@ jobs:
         $HOME/.local/bin/uv run --locked make quality
     - name: Test with pytest
       run: |
-      	uv add "pandas>=2.3.3,<3"
-	uv lock -P pandas
+      	# make sure we're testing on both pandas 2.x and 3.x
+        uv add "pandas>=2.3.3,<3"
+        uv lock -P pandas
         $HOME/.local/bin/uv run --locked pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests
-	uv add "pandas>=3,<4"
-	uv lock -P pandas
-	$HOME/.local/bin/uv run --locked pytest
+        uv add "pandas>=3,<4"
+        uv lock -P pandas
+        $HOME/.local/bin/uv run --locked pytest
