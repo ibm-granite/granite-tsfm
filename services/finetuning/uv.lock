@@ -476,8 +476,8 @@ http = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.4.dev25+gadb95bf48"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3#adb95bf48dd758b25bcc10662b9098ff4bf90f83" }
+version = "0.3.4.dev120+ga05236a1a"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny#a05236a1a1e5ffcb7cc92c5119bd5f3ce21f5692" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
@@ -1846,7 +1846,7 @@ dev = [
 requires-dist = [
     { name = "datasets", specifier = ">=4.5" },
     { name = "fastapi", specifier = ">=0.120.2" },
-    { name = "granite-tsfm", git = "https://github.com/ibm-granite/granite-tsfm.git?branch=pandas3" },
+    { name = "granite-tsfm", git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny" },
     { name = "kubeflow-training", marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">1,<3" },
     { name = "pytest", marker = "extra == 'dev'" },
