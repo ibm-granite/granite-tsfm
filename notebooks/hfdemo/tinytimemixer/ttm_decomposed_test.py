@@ -1,50 +1,38 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import argparse
 import logging
-import math
 import os
 import random
 import tempfile
 
 # Standard
-from contextlib import contextmanager
+from dataclasses import dataclass
 
+# Standard
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR
-from torch.utils.data import ConcatDataset
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 # First Party
-from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
-from tsfm_public import TimeSeriesPreprocessor, get_datasets, load_dataset
+# First Party
+from transformers import Trainer, TrainerCallback, TrainingArguments, set_seed
+from tsfm_public import load_dataset
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
-    TinyTimeMixerForMultiHeadPrediction,
+    TinyTimeMixerForDecomposedPrediction,
 )
 
 # from tsfm_public.models.tinytimemixer.utils import get_ttm_args
-from tsfm_public.toolkit.get_model import get_model
-from tsfm_public.toolkit.lr_finder import optimal_lr_finder
-from tsfm_public.toolkit.visualization import plot_predictions
+
 
 # Third Party
 
 
 logger = logging.getLogger(__file__)
-
-
-import argparse
-
-# Standard
-from dataclasses import dataclass
-
-# First Party
-from transformers import TrainerCallback
 
 
 def print_learnable_blocks(model):
@@ -487,7 +475,7 @@ def get_base_model(args):
 
     # Residual tail knob (safe default = quarter context)
 
-    model = TinyTimeMixerForMultiHeadPrediction(config)
+    model = TinyTimeMixerForDecomposedPrediction(config)
 
     # (Optional) quick grad diagnostics
     for name, p in model.named_parameters():
@@ -516,7 +504,7 @@ def pretrain_simple(args, model, dset_train, dset_val):
     print("\n=== Phase 3: Joint (point) ===")
 
     # # Reload from Phase 2 and turn on multi-quantile head via kwargs
-    # model = TinyTimeMixerForMultiHeadPrediction.from_pretrained(
+    # model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
     #     phase2_path,
     #     multi_quantile_head=True,          # <--- enable quantiles in config & modules
     # )
@@ -565,7 +553,7 @@ def pretrain_with_callback(args, model, dset_train, dset_val):
     # ---------- PHASE 3: Joint (point) ----------
 
     # # Reload from Phase 2 and turn on multi-quantile head via kwargs
-    # model = TinyTimeMixerForMultiHeadPrediction.from_pretrained(
+    # model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
     #     phase2_path,
     #     multi_quantile_head=True,          # <--- enable quantiles in config & modules
     # )
@@ -670,7 +658,7 @@ def pretrain(args, model, dset_train, dset_val):
     print("\n=== Phase 3: Joint (point) ===")
 
     # # Reload from Phase 2 and turn on multi-quantile head via kwargs
-    # model = TinyTimeMixerForMultiHeadPrediction.from_pretrained(
+    # model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
     #     phase2_path,
     #     multi_quantile_head=True,          # <--- enable quantiles in config & modules
     # )
@@ -737,7 +725,7 @@ def pretrain(args, model, dset_train, dset_val):
 # Inference + Visualization
 # -----------------------------
 def inference(args, model_path, dset_test, label="iid"):
-    model = TinyTimeMixerForMultiHeadPrediction.from_pretrained(model_path)
+    model = TinyTimeMixerForDecomposedPrediction.from_pretrained(model_path)
     print(
         model.trend_loss_weight,
         model.residual_loss_weight,
