@@ -28,7 +28,7 @@ else:
         "TinyTimeMixerModel",
         "TinyTimeMixerForPrediction",
         "TinyTimeMixerForMaskedPrediction",
-        "TinyTimeMixerForMultiHeadPrediction",
+        "TinyTimeMixerForDecomposedPrediction",
     ]
 
     _import_structure["utils_tinytimemixer"] = [
@@ -52,8 +52,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_tinytimemixer import (
             TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyTimeMixerForDecomposedPrediction,
             TinyTimeMixerForMaskedPrediction,
-            TinyTimeMixerForMultiHeadPrediction,
             TinyTimeMixerForPrediction,
             TinyTimeMixerModel,
         )

@@ -235,7 +235,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         residual_loss_weight: Optional[float] = 1,
         joint_loss_weight: Optional[float] = 1,
         forecast_loss_type: Optional[str] = "joint",
-        decompose: bool = False,
+        decompose: bool = True,
         **kwargs,
     ):
 

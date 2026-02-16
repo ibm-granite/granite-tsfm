@@ -2552,7 +2552,7 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
 
 
 @dataclass
-class TinyTimeMixerForMultiHeadPredictionOutput(ModelOutput):
+class TinyTimeMixerForDecomposedPredictionOutput(ModelOutput):
     """ """
 
     loss: Optional[torch.FloatTensor] = None
@@ -3202,7 +3202,7 @@ def robust_lowess_like(
     return trend, residual
 
 
-class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
+class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
     r"""
     `TinyTimeMixer` for forecasting application.
 
@@ -3215,7 +3215,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
     """
 
     def __init__(self, config: TinyTimeMixerConfig):
-        self.decompose_prediction = bool(getattr(config, "decompose", False))
+        self.decompose_prediction = bool(getattr(config, "decompose", True))
 
         if self.decompose_prediction:
             self._init_decomposed(config)
@@ -3301,7 +3301,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
         freq_token: Optional[torch.Tensor] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
-    ) -> TinyTimeMixerForMultiHeadPredictionOutput:
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
         if self.decompose_prediction:
             return self._forward_decomposed(
                 past_values=past_values,
@@ -3341,7 +3341,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
         freq_token: Optional[torch.Tensor] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
-    ) -> TinyTimeMixerForMultiHeadPredictionOutput:
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
         r"""
         past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -3406,7 +3406,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
                 ]
             )
 
-        return TinyTimeMixerForMultiHeadPredictionOutput(
+        return TinyTimeMixerForDecomposedPredictionOutput(
             loss=model_output.loss,
             prediction_outputs=model_output.prediction_outputs,
             quantile_outputs=model_output.quantile_outputs,
@@ -3489,7 +3489,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
         freq_token: Optional[torch.Tensor] = None,
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
-    ) -> TinyTimeMixerForMultiHeadPredictionOutput:
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
         r"""
         past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -3681,7 +3681,7 @@ class TinyTimeMixerForMultiHeadPrediction(TinyTimeMixerPreTrainedModel):
         #             future_values,
         #         ]
         #     )
-        return TinyTimeMixerForMultiHeadPredictionOutput(
+        return TinyTimeMixerForDecomposedPredictionOutput(
             loss=loss_val,
             prediction_outputs=combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
             quantile_outputs=combined_quantile_forecast,
