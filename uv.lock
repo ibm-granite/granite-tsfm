@@ -971,7 +971,7 @@ requires-dist = [
     { name = "kaleido", marker = "extra == 'ogv'" },
     { name = "matplotlib", marker = "extra == 'notebooks'" },
     { name = "numpy", specifier = "<3" },
-    { name = "pandas", specifier = ">2,<4" },
+    { name = "pandas", specifier = ">=2.3.3,<4" },
     { name = "parameterized", marker = "extra == 'testing'" },
     { name = "plotly", marker = "extra == 'demos'" },
     { name = "plotly", marker = "extra == 'notebooks'" },
