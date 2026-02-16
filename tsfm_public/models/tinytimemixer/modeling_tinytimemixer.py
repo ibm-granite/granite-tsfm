@@ -1106,7 +1106,7 @@ class TinyTimeMixerForPredictionHead(nn.Module):
         self.prediction_channel_indices = config.prediction_channel_indices
 
         if self.prediction_channel_indices is not None:
-            self.prediction_channel_indices.sort()
+            self.prediction_channel_indices = sorted(self.prediction_channel_indices)
 
         self.prediction_filter_length = config.prediction_filter_length
 

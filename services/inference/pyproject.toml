@@ -5,7 +5,7 @@ description = "Service layer for TSFM granite models."
 authors = [
   { name = "IBM" }
 ]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "filelock",
   "fastapi",
@@ -19,7 +19,8 @@ dependencies = [
   ]
 
 [tool.uv.sources]
-granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "destiny" }
+granite-tsfm = { git = "https://github.com/ibm-granite/granite-tsfm.git", branch = "pandas3" }
+# granite-tsfm = { path = "../../"}
 
 [project.optional-dependencies]
 dev = [
@@ -37,7 +38,6 @@ torch-cpu = [
 sagemaker = [
   "sagemaker",
   "boto3",
-  "mlflow>=2.2.1"
 ]
 
 [tool.setuptools.packages.find]

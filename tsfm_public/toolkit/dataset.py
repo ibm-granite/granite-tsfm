@@ -649,7 +649,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
@@ -943,7 +943,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
 
             seq_y[:, self._y_mask_conditional] = 0
 

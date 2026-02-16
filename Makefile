@@ -19,6 +19,7 @@ style:
 # update uv lock files
 # for cve compliance
 update_lock_files:
+	touch ./uv.lock services/finetuning/uv.lock services/inference/uv.lock
 	rm ./uv.lock services/finetuning/uv.lock services/inference/uv.lock 
 	uv lock -U
 	uv lock --directory services/inference -U
