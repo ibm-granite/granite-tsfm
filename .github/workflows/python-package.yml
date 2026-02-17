@@ -36,9 +36,23 @@ jobs:
         $HOME/.local/bin/uv run --locked make quality
     - name: Test with pytest
       run: |
-      	uv add "pandas>=2.3.3,<3"
-	uv lock -P pandas
-        $HOME/.local/bin/uv run --locked pytest --cov=tsfm_public --cov-fail-under=75 --cov-report term-missing tests
-	uv add "pandas>=3,<4"
-	uv lock -P pandas
-	$HOME/.local/bin/uv run --locked pytest
+        # Test with pandas 2.x
+        echo "::group::Testing with pandas 2.x"
+        $HOME/.local/bin/uv add "pandas>=2.3.3,<3"
+        $HOME/.local/bin/uv lock -P pandas
+        $HOME/.local/bin/uv run --locked pytest \
+          --cov=tsfm_public \
+          --cov-fail-under=75 \
+          --cov-report=term-missing \
+          tests
+        echo "::endgroup::"
+        
+        # Test with pandas 3.x
+        echo "::group::Testing with pandas 3.x"
+        $HOME/.local/bin/uv add "pandas>=3,<4"
+        $HOME/.local/bin/uv lock -P pandas
+        $HOME/.local/bin/uv run --locked pytest \
+          tests
+        echo "::endgroup::"
+
+
