@@ -397,12 +397,28 @@ def test_forecasting_imputation(ts_data_with_categorical):
         context_length=context_length,
         prediction_length=prediction_length,
         fill_value=fill_value,
-        impute_method=None,
+        impute_method="fill",
     )
 
     past_values = ds[0]["past_values"].numpy()
     np.testing.assert_allclose(past_values[1, 1], fill_value)
     np.testing.assert_allclose(past_values[0, 0], fill_value)
+
+    # no fill
+    ds = ForecastDFDataset(
+        df,
+        timestamp_column="timestamp",
+        id_columns=["id"],
+        target_columns=target_columns,
+        context_length=context_length,
+        prediction_length=prediction_length,
+        fill_value=fill_value,
+        impute_method=None,
+    )
+
+    past_values = ds[0]["past_values"].numpy()
+    assert np.isnan(past_values[1, 1])
+    assert np.isnan(past_values[0, 0])
 
 
 def test_forecasting_df_dataset_non_autoregressive(ts_data_with_categorical):

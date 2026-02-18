@@ -26,7 +26,14 @@ from transformers.utils import (
 
 LOGGER = logging.getLogger(__file__)
 
-TYPE_TO_STRING = {int: "int", np.int64: "numpy.int64", str: "str", float: "float", np.float64: "numpy.float64"}
+TYPE_TO_STRING = {
+    int: "int",
+    np.int32: "numpy.int32",
+    np.int64: "numpy.int64",
+    str: "str",
+    float: "float",
+    np.float64: "numpy.float64",
+}
 STRING_TO_TYPE = {_v: _k for _k, _v in TYPE_TO_STRING.items()}
 
 

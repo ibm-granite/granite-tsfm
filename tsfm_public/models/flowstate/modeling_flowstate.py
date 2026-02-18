@@ -177,7 +177,7 @@ def FlowStateLegendreBasis(x, degree):
     Returns:
         `torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`: The basis function values at x
     """
-    retvar = torch.ones(*x.shape, degree + 1).type(x.type()).to(x.device)
+    retvar = torch.ones(*x.shape, degree + 1, dtype=x.dtype, device=x.device)
     if retvar.ndim == 3:
         retvar = retvar.permute(1, 2, 0)
         x = x.transpose(0, -1)
@@ -202,7 +202,7 @@ def FlowStateFourierBasis(x, degree):
     Returns:
         `torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`: The basis function values at x
     """
-    retvar = torch.ones(*x.shape, degree + 1).type(x.type()).to(x.device)
+    retvar = torch.ones(*x.shape, degree + 1, dtype=x.dtype, device=x.device)
     if retvar.ndim == 3:
         retvar = retvar.permute(1, 2, 0)
         x = x.transpose(0, -1)
@@ -719,12 +719,14 @@ class FlowStateForPredictionOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, len(quantiles), prediction_length, 1)`):
-            Prediction output from FlowState model.
+        prediction_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, prediction_length, 1)`):
+            Point prediction output (mean) from FlowState model.
         backbone_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Last hidden state at the output of the backbone before passing through the decoder
         decoder_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Last hidden state of the decoder embeddings.
+        quantile_outputs (`torch.FloatTensor` of shape `(num_channels, batch_size, len(quantiles), prediction_length, 1)`):
+            Quantile prediction outputs from FlowState model.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -732,6 +734,7 @@ class FlowStateForPredictionOutput(ModelOutput):
     backbone_hidden_state: torch.FloatTensor = None
     decoder_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    quantile_outputs: torch.FloatTensor = None
 
 
 class FlowStateForPrediction(FlowStatePreTrainedModel):
@@ -759,6 +762,23 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             pred = torch.cat((pred, rest[:, :, -(pred_len - pred.shape[2]) :]), dim=2)
         pred = pred[:, :, :pred_len]
         return pred
+
+    def _transform_quantiles_to(self, quantiles, prediction_type):
+        if prediction_type == "mean":
+            # calculate an approximate mean from quantiles
+            quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
+            quant_prob /= quant_prob.sum()  # normalize quantile weights
+            quant_prob = quant_prob.view(1, -1, 1, 1).to(quantiles.device)
+            return (quantiles * quant_prob).sum(dim=1)
+        elif prediction_type == "median":
+            if 0.5 not in self.config.quantiles:
+                raise RuntimeError("Median requested but not part of the quantiles.")
+            ix = self.config.quantiles.index(0.5)
+            return quantiles[:, ix, :]
+        else:
+            raise RuntimeError(
+                f"Unknown `prediction_type` detected. Should be one of ['mean', 'median'], but found {prediction_type}"
+            )
 
     @add_start_docstrings_to_model_forward(FLOWSTATE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlowStateForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -819,6 +839,15 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         if prediction_type is None:
             prediction_type = self.config.prediction_type
 
+            # In case of an older config where the quantile prediction was not always part of the `FlowStateForPredictionOutput`
+            # and prediction_type == 'quantile', fallback to a mean prediction, as the quantiles are now always part of the
+            # `FlowStateForPredictionOutput`
+            if prediction_type == "quantile":
+                logger.warning(
+                    "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
+                )
+                prediction_type = "mean"
+
         if past_values.dim() != 3:
             raise ValueError(
                 "`past_values` must have 3 dimensions of shape `(sequence_length, batch_size, num_input_channels)`."
@@ -856,22 +885,8 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             model_output.last_hidden_state, prediction_length
         )
 
-        if prediction_type == "quantile":
-            pass
-        elif prediction_type == "mean":
-            # calculate an approximate mean from quantiles
-            quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
-            quant_prob /= quant_prob.sum()  # normalize quantile weights
-            quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
-            model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
-        elif prediction_type == "median":
-            if 0.5 not in self.config.quantiles:
-                raise RuntimeError("Median requested but not part of the quantiles.")
-            ix = self.config.quantiles.index(0.5)
-            model_output.last_hidden_state = model_output.last_hidden_state[:, ix, :]
-        else:
-            raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
-
+        quantiles = model_output.last_hidden_state
+        point_predictions = self._transform_quantiles_to(quantiles, prediction_type)
         loss_val = None
 
         if not return_dict:
@@ -879,17 +894,19 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
                 v
                 for v in [
                     loss_val,
-                    model_output.last_hidden_state,
+                    point_predictions,
                     model_output.backbone_hidden_state,
                     model_output.decoder_hidden_state,
                     model_output.hidden_states,
+                    quantiles,
                 ]
             )
 
         return FlowStateForPredictionOutput(
             loss=loss_val,
-            prediction_outputs=model_output.last_hidden_state,  # tensor [batch_size x prediction_length x num_input_channels]
+            prediction_outputs=point_predictions,  # tensor [batch_size x prediction_length x num_input_channels]
             backbone_hidden_state=model_output.backbone_hidden_state,
             decoder_hidden_state=model_output.decoder_hidden_state,
             hidden_states=model_output.hidden_states,
+            quantile_outputs=quantiles,
         )

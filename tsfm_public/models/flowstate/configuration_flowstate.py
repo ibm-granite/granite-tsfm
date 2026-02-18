@@ -93,7 +93,7 @@ class FlowStateConfig(PretrainedConfig):
         decoder_type: str = "legs",
         # Loss function / Prediction
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        prediction_type: str = "quantile",
+        prediction_type: str = "mean",
         **kwargs,
     ):
         self.init_processing = False
@@ -148,11 +148,19 @@ class FlowStateConfig(PretrainedConfig):
         if not hasattr(self, "decoder_dim") or self.decoder_dim <= 0:
             raise ValueError("decoder_dim must be provided and positive")
         if not hasattr(self, "decoder_type") or self.decoder_type not in ["legs", "hlegs", "four"]:
-            raise ValueError("decoder_type must be provided and one of `['legs', 'hlegs', 'four']`")
+            raise ValueError(
+                f"decoder_type must be provided and one of `['legs', 'hlegs', 'four']`, but found {self.decoder_type}"
+            )
 
         # Check loss paramter
         if not hasattr(self, "quantiles") or min(self.quantiles) < 0.0 or max(self.quantiles) > 1.0:
             raise ValueError("The values of quantiles must be provided and between [0, 1]")
 
-        if not hasattr(self, "prediction_type") and self.prediction_type not in ["quantile", "mean", "median"]:
-            raise ValueError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+        if self.prediction_type == "quantile":
+            logger.warning(
+                "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
+            )
+            self.prediction_type = "mean"
+
+        if not hasattr(self, "prediction_type") or self.prediction_type not in ["mean", "median"]:
+            raise ValueError("Unknown prediction_type detected. Should be one of ['mean', 'median']")
