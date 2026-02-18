@@ -649,7 +649,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
@@ -943,7 +943,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
 
             seq_y[:, self._y_mask_conditional] = 0
 
@@ -1276,14 +1276,17 @@ def ts_padding(
     if timestamp_column:
         if len(df) < 2:
             pad_df[timestamp_column] = None
-        elif (df[timestamp_column].dtype.type == np.datetime64) or (df[timestamp_column].dtype == int):
+        elif (
+            (df[timestamp_column].dtype.type == np.datetime64)
+            or (df[timestamp_column].dtype == int)
+            or (df[timestamp_column].dtype == np.int64)
+        ):
             last_timestamp = df.iloc[0][timestamp_column]
             period = df.iloc[1][timestamp_column] - df.iloc[0][timestamp_column]
             prepended_timestamps = [last_timestamp + offset * period for offset in range(-fill_length, 0)]
             pad_df[timestamp_column] = prepended_timestamps
         else:
             pad_df[timestamp_column] = None
-        # Ensure same type
         pad_df[timestamp_column] = pad_df[timestamp_column].astype(df[timestamp_column].dtype)
 
     if id_columns:
