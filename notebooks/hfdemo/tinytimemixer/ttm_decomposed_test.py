@@ -364,6 +364,8 @@ def get_ttm_args():
 
     # ---------------- Quantile Head (Phase 4) ----------------
     parser.add_argument("--multi_quantile_head", action="store_true")
+    parser.add_argument("--num_quantiles", type=int, default=9)
+    parser.add_argument("--mq_hidden", type=int, default=8)
 
     # ---------------- Logging / Save ----------------
     parser.add_argument("--save_dir", type=str, default="./ttm_runs")
@@ -468,8 +470,11 @@ def get_base_model(args):
         trend_decoder_num_layers=args.trend_decoder_num_layers,
         # quantiles off for this 3-phase (can add Phase-4 later)
         multi_quantile_head=args.multi_quantile_head,
+        num_quantiles=args.num_quantiles,
+        mq_hidden=args.mq_hidden,
         head_d_model=args.head_d_model,
         trend_head_d_model=args.trend_head_d_model,
+        point_extra_weight=2,
         decompose=True,
     )
 
@@ -725,6 +730,15 @@ def pretrain(args, model, dset_train, dset_val):
 # Inference + Visualization
 # -----------------------------
 def inference(args, model_path, dset_test, label="iid"):
+    import os
+    import random
+    import tempfile
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from transformers import Trainer, TrainingArguments
+
+    # ---- load model ----
     model = TinyTimeMixerForDecomposedPrediction.from_pretrained(model_path)
     print(
         model.trend_loss_weight,
@@ -732,7 +746,7 @@ def inference(args, model_path, dset_test, label="iid"):
         model.joint_loss_weight,
         model.forecast_loss_type,
     )
-    # print_learnable_blocks(model)
+
     temp_dir = tempfile.mkdtemp()
     trainer = Trainer(
         model=model,
@@ -748,7 +762,8 @@ def inference(args, model_path, dset_test, label="iid"):
     output = trainer.evaluate(dset_test)
     print(output)
     print(model)
-    # Predict
+
+    # ---- Predict ----
     predictions_dict = trainer.predict(dset_test)
 
     # Unpack (matches your TinyTimeMixerForDecomposedPredictionOutput ordering)
@@ -761,29 +776,85 @@ def inference(args, model_path, dset_test, label="iid"):
     residual_prediction_outputs = predictions_dict.predictions[
         3
     ]  # [N, F, C] (inverse-scaled)
+
     input_data = predictions_dict.predictions[-2]  # [N, L, C] (raw scale)
     trend_input = predictions_dict.predictions[4]  # [N, L, C] trend (raw scale)
     residual_input_t = predictions_dict.predictions[5]  # [N, L, C] residual (raw scale)
     forecast_groundtruth = predictions_dict.predictions[-1]  # [N, F, C] (raw scale)
+
+    # Right-align residual input on the full input window (so it doesn't draw on the left)
     L_res = residual_input_t.shape[1]
-    residual_input = np.full_like(
-        input_data, np.nan
-    )  # fill with NaN so it does not draw
+    residual_input = np.full_like(input_data, np.nan)
+    residual_input[:, -L_res:] = residual_input_t
 
-    residual_input[:, -L_res:] = residual_input_t  # right-aligned residual
-    has_quantiles = model.config.multi_quantile_head
-
+    # ---- Quantiles (config-driven) ----
+    has_quantiles = bool(getattr(model.config, "multi_quantile_head", False))
     if has_quantiles:
+        # Expected shapes: [N, Q, F, C]
+        comb_q = predictions_dict.predictions[1]
         trend_q = predictions_dict.predictions[6]
         resid_q = predictions_dict.predictions[7]
-        comb_q = predictions_dict.predictions[1]
 
+        Q = int(getattr(model.config, "num_quantiles", 9))
+        if Q <= 0 or (Q % 2) == 0:
+            raise ValueError(f"Invalid config.num_quantiles={Q}. Must be positive odd.")
+
+        # Quantile grid used by MultiQuantileHead: i/(Q+1), i=1..Q
+        quantiles = np.arange(1, Q + 1, dtype=np.float32) / (Q + 1)
+
+        # median index (exact)
+        i50 = Q // 2
+
+        def plot_all_quantiles(
+            qarr, idx, ch, title, save_path, y_true=None, shade_p10_p90=True
+        ):
+            """
+            qarr: [N, Q, F, C]
+            Plots all Q quantile curves, highlights median, optionally shades p10-p90 (nearest indices).
+            """
+            qmat = qarr[idx, :, :, ch]  # [Q, F]
+            Fh = qmat.shape[1]
+
+            plt.figure(figsize=(12, 6))
+
+            # Plot all quantiles (faint)
+            for qi in range(Q):
+                plt.plot(qmat[qi], linewidth=0.8, alpha=0.35)
+
+            # Highlight median
+            plt.plot(qmat[i50], linewidth=2.0, label=f"q{quantiles[i50]:.2f} (median)")
+
+            # Optional: shade ~p10-p90 band using nearest indices
+            if shade_p10_p90:
+                i10 = int(np.argmin(np.abs(quantiles - 0.10)))
+                i90 = int(np.argmin(np.abs(quantiles - 0.90)))
+                q10 = qmat[i10]
+                q90 = qmat[i90]
+                plt.fill_between(
+                    np.arange(Fh),
+                    q10,
+                    q90,
+                    alpha=0.12,
+                    label=f"Band ({quantiles[i10]:.2f}–{quantiles[i90]:.2f})",
+                )
+
+            if y_true is not None:
+                plt.plot(y_true, linewidth=1.2, label="Ground Truth")
+
+            plt.title(title)
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(save_path)
+            plt.close()
+
+    # ---- quick sanity ----
     print("PRED--->", predictions_output[0, 0:10, 0])
     print("GRD---->", forecast_groundtruth[0, 0:10, 0])
 
     mse = np.mean((predictions_output - forecast_groundtruth) ** 2)
     print("MSE =", mse)
-    # Save random plots
+
+    # ---- Save random plots ----
     save_folder = os.path.join(args.save_dir, "random_plots", label)
     os.makedirs(save_folder, exist_ok=True)
 
@@ -801,25 +872,23 @@ def inference(args, model_path, dset_test, label="iid"):
 
         input_main = input_data[idx, :, ch]
         input_trend = trend_input[idx, :, ch]
-
         input_residual = residual_input[idx, :, ch]
 
+        # ---- Main 2-panel plot ----
         plt.figure(figsize=(12, 8))
 
-        # Inputs
         plt.subplot(2, 1, 1)
         plt.plot(input_main, label="Input", linewidth=1.5)
-        plt.plot(input_trend, label="Trend Input", linewidth=1)
-        plt.plot(input_residual, label="Residual Input", linewidth=1)
+        plt.plot(input_trend, label="Trend Input", linewidth=1.0)
+        plt.plot(input_residual, label="Residual Input", linewidth=1.0)
         plt.title(f"Inputs (Sample {idx}, Channel {ch})")
         plt.legend()
 
-        # Forecasts
         plt.subplot(2, 1, 2)
         plt.plot(forecast_main, label="Forecast", linewidth=1.5)
-        plt.plot(forecast_trend, label="Trend Forecast", linewidth=1)
-        plt.plot(forecast_residual, label="Residual Forecast", linewidth=1)
-        plt.plot(forecast_ori, label="Ground Truth", linewidth=1)
+        plt.plot(forecast_trend, label="Trend Forecast", linewidth=1.0)
+        plt.plot(forecast_residual, label="Residual Forecast", linewidth=1.0)
+        plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
         plt.title(f"Forecasts (Sample {idx}, Channel {ch})")
         plt.legend()
 
@@ -827,67 +896,208 @@ def inference(args, model_path, dset_test, label="iid"):
         plt.savefig(os.path.join(save_folder, f"plot_{i}.png"))
         plt.close()
 
-        # ---------------- Extra quantile plots ----------------
+        # ---- Quantile plots: plot ALL quantiles ----
         if has_quantiles:
-            # Helper to extract q10, q50, q90 lines
-            def q1090(qarr, idx, ch):
-                # qarr: [N, 9, F, C]; quantile order = [0.1,...,0.9], median at index 4
-                q10 = qarr[idx, 0, :, ch]
-                q50 = qarr[idx, 4, :, ch]
-                q90 = qarr[idx, 8, :, ch]
-                return q10, q50, q90
-
-            # --- Combined quantiles ---
-            q10, q50, q90 = q1090(comb_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(q50, label="Combined q50", linewidth=1.8)
-            plt.plot(q10, label="Combined q10", linewidth=1.0)
-            plt.plot(q90, label="Combined q90", linewidth=1.0)
-            # ground truth for reference
-            plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
-            # (optional) band shading
-            plt.fill_between(
-                np.arange(len(q50)), q10, q90, alpha=0.15, label="P80 band"
+            plot_all_quantiles(
+                comb_q,
+                idx,
+                ch,
+                title=f"Combined Quantiles (all Q={Q}) (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_combined_all_{i}.png"),
+                y_true=forecast_ori,
+                shade_p10_p90=True,
             )
-            plt.title(f"Combined Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_combined_{i}.png"))
-            plt.close()
 
-            # --- Trend quantiles ---
-            tq10, tq50, tq90 = q1090(trend_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(tq50, label="Trend q50", linewidth=1.8)
-            plt.plot(tq10, label="Trend q10", linewidth=1.0)
-            plt.plot(tq90, label="Trend q90", linewidth=1.0)
-            # optional teacher target overlay if you keep it around
-            # plt.plot(tau_tgt[idx,:,ch], label='Trend target', linewidth=1.0)
-            plt.fill_between(
-                np.arange(len(tq50)), tq10, tq90, alpha=0.15, label="P80 band"
+            plot_all_quantiles(
+                trend_q,
+                idx,
+                ch,
+                title=f"Trend Quantiles (all Q={Q}) (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_trend_all_{i}.png"),
+                y_true=None,
+                shade_p10_p90=True,
             )
-            plt.title(f"Trend Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_trend_{i}.png"))
-            plt.close()
 
-            # --- Residual quantiles ---
-            rq10, rq50, rq90 = q1090(resid_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(rq50, label="Residual q50", linewidth=1.8)
-            plt.plot(rq10, label="Residual q10", linewidth=1.0)
-            plt.plot(rq90, label="Residual q90", linewidth=1.0)
-            plt.fill_between(
-                np.arange(len(rq50)), rq10, rq90, alpha=0.15, label="P80 band"
+            plot_all_quantiles(
+                resid_q,
+                idx,
+                ch,
+                title=f"Residual Quantiles (all Q={Q}) (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_residual_all_{i}.png"),
+                y_true=None,
+                shade_p10_p90=True,
             )
-            plt.title(f"Residual Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_residual_{i}.png"))
-            plt.close()
 
     print(f"Saved {num_plots} plots to: {save_folder}")
+
+
+# # -----------------------------
+# # Inference + Visualization
+# # -----------------------------
+# def inference_old(args, model_path, dset_test, label="iid"):
+#     model = TinyTimeMixerForDecomposedPrediction.from_pretrained(model_path)
+#     print(
+#         model.trend_loss_weight,
+#         model.residual_loss_weight,
+#         model.joint_loss_weight,
+#         model.forecast_loss_type,
+#     )
+#     # print_learnable_blocks(model)
+#     temp_dir = tempfile.mkdtemp()
+#     trainer = Trainer(
+#         model=model,
+#         args=TrainingArguments(
+#             output_dir=temp_dir,
+#             per_device_eval_batch_size=args.batch_size,
+#             seed=args.random_seed,
+#             report_to="none",
+#         ),
+#     )
+
+#     print("+" * 20, "Test MSE output:", "+" * 20)
+#     output = trainer.evaluate(dset_test)
+#     print(output)
+#     print(model)
+#     # Predict
+#     predictions_dict = trainer.predict(dset_test)
+
+#     # Unpack (matches your TinyTimeMixerForDecomposedPredictionOutput ordering)
+#     predictions_output = predictions_dict.predictions[
+#         0
+#     ]  # [N, F, C] combined (inverse-scaled)
+#     trend_prediction_outputs = predictions_dict.predictions[
+#         2
+#     ]  # [N, F, C] (inverse-scaled)
+#     residual_prediction_outputs = predictions_dict.predictions[
+#         3
+#     ]  # [N, F, C] (inverse-scaled)
+#     input_data = predictions_dict.predictions[-2]  # [N, L, C] (raw scale)
+#     trend_input = predictions_dict.predictions[4]  # [N, L, C] trend (raw scale)
+#     residual_input_t = predictions_dict.predictions[5]  # [N, L, C] residual (raw scale)
+#     forecast_groundtruth = predictions_dict.predictions[-1]  # [N, F, C] (raw scale)
+#     L_res = residual_input_t.shape[1]
+#     residual_input = np.full_like(
+#         input_data, np.nan
+#     )  # fill with NaN so it does not draw
+
+#     residual_input[:, -L_res:] = residual_input_t  # right-aligned residual
+#     has_quantiles = model.config.multi_quantile_head
+
+#     if has_quantiles:
+#         trend_q = predictions_dict.predictions[6]
+#         resid_q = predictions_dict.predictions[7]
+#         comb_q = predictions_dict.predictions[1]
+
+#     print("PRED--->", predictions_output[0, 0:10, 0])
+#     print("GRD---->", forecast_groundtruth[0, 0:10, 0])
+
+#     mse = np.mean((predictions_output - forecast_groundtruth) ** 2)
+#     print("MSE =", mse)
+#     # Save random plots
+#     save_folder = os.path.join(args.save_dir, "random_plots", label)
+#     os.makedirs(save_folder, exist_ok=True)
+
+#     num_samples = predictions_output.shape[0]
+#     num_plots = min(10, num_samples)
+
+#     ch = 0  # plot first channel by default
+#     for i in range(num_plots):
+#         idx = random.randint(0, num_samples - 1)
+
+#         forecast_main = predictions_output[idx, :, ch]
+#         forecast_trend = trend_prediction_outputs[idx, :, ch]
+#         forecast_residual = residual_prediction_outputs[idx, :, ch]
+#         forecast_ori = forecast_groundtruth[idx, :, ch]
+
+#         input_main = input_data[idx, :, ch]
+#         input_trend = trend_input[idx, :, ch]
+
+#         input_residual = residual_input[idx, :, ch]
+
+#         plt.figure(figsize=(12, 8))
+
+#         # Inputs
+#         plt.subplot(2, 1, 1)
+#         plt.plot(input_main, label="Input", linewidth=1.5)
+#         plt.plot(input_trend, label="Trend Input", linewidth=1)
+#         plt.plot(input_residual, label="Residual Input", linewidth=1)
+#         plt.title(f"Inputs (Sample {idx}, Channel {ch})")
+#         plt.legend()
+
+#         # Forecasts
+#         plt.subplot(2, 1, 2)
+#         plt.plot(forecast_main, label="Forecast", linewidth=1.5)
+#         plt.plot(forecast_trend, label="Trend Forecast", linewidth=1)
+#         plt.plot(forecast_residual, label="Residual Forecast", linewidth=1)
+#         plt.plot(forecast_ori, label="Ground Truth", linewidth=1)
+#         plt.title(f"Forecasts (Sample {idx}, Channel {ch})")
+#         plt.legend()
+
+#         plt.tight_layout()
+#         plt.savefig(os.path.join(save_folder, f"plot_{i}.png"))
+#         plt.close()
+
+#         # ---------------- Extra quantile plots ----------------
+#         if has_quantiles:
+#             # Helper to extract q10, q50, q90 lines
+#             def q1090(qarr, idx, ch):
+#                 # qarr: [N, 9, F, C]; quantile order = [0.1,...,0.9], median at index 4
+#                 q10 = qarr[idx, 0, :, ch]
+#                 q50 = qarr[idx, 4, :, ch]
+#                 q90 = qarr[idx, 8, :, ch]
+#                 return q10, q50, q90
+
+#             # --- Combined quantiles ---
+#             q10, q50, q90 = q1090(comb_q, idx, ch)
+#             plt.figure(figsize=(12, 6))
+#             plt.plot(q50, label="Combined q50", linewidth=1.8)
+#             plt.plot(q10, label="Combined q10", linewidth=1.0)
+#             plt.plot(q90, label="Combined q90", linewidth=1.0)
+#             # ground truth for reference
+#             plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
+#             # (optional) band shading
+#             plt.fill_between(
+#                 np.arange(len(q50)), q10, q90, alpha=0.15, label="P80 band"
+#             )
+#             plt.title(f"Combined Quantiles (Sample {idx}, Channel {ch})")
+#             plt.legend()
+#             plt.tight_layout()
+#             plt.savefig(os.path.join(save_folder, f"quant_combined_{i}.png"))
+#             plt.close()
+
+#             # --- Trend quantiles ---
+#             tq10, tq50, tq90 = q1090(trend_q, idx, ch)
+#             plt.figure(figsize=(12, 6))
+#             plt.plot(tq50, label="Trend q50", linewidth=1.8)
+#             plt.plot(tq10, label="Trend q10", linewidth=1.0)
+#             plt.plot(tq90, label="Trend q90", linewidth=1.0)
+#             # optional teacher target overlay if you keep it around
+#             # plt.plot(tau_tgt[idx,:,ch], label='Trend target', linewidth=1.0)
+#             plt.fill_between(
+#                 np.arange(len(tq50)), tq10, tq90, alpha=0.15, label="P80 band"
+#             )
+#             plt.title(f"Trend Quantiles (Sample {idx}, Channel {ch})")
+#             plt.legend()
+#             plt.tight_layout()
+#             plt.savefig(os.path.join(save_folder, f"quant_trend_{i}.png"))
+#             plt.close()
+
+#             # --- Residual quantiles ---
+#             rq10, rq50, rq90 = q1090(resid_q, idx, ch)
+#             plt.figure(figsize=(12, 6))
+#             plt.plot(rq50, label="Residual q50", linewidth=1.8)
+#             plt.plot(rq10, label="Residual q10", linewidth=1.0)
+#             plt.plot(rq90, label="Residual q90", linewidth=1.0)
+#             plt.fill_between(
+#                 np.arange(len(rq50)), rq10, rq90, alpha=0.15, label="P80 band"
+#             )
+#             plt.title(f"Residual Quantiles (Sample {idx}, Channel {ch})")
+#             plt.legend()
+#             plt.tight_layout()
+#             plt.savefig(os.path.join(save_folder, f"quant_residual_{i}.png"))
+#             plt.close()
+
+#     print(f"Saved {num_plots} plots to: {save_folder}")
 
 
 # -----------------------------

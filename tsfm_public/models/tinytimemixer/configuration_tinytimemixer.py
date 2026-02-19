@@ -221,6 +221,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
         fft_length: int = 0,
         use_fft_embedding: bool = True,
         multi_quantile_head: bool = False,
+        num_quantiles: int = 9,
+        mq_hidden: int = 8,
+        mq_kernel_size: int = 3,
         point_extra_weight: Optional[int] = 0,
         residual_context_length: int = None,
         trend_patch_length: int = None,
@@ -235,7 +238,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         residual_loss_weight: Optional[float] = 1,
         joint_loss_weight: Optional[float] = 1,
         forecast_loss_type: Optional[str] = "joint",
-        decompose: bool = True,
+        decompose: bool = False,
         **kwargs,
     ):
 
@@ -302,6 +305,10 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.fft_length = fft_length
         self.use_fft_embedding = use_fft_embedding
         self.multi_quantile_head = multi_quantile_head
+
+        self.num_quantiles = num_quantiles
+        self.mq_kernel_size = mq_kernel_size
+        self.mq_hidden = mq_hidden
         self.point_extra_weight = point_extra_weight
         self.residual_context_length = residual_context_length
         self.trend_patch_length = trend_patch_length
