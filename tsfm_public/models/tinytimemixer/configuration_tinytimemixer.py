@@ -235,7 +235,8 @@ class TinyTimeMixerConfig(PretrainedConfig):
         residual_loss_weight: Optional[float] = 1,
         joint_loss_weight: Optional[float] = 1,
         forecast_loss_type: Optional[str] = "joint",
-        decompose: bool = True,
+        decompose: bool = False,
+        light_mode: bool = False,
         **kwargs,
     ):
 
@@ -317,6 +318,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.forecast_loss_type = forecast_loss_type
         self.trend_head_d_model = trend_head_d_model
         self.decompose = decompose
+        self.light_mode = light_mode
 
         super().__init__(**kwargs)
 

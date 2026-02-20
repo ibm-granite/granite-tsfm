@@ -2907,13 +2907,24 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     # avoiding mask operations for performance benefits on normal scenarios.
                     loss_val = loss(y_hat, future_values)
 
+        m_last_hidden_state = model_output.last_hidden_state
+
+        if self.config.light_mode:
+            m_last_hidden_state = None
+            decoder_output = None
+            hidden_states = None
+            loc = None
+            scale = None
+            past_values = None
+            future_values = None
+
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     loss_val,
                     y_hat,
-                    model_output.last_hidden_state,
+                    m_last_hidden_state,
                     decoder_output,
                     hidden_states,
                     loc,
@@ -2927,7 +2938,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         return TinyTimeMixerForPredictionOutput(
             loss=loss_val,
             prediction_outputs=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
-            backbone_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
+            backbone_hidden_state=m_last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             decoder_hidden_state=decoder_output,  # x: [batch_size x nvars x num_patch x decoder_d_model]
             hidden_states=hidden_states,
             loc=loc,
@@ -3388,30 +3399,39 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             metadata=metadata,
         )
 
+        m_prediction_outputs = model_output.prediction_outputs
+        m_quantile_outputs = model_output.quantile_outputs
+        m_input_data = model_output.input_data
+        m_forecast_groundtruth = model_output.forecast_groundtruth
+
+        if self.config.light_mode:
+            m_input_data = None
+            m_forecast_groundtruth = None
+            
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     model_output.loss,
-                    model_output.prediction_outputs,
-                    model_output.quantile_outputs,
+                    m_prediction_outputs,
+                    m_quantile_outputs,
                     None,
                     None,
                     None,
                     None,
                     None,
                     None,
-                    model_output.input_data,
-                    model_output.forecast_groundtruth,
+                    m_input_data,
+                    m_forecast_groundtruth,
                 ]
             )
 
         return TinyTimeMixerForDecomposedPredictionOutput(
             loss=model_output.loss,
-            prediction_outputs=model_output.prediction_outputs,
-            quantile_outputs=model_output.quantile_outputs,
-            input_data=model_output.quantile_outputs,
-            forecast_groundtruth=model_output.forecast_groundtruth,
+            prediction_outputs=m_prediction_outputs,
+            quantile_outputs=m_quantile_outputs,
+            input_data=m_input_data,
+            forecast_groundtruth=m_forecast_groundtruth,
         )
 
     def set_stage(
@@ -3664,6 +3684,17 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                 data=residual_quantile_outputs, loc=loc_exp, scale=scale_exp
             )
 
+        
+        if self.config.light_mode:
+            trend_prediction_outputs = None
+            residual_prediction_outputs = None
+            trend_signal = None
+            residual_signal = None
+            trend_quantile_outputs = None
+            residual_quantile_outputs = None
+            past_values = None
+            future_values = None
+            
         # if not return_dict:
         #     return tuple(
         #         v
