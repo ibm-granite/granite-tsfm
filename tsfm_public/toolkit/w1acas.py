@@ -1,7 +1,13 @@
 # Copyright contributors to the TSFM project
 #
 import numpy as np
-from tsfm_public.toolkit.conformal import (
+# from tsfm_public.toolkit.conformal import (
+#     AdaptiveWeightedConformalScoreWrapper,
+#     PostHocProbabilisticProcessor,
+#     NonconformityScores,
+#     nonconformity_score_functions,
+# )
+from .conformal import (
     AdaptiveWeightedConformalScoreWrapper,
     PostHocProbabilisticProcessor,
     NonconformityScores,
