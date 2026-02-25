@@ -58,6 +58,8 @@ if __name__ == "__main__":
                         help='Initialization strategy for past weights (0, "proximity", or numeric value)')
     parser.add_argument('--return_weights', action='store_true',
                         help='If set, returns calibration scores and weights along with p-values')
+    parser.add_argument('--tsb_ad_evaluation', action='store_true',
+                        help='If set, also computes TSB-AD evaluation metrics')
     
     args = parser.parse_args()
 
@@ -86,6 +88,12 @@ if __name__ == "__main__":
     lr = args.lr
     prior_past_weights_value = args.prior_past_weights_value
     return_weights = args.return_weights
+    tsb_ad_evaluation = args.tsb_ad_evaluation
+    
+    # Conditionally import TSB-AD functions if needed
+    if tsb_ad_evaluation:
+        from tsb_ad_evaluation import get_scores_tsb_ad_eval
+        from TSB_AD.utils.slidingWindows import find_length_rank
     
 
     # Dataset configuration
@@ -202,14 +210,28 @@ if __name__ == "__main__":
 
     
     
-    # Compute evaluation metrics
+    # Compute standard evaluation metrics
     evaluation = get_scores_eval(1 - p_values_test, label_test)
-    print("\nEvaluation metrics:")
+    print("\nStandard Evaluation metrics:")
     print(evaluation)
     
     # Get threshold and predictions
     threshold = evaluation['threshold_dependent_metrics']['PA-F1_point']['threshold']
     label_pred_test = p_values_test < threshold
+    
+    # Compute TSB-AD evaluation metrics if requested
+    if tsb_ad_evaluation:
+        slidingWindow = find_length_rank(data[:, 0].reshape(-1, 1), rank=1)
+        evaluation_tsb_ad = get_scores_tsb_ad_eval(1 - p_values_test, label_test, slidingWindow=slidingWindow)
+        print("\nTSB-AD Evaluation metrics:")
+        print(evaluation_tsb_ad)
+
+        # Save TSB-AD evaluation as JSON if computed
+        evaluation_tsb_ad_path = os.path.join(output_base_dir, "evaluation_tsb_ad.json")
+        with open(evaluation_tsb_ad_path, 'w') as f:
+            json.dump(evaluation_tsb_ad, f, indent=2)
+        print(f"TSB-AD Evaluation saved to: {evaluation_tsb_ad_path}")
+    
     
     # Save p_values_all as CSV
     p_values_df = pd.DataFrame({
@@ -222,12 +244,12 @@ if __name__ == "__main__":
     p_values_df.to_csv(p_values_path, index=False)
     print(f"P-values saved to: {p_values_path}")
     
-    # Save evaluation as JSON
+    # Save standard evaluation as JSON
     evaluation_path = os.path.join(output_base_dir, "evaluation.json")
     with open(evaluation_path, 'w') as f:
         json.dump(evaluation, f, indent=2)
     print(f"Evaluation saved to: {evaluation_path}")
-    
+
     # Generate and save visualization
     print("\nGenerating visualization...")
     plot_anomaly_detection(data[train_index:], label_test, p_values_test, label_pred_test, threshold=threshold, output_dir=output_base_dir)

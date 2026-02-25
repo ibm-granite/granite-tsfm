@@ -35,10 +35,7 @@ pip install tirex-ts
 
 **For TSB-AD Evaluation Metrics:**
 ```bash
-# Clone and install TSB-AD repository
-git clone https://github.com/TheDatumOrg/TSB-AD.git
-cd TSB-AD
-pip install -e .
+pip install TSB-AD
 ```
 
 Note: TSB-AD is only required if you want to use the advanced evaluation metrics in `tsb_ad_evaluation.py`.
@@ -121,6 +118,16 @@ python main_acas_w1.py --model_name chronos-bolt-small
 # Using TiRex model
 python main_acas_w1.py --model_name tirex
 ```
+
+**Enable TSB-AD Evaluation Metrics:**
+
+To compute additional TSB-AD evaluation metrics (requires TSB-AD installation), add the `--tsb_ad_evaluation` flag:
+
+```bash
+python main_acas_w1.py --tsb_ad_evaluation
+```
+
+This will generate both standard evaluation metrics (`evaluation.json`) and TSB-AD metrics (`evaluation_tsb_ad.json`).
 
 ### Custom Configuration
 
