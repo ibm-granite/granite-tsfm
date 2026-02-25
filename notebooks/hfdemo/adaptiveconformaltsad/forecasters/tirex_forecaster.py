@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
+import torch
 from utils import create_rolling_forecast_contexts
 from tirex import ForecastModel, load_model
 import numpy as np
@@ -63,7 +63,7 @@ def tirex_forecaster(
         - 'y_pred': np.ndarray, shape (n_samples, prediction_length, n_features)
         - 'y_true': np.ndarray, shape (n_samples, prediction_length, n_features)
     """
-    device_map = "cuda" if torch.cuda.is_available() else "cpu"
+    device_map = "cuda:0" if torch.cuda.is_available() else "cpu"
     # Get model checkpoint
     if model_checkpoint is None:
         if model_name in TIREX_MODELS:

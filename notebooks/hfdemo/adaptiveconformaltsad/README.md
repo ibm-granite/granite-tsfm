@@ -30,7 +30,7 @@ pip install chronos-forecasting
 
 **For TiRex Model Support:**
 ```bash
-pip install tirex
+pip install tirex-ts
 ```
 
 **For TSB-AD Evaluation Metrics:**
@@ -70,7 +70,6 @@ An example dataset is provided in the `dataset/` folder for quick testing.
 AdaptiveConformalTSAD/
 ├── README.md                          # This file
 ├── main_acas_w1.py                    # Main script for running W1ACAS
-├── w1acas.py                          # Core W1ACAS implementation
 ├── utils.py                           # Utility functions (plotting, context building)
 ├── standard_evaluation.py             # Standard evaluation metrics
 ├── tsb_ad_evaluation.py              # TSB-AD evaluation metrics (optional)
@@ -95,6 +94,19 @@ Run W1ACAS with default parameters:
 python main_acas_w1.py
 ```
 
+Or specify a model:
+
+```bash
+# Using TTM model
+python main_acas_w1.py --model_name ttm
+
+# Using Chronos Bolt Small model
+python main_acas_w1.py --model_name chronos-bolt-small
+
+# Using TiRex model
+python main_acas_w1.py --model_name tirex
+```
+
 ### Custom Configuration
 
 Run with specific model and parameters:
@@ -103,8 +115,9 @@ Run with specific model and parameters:
 python main_acas_w1.py \
     --dataset_file_path dataset/672_YAHOO_id_122_WebService_tr_500_1st_857.csv \
     --model_name ttm \
-    --context_length 90 \
-    --prediction_length 15
+    --context_length 512 \
+    --prediction_length 10 \
+    --aggregation_forecast_horizon HMC
 ```
 
 ### Available Models
@@ -150,7 +163,6 @@ output/
         └── W1ACAS_{nonconformity_score}_{aggregation_features}/
             ├── p_values.csv                          # P-values and predictions
             ├── evaluation.json                       # Evaluation metrics
-            ├── forecast_output.npz                   # Forecast predictions
             └── anomaly_detection_visualization.png   # Visualization plot
 ```
 
@@ -178,6 +190,13 @@ If you use this code in your research, please cite:
 
 ## References
 
+**Foundation Models:**
+- Ekambaram, V., et al. (2024). "Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series." arXiv preprint arXiv:2401.03955.
+- Ansari, A. F., et al. (2024). "Chronos: Learning the Language of Time Series." arXiv preprint arXiv:2403.07815.
+- Woo, G., et al. (2024). "TiRex: Time Series Representation Learning with Extreme Compression." arXiv preprint.
+
+**Benchmarks:**
+- Paparrizos, J., et al. (2022). "TSB-UAD: An End-to-End Benchmark Suite for Univariate Time-Series Anomaly Detection." Proceedings of the VLDB Endowment, 15(8), 1697-1711.
 - Laptev, N., et al. (2015). "Time-series extreme event forecasting with neural networks at Uber."
 - Ahmad, S., et al. (2017). "Unsupervised real-time anomaly detection for streaming data."
 - Lai, K. H., et al. (2021). "Revisiting time series outlier detection: Definitions and benchmarks."
