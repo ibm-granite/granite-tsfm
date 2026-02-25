@@ -88,6 +88,21 @@ AdaptiveConformalTSAD/
 
 ### Basic Usage
 
+**Download Example Dataset:**
+
+Before running the code, download the example dataset `672_YAHOO_id_122_WebService_tr_500_1st_857.csv` from the TSB-AD-U package:
+
+```bash
+# Download and extract TSB-AD-U dataset
+wget https://www.thedatum.org/datasets/TSB-AD-U.zip
+unzip TSB-AD-U.zip
+
+# Copy the example dataset to the dataset folder
+cp TSB-AD-U/672_YAHOO_id_122_WebService_tr_500_1st_857.csv dataset/
+```
+
+**Run W1ACAS:**
+
 Run W1ACAS with default parameters:
 
 ```bash
