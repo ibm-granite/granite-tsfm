@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 from pandas.core.frame import DataFrame
 import numpy as np
 

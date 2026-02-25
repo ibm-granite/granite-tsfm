@@ -1,5 +1,6 @@
 
-
+# Copyright contributors to the TSFM project
+#
 """
 Time Series Anomaly Detection Metrics
 

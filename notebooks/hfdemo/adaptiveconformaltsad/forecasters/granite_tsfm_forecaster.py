@@ -1,3 +1,5 @@
+# Copyright contributors to the TSFM project
+#
 import numpy as np
 from tsfm_public.toolkit import get_model
 from tsfm_public.toolkit.time_series_preprocessor import (
