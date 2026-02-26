@@ -139,7 +139,8 @@ python main_acas_w1.py \
     --model_name ttm \
     --context_length 512 \
     --prediction_length 10 \
-    --aggregation_forecast_horizon HMC
+    --aggregation_forecast_horizon HMC \
+    --nonconformity_score error
 ```
 
 ### Available Models
@@ -204,7 +205,7 @@ If you use this code in your research, please cite:
 ```bibtex
 @inproceedings{w1acas2026,
   title={Adaptive Conformal Anomaly Detection with Time Series Foundation Models for Signal Monitoring},
-  author={[Authors]},
+  author={Natalia Martinez Gil and Fearghal O'Donncha and Wesley M. Gifford and Nianjun Zhou and Dhaval C. Patel and Roman Vaculin},
   booktitle={International Conference on Learning Representations (ICLR)},
   year={2026}
 }

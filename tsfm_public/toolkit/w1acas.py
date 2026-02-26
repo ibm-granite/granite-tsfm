@@ -330,6 +330,10 @@ def get_forecast_conformal_adaptive_online_score(
     weighting_optim_params["window_size"] = window_size
     weighting_optim_params["prior_past_weights_value"] = prior_past_weights_value
 
+    beta_prior = None
+    if nonconformity_score in ['error']:
+        beta_prior = (1.0,1.0)
+
     ### Initialize AD_MODEL
     print("#Optimization parameters :: ")
     print(weighting_optim_params)
@@ -366,10 +370,14 @@ def get_forecast_conformal_adaptive_online_score(
             )
             ini_i_cal = ix_h
             end_i_cal = ix_h + int(np.ceil(1 / significance_level))
-            beta_cal = awcs.fit(nonconformity_scores_values[ini_i_cal:end_i_cal])
+            beta_cal = awcs.fit(nonconformity_scores_values[ini_i_cal:end_i_cal],beta_prior=beta_prior)
+            if nonconformity_score in ['error']:
+                beta_cal = np.minimum(1,2*np.minimum(beta_cal, 1 - beta_cal))
             outliers_scores[ini_i_cal:end_i_cal, ix_h, ix_f] = beta_cal
 
-            beta_all = awcs.predict(nonconformity_scores_values[end_i_cal:])
+            beta_all = awcs.predict(nonconformity_scores_values[end_i_cal:],beta_prior=beta_prior)
+            if nonconformity_score in ['error']:
+                beta_all = np.minimum(1,2*np.minimum(beta_all, 1 - beta_all))
             outliers_scores[end_i_cal:, ix_h, ix_f] = beta_all
 
             if return_weights:
