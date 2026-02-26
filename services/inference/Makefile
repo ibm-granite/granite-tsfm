@@ -10,7 +10,6 @@ boilerplate:
 		echo $$f; \
 		cat ../boilerplate/warning.txt > tsfminference/$$(basename $$f); \
 		cat $$f>>tsfminference/$$(basename $$f); \
-		if ! grep $$(basename $$f) tsfminference/.gitignore; then echo $$(basename $$f) >> tsfminference/.gitignore; fi \
 		done
 
 create_prometheus_metrics_dir:

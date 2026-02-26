@@ -38,6 +38,7 @@ jobs:
         sudo apt-get clean
         sudo rm -rf /usr/local/lib/android
         docker system prune --all --force || true
+        docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest
         SKIP_GPU_BUILD="1" CONTAINER_BUILDER=docker \
          $HOME/.local/bin/uv run --locked --directory=services/inference make image 
          $HOME/.local/bin/uv run --locked --directory=services/inference make test_image
