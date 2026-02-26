@@ -6,7 +6,7 @@ import enum
 import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+import warnings
 import numpy as np
 import pandas as pd
 import torch
@@ -1898,7 +1898,7 @@ class AdaptiveWeightedConformalScoreWrapper:
         #     self.weighting_params["n_batch_update"] > self.weights_critical_norm
         # ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
 
-    def fit(self, scores: np.ndarray) -> np.ndarray:
+    def fit(self, scores: np.ndarray, beta_prior : Optional[Tuple[float, float]] = None) -> np.ndarray:
         """
         Fit the model using calibration nonconformity scores.
 
@@ -1943,6 +1943,7 @@ class AdaptiveWeightedConformalScoreWrapper:
                     torch_scores_past.to(self.device),
                     weights=self.weights_parameters[-scores.shape[0] :],
                     conformal_weights=True,
+                    beta_prior=beta_prior,
                 )
                 .clone()
                 .detach()
@@ -1952,7 +1953,7 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         return 1 - np.array(betas)
 
-    def predict(self, scores: np.ndarray, verbose: bool = False) -> np.ndarray:
+    def predict(self, scores: np.ndarray, verbose: bool = False, beta_prior : Optional[Tuple[float, float]] = None) -> np.ndarray:
         """
         Perform online prediction of conformal p-values for observed scores.
 
@@ -2026,6 +2027,7 @@ class AdaptiveWeightedConformalScoreWrapper:
                         weights=self.weights_parameters[-scores_matrix.shape[1] :],
                         # weights=self.weights_average[-scores_matrix.shape[1]:]/self.weights_average_count,
                         conformal_weights=True,
+                        beta_prior=beta_prior,
                     )
                     .clone()
                     .detach()
@@ -2135,34 +2137,48 @@ def get_beta(
     test_scores: torch.Tensor,
     observed_scores: torch.Tensor,
     weights: Optional[torch.Tensor] = None,
-    conformal_weights: bool = True,
+    conformal_weights: bool = True,  #legacy default: True => beta_prior (1,0)
+    beta_prior: Optional[Tuple[float, float]] = None,   # (a_prior, b_prior)
 ) -> torch.Tensor:
     """
-    Compute the weighted conformal p-scores (beta_t) for a batch of test scores given observed calibration scores.
+    Compute the weighted conformal p-scores (beta_t) for a batch of test scores given observed calibration scores. The scores are estimated as weighted left-tail probabilities with optional Beta(a,b) (Laplace) smoothing.
 
     Args:
-        test_scores (np.ndarray): Array of test (observed) nonconformity scores. Shape: (b,).
-        observed_scores (np.ndarray): Array of previously observed scores. Shape: (b, w), where each row contains the calibration scores for a given test point.
-        weights (np.ndarray): Array of time-based weights applied to observed scores. Shape: (w,). All weights should lie in the range [0, 1].
-        conformal_weights (bool, optional): Apply conformal quantile conservative correction.
-
+        test_scores (np.ndarray): Array of test (observed) nonconformity scores. Shape: (B,).
+        observed_scores (np.ndarray): Array of previously observed scores. Shape: (B, W), where each row contains the calibration scores for a given test point.
+        weights (np.ndarray): Array of time-based weights applied to observed scores. Shape: (W,). All weights should lie in the range [0, 1].
+        conformal_weights (bool, optional): Legacy flag enabling the standard conformal finite-sample correction (equivalent to Beta(1,0) smoothing). Ignored if `beta_prior` is provided.
+        beta_prior (tuple(float, float), optional): Beta(a,b) prior controlling Laplace smoothing of the empirical CDF. If provided, it overrides `conformal_weights`.
+    
     Returns:
-        np.ndarray: Array of weighted p-scores (beta_t) for each test score. Shape: (b,).
+        np.ndarray: Array of weighted p-scores (beta_t) for each test score. Shape: (B,).
     """
 
-    b, w = observed_scores.shape
+    B, W = observed_scores.shape
 
     assert (
-        test_scores.ndim == 1 and test_scores.shape[0] == b
+        test_scores.ndim == 1 and test_scores.shape[0] == B
     ), "incorrect dimensions for test and observed scores, got {} and {}".format(
         test_scores.shape, observed_scores.shape
     )
 
+    # Resolve (a_prior, b_prior) with clear precedence    
+    if beta_prior is not None:        
+        a_prior, b_prior = map(float, beta_prior)        
+        if conformal_weights is not True:  # user explicitly changed legacy flag while providing beta_prior            
+            warnings.warn(
+                "`beta_prior` is provided and will override `conformal_weights`. "
+                "Remove or ignore `conformal_weights` to silence this warning.",
+                stacklevel=2,            
+                )    
+    else:
+        a_prior, b_prior = (1.0, 0.0) if conformal_weights else (0.0, 0.0)
+
     if weights is None:
-        weights = torch.ones(w)
+        weights = torch.ones(W)
 
     assert (
-        weights.ndim == 1 and weights.shape[0] == w
+        weights.ndim == 1 and weights.shape[0] == W
     ), "incorrect dimensions for weights and observed scores, got {} and {}".format(
         weights.shape, observed_scores.shape
     )
@@ -2171,12 +2187,12 @@ def get_beta(
     ), "weights should be constrained between 0 and 1, got {} and {}".format(weights.max(), weights.min())
 
     betas = (weights.unsqueeze(0) * (observed_scores <= test_scores.unsqueeze(1))).sum(1)
-
     weight_norm = weights.sum()
-    if conformal_weights:
-        weight_norm = weight_norm + 1
-        betas = betas + 1
-    betas = betas / weight_norm
+    # if conformal_weights:
+    #     weight_norm = weight_norm + 1
+    #     betas = betas + 1
+    # betas = betas / weight_norm
+    betas = (betas + a_prior) / (weight_norm + a_prior + b_prior)
 
     # betas = ((weights.unsqueeze(0) * (observed_scores<= test_scores.unsqueeze(1))).sum(1)+1)/weight_norm
     return betas
