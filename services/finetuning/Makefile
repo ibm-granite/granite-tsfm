@@ -9,7 +9,6 @@ boilerplate:
 		echo $$f; \
 		cat ../boilerplate/warning.txt > tsfmfinetuning/$$(basename $$f); \
 		cat $$f>>tsfmfinetuning/$$(basename $$f); \
-		if ! grep $$(basename $$f) tsfmfinetuning/.gitignore; then echo $$(basename $$f) >> tsfmfinetuning/.gitignore; fi \
 		done
 
 image: boilerplate
