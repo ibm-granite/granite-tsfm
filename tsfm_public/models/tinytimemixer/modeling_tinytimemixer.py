@@ -1605,6 +1605,21 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
 
+        # if isinstance(module, MultiQuantileHead):
+        #     # Initialize MQ temperature parameter if enabled.
+        #     # This avoids doing init inside the head and keeps HF-style init central.
+        #     if (
+        #         getattr(module, "enable_delta_temperature", False)
+        #         and module._temp_u is not None
+        #     ):
+        #         init_temp = float(getattr(self.config, "mq_temperature_init", 1.0))
+        #         init_temp = max(init_temp, 1e-8)
+
+        #         # softplus^{-1}(x) = log(exp(x) - 1)
+        #         init_u = torch.log(torch.expm1(torch.tensor(init_temp)))
+
+        #         with torch.no_grad():
+        #             module._temp_u.data.fill_(init_u)
         if isinstance(module, TinyTimeMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
@@ -2167,67 +2182,117 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
 
 
 class MultiQuantileHead(nn.Module):
-    """
-    Turn mean forecasts [B, C, T] into quantiles [B, C, 9, T] for q = 0.1..0.9.
-    - Channel independent: same weights applied to every channel.
-    - Monotonic by construction using positive cumulative deltas (softplus).
-    - Deltas are conditioned on the mean via a small temporal conv stack.
 
-    Quantile layout (dim=2): [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
-    """
-
-    def __init__(self, hidden: int = 8, kernel_size: int = 3, eps: float = 1e-6):
+    def __init__(self, config):
         super().__init__()
-        self.eps = eps
-        pad = kernel_size // 2
 
-        # Per-channel temporal features (shared across channels)
-        self.dw = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=pad, bias=True)
-        self.inorm = nn.InstanceNorm1d(1, affine=True)  # time-wise stabilization
-        # Lightweight projection to quantile params
-        self.pw1 = nn.Conv1d(1, hidden, kernel_size=1, bias=True)
-        self.pw2 = nn.Conv1d(
-            hidden, 9, kernel_size=1, bias=True
-        )  # [bias50, 4*down, 4*up]
+        self.mq_hidden = int(getattr(config, "mq_hidden", 8))
+        self.mq_kernel_size = int(getattr(config, "mq_kernel_size", 3))
+        self.mq_eps = float(getattr(config, "mq_eps", 1e-6))
 
+        self.decoder_d_model = int(config.decoder_d_model)
+        self.num_patches = int(config.num_patches)  # ← use backbone config
+
+        self.mq_use_decoder_pool = bool(getattr(config, "mq_use_decoder_pool", False))
+        self.mq_cond_path = str(getattr(config, "mq_cond_path", "pool")).lower()
+        self.mq_cond_mode = str(getattr(config, "mq_cond_mode", "add")).lower()
+
+        assert self.mq_cond_path in ("pool", "flatten")
+        assert self.mq_cond_mode in ("add", "concat")
+
+        self.mq_q50_type = str(getattr(config, "mq_q50_type", "median")).lower()
+
+        # --- base stack ---
+        pad = self.mq_kernel_size // 2
+        self.dw = nn.Conv1d(1, 1, kernel_size=self.mq_kernel_size, padding=pad)
+        self.inorm = nn.InstanceNorm1d(1, affine=True)
+        self.pw1 = nn.Conv1d(1, self.mq_hidden, kernel_size=1)
         self.act = nn.GELU()
 
-    def _safe_time_norm(self, x, eps=1e-3, clip=10.0):
-        # x: [B*C, 1, T]
-        mu = x.mean(dim=2, keepdim=True)
-        var = x.var(dim=2, unbiased=False, keepdim=True)
-        xn = (x - mu) / (var.add_(eps).sqrt_())
-        return xn.clamp_(-clip, clip)
+        # --- decoder conditioning ---
+        if self.mq_use_decoder_pool:
 
-    def forward(self, mean_hat: torch.Tensor) -> torch.Tensor:
-        """
-        mean_hat: [B, T,C]
-        returns qhat: [B, 9, T,C] for quantiles [0.1,...,0.9]
-        """
-        mean_hat = mean_hat.transpose(-1, -2)  # [B, C, T]
-        assert mean_hat.dim() == 3, "mean_hat must be [B, C, T]"
-        B, C, T = mean_hat.shape
+            if self.mq_cond_path == "pool":
+                self.dec_proj = nn.Linear(self.decoder_d_model, self.mq_hidden)
 
-        x = mean_hat.reshape(B * C, 1, T)  # share weights across channels
-        x = self.dw(x)
-        x = self.inorm(x)
-        h = self.act(self.pw1(x))
-        o = self.pw2(h)  # [B*C, 9, T]
-        o = o.reshape(B, C, 9, T)
+            else:  # flatten path
 
-        bias50 = o[:, :, 0:1, :]  # [B,C,1,T]
-        down_raw = o[:, :, 1:5, :]  # [B,C,4,T]
-        up_raw = o[:, :, 5:9, :]  # [B,C,4,T]
+                self.mq_decoder_d_model = int(
+                    getattr(config, "mq_decoder_d_model", self.mq_hidden)
+                )
 
-        # Positive increments -> monotone quantiles
-        down_inc = F.softplus(down_raw) + self.eps
-        up_inc = F.softplus(up_raw) + self.eps
+                # D → md (token-wise)
+                self.dec_tok_proj = nn.Linear(
+                    self.decoder_d_model,
+                    self.mq_decoder_d_model,
+                )
 
-        q50 = (
-            mean_hat.unsqueeze(2) + bias50
-        )  # allow median to deviate from mean if helpful
+                # (num_patches * md) → hidden
+                flat_dim = self.num_patches * self.mq_decoder_d_model
+                self.dec_flat_to_hidden = nn.Linear(flat_dim, self.mq_hidden)
 
-        # cumulative distances from median
+        # adjust pw2 for concat
+        pw2_in = self.mq_hidden
+        if self.mq_use_decoder_pool and self.mq_cond_mode == "concat":
+            pw2_in = self.mq_hidden * 2
+
+        self.pw2 = nn.Conv1d(pw2_in, 9, kernel_size=1)
+
+    def forward(self, mean_hat, decoder_hidden_state=None):
+
+        mean_hat_ct = mean_hat.transpose(-1, -2).contiguous()
+        B, C, T = mean_hat_ct.shape
+
+        x = mean_hat_ct.view(B * C, 1, T)
+        x = self.inorm(self.dw(x))
+        h = self.act(self.pw1(x))  # [B*C,H,T]
+
+        if self.mq_use_decoder_pool:
+
+            if decoder_hidden_state is None:
+                raise ValueError("decoder_hidden_state required")
+
+            if self.mq_cond_path == "pool":
+
+                dec_pool = decoder_hidden_state.mean(dim=2)  # [B,C,D]
+                cond = self.dec_proj(dec_pool)
+
+            else:  # flatten path
+
+                B2, C2, P, D = decoder_hidden_state.shape
+                assert (
+                    P == self.num_patches
+                ), f"Expected {self.num_patches} patches, got {P}"
+
+                # [B,C,P,D] → [B,C,P,md]
+                dec_tok = self.dec_tok_proj(decoder_hidden_state)
+
+                # flatten patches
+                dec_flat = dec_tok.reshape(B2, C2, -1)
+
+                # project to hidden
+                cond = self.dec_flat_to_hidden(dec_flat)  # [B,C,H]
+
+            cond = cond.view(B * C, -1).unsqueeze(-1).expand(-1, -1, T)
+
+            if self.mq_cond_mode == "add":
+                h = h + cond
+            else:
+                h = torch.cat([h, cond], dim=1)
+
+        o = self.pw2(h).view(B, C, 9, T)
+
+        bias50 = o[:, :, 0:1, :]
+        down_raw = o[:, :, 1:5, :]
+        up_raw = o[:, :, 5:9, :]
+
+        down_inc = F.softplus(down_raw) + self.mq_eps
+        up_inc = F.softplus(up_raw) + self.mq_eps
+
+        q50 = mean_hat_ct.unsqueeze(2)
+        if self.mq_q50_type == "median":
+            q50 = q50 + bias50
+
         down_cum = torch.cumsum(down_inc, dim=2)
         up_cum = torch.cumsum(up_inc, dim=2)
 
@@ -2241,13 +2306,244 @@ class MultiQuantileHead(nn.Module):
         q80 = q50 + up_cum[:, :, 2:3, :]
         q90 = q50 + up_cum[:, :, 3:4, :]
 
-        qhat = torch.cat(
-            [q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2
-        )  # [B,C,9,T]
+        qhat_ctqt = torch.cat([q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2)
 
-        qhat = qhat.permute(0, 2, 3, 1)  # [B,9,T,C]
+        return qhat_ctqt.permute(0, 2, 3, 1).contiguous()
 
-        return qhat
+
+# # ----------------------------
+# # Multi-Quantile Head (9 taus)
+# # ----------------------------
+# class MultiQuantileHeadOLD(nn.Module):
+#     """
+#     9-quantile head (0.1..0.9) with optional CRPS improvements.
+
+#     Default behavior = IDENTICAL to your current implementation.
+#     New behavior is enabled only if config.mq_* flags are set.
+
+#     Input:  mean_hat [B, T, C]
+#     Output: qhat     [B, 9, T, C]  for taus = 0.1..0.9
+#     """
+
+#     def __init__(self, config):
+#         super().__init__()
+
+#         # --- Base params (same as before) ---
+#         hidden = int(getattr(config, "mq_hidden", 8))
+#         kernel_size = int(getattr(config, "mq_kernel_size", 3))
+#         self.eps = float(getattr(config, "mq_eps", 1e-6))
+#         pad = kernel_size // 2
+
+#         # --- Optional CRPS flags ---
+#         self.detach_mean_for_head = bool(
+#             getattr(config, "mq_detach_mean_for_head", False)
+#         )
+#         self.median_mode = str(getattr(config, "mq_median_mode", "biased"))
+#         self.median_bias_shrink = float(getattr(config, "mq_median_bias_shrink", 0.05))
+
+#         self.enable_delta_temperature = bool(
+#             getattr(config, "mq_enable_delta_temperature", False)
+#         )
+#         self.temperature_per_horizon = bool(
+#             getattr(config, "mq_temperature_per_horizon", False)
+#         )
+
+#         self.prediction_length = int(getattr(config, "prediction_length", 0))
+#         if self.prediction_length <= 0:
+#             raise ValueError(
+#                 "config.prediction_length must be set (>0) for MultiQuantileHead."
+#             )
+
+#         if self.median_mode not in ("biased", "fixed", "shrink"):
+#             raise ValueError(
+#                 f"mq_median_mode must be one of ['biased','fixed','shrink'], got {self.median_mode}"
+#             )
+
+#         # --- Core layers (UNCHANGED from your baseline) ---
+#         self.dw = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=pad, bias=True)
+#         self.inorm = nn.InstanceNorm1d(1, affine=True)
+#         self.pw1 = nn.Conv1d(1, hidden, kernel_size=1, bias=True)
+#         self.pw2 = nn.Conv1d(
+#             hidden, 9, kernel_size=1, bias=True
+#         )  # [bias50, 4*down, 4*up]
+#         self.act = nn.GELU()
+
+#         # --- Optional temperature parameter (INIT done in model._init_weights) ---
+#         self._temp_u = None
+#         if self.enable_delta_temperature:
+#             if self.temperature_per_horizon:
+#                 self._temp_u = nn.Parameter(torch.zeros(self.prediction_length))
+#             else:
+#                 self._temp_u = nn.Parameter(torch.zeros(1))
+
+#     def _get_temp(self, T: int, device, dtype):
+#         """
+#         Returns multiplicative temperature for deltas.
+#         - scalar:       [1,1,1,1]
+#         - per-horizon:  [1,1,1,T]
+#         """
+#         if not self.enable_delta_temperature:
+#             return None
+#         if self._temp_u is None:
+#             return None
+
+#         if self.temperature_per_horizon:
+#             if T > self._temp_u.numel():
+#                 raise ValueError(
+#                     f"T={T} exceeds configured prediction_length={self._temp_u.numel()} for mq_temperature_per_horizon."
+#                 )
+#             temp = (
+#                 F.softplus(self._temp_u[:T]).to(device=device, dtype=dtype) + self.eps
+#             )
+#             return temp.view(1, 1, 1, T)
+
+#         temp = F.softplus(self._temp_u).to(device=device, dtype=dtype) + self.eps
+#         return temp.view(1, 1, 1, 1)
+
+#     def forward(self, mean_hat: torch.Tensor) -> torch.Tensor:
+#         """
+#         mean_hat: [B, T, C]
+#         returns:  [B, 9, T, C]
+#         """
+#         if mean_hat.dim() != 3:
+#             raise ValueError("mean_hat must be rank-3: [B, T, C].")
+
+#         mean_hat_ct = mean_hat.transpose(-1, -2)  # [B, C, T]
+#         B, C, T = mean_hat_ct.shape
+
+#         # Optional: protect point predictor from quantile gradients
+#         cond = mean_hat_ct.detach() if self.detach_mean_for_head else mean_hat_ct
+
+#         x = cond.reshape(B * C, 1, T)
+#         x = self.dw(x)
+#         x = self.inorm(x)
+#         h = self.act(self.pw1(x))
+#         o = self.pw2(h).reshape(B, C, 9, T)
+
+#         bias50 = o[:, :, 0:1, :]  # [B,C,1,T]
+#         down_raw = o[:, :, 1:5, :]  # [B,C,4,T]
+#         up_raw = o[:, :, 5:9, :]  # [B,C,4,T]
+
+#         down_inc = F.softplus(down_raw) + self.eps
+#         up_inc = F.softplus(up_raw) + self.eps
+
+#         # Optional temperature scaling (starts as 1.0 if mq_temperature_init=1.0)
+#         temp = self._get_temp(T, down_inc.device, down_inc.dtype)
+#         if temp is not None:
+#             down_inc = down_inc * temp
+#             up_inc = up_inc * temp
+
+#         # Median/anchor
+#         if self.median_mode == "fixed":
+#             q50 = mean_hat_ct.unsqueeze(2)  # MASE-safe anchor
+#         elif self.median_mode == "shrink":
+#             q50 = mean_hat_ct.unsqueeze(2) + self.median_bias_shrink * bias50
+#         else:  # "biased" (baseline behavior)
+#             q50 = mean_hat_ct.unsqueeze(2) + bias50
+
+#         # cumulative distances from median
+#         down_cum = torch.cumsum(down_inc, dim=2)
+#         up_cum = torch.cumsum(up_inc, dim=2)
+
+#         q40 = q50 - down_cum[:, :, 0:1, :]
+#         q30 = q50 - down_cum[:, :, 1:2, :]
+#         q20 = q50 - down_cum[:, :, 2:3, :]
+#         q10 = q50 - down_cum[:, :, 3:4, :]
+
+#         q60 = q50 + up_cum[:, :, 0:1, :]
+#         q70 = q50 + up_cum[:, :, 1:2, :]
+#         q80 = q50 + up_cum[:, :, 2:3, :]
+#         q90 = q50 + up_cum[:, :, 3:4, :]
+
+#         qhat_ctqt = torch.cat(
+#             [q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2
+#         )  # [B,C,9,T]
+#         qhat = qhat_ctqt.permute(0, 2, 3, 1).contiguous()  # [B,9,T,C]
+#         return qhat
+
+
+# class MultiQuantileHead(nn.Module):
+#     """
+#     Turn mean forecasts [B, C, T] into quantiles [B, C, 9, T] for q = 0.1..0.9.
+#     - Channel independent: same weights applied to every channel.
+#     - Monotonic by construction using positive cumulative deltas (softplus).
+#     - Deltas are conditioned on the mean via a small temporal conv stack.
+
+#     Quantile layout (dim=2): [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+#     """
+
+#     def __init__(self, hidden: int = 8, kernel_size: int = 3, eps: float = 1e-6):
+#         super().__init__()
+#         self.eps = eps
+#         pad = kernel_size // 2
+
+#         # Per-channel temporal features (shared across channels)
+#         self.dw = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=pad, bias=True)
+#         self.inorm = nn.InstanceNorm1d(1, affine=True)  # time-wise stabilization
+#         # Lightweight projection to quantile params
+#         self.pw1 = nn.Conv1d(1, hidden, kernel_size=1, bias=True)
+#         self.pw2 = nn.Conv1d(
+#             hidden, 9, kernel_size=1, bias=True
+#         )  # [bias50, 4*down, 4*up]
+
+#         self.act = nn.GELU()
+
+#     def _safe_time_norm(self, x, eps=1e-3, clip=10.0):
+#         # x: [B*C, 1, T]
+#         mu = x.mean(dim=2, keepdim=True)
+#         var = x.var(dim=2, unbiased=False, keepdim=True)
+#         xn = (x - mu) / (var.add_(eps).sqrt_())
+#         return xn.clamp_(-clip, clip)
+
+#     def forward(self, mean_hat: torch.Tensor) -> torch.Tensor:
+#         """
+#         mean_hat: [B, T,C]
+#         returns qhat: [B, 9, T,C] for quantiles [0.1,...,0.9]
+#         """
+#         mean_hat = mean_hat.transpose(-1, -2)  # [B, C, T]
+#         assert mean_hat.dim() == 3, "mean_hat must be [B, C, T]"
+#         B, C, T = mean_hat.shape
+
+#         x = mean_hat.reshape(B * C, 1, T)  # share weights across channels
+#         x = self.dw(x)
+#         x = self.inorm(x)
+#         h = self.act(self.pw1(x))
+#         o = self.pw2(h)  # [B*C, 9, T]
+#         o = o.reshape(B, C, 9, T)
+
+#         bias50 = o[:, :, 0:1, :]  # [B,C,1,T]
+#         down_raw = o[:, :, 1:5, :]  # [B,C,4,T]
+#         up_raw = o[:, :, 5:9, :]  # [B,C,4,T]
+
+#         # Positive increments -> monotone quantiles
+#         down_inc = F.softplus(down_raw) + self.eps
+#         up_inc = F.softplus(up_raw) + self.eps
+
+#         q50 = (
+#             mean_hat.unsqueeze(2) + bias50
+#         )  # allow median to deviate from mean if helpful
+
+#         # cumulative distances from median
+#         down_cum = torch.cumsum(down_inc, dim=2)
+#         up_cum = torch.cumsum(up_inc, dim=2)
+
+#         q40 = q50 - down_cum[:, :, 0:1, :]
+#         q30 = q50 - down_cum[:, :, 1:2, :]
+#         q20 = q50 - down_cum[:, :, 2:3, :]
+#         q10 = q50 - down_cum[:, :, 3:4, :]
+
+#         q60 = q50 + up_cum[:, :, 0:1, :]
+#         q70 = q50 + up_cum[:, :, 1:2, :]
+#         q80 = q50 + up_cum[:, :, 2:3, :]
+#         q90 = q50 + up_cum[:, :, 3:4, :]
+
+#         qhat = torch.cat(
+#             [q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2
+#         )  # [B,C,9,T]
+
+#         qhat = qhat.permute(0, 2, 3, 1)  # [B,9,T,C]
+
+#         return qhat
 
 
 class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
@@ -2685,7 +2981,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.multi_quantile_head_block = None
         if config.multi_quantile_head:
-            self.multi_quantile_head_block = MultiQuantileHead()
+            self.multi_quantile_head_block = MultiQuantileHead(config)
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -2877,7 +3173,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                 loss_val = weighted_average(loss_val)
 
         elif self.multi_quantile_head_block is not None:
-            y_hat_quantiles = self.multi_quantile_head_block(y_hat)
+            y_hat_quantiles = self.multi_quantile_head_block(
+                y_hat, decoder_hidden_state=decoder_output
+            )
             y_hat = y_hat_quantiles[:, 4, ...]
 
             y_hat = self.backbone.scaler.inverse(data=y_hat, loc=loc, scale=scale)
@@ -3228,7 +3526,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
     def __init__(self, config: TinyTimeMixerConfig):
         self.decompose_prediction = bool(getattr(config, "decompose", True))
 
-        if self.decompose_prediction:
+        if self.decompose_prediction or True:
             self._init_decomposed(config)
         else:
             self._init_standard(config)
@@ -3407,7 +3705,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         if self.config.light_mode:
             m_input_data = None
             m_forecast_groundtruth = None
-            
+
         if not return_dict:
             return tuple(
                 v
@@ -3684,7 +3982,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                 data=residual_quantile_outputs, loc=loc_exp, scale=scale_exp
             )
 
-        
         if self.config.light_mode:
             trend_prediction_outputs = None
             residual_prediction_outputs = None
@@ -3694,7 +3991,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             residual_quantile_outputs = None
             past_values = None
             future_values = None
-            
+
         # if not return_dict:
         #     return tuple(
         #         v
