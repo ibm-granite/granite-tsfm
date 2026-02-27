@@ -1,4 +1,3 @@
-
 # Copyright contributors to the TSFM project
 #
 """
@@ -15,17 +14,16 @@ Reference:
     NeurIPS 2024.
 """
 
-from sklearn import metrics
-import numpy as np
-import math
 import copy
 
+import numpy as np
+from sklearn import metrics
 
-def adjust_predicts(score, label, threshold=None, pred=None, calc_latency=False
-):
+
+def adjust_predicts(score, label, threshold=None, pred=None, calc_latency=False):
     """
     Calculate adjusted predict labels using given `score`, `threshold` (or given `pred`) and `label`.
-    
+
     Adapted from TSB-AD: https://github.com/TheDatumOrg/TSB-AD
 
     Args:
@@ -89,9 +87,7 @@ def get_scores_eval(scores, label, thresholds=None):
                 np.linspace(0.2, 1, 21),  # High α for broader picture
             ]
         )
-        thresholds = np.sort(
-            np.unique(np.sort(np.concatenate([alpha_p_values, 1 - alpha_p_values])))
-        )
+        thresholds = np.sort(np.unique(np.sort(np.concatenate([alpha_p_values, 1 - alpha_p_values]))))
 
     output["threshold_independent_metrics"] = {
         "AUC_ROC": metrics.roc_auc_score(label, scores),
@@ -118,14 +114,11 @@ def get_scores_eval(scores, label, thresholds=None):
         for th_metric in threshold_metrics:
             metric_value = 0
             if th_metric == "PA-F1":
-                metric_value = metric_PointF1PA(scores, label, preds=pred
-                )
+                metric_value = metric_PointF1PA(scores, label, preds=pred)
             if metric_value >= best_threshold_metrics[th_metric + "_point"][th_metric]:
                 best_threshold_metrics[th_metric + "_point"][th_metric] = metric_value
                 best_threshold_metrics[th_metric + "_point"]["fpr"] = fpr
-                best_threshold_metrics[th_metric + "_point"]["score_threshold"] = (
-                    1 - th_effective
-                )
-                best_threshold_metrics[th_metric + "_point"]["threshold"] = 1 - th #p-value compatible
+                best_threshold_metrics[th_metric + "_point"]["score_threshold"] = 1 - th_effective
+                best_threshold_metrics[th_metric + "_point"]["threshold"] = 1 - th  # p-value compatible
     output["threshold_dependent_metrics"] = best_threshold_metrics
     return output

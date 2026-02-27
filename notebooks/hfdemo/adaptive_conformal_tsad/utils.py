@@ -1,10 +1,11 @@
 # Copyright contributors to the TSFM project
 #
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
+
 
 def create_rolling_forecast_contexts(
     past_values,
@@ -50,9 +51,7 @@ def create_rolling_forecast_contexts(
 
     if max_context is not None:
         if max_context < context_length:
-            raise ValueError(
-                f"max_context ({max_context}) must be >= context_length ({context_length})."
-            )
+            raise ValueError(f"max_context ({max_context}) must be >= context_length ({context_length}).")
     assert mode in ["fixed", "expanding"], f"Invalid mode '{mode}'. Must be 'fixed' or 'expanding'."
 
     end_idx = np.arange(context_length - 1, T, step)
@@ -75,9 +74,7 @@ def create_rolling_forecast_contexts(
         if mode == "fixed":
             L = context_length
             if (max_context is not None) and (L > max_context):
-                raise ValueError(
-                    f"context_length ({context_length}) exceeds max_context ({max_context})."
-                )
+                raise ValueError(f"context_length ({context_length}) exceeds max_context ({max_context}).")
             start = t - L
         else:  # expanding
             # grow with t, but clip to max_context if provided
@@ -116,10 +113,11 @@ def create_rolling_forecast_contexts(
 
     return output
 
-def plot_anomaly_detection(data, label, p_values, label_pred, threshold=None, output_dir='output'):
+
+def plot_anomaly_detection(data, label, p_values, label_pred, threshold=None, output_dir="output"):
     """
     Create a figure with two subplots for anomaly detection visualization.
-    
+
     Parameters:
     -----------
     data : np.ndarray
@@ -137,56 +135,77 @@ def plot_anomaly_detection(data, label, p_values, label_pred, threshold=None, ou
     """
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-    
+
     # Top plot: Time series with anomaly labels and predictions
     time_index = np.arange(len(data))
-    ax1.plot(time_index, data[:, 0], 'b-', linewidth=1, label='Time Series')
-    
+    ax1.plot(time_index, data[:, 0], "b-", linewidth=1, label="Time Series")
+
     # Shade anomaly regions (where label == 1)
     anomaly_regions = label == 1
-    ax1.fill_between(time_index, data[:, 0].min(), data[:, 0].max(),
-                     where=anomaly_regions, alpha=0.3, color='red',
-                     label='True Anomalies')
-    
+    ax1.fill_between(
+        time_index,
+        data[:, 0].min(),
+        data[:, 0].max(),
+        where=anomaly_regions,
+        alpha=0.3,
+        color="red",
+        label="True Anomalies",
+    )
+
     # Mark detected outliers (where label_pred == 1)
     detected_outliers = label_pred == 1
-    ax1.scatter(time_index[detected_outliers], data[detected_outliers, 0],
-               color='red', marker='o', s=50, zorder=5,
-               label='Detected Outliers', edgecolors='black', linewidths=0.5)
-    
-    ax1.set_ylabel('Value', fontsize=12)
-    ax1.set_title('Time Series with Anomaly Detection', fontsize=14, fontweight='bold')
-    ax1.legend(loc='best')
+    ax1.scatter(
+        time_index[detected_outliers],
+        data[detected_outliers, 0],
+        color="red",
+        marker="o",
+        s=50,
+        zorder=5,
+        label="Detected Outliers",
+        edgecolors="black",
+        linewidths=0.5,
+    )
+
+    ax1.set_ylabel("Value", fontsize=12)
+    ax1.set_title("Time Series with Anomaly Detection", fontsize=14, fontweight="bold")
+    ax1.legend(loc="best")
     ax1.grid(True, alpha=0.3)
-    
+
     # Bottom plot: P-values in log scale with threshold
-    ax2.semilogy(time_index, p_values, 'g-', linewidth=1, label='P-values')
-    
+    ax2.semilogy(time_index, p_values, "g-", linewidth=1, label="P-values")
+
     # Mark threshold with dotted line (if provided)
     if threshold is not None:
-        ax2.axhline(y=threshold, color='orange', linestyle='--', linewidth=2,
-                   label=f'Threshold = {threshold:.4f}')
-    
+        ax2.axhline(y=threshold, color="orange", linestyle="--", linewidth=2, label=f"Threshold = {threshold:.4f}")
+
     # Mark detected outliers (where label_pred == 1)
-    ax2.scatter(time_index[detected_outliers], p_values[detected_outliers],
-               color='red', marker='o', s=50, zorder=5,
-               label='Detected Outliers', edgecolors='black', linewidths=0.5)
-    
-    ax2.set_xlabel('Time Index', fontsize=12)
-    ax2.set_ylabel('P-values (log scale)', fontsize=12)
-    ax2.set_title('P-values with Detection Threshold', fontsize=14, fontweight='bold')
-    ax2.legend(loc='best')
-    ax2.grid(True, alpha=0.3, which='both')
-    
+    ax2.scatter(
+        time_index[detected_outliers],
+        p_values[detected_outliers],
+        color="red",
+        marker="o",
+        s=50,
+        zorder=5,
+        label="Detected Outliers",
+        edgecolors="black",
+        linewidths=0.5,
+    )
+
+    ax2.set_xlabel("Time Index", fontsize=12)
+    ax2.set_ylabel("P-values (log scale)", fontsize=12)
+    ax2.set_title("P-values with Detection Threshold", fontsize=14, fontweight="bold")
+    ax2.legend(loc="best")
+    ax2.grid(True, alpha=0.3, which="both")
+
     plt.tight_layout()
-    
+
     # Save figure
-    output_path = os.path.join(output_dir, 'anomaly_detection_visualization.png')
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    output_path = os.path.join(output_dir, "anomaly_detection_visualization.png")
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
     print(f"\nFigure saved to: {output_path}")
     plt.show()
-    
+
     return output_path

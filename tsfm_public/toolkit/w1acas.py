@@ -1,6 +1,8 @@
 # Copyright contributors to the TSFM project
 #
 import numpy as np
+from scipy.stats import cauchy, chi2
+
 # from tsfm_public.toolkit.conformal import (
 #     AdaptiveWeightedConformalScoreWrapper,
 #     PostHocProbabilisticProcessor,
@@ -10,17 +12,14 @@ import numpy as np
 from .conformal import (
     AdaptiveWeightedConformalScoreWrapper,
     PostHocProbabilisticProcessor,
-    NonconformityScores,
     nonconformity_score_functions,
 )
-from scipy.stats import chi2
-import numpy as np
-from scipy.stats import cauchy
 
 
-'''
+"""
 P-VALUE AGGREGATION FUNCTIONS
-'''
+"""
+
 
 def fisher_method_2d(p_values: np.ndarray) -> np.ndarray:
     """
@@ -110,14 +109,14 @@ def tippett_method_2d(p_values: np.ndarray) -> np.ndarray:
 def cauchy_combination_2d(p_values: np.ndarray) -> np.ndarray:
     """
     Combine p-values using Cauchy combination method along axis=1.
-    
+
     Uses the Cauchy combination test which is robust to correlations.
-    
+
     Parameters
     ----------
     p_values : array-like, shape (n_rows, n_tests)
         Input p-values.
-    
+
     Returns
     -------
     combined_p : np.ndarray, shape (n_rows,)
@@ -126,21 +125,21 @@ def cauchy_combination_2d(p_values: np.ndarray) -> np.ndarray:
     p_values = np.asarray(p_values)
     if p_values.ndim != 2:
         raise ValueError("p_values must be a 2D array")
-    
+
     # Create a copy to avoid modifying the original
     p_values_clipped = p_values.copy()
-    
+
     # Only clip non-NaN values to avoid numerical issues
     valid_mask = ~np.isnan(p_values)
     p_values_clipped[valid_mask] = np.clip(p_values[valid_mask], 1e-15, 1 - 1e-15)
-    
+
     # Compute Cauchy statistic per row, handling NaN values
     # np.tan will propagate NaN, and np.nanmean will ignore them
     T = np.nanmean(np.tan((0.5 - p_values_clipped) * np.pi), axis=1)
-    
+
     # Combined p-value using Cauchy CDF
     combined_p = 1 - cauchy.cdf(T)
-    
+
     return combined_p
 
 
@@ -176,9 +175,10 @@ aggregation_methods = {
 }
 
 
-'''
+"""
 Wasserstein-1 distance-based Adaptive Conformal Anomaly Scoring (W1ACAS) - Function Wrapper
-'''
+"""
+
 
 def get_forecast_conformal_adaptive_online_score(
     prediction_output,
@@ -197,11 +197,11 @@ def get_forecast_conformal_adaptive_online_score(
     """
     Compute adaptive conformal anomaly scores (p-values) for time series forecasts using
     Wasserstein-1 distance-based Adaptive Conformal Anomaly Scoring (W1ACAS).
-    
+
     This function implements an online adaptive conformal prediction framework for time series
     anomaly detection. It computes p-values for each time point by comparing forecast errors
     against past observations with adaptive weighting.
-    
+
     Parameters
     ----------
     prediction_output : dict
@@ -211,22 +211,22 @@ def get_forecast_conformal_adaptive_online_score(
                 Forecasted values
             - 'y_true' : np.ndarray, shape (n_samples, n_horizons, n_features)
                 Ground truth values
-    
+
     significance_level : float, default=0.01
         Target significance level (alpha) for anomaly detection. This sets the p-value
         resolution - lower values provide finer resolution but require more calibration data.
         Determines the minimum calibration window size as ceil(1/alpha).
-    
+
     aggregation_forecast_horizon : str or None, default="median"
         Method to aggregate p-values across forecast horizons. Options:
             - "median", "mean", "min", "max": Statistical aggregations
             - "Fisher", "HMC", "Tippett", "Cauchy": P-value combination methods
             - None: No aggregation, returns all horizons
-    
+
     nonconformity_score : str, default="absolute_error"
         Type of nonconformity score to compute forecast errors.
         Common options: "absolute_error", "squared_error", etc.
-    
+
     forecast_steps : int, list of int, or None, default=None
         Controls which forecast horizons are processed:
             - None: uses all available horizons from y_pred.shape[1].
@@ -235,36 +235,36 @@ def get_forecast_conformal_adaptive_online_score(
             - list of int: uses only the specified forecast steps (1-based). Each value k
               in the list corresponds to horizon index ix_h = k - 1. The align_forecast
               slicing will use max(forecast_steps) as the upper bound.
-    
+
     aggregation_features : str or None, default=None
         Method to aggregate p-values across features. Options same as
         aggregation_forecast_horizon. If None, returns separate p-values per feature.
-    
+
     n_epochs : int, default=1
         Number of optimization epochs for adaptive weight learning.
-    
+
     n_batch_update : int, default=10
         Batch size for updating adaptive weights during online learning.
-    
+
     lr : float, default=0.001
         Learning rate for adaptive weight optimization.
-    
+
     prior_past_weights_value : int or str, default=0
         Initialization strategy for past weights in adaptive weighting:
             - 0: Uniform initialization
             - "proximity": Weight based on temporal proximity
             - Other numeric values: Custom initialization
-    
+
     return_weights : bool, default=False
         If True, returns calibration scores and weights along with p-values.
-    
+
     align_forecast : bool, default=True
         If True, applies forecast_horizon_aggregation to align forecasted and ground truth
         values such that each row corresponds to the same observation and each column
         represents the prediction at each horizon for that observation. This ensures proper
         temporal alignment for multi-step forecasts. When forecast_steps is a list, the
         slicing uses max(forecast_steps) as the upper bound.
-    
+
     Returns
     -------
     scores : np.ndarray
@@ -274,12 +274,12 @@ def get_forecast_conformal_adaptive_online_score(
             - If only features aggregated: (n_samples, n_horizons)
             - If no aggregation: (n_samples, n_horizons, n_features)
         Lower p-values indicate higher anomaly likelihood.
-    
+
     weights_dict : dict, optional
         Only returned if return_weights=True. Contains:
             - 'cal_scores': Calibration scores for each horizon and feature
             - 'cal_weights': Adaptive weights for each horizon and feature
-    
+
     Notes
     -----
     The function implements an adaptive conformal prediction framework where:
@@ -288,7 +288,7 @@ def get_forecast_conformal_adaptive_online_score(
     3. Adaptive weights are learned to emphasize relevant historical data
     4. P-values are computed as the weighted proportion of calibration scores >= test score
     5. Multiple p-values (across horizons/features) are combined using statistical methods
-    
+
     The adaptive weighting mechanism allows the method to adjust to non-stationary
     time series by giving more weight to recent, relevant calibration data.
 
@@ -320,9 +320,7 @@ def get_forecast_conformal_adaptive_online_score(
     if align_forecast:
         phpp = PostHocProbabilisticProcessor()
         y_pred = phpp.forecast_horizon_aggregation(y_pred[:, :forecast_steps_max, ...], aggregation=None)
-        y_true = phpp.forecast_horizon_aggregation(
-            y_true[:, :forecast_steps_max, ...], aggregation=None
-        )
+        y_true = phpp.forecast_horizon_aggregation(y_true[:, :forecast_steps_max, ...], aggregation=None)
     else:
         # Use the data as-is without alignment
         y_pred = y_pred[:, :forecast_steps_max, ...]
@@ -351,8 +349,8 @@ def get_forecast_conformal_adaptive_online_score(
     weighting_optim_params["prior_past_weights_value"] = prior_past_weights_value
 
     beta_prior = None
-    if nonconformity_score in ['error']:
-        beta_prior = (1.0,1.0)
+    if nonconformity_score in ["error"]:
+        beta_prior = (1.0, 1.0)
 
     ### Initialize AD_MODEL
     print("#Optimization parameters :: ")
@@ -383,21 +381,19 @@ def get_forecast_conformal_adaptive_online_score(
                     "stride": weighting_optim_params["stride"],
                     "lr": weighting_optim_params["lr"],
                     "n_epochs": weighting_optim_params["n_epochs"],
-                    "prior_past_weights_value": weighting_optim_params[
-                        "prior_past_weights_value"
-                    ],
+                    "prior_past_weights_value": weighting_optim_params["prior_past_weights_value"],
                 },
             )
             ini_i_cal = ix_h
             end_i_cal = ix_h + int(np.ceil(1 / significance_level))
-            beta_cal = awcs.fit(nonconformity_scores_values[ini_i_cal:end_i_cal],beta_prior=beta_prior)
-            if nonconformity_score in ['error']:
-                beta_cal = np.minimum(1,2*np.minimum(beta_cal, 1 - beta_cal))
+            beta_cal = awcs.fit(nonconformity_scores_values[ini_i_cal:end_i_cal], beta_prior=beta_prior)
+            if nonconformity_score in ["error"]:
+                beta_cal = np.minimum(1, 2 * np.minimum(beta_cal, 1 - beta_cal))
             outliers_scores[ini_i_cal:end_i_cal, ix_h, ix_f] = beta_cal
 
-            beta_all = awcs.predict(nonconformity_scores_values[end_i_cal:],beta_prior=beta_prior)
-            if nonconformity_score in ['error']:
-                beta_all = np.minimum(1,2*np.minimum(beta_all, 1 - beta_all))
+            beta_all = awcs.predict(nonconformity_scores_values[end_i_cal:], beta_prior=beta_prior)
+            if nonconformity_score in ["error"]:
+                beta_all = np.minimum(1, 2 * np.minimum(beta_all, 1 - beta_all))
             outliers_scores[end_i_cal:, ix_h, ix_f] = beta_all
 
             if return_weights:
@@ -408,7 +404,7 @@ def get_forecast_conformal_adaptive_online_score(
 
     # print(outliers_scores.shape)
     # print(np.nanmean(outliers_scores))
-    
+
     # Aggregate across forecast horizon dimension (axis=1)
     if aggregation_forecast_horizon is not None:
         if aggregation_forecast_horizon in aggregation_methods:
@@ -446,5 +442,3 @@ def get_forecast_conformal_adaptive_online_score(
         return scores, {"cal_scores": cal_scores, "cal_weights": cal_weights}
     else:
         return scores
-
-
