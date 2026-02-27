@@ -5,8 +5,9 @@
 import enum
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
 import warnings
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
 import torch
@@ -1898,7 +1899,7 @@ class AdaptiveWeightedConformalScoreWrapper:
         #     self.weighting_params["n_batch_update"] > self.weights_critical_norm
         # ), "Given the false alarm n_batch_update must be larger than {}".format(np.ceil(self.weights_critical_norm))
 
-    def fit(self, scores: np.ndarray, beta_prior : Optional[Tuple[float, float]] = None) -> np.ndarray:
+    def fit(self, scores: np.ndarray, beta_prior: Optional[Tuple[float, float]] = None) -> np.ndarray:
         """
         Fit the model using calibration nonconformity scores.
 
@@ -1953,7 +1954,9 @@ class AdaptiveWeightedConformalScoreWrapper:
 
         return 1 - np.array(betas)
 
-    def predict(self, scores: np.ndarray, verbose: bool = False, beta_prior : Optional[Tuple[float, float]] = None) -> np.ndarray:
+    def predict(
+        self, scores: np.ndarray, verbose: bool = False, beta_prior: Optional[Tuple[float, float]] = None
+    ) -> np.ndarray:
         """
         Perform online prediction of conformal p-values for observed scores.
 
@@ -2137,8 +2140,8 @@ def get_beta(
     test_scores: torch.Tensor,
     observed_scores: torch.Tensor,
     weights: Optional[torch.Tensor] = None,
-    conformal_weights: bool = True,  #legacy default: True => beta_prior (1,0)
-    beta_prior: Optional[Tuple[float, float]] = None,   # (a_prior, b_prior)
+    conformal_weights: bool = True,  # legacy default: True => beta_prior (1,0)
+    beta_prior: Optional[Tuple[float, float]] = None,  # (a_prior, b_prior)
 ) -> torch.Tensor:
     """
     Compute the weighted conformal p-scores (beta_t) for a batch of test scores given observed calibration scores. The scores are estimated as weighted left-tail probabilities with optional Beta(a,b) (Laplace) smoothing.
@@ -2149,7 +2152,7 @@ def get_beta(
         weights (np.ndarray): Array of time-based weights applied to observed scores. Shape: (W,). All weights should lie in the range [0, 1].
         conformal_weights (bool, optional): Legacy flag enabling the standard conformal finite-sample correction (equivalent to Beta(1,0) smoothing). Ignored if `beta_prior` is provided.
         beta_prior (tuple(float, float), optional): Beta(a,b) prior controlling Laplace smoothing of the empirical CDF. If provided, it overrides `conformal_weights`.
-    
+
     Returns:
         np.ndarray: Array of weighted p-scores (beta_t) for each test score. Shape: (B,).
     """
@@ -2162,15 +2165,15 @@ def get_beta(
         test_scores.shape, observed_scores.shape
     )
 
-    # Resolve (a_prior, b_prior) with clear precedence    
-    if beta_prior is not None:        
-        a_prior, b_prior = map(float, beta_prior)        
-        if conformal_weights is not True:  # user explicitly changed legacy flag while providing beta_prior            
+    # Resolve (a_prior, b_prior) with clear precedence
+    if beta_prior is not None:
+        a_prior, b_prior = map(float, beta_prior)
+        if conformal_weights is not True:  # user explicitly changed legacy flag while providing beta_prior
             warnings.warn(
                 "`beta_prior` is provided and will override `conformal_weights`. "
                 "Remove or ignore `conformal_weights` to silence this warning.",
-                stacklevel=2,            
-                )    
+                stacklevel=2,
+            )
     else:
         a_prior, b_prior = (1.0, 0.0) if conformal_weights else (0.0, 0.0)
 
