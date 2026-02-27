@@ -331,6 +331,29 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         context_len: List[int],
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Any]:
+
+        # x: batch size x context x features
+        # observed_inputs_mask: batch size x context x features
+        # forecast_len: list of forecast lengths
+        # context_len: list of context lengths
+        # output_hidden_states: whether to return hidden states
+
+        miss_mask = ~observed_inputs_mask
+
+        # x and observed_inputs_mask should be 2d or 3d
+
+        x = x.unsqueeze(-1) if x.ndim == 2 else x
+        miss_mask = miss_mask.unsqueeze(-1) if miss_mask.ndim == 2 else miss_mask
+        x_mean = x.nanmean(dim=1) # mean across context dimension
+
+        x_context_dim = x.shape[1]
+
+
+        context = min(x.shape[1] + f, context)
+        s_i = c_i - f_i  # part of the context that was provided
+        x_in = x_i[-s_i:]
+
+
         pass
 
     def forecast_single_step(
