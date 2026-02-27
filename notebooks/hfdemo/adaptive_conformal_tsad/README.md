@@ -2,8 +2,10 @@
 
 This repository contains the official implementation of the paper:
 
-**"Adaptive Conformal Anomaly Detection with Time Series Foundation Models for Signal Monitoring"**  
+**"Adaptive Conformal Anomaly Detection with Time Series Foundation Models for Signal Monitoring"**
 *Accepted at ICLR 2026*
+
+*Natalia Martinez Gil, Fearghal O'Donncha, Wesley M. Gifford, Nianjun Zhou, Dhaval C. Patel, Roman Vaculin*
 
 ## Overview
 
