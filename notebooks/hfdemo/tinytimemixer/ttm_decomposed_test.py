@@ -369,6 +369,33 @@ def get_ttm_args():
     parser.add_argument("--save_dir", type=str, default="./ttm_runs")
     parser.add_argument("--early_stopping", action="store_true")
 
+    parser.add_argument("--mq_detach_mean_for_head", action="store_true")
+
+    parser.add_argument(
+        "--mq_q50_type",
+        type=str,
+        default="median",
+        choices=["median", "mean"],
+    )
+
+    parser.add_argument("--mq_use_decoder_pool", action="store_true")
+
+    parser.add_argument(
+        "--mq_cond_path",
+        type=str,
+        default="pool",
+        choices=["pool", "flatten"],
+    )
+
+    parser.add_argument(
+        "--mq_cond_mode",
+        type=str,
+        default="add",
+        choices=["add", "concat"],
+    )
+
+    parser.add_argument("--mq_decoder_d_model", type=int, default=32)
+
     args = parser.parse_args()
     return args
 
@@ -471,6 +498,11 @@ def get_base_model(args):
         head_d_model=args.head_d_model,
         trend_head_d_model=args.trend_head_d_model,
         decompose=True,
+        mq_use_decoder_pool=args.mq_use_decoder_pool,
+        mq_q50_type=args.mq_q50_type,
+        mq_cond_path=args.mq_cond_path,
+        mq_cond_mode=args.mq_cond_mode,
+        mq_decoder_d_model=args.mq_decoder_d_model,
     )
 
     # Residual tail knob (safe default = quarter context)

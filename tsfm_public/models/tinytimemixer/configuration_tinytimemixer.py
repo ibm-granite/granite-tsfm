@@ -237,6 +237,21 @@ class TinyTimeMixerConfig(PretrainedConfig):
         forecast_loss_type: Optional[str] = "joint",
         decompose: bool = False,
         light_mode: bool = False,
+        mq_hidden: int = 8,
+        mq_kernel_size: int = 3,
+        mq_eps: float = 1e-6,
+        mq_use_decoder_pool: bool = False,
+        mq_q50_type: str = "median",
+        mq_cond_path: str = "pool",
+        mq_cond_mode: str = "add",
+        mq_decoder_d_model: int = 8,
+        mq_use_positional: bool = False,
+        # mq_detach_mean_for_head: bool = False,
+        # mq_median_mode: str = "biased",
+        # mq_median_bias_shrink: float = 0.05,
+        # mq_enable_delta_temperature: bool = False,
+        # mq_temperature_per_horizon: bool = False,
+        # mq_temperature_init: float = 1.0,
         **kwargs,
     ):
 
@@ -319,6 +334,16 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.trend_head_d_model = trend_head_d_model
         self.decompose = decompose
         self.light_mode = light_mode
+
+        self.mq_hidden = int(mq_hidden)
+        self.mq_kernel_size = int(mq_kernel_size)
+        self.mq_eps = float(mq_eps)
+        self.mq_use_decoder_pool = mq_use_decoder_pool
+        self.mq_q50_type = mq_q50_type
+        self.mq_cond_path = mq_cond_path
+        self.mq_cond_mode = mq_cond_mode
+        self.mq_decoder_d_model = mq_decoder_d_model
+        self.mq_use_positional = mq_use_positional
 
         super().__init__(**kwargs)
 

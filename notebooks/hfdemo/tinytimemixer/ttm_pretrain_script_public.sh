@@ -13,4 +13,8 @@ python ttm_pretrain_sample.py  --context_length 90 \
                                --register_tokens 2 \
                                --fft_length 2 \
                                --multi_quantile_head \
+                               --mq_detach_mean_for_head \
+                               --mq_median_mode fixed \
+                               --mq_enable_delta_temperature \
+                               --mq_temperature_per_horizon \
                                --save_dir /dccstor/tsfm-irl/vijaye12/opensource/g_fig/public

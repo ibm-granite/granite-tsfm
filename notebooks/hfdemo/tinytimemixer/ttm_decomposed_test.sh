@@ -24,10 +24,16 @@ python ttm_decomposed_test.py  --context_length 1536 \
                                --trend_decoder_d_model 32 \
                                --trend_num_layers 1 \
                                --trend_decoder_num_layers 1 \
-                               --epochs_phase1 1 \
-                               --epochs_phase2 1 \
-                               --epochs_phase3 1 \
+                               --epochs_phase1 3 \
+                               --epochs_phase2 3 \
+                               --epochs_phase3 5 \
+                               --multi_quantile_head \
                                --multi_scale \
+                               --mq_use_decoder_pool \
+                               --mq_cond_path pool \
+                               --mq_cond_mode add \
+                               --mq_decoder_d_model 4 \
+                               --mq_q50_type median \
                                --save_dir /dccstor/tsfm-irl/vijaye12/hacking/tmp_files/decom_style_multiscale \
                                
                                
