@@ -227,9 +227,14 @@ def get_forecast_conformal_adaptive_online_score(
         Type of nonconformity score to compute forecast errors.
         Common options: "absolute_error", "squared_error", etc.
     
-    forecast_steps : int or None, default=None
-        Number of forecast horizons to use. If None, uses all available horizons
-        from y_pred.shape[1].
+    forecast_steps : int, list of int, or None, default=None
+        Controls which forecast horizons are processed:
+            - None: uses all available horizons from y_pred.shape[1].
+            - int: uses all horizons from 0 up to (but not including) that integer,
+              i.e. ix_h in range(forecast_steps). Equivalent to forecast steps 1..forecast_steps.
+            - list of int: uses only the specified forecast steps (1-based). Each value k
+              in the list corresponds to horizon index ix_h = k - 1. The align_forecast
+              slicing will use max(forecast_steps) as the upper bound.
     
     aggregation_features : str or None, default=None
         Method to aggregate p-values across features. Options same as
@@ -257,7 +262,8 @@ def get_forecast_conformal_adaptive_online_score(
         If True, applies forecast_horizon_aggregation to align forecasted and ground truth
         values such that each row corresponds to the same observation and each column
         represents the prediction at each horizon for that observation. This ensures proper
-        temporal alignment for multi-step forecasts.
+        temporal alignment for multi-step forecasts. When forecast_steps is a list, the
+        slicing uses max(forecast_steps) as the upper bound.
     
     Returns
     -------
@@ -285,28 +291,42 @@ def get_forecast_conformal_adaptive_online_score(
     
     The adaptive weighting mechanism allows the method to adjust to non-stationary
     time series by giving more weight to recent, relevant calibration data.
+
+    When forecast_steps is a list (e.g. [1, 3, 6]), only those specific forecast steps
+    (1-based) are processed. Forecast step k corresponds to horizon index ix_h = k - 1.
+    The output array retains the full horizon dimension (up to max(forecast_steps)), with
+    NaN filled for horizons that were not processed.
     """
     y_pred = prediction_output["y_pred"]
     y_true = prediction_output["y_true"]
     # sample_index = prediction_output['sample_index']
     # label_train = prediction_output["label_train"]
 
-    ## Aggregate errors of each index across forecast steps
+    ## Resolve forecast_steps into:
+    ##   - forecast_steps_max : int, upper bound for slicing (exclusive)
+    ##   - horizon_indices    : list of ix_h values to process
     if forecast_steps is None:
-        forecast_steps = y_pred.shape[1]
-    forecast_steps = int(forecast_steps)
+        forecast_steps_max = y_pred.shape[1]
+        horizon_indices = list(range(forecast_steps_max))
+    elif isinstance(forecast_steps, (list, tuple)):
+        # forecast_steps is a list of 1-based step numbers; convert to 0-based indices
+        horizon_indices = [int(s) - 1 for s in forecast_steps]
+        forecast_steps_max = max(horizon_indices) + 1  # inclusive upper bound for slicing
+    else:
+        forecast_steps_max = int(forecast_steps)
+        horizon_indices = list(range(forecast_steps_max))
 
     ## Align forecast at different steps for the same observation
     if align_forecast:
         phpp = PostHocProbabilisticProcessor()
-        y_pred = phpp.forecast_horizon_aggregation(y_pred[:, :forecast_steps, ...], aggregation=None)
+        y_pred = phpp.forecast_horizon_aggregation(y_pred[:, :forecast_steps_max, ...], aggregation=None)
         y_true = phpp.forecast_horizon_aggregation(
-            y_true[:, :forecast_steps, ...], aggregation=None
+            y_true[:, :forecast_steps_max, ...], aggregation=None
         )
     else:
         # Use the data as-is without alignment
-        y_pred = y_pred[:, :forecast_steps, ...]
-        y_true = y_true[:, :forecast_steps, ...]
+        y_pred = y_pred[:, :forecast_steps_max, ...]
+        y_true = y_true[:, :forecast_steps_max, ...]
 
     """
     2. Parameters
@@ -315,7 +335,7 @@ def get_forecast_conformal_adaptive_online_score(
 
     ### Window Size
     critical_efficient_size = int(
-        int(np.ceil(1 / significance_level)) + forecast_steps
+        int(np.ceil(1 / significance_level)) + forecast_steps_max
     )  # minimum size for desired significance level
 
     window_size = int(np.maximum(critical_efficient_size, y_pred.shape[0]))
@@ -347,7 +367,7 @@ def get_forecast_conformal_adaptive_online_score(
         cal_weights = {}
         cal_scores = {}
     for ix_f in range(y_pred.shape[2]):
-        for ix_h in range(y_pred.shape[1]):
+        for ix_h in horizon_indices:
             nonconformity_scores_values = nonconformity_score_functions(
                 y_gt=y_true[:, ix_h, ix_f],
                 y_pred=y_pred[:, ix_h, ix_f],
