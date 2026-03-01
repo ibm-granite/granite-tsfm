@@ -246,6 +246,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         mq_cond_mode: str = "add",
         mq_decoder_d_model: int = 8,
         mq_use_positional: bool = False,
+        quantile_list=None,
         # mq_detach_mean_for_head: bool = False,
         # mq_median_mode: str = "biased",
         # mq_median_bias_shrink: float = 0.05,
@@ -344,6 +345,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.mq_cond_mode = mq_cond_mode
         self.mq_decoder_d_model = mq_decoder_d_model
         self.mq_use_positional = mq_use_positional
+        self.quantile_list = quantile_list
 
         super().__init__(**kwargs)
 

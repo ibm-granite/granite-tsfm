@@ -503,6 +503,11 @@ def get_base_model(args):
         mq_cond_path=args.mq_cond_path,
         mq_cond_mode=args.mq_cond_mode,
         mq_decoder_d_model=args.mq_decoder_d_model,
+        quantile_list=[0.1, 0.2, 0.5, 0.8, 0.9],
+        penalize_large_width_ratio=0.5,
+        # width_penalty_mode="wis",
+        width_penalty_mode="boundary",
+        point_extra_weight=1,
     )
 
     # Residual tail knob (safe default = quarter context)
@@ -753,6 +758,85 @@ def pretrain(args, model, dset_train, dset_val):
     return model_save_path
 
 
+def _fmt_q(q: float) -> str:
+    """Pretty label for quantiles (e.g., 0.05 -> 'q05', 0.5 -> 'q50', 0.99 -> 'q99')."""
+    return f"q{int(round(q * 100)):02d}"
+
+
+def pick_first_mid_last(qarr, quantile_values, idx: int, ch: int):
+    """
+    Returns (q_low, q_mid, q_high, q_low_val, q_mid_val, q_high_val)
+      - q_* are the quantile probabilities
+      - q_*_val are arrays of shape [F] for that sample+channel
+    """
+    if quantile_values is None:
+        raise ValueError(
+            "quantile_values must be provided (same order as qarr's Q dimension)."
+        )
+
+    Q = qarr.shape[1]
+    if len(quantile_values) != Q:
+        raise ValueError(
+            f"len(quantile_values)={len(quantile_values)} must match Q={Q}."
+        )
+
+    low_i = 0
+    mid_i = Q // 2
+    high_i = Q - 1
+
+    q_low = float(quantile_values[low_i])
+    q_mid = float(quantile_values[mid_i])
+    q_high = float(quantile_values[high_i])
+
+    low = qarr[idx, low_i, :, ch]
+    mid = qarr[idx, mid_i, :, ch]
+    high = qarr[idx, high_i, :, ch]
+
+    return q_low, q_mid, q_high, low, mid, high
+
+
+def plot_quantiles_first_mid_last(
+    qarr,
+    quantile_values,
+    idx: int,
+    ch: int,
+    save_path: str,
+    title: str,
+    gt=None,  # optional ground-truth overlay: shape [F]
+    shade_between=True,  # shade between low/high
+    shade_label=None,  # optional override label for shaded band
+    figsize=(12, 6),
+):
+    q_low, q_mid, q_high, low, mid, high = pick_first_mid_last(
+        qarr, quantile_values, idx, ch
+    )
+
+    plt.figure(figsize=figsize)
+
+    # mid line thicker
+    plt.plot(mid, label=f"{_fmt_q(q_mid)} (mid)", linewidth=1.8)
+    plt.plot(low, label=f"{_fmt_q(q_low)} (low)", linewidth=1.0)
+    plt.plot(high, label=f"{_fmt_q(q_high)} (high)", linewidth=1.0)
+
+    if gt is not None:
+        plt.plot(gt, label="Ground Truth", linewidth=1.0)
+
+    if shade_between:
+        x = np.arange(len(mid))
+        if shade_label is None:
+            # "Pxx band" between low/high
+            coverage = int(round((q_high - q_low) * 100))
+            shade_label = f"P{coverage} band"
+        plt.fill_between(x, low, high, alpha=0.15, label=shade_label)
+
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+
+
 # -----------------------------
 # Inference + Visualization
 # -----------------------------
@@ -805,6 +889,10 @@ def inference(args, model_path, dset_test, label="iid"):
     residual_input[:, -L_res:] = residual_input_t  # right-aligned residual
     has_quantiles = model.config.multi_quantile_head
 
+    # -------------------------
+    # Usage for your 3 tensors
+    # -------------------------
+
     if has_quantiles:
         trend_q = predictions_dict.predictions[6]
         resid_q = predictions_dict.predictions[7]
@@ -815,6 +903,46 @@ def inference(args, model_path, dset_test, label="iid"):
 
     mse = np.mean((predictions_output - forecast_groundtruth) ** 2)
     print("MSE =", mse)
+
+    # ----- CRPS (from quantiles) -----
+    if has_quantiles:
+        qhat = comb_q  # [B,Q,T,C]
+        y = forecast_groundtruth  # [B,T,C]
+
+        quantile_values = model.config.quantile_list
+        if quantile_values is None:
+            quantile_values = [i / 10.0 for i in range(1, 10)]
+
+        taus = np.array(quantile_values, dtype=np.float32)
+        Q = len(taus)
+        assert Q == qhat.shape[1], "Mismatch between quantile count and predictions"
+
+        y_exp = np.expand_dims(y, axis=1)  # [B,1,T,C]
+        e = y_exp - qhat  # [B,Q,T,C]
+
+        taus_exp = taus.reshape(1, Q, 1, 1)
+        pinball = np.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
+
+        # ---- Trapezoidal weights over tau (Q weights) ----
+        order = np.argsort(taus)
+        taus_s = taus[order]
+        pinball_s = pinball[:, order, :, :]
+
+        if Q == 1:
+            # degenerate: can't integrate; fall back to 2*mean(pinball)
+            crps = 2.0 * np.mean(pinball_s)
+        else:
+            w = np.zeros(Q, dtype=np.float32)
+            w[0] = 0.5 * (taus_s[1] - taus_s[0])
+            w[-1] = 0.5 * (taus_s[-1] - taus_s[-2])
+            if Q > 2:
+                w[1:-1] = 0.5 * (taus_s[2:] - taus_s[:-2])
+
+            # shape to broadcast
+            w_exp = w.reshape(1, Q, 1, 1)
+            crps = 2.0 * np.mean(pinball_s * w_exp)
+
+        print("CRPS =", crps)
     # Save random plots
     save_folder = os.path.join(args.save_dir, "random_plots", label)
     os.makedirs(save_folder, exist_ok=True)
@@ -859,65 +987,42 @@ def inference(args, model_path, dset_test, label="iid"):
         plt.savefig(os.path.join(save_folder, f"plot_{i}.png"))
         plt.close()
 
-        # ---------------- Extra quantile plots ----------------
         if has_quantiles:
-            # Helper to extract q10, q50, q90 lines
-            def q1090(qarr, idx, ch):
-                # qarr: [N, 9, F, C]; quantile order = [0.1,...,0.9], median at index 4
-                q10 = qarr[idx, 0, :, ch]
-                q50 = qarr[idx, 4, :, ch]
-                q90 = qarr[idx, 8, :, ch]
-                return q10, q50, q90
-
-            # --- Combined quantiles ---
-            q10, q50, q90 = q1090(comb_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(q50, label="Combined q50", linewidth=1.8)
-            plt.plot(q10, label="Combined q10", linewidth=1.0)
-            plt.plot(q90, label="Combined q90", linewidth=1.0)
-            # ground truth for reference
-            plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
-            # (optional) band shading
-            plt.fill_between(
-                np.arange(len(q50)), q10, q90, alpha=0.15, label="P80 band"
+            quantile_values = (
+                model.config.quantile_list
+            )  # [0.01, 0.05, 0.5, 0.95, 0.99]
+            if quantile_values is None:
+                quantile_values = [i / 10.0 for i in range(1, 10)]
+            # ---------------- Extra quantile plots ----------------
+            plot_quantiles_first_mid_last(
+                comb_q,
+                quantile_values=quantile_values,
+                idx=idx,
+                ch=ch,
+                gt=forecast_ori,  # overlay ground truth
+                title=f"Combined Quantiles (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_combined_{i}.png"),
             )
-            plt.title(f"Combined Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_combined_{i}.png"))
-            plt.close()
 
-            # --- Trend quantiles ---
-            tq10, tq50, tq90 = q1090(trend_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(tq50, label="Trend q50", linewidth=1.8)
-            plt.plot(tq10, label="Trend q10", linewidth=1.0)
-            plt.plot(tq90, label="Trend q90", linewidth=1.0)
-            # optional teacher target overlay if you keep it around
-            # plt.plot(tau_tgt[idx,:,ch], label='Trend target', linewidth=1.0)
-            plt.fill_between(
-                np.arange(len(tq50)), tq10, tq90, alpha=0.15, label="P80 band"
+            plot_quantiles_first_mid_last(
+                trend_q,
+                quantile_values=quantile_values,
+                idx=idx,
+                ch=ch,
+                gt=None,  # or your trend target if you want
+                title=f"Trend Quantiles (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_trend_{i}.png"),
             )
-            plt.title(f"Trend Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_trend_{i}.png"))
-            plt.close()
 
-            # --- Residual quantiles ---
-            rq10, rq50, rq90 = q1090(resid_q, idx, ch)
-            plt.figure(figsize=(12, 6))
-            plt.plot(rq50, label="Residual q50", linewidth=1.8)
-            plt.plot(rq10, label="Residual q10", linewidth=1.0)
-            plt.plot(rq90, label="Residual q90", linewidth=1.0)
-            plt.fill_between(
-                np.arange(len(rq50)), rq10, rq90, alpha=0.15, label="P80 band"
+            plot_quantiles_first_mid_last(
+                resid_q,
+                quantile_values=quantile_values,
+                idx=idx,
+                ch=ch,
+                gt=None,
+                title=f"Residual Quantiles (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"quant_residual_{i}.png"),
             )
-            plt.title(f"Residual Quantiles (Sample {idx}, Channel {ch})")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(os.path.join(save_folder, f"quant_residual_{i}.png"))
-            plt.close()
 
     print(f"Saved {num_plots} plots to: {save_folder}")
 
