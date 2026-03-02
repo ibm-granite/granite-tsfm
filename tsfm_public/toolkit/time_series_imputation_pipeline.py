@@ -76,9 +76,7 @@ class TimeSeriesImputationPipeline(TimeSeriesPipeline):
         self._model_output_key = "reconstruction_outputs"
         self._copy_dataset_keys = False
 
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
+        # Note: This pipeline only supports PyTorch models
         self.check_model_type(MODEL_FOR_TIME_SERIES_IMPUTATION_MAPPING_NAMES)
 
     def _sanitize_parameters(
