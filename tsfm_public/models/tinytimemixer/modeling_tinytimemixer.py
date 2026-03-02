@@ -1202,6 +1202,12 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
+    
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        # Initialize the all_tied_weights_keys attribute required by transformers 5.x
+        if not hasattr(self, 'all_tied_weights_keys'):
+            self.all_tied_weights_keys = {}
 
     def _init_weights(self, module):
         """Initialize weights"""

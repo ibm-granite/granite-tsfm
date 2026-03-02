@@ -332,11 +332,11 @@ wheels = [
 
 [[package]]
 name = "cachetools"
-version = "7.0.1"
+version = "7.0.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d4/07/56595285564e90777d758ebd383d6b0b971b87729bbe2184a849932a3736/cachetools-7.0.1.tar.gz", hash = "sha256:e31e579d2c5b6e2944177a0397150d312888ddf4e16e12f1016068f0c03b8341", size = 36126, upload-time = "2026-02-10T22:24:05.03Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/c7/342b33cc6877eebc6c9bb45cb9f78e170e575839699f6f3cc96050176431/cachetools-7.0.2.tar.gz", hash = "sha256:7e7f09a4ca8b791d8bb4864afc71e9c17e607a28e6839ca1a644253c97dbeae0", size = 36983, upload-time = "2026-03-02T19:45:16.926Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/9e/5faefbf9db1db466d633735faceda1f94aa99ce506ac450d232536266b32/cachetools-7.0.1-py3-none-any.whl", hash = "sha256:8f086515c254d5664ae2146d14fc7f65c9a4bce75152eb247e5a9c5e6d7b2ecf", size = 13484, upload-time = "2026-02-10T22:24:03.741Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/04/4b6968e77c110f12da96fdbfcb39c6557c2e5e81bd7afcf8ed893d5bc588/cachetools-7.0.2-py3-none-any.whl", hash = "sha256:938dcad184827c5e94928c4fd5526e2b46692b7fb1ae94472da9131d0299343c", size = 13793, upload-time = "2026-03-02T19:45:15.495Z" },
 ]
 
 [[package]]
@@ -3754,7 +3754,7 @@ wheels = [
 
 [[package]]
 name = "tritonclient"
-version = "2.65.0"
+version = "2.66.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -3762,9 +3762,9 @@ dependencies = [
     { name = "urllib3" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/89/75166c9b025bcdd0e86dc342ea590999be36078c2125d78b97a3c471db76/tritonclient-2.65.0-py3-none-any.whl", hash = "sha256:cc3e58cf24a5f53fe24066e2037756560f6fdd2743a9d19fbb641b7580a63b4f", size = 98317, upload-time = "2026-02-03T20:59:29.457Z" },
-    { url = "https://files.pythonhosted.org/packages/90/72/70e68ff56bda8da0c25acb7e4f2396c800c9969284b834d4f77285c20c55/tritonclient-2.65.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:75f0ecac1cbd4a2539ef2c27c5774ebc674e679a590a4840cd3f0dd696c80a2b", size = 111866, upload-time = "2026-02-03T20:59:47.931Z" },
-    { url = "https://files.pythonhosted.org/packages/63/eb/2bd71953f3eea73368c1e1e13abb8069eacc700884631edf79007b52de26/tritonclient-2.65.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:10ed058d2b816a0bd48d6c62d8dcb01864a0c2cc971a31fe366d328f6e3311c2", size = 111867, upload-time = "2026-02-03T20:58:03.359Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/5a/d4a255b94f74ec225ff2ec0eff2ae480fec65198dc962236748493e87a17/tritonclient-2.66.0-py3-none-any.whl", hash = "sha256:7e3558a47542528a4edd2da607050e756022c6b14ea2b352a67c78f1484e698f", size = 98317, upload-time = "2026-03-02T17:58:43.417Z" },
+    { url = "https://files.pythonhosted.org/packages/79/a6/e37f2e8ef2a3d782f4d4535c1136007ff3a702174c952cf7944ca709505d/tritonclient-2.66.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:d2c2865239017a0d15a5f34e23f093feac222e608d6182a1444354204a0833ad", size = 111866, upload-time = "2026-03-02T17:58:21.792Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/87/e1adba7819a42f71071914c51617b36760a7a17606eb969954153b761076/tritonclient-2.66.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:ec759cd8186130be9726be2fa31bc14b1dd46daa19add770610df889aa57d0a4", size = 111868, upload-time = "2026-03-02T17:56:22.572Z" },
 ]
 
 [package.optional-dependencies]
