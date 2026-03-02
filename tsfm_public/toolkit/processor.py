@@ -44,6 +44,7 @@ def _download_url(url):
         LOGGER.error(f"Failed to download {url}: {e}")
         raise
 
+
 TYPE_TO_STRING = {
     int: "int",
     np.int32: "numpy.int32",
