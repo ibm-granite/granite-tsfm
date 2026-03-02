@@ -254,7 +254,6 @@ class TSFMForecastingTuningHandler:
         training_tmp_dir = Path(tmp_dir)
         training_args = TrainingArguments(
             output_dir=training_tmp_dir / "output",
-            overwrite_output_dir=True,
             learning_rate=learning_rate,
             num_train_epochs=parameters.trainer_args.num_train_epochs,
             eval_strategy="epoch",
