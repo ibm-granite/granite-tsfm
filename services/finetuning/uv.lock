@@ -515,8 +515,8 @@ http = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.5.dev125+g0bf1e20da"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=transformers5.x#0bf1e20da33694046029ae4d15fa9df9bca39aa7" }
+version = "0.3.5.dev153+g1c0544af7"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=transformers5.x#1c0544af7962fcf07680cc021ae57a570bf69d8d" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
