@@ -522,8 +522,8 @@ wheels = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.3.dev83+g6c208a9ce"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny#6c208a9ce4255c7f9453e719aa8ac33b47a0355a" }
+version = "0.3.5.dev153+g1c0544af7"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=transformers5.x#1c0544af7962fcf07680cc021ae57a570bf69d8d" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
