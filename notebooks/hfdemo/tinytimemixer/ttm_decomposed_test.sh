@@ -24,9 +24,9 @@ python ttm_decomposed_test.py  --context_length 1536 \
                                --trend_decoder_d_model 32 \
                                --trend_num_layers 1 \
                                --trend_decoder_num_layers 1 \
-                               --epochs_phase1 5 \
-                               --epochs_phase2 5 \
-                               --epochs_phase3 5 \
+                               --epochs_phase1 1 \
+                               --epochs_phase2 1 \
+                               --epochs_phase3 1 \
                                --multi_quantile_head \
                                --multi_scale \
                                --mq_use_decoder_pool \

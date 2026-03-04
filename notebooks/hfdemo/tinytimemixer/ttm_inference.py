@@ -163,7 +163,7 @@ def build_test_dataset_from_model_config(model):
 def run_inference_only(model_path: str) -> None:
     # Load model
     model = TinyTimeMixerForPrediction.from_pretrained(
-        model_path, light_mode=True
+        model_path, light_mode=True, decoder_mode="mix_channel"
     )
     model.eval()
 
