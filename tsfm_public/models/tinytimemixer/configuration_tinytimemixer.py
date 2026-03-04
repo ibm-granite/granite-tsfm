@@ -230,6 +230,9 @@ class TinyTimeMixerConfig(PretrainedConfig):
         trend_num_layers: int = None,
         trend_decoder_num_layers: int = None,
         trend_register_tokens: int = None,
+        trend_fft_length: int = None,
+        trend_multi_scale: bool = None,
+        trend_adaptive_patching_levels: int = None,
         trend_head_d_model: Optional[int] = None,
         trend_loss_weight: Optional[float] = 1,
         residual_loss_weight: Optional[float] = 1,
@@ -246,7 +249,15 @@ class TinyTimeMixerConfig(PretrainedConfig):
         mq_cond_mode: str = "add",
         mq_decoder_d_model: int = 8,
         mq_use_positional: bool = False,
+        combine_quantiles_via_variance: bool = False,
         quantile_list=None,
+        penalize_large_width_ratio: float = 0.0,
+        width_penalty_mode: str = "boundary",
+        estimate_errors: bool = False,
+        err_quantiles=None,
+        estimate_error_weight: float = 0.1,
+        err_enable_mixer: bool = False,
+        err_mixer_layers: int = 2,
         # mq_detach_mean_for_head: bool = False,
         # mq_median_mode: str = "biased",
         # mq_median_bias_shrink: float = 0.05,
@@ -328,7 +339,10 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.trend_num_layers = trend_num_layers
         self.trend_decoder_num_layers = trend_decoder_num_layers
         self.trend_register_tokens = trend_register_tokens
+        self.trend_fft_length = trend_fft_length
         self.trend_loss_weight = trend_loss_weight
+        self.trend_multi_scale = trend_multi_scale
+        self.trend_adaptive_patching_levels = trend_adaptive_patching_levels
         self.residual_loss_weight = residual_loss_weight
         self.joint_loss_weight = joint_loss_weight
         self.forecast_loss_type = forecast_loss_type
@@ -345,8 +359,16 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.mq_cond_mode = mq_cond_mode
         self.mq_decoder_d_model = mq_decoder_d_model
         self.mq_use_positional = mq_use_positional
+        self.combine_quantiles_via_variance = combine_quantiles_via_variance
         self.quantile_list = quantile_list
 
+        self.penalize_large_width_ratio = penalize_large_width_ratio
+        self.width_penalty_mode = width_penalty_mode
+        self.estimate_errors = estimate_errors
+        self.err_quantiles = err_quantiles
+        self.estimate_error_weight = estimate_error_weight
+        self.err_enable_mixer = err_enable_mixer
+        self.err_mixer_layers = err_mixer_layers
         super().__init__(**kwargs)
 
     def compute_total_num_patches_multiscale(self) -> int:

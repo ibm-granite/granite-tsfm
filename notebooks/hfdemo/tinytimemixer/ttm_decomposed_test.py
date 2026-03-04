@@ -504,10 +504,16 @@ def get_base_model(args):
         mq_cond_mode=args.mq_cond_mode,
         mq_decoder_d_model=args.mq_decoder_d_model,
         quantile_list=[0.1, 0.2, 0.5, 0.8, 0.9],
-        penalize_large_width_ratio=0.5,
+        penalize_large_width_ratio=0.1,
         # width_penalty_mode="wis",
         width_penalty_mode="boundary",
+        combine_quantiles_via_variance=False,
         point_extra_weight=1,
+        err_enable_mixer=False,
+        err_mixer_layers=2,
+        estimate_errors=True,
+        err_quantiles=[0.5, 0.9],
+        estimate_error_weight=3,
     )
 
     # Residual tail knob (safe default = quarter context)
@@ -837,6 +843,127 @@ def plot_quantiles_first_mid_last(
     plt.close()
 
 
+def _pick_q_indices(quantile_values, Q):
+    """
+    Returns (i50, i90) indices into the quantile dimension.
+    Falls back gracefully if quantile_values is None or doesn't contain 0.5/0.9.
+    """
+    if quantile_values is None:
+        # If your error head outputs only q50 and q90, assume [0.5, 0.9]
+        if Q == 2:
+            return 0, 1
+        # Otherwise default to median-like and near-upper
+        return Q // 2, min(Q - 1, (Q // 2) + (Q // 4))
+
+    taus = np.array(list(quantile_values), dtype=np.float32)
+    # closest indices to 0.5 and 0.9
+    i50 = int(np.argmin(np.abs(taus - 0.5)))
+    i90 = int(np.argmin(np.abs(taus - 0.9)))
+    return i50, i90
+
+
+def plot_error_quantiles_with_forecast(
+    pred_err_q,  # [N,Q,F,C]
+    y_pred,  # [N,F,C]
+    y_true,  # [N,F,C]
+    idx: int,
+    ch: int,
+    save_path: str,
+    quantile_values=None,
+    title=None,
+):
+    """
+    Combined plot:
+      Top: Forecast vs Ground Truth
+      Bottom: Actual |error| vs predicted error q50 & q90
+    """
+
+    # -------------------------
+    # Forecast values
+    # -------------------------
+    forecast = y_pred[idx, :, ch]
+    gt = y_true[idx, :, ch]
+
+    # -------------------------
+    # Actual error magnitude
+    # -------------------------
+    actual_err = np.abs(forecast - gt)
+
+    # -------------------------
+    # Pick q50 & q90 indices
+    # -------------------------
+    Q = pred_err_q.shape[1]
+
+    if quantile_values is None:
+        if Q == 2:
+            i50, i90 = 0, 1
+        else:
+            i50 = Q // 2
+            i90 = min(Q - 1, i50 + 1)
+    else:
+        taus = np.array(list(quantile_values), dtype=np.float32)
+        i50 = int(np.argmin(np.abs(taus - 0.5)))
+        i90 = int(np.argmin(np.abs(taus - 0.9)))
+
+    err_q50 = pred_err_q[idx, i50, :, ch]
+    err_q90 = pred_err_q[idx, i90, :, ch]
+
+    # -------------------------
+    # Plot
+    # -------------------------
+    plt.figure(figsize=(12, 8))
+
+    # ----- Top: forecast vs actual -----
+    plt.subplot(2, 1, 1)
+    plt.plot(forecast, label="Forecast", linewidth=1.8)
+    plt.plot(gt, label="Ground Truth", linewidth=1.8)
+    plt.title("Forecast vs Ground Truth")
+    plt.legend()
+
+    # ----- Bottom: error curves -----
+    plt.subplot(2, 1, 2)
+    plt.plot(actual_err, label="Actual |error|", linewidth=2)
+    plt.plot(err_q50, label="Pred Error q50", linewidth=1.5)
+    plt.plot(err_q90, label="Pred Error q90", linewidth=1.5)
+    plt.title("Error Prediction (q50 & q90)")
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+
+
+def plot_error_quantiles_vs_actual(
+    pred_err_q,  # [N,Q,F,C]
+    y_pred,  # [N,F,C]
+    y_true,  # [N,F,C]
+    idx: int,
+    ch: int,
+    save_path: str,
+    quantile_values=None,
+    title=None,
+):
+    # actual error magnitude
+    actual_err = np.abs(y_pred[idx, :, ch] - y_true[idx, :, ch])  # [F]
+
+    Q = pred_err_q.shape[1]
+    i50, i90 = _pick_q_indices(quantile_values, Q)
+
+    err_q50 = pred_err_q[idx, i50, :, ch]  # [F]
+    err_q90 = pred_err_q[idx, i90, :, ch]  # [F]
+
+    plt.figure(figsize=(12, 4))
+    plt.plot(actual_err, label="Actual |error|", linewidth=1.8)
+    plt.plot(err_q50, label="Pred error q50", linewidth=1.5)
+    plt.plot(err_q90, label="Pred error q90", linewidth=1.5)
+
+    plt.title(title or f"Error quantiles vs actual (Sample {idx}, Channel {ch})")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+
+
 # -----------------------------
 # Inference + Visualization
 # -----------------------------
@@ -866,6 +993,14 @@ def inference(args, model_path, dset_test, label="iid"):
     print(model)
     # Predict
     predictions_dict = trainer.predict(dset_test)
+
+    has_error_est = bool(getattr(model.config, "estimate_errors", False))
+
+    prediction_errors = None
+    if has_error_est:
+        # As you said: predictions[-3] is [N,Q,F,C] (sample, q, t, c)
+        prediction_errors = predictions_dict.predictions[-3]
+        print("prediction_errors shape:", prediction_errors.shape)
 
     # Unpack (matches your TinyTimeMixerForDecomposedPredictionOutput ordering)
     predictions_output = predictions_dict.predictions[
@@ -987,6 +1122,36 @@ def inference(args, model_path, dset_test, label="iid"):
         plt.savefig(os.path.join(save_folder, f"plot_{i}.png"))
         plt.close()
 
+        # -------------------------
+        # Error plots (q50/q90 vs actual)
+        # -------------------------
+        if has_error_est and prediction_errors is not None:
+            # If your model has a dedicated list for error quantiles, use it here.
+            # Otherwise, if it's literally only [q50,q90], leave as None and we assume [0.5,0.9].
+            err_quantile_values = getattr(model.config, "err_quantiles", None)
+
+            plot_error_quantiles_with_forecast(
+                pred_err_q=prediction_errors,
+                y_pred=predictions_output,
+                y_true=forecast_groundtruth,
+                idx=idx,
+                ch=ch,
+                quantile_values=err_quantile_values,
+                title=f"Forecast + Error Quantiles (Sample {idx}, Channel {ch})",
+                save_path=os.path.join(save_folder, f"forecast_error_combined_{i}.png"),
+            )
+
+            # plot_error_quantiles_vs_actual(
+            #     pred_err_q=prediction_errors,
+            #     y_pred=predictions_output,
+            #     y_true=forecast_groundtruth,
+            #     idx=idx,
+            #     ch=ch,
+            #     quantile_values=err_quantile_values,  # or None
+            #     title=f"Predicted Error (q50/q90) vs Actual |error| (Sample {idx}, Channel {ch})",
+            #     save_path=os.path.join(save_folder, f"errors_q50_q90_{i}.png"),
+            # )
+
         if has_quantiles:
             quantile_values = (
                 model.config.quantile_list
@@ -1087,5 +1252,7 @@ if __name__ == "__main__":
     inference(args=args, model_path=model_save_path, dset_test=dset_test)
     print("inference completed..")
 
+    # inference(args=args, model_path=model_save_path, dset_test=dset_test_ood, label = "ood")
+    # print("inference ood completed..")
     # inference(args=args, model_path=model_save_path, dset_test=dset_test_ood, label = "ood")
     # print("inference ood completed..")
