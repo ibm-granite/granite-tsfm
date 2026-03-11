@@ -72,7 +72,7 @@ and monitor an ayschronous finetuning job.
 First:
 
 - [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Install helm](https://helm.sh/docs/intro/install/)
+  
 - If you are using podman, you will need to enable the use of an insecure (using http instead of https)
   local container registry by creating a file called `/etc/containers/registries.conf.d/localhost.conf`
   with the following content:
