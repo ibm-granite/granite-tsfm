@@ -44,5 +44,5 @@ def get_fixed_factor(freq: str, domain=None):
     elif "A" in freq:
         factor = BASE_SEASON / 4.0  # leap year ??
     else:
-        raise NotImplementedError("{freq} not implemented. Add {freq} option to this method")
+        raise NotImplementedError(f"{freq} not implemented. Add {freq} option to this method")
     return factor
