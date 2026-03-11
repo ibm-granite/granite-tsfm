@@ -278,14 +278,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         logger.info(
             f"Context Len: {cl} | Forecast Len: {forecast_len} ",
         )
-        cl = [cl] * len(inputs)
-        fl = [
-            max(
-                forecast_len,
-                ul,
-                self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
-            )
-        ] * len(inputs)
 
         if not observed_inputs_mask:
             if list_input:
@@ -293,18 +285,41 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else:
                 observed_inputs_mask = ~inputs.isnan()
 
-        forecast_samples, hidden_states = self.forecast_single_step(
-            inputs,
-            forecast_len=fl,
-            observed_inputs_mask=observed_inputs_mask,
-            context_len=cl,
-            output_hidden_states=output_hidden_states,
-        )
-
         if list_input:
+            cl = [cl] * len(inputs)
+            fl = [
+                max(
+                    forecast_len,
+                    ul,
+                    self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
+                )
+            ] * len(inputs)
+            forecast_samples, hidden_states = self.forecast_single_step(
+                inputs,
+                forecast_length=fl,
+                observed_inputs_mask=observed_inputs_mask,
+                context_length=cl,
+                output_hidden_states=output_hidden_states,
+            )
             forecast_samples = [sample[:, :forecast_len] for sample in forecast_samples]
         else:
-            # do we really need this
+            if not (isinstance(inputs, torch.Tensor) and isinstance(observed_inputs_mask, torch.Tensor)):
+                raise ValueError("Both the `inputs` and `observed_values_mask` should be of type torch.Tensor.")
+
+            fl = max(
+                forecast_len,
+                ul,
+                self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
+            )
+
+            forecast_samples, hidden_states = self.forecast_single_step_fast(
+                inputs,
+                forecast_length=fl,
+                observed_inputs_mask=observed_inputs_mask,
+                context_length=cl,
+                output_hidden_states=output_hidden_states,
+            )
+            # do we really need this?
             if False:
                 sample_lengths = [sample.shape[-1] for sample in forecast_samples]
                 if len(set(sample_lengths)) > 1:
@@ -312,7 +327,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                         f"Forecast samples have different lengths: {sample_lengths}. "
                         f"Truncating to minimum length: {min(sample_lengths)}"
                     )
-            forecast_samples = torch.stack(forecast_samples, dim=0)[:, :, :forecast_len]
+            forecast_samples = forecast_samples[:, :, :forecast_len]
 
         if quantile_levels is not None:
             quantile_indices = [self.backbone.quantile_levels.index(q) for q in quantile_levels]
@@ -327,8 +342,8 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         self,
         x: torch.Tensor,
         observed_inputs_mask: torch.Tensor,
-        forecast_len: List[int],
-        context_len: List[int],
+        forecast_length: int,
+        context_length: int,
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Any]:
 
@@ -344,24 +359,95 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         x = x.unsqueeze(-1) if x.ndim == 2 else x
         miss_mask = miss_mask.unsqueeze(-1) if miss_mask.ndim == 2 else miss_mask
-        x_mean = x.nanmean(dim=1) # mean across context dimension
+        x_mean = x.nanmean(dim=1)  # mean across context dimension
 
-        x_context_dim = x.shape[1]
+        context_provided = x.shape[1]
 
+        context = min(context_provided + forecast_length, context_length)
+        s = context - forecast_length  # part of the context that was provided
+        x_in = x[:, -s:, ...]
+        pad_mask = torch.zeros_like(x_in)
 
-        context = min(x.shape[1] + f, context)
-        s_i = c_i - f_i  # part of the context that was provided
-        x_in = x_i[-s_i:]
+        nan_mask = torch.isnan(x_in)
+        x_in = torch.where(nan_mask, x_mean.unsqueeze(1).expand_as(x_in), x_in)
 
+        # f_i_shape = (f_i,) + x_in.shape[1:]
 
-        pass
+        batch_size, _, n_dim = x_in.shape
+        forecast_shape = (batch_size, forecast_length, n_dim)
+
+        pred_mask = torch.cat([torch.zeros_like(x_in), torch.ones(forecast_shape)], dim=1)
+        miss_mask = torch.cat([miss_mask, torch.zeros(forecast_shape)], dim=1)
+        pad_mask = torch.cat([pad_mask, torch.zeros(forecast_shape)], dim=1)
+        x_in = torch.cat([x_in, x_mean.unsqueeze(1).repeat((1, forecast_length, 1))], dim=1)
+
+        sample_len = s + forecast_length  # x_in.shape[1]
+
+        if sample_len == self.config.context_length:
+            # just pass
+
+            inputs = x_in
+            # inputs.append(x_in)
+            # pred_mask.append(pred_mask_i)
+            # pad_mask.append(pad_mask_i)
+            # miss_mask.append(miss_mask_i)
+            # time_index.append(time_index_i)
+            ts_ends = (0, sample_len)
+
+        elif sample_len < self.config.context_length:
+            left_pad = self.config.context_length - sample_len
+
+            pad = x_mean.unsqueeze(dim=1).repeat((1, left_pad, 1))
+            inputs = torch.cat((pad, x_in), dim=1)  # append left_pad + sample_len = context_len, num_channels
+
+            pred_mask = F.pad(pred_mask, (0, 0, left_pad, 0), mode="constant", value=0.0)
+            pad_mask = F.pad(pad_mask, (0, 0, left_pad, 0), mode="constant", value=1.0)
+            miss_mask = F.pad(miss_mask, (0, 0, left_pad, 0), mode="constant", value=0.0)
+            # time_index = F.pad(time_index, (left_pad, 0), mode="constant", value=-1)
+
+            ts_ends = (left_pad, left_pad + sample_len)
+            # pad
+        else:  # sample_len > self.config.context_length
+            # not supported for now
+            raise ValueError(
+                "Please ensure that provided sample plus the desired forecast is less than the model maximum context length."
+            )
+
+        # we are B T N, but backbone wants (B N) T
+        inputs = rearrange(inputs, "B T N -> (B N) T")
+        pred_mask = rearrange(pred_mask, "B T N -> (B N) T")
+        miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
+        pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
+
+        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
+            model_output = self.backbone(
+                inputs=inputs,
+                pred_mask=pred_mask,
+                miss_mask=miss_mask,
+                pad_mask=pad_mask,
+                return_loss=False,
+                output_hidden_states=output_hidden_states,
+            )
+            outputs = model_output.quantile_outputs
+
+        outputs = outputs.permute(0, 2, 1)
+        outputs = self.backbone.norm_fn.inverse_transform(outputs)
+        outputs = rearrange(outputs, "(B N) Q T -> B Q T N", B=batch_size)
+
+        # sample_length <= self.config.context_length
+        # ts_ends should always be self.config.context_length
+
+        x_preds = outputs[:, :, ts_ends[0] : ts_ends[1]]
+        x_preds = x_preds[:, :, -forecast_length:]
+
+        return x_preds, model_output.hidden_states
 
     def forecast_single_step(
         self,
         x: List[torch.Tensor] | torch.Tensor,
         observed_inputs_mask: List[torch.Tensor] | torch.Tensor,
-        forecast_len: List[int],
-        context_len: List[int],
+        forecast_length: List[int],
+        context_length: List[int],
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[list[torch.Tensor], Any]:
         """
@@ -382,7 +468,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # x_i: time x num_channels
         # context is full window of input to backbone
         # old_context + forecast = context
-        for x_i, observed_inputs_mask_i, c_i, f_i in zip(x, observed_inputs_mask, context_len, forecast_len):
+        for x_i, observed_inputs_mask_i, c_i, f_i in zip(x, observed_inputs_mask, context_length, forecast_length):
             c_i = min(x_i.shape[0] + f_i, c_i)
             s_i = c_i - f_i  # part of the context that was provided
             x_in = x_i[-s_i:]
@@ -513,5 +599,5 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else:
                 # to do: check me
                 x_pred = F.interpolate(outputs[i].unsqueeze(1), size=sample_lengths[i], mode="linear").squeeze(1)
-            x_preds.append(x_pred[:, -forecast_len[i] :])
+            x_preds.append(x_pred[:, -forecast_length[i] :])
         return x_preds, model_output.hidden_states
