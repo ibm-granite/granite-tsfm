@@ -283,7 +283,10 @@ class FlowStateS5Block(nn.Module):
     def __init__(self, config, last=False):
         super().__init__()
         self.last = last
+        self.output_gating = config.out_gating
         self.config = config
+        if self.output_gating:
+            self.output_gate = nn.Linear(config.embedding_feature_dim, config.embedding_feature_dim)
         self.init_params()
 
     def init_params(self):
@@ -301,6 +304,7 @@ class FlowStateS5Block(nn.Module):
             Lambda, V = torch.linalg.eig(torch.block_diag(*encoder_num_hippo_blocks * [A]))
             self.log_Lambda_real = torch.nn.Parameter(torch.log(-Lambda.real))
             self.Lambda_imag = torch.nn.Parameter(Lambda.imag)
+
             B = 0.5 / torch.sqrt(torch.tensor(H)) * (torch.randn(state_dim, H) + torch.randn(state_dim, H) * 1.0j)
             C = (
                 0.5
@@ -315,29 +319,22 @@ class FlowStateS5Block(nn.Module):
             log_min, log_max = torch.log(torch.tensor(0.001)), torch.log(torch.tensor(0.1))
             self.log_Delta = nn.Parameter(log_min + (log_max - log_min) * torch.rand(state_dim))
 
-    def get_discretized(self, L=None, scale_factor=1.0):
+    def get_discretized(self, scale_factor, L=None):
         """Discretize a diagonalized, continuous-time linear SSM
         Args:
+        scale_factor (float32): mult factor for discretization step sizes (b,)
         L (int): length of the sequence
-        scale_factor (float32): mult factor for discretization step sizes (scalar, or per el in batch)
         Returns:
         discretized kernel (complex64), B_bar (complex64) (P,), (P,H)"""
         if L is None:
             L = int((self.config.context_length + 1 - self.config.patch) / self.config.stride - 1e-9) + 1
         lambda_ = -torch.exp(self.log_Lambda_real) + 1j * self.Lambda_imag
         device = lambda_.device
-        Identity = torch.ones(lambda_.shape[0], device=device)
         B_tilde = self.B_tilde_r + 1.0j * self.B_tilde_i
-        if type(scale_factor) is torch.Tensor and scale_factor.ndim > 0:  # different scale factor per sample
-            log_Lambda_bar = torch.outer(scale_factor, lambda_ * torch.exp(self.log_Delta))
-            kernel = torch.einsum("bd,L->bLd", log_Lambda_bar, torch.arange(L - 1, -1, -1, device=device)).exp()
-            B_bar = (1 / lambda_ * (kernel[:, -2] - 1.0))[..., None] * B_tilde
-        else:
-            log_Lambda_bar = scale_factor * lambda_ * torch.exp(self.log_Delta)
-            kernel = torch.multiply(
-                log_Lambda_bar.unsqueeze(0), torch.arange(L - 1, -1, -1, device=device).unsqueeze(-1)
-            ).exp()
-            B_bar = (1 / lambda_ * (kernel[-2] - Identity))[..., None] * B_tilde
+        scale_factor = scale_factor.repeat((lambda_.shape[0], 1)).T
+        log_Lambda_bar = scale_factor.unsqueeze(1) * lambda_[None,None,:] * torch.exp(self.log_Delta)
+        kernel = torch.einsum("bLd,L->bLd", log_Lambda_bar, torch.arange(L - 1, -1, -1, device=device)).exp()
+        B_bar = (1 / lambda_ * (kernel[:,-2] - 1.0))[..., None] * B_tilde
 
         return kernel, B_bar
 
@@ -362,27 +359,46 @@ class FlowStateS5Block(nn.Module):
         else:
             return o
 
-    def forward(self, input_sequences, scale_factor=1.0):
+    def forward(self, input_sequences: torch.Tensor, scale_factor: torch.Tensor):
         """Computes LxBxH output sequence of an S5 layer given LxBxH input sequence.
         Args:
         params: tuple of the continuous time SSM parameters
         input_sequences: batch of input feature sequences (L, B ,H)
         Returns:
         Batch of S5 layer output sequences (L, B, H)"""
-        input_sequences = input_sequences + 0.0j
-        kernel, B_bar = self.get_discretized(L=input_sequences.shape[0], scale_factor=scale_factor)
-        if kernel.ndim == 3:
-            Bu_elements = torch.einsum("bnm,lbm->lbn", B_bar, input_sequences)
-        else:
-            Bu_elements = torch.einsum("nm,lbm->lbn", B_bar, input_sequences)
+
+        kernel, B_bar = self.get_discretized(scale_factor, L=input_sequences.shape[0])
+        Bu_elements = torch.einsum("bnm,lbm->lbn", B_bar.real, input_sequences) + torch.einsum("bnm,lbm->lbn", B_bar.imag, input_sequences) * 1.j
+
         xs = self.apply_ssm_kern_ff(Bu_elements, kernel)
         if self.last:
             input_sequences = input_sequences[min(self.config.min_context, input_sequences.shape[0]) - 1 :]
         # Compute SSM output sequence
-        xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r + 1.0j * self.C_tilde_i, xs)
-        xs += torch.einsum("h,...bh->...bh", self.D, input_sequences.real)
-        return xs.real
+        xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r, xs.real) + torch.einsum("hn,...bn->...bh", self.C_tilde_i, -xs.imag)
 
+        if self.output_gating:
+            xs = F.sigmoid(self.output_gate(xs)) * xs
+        xs += torch.einsum("h,...bh->...bh", self.D, input_sequences)
+
+        return xs
+
+class MLP(nn.Module):
+    """
+    Simple Gated MLP Layer.
+    """
+    def __init__(self, dim: int, exp_factor: int = 2, p_drop=0.2):
+        super().__init__()
+        self.dim = dim
+        self.drop = nn.Dropout(p=p_drop)
+        self.rms_weight = nn.Parameter(torch.ones(dim))
+        self.w1 = nn.Linear(dim, dim*exp_factor)
+        self.w2 = nn.Linear(dim, dim*exp_factor)
+        self.w3 = nn.Linear(dim*exp_factor, dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        skip = x
+        x = F.rms_norm(x, (self.dim,), self.rms_weight, 1e-6)
+        return self.w3(self.drop(F.silu(self.w1(x)) * self.w2(x))) + skip
 
 class FlowStateS5Layer(nn.Module):
     def __init__(self, config, last=False, ssm=True):
@@ -391,19 +407,26 @@ class FlowStateS5Layer(nn.Module):
         n = config.embedding_feature_dim
         self.last = last
         self.ssm = FlowStateS5Block(config, last=last)
-        self.out = nn.Linear(n, n)
+        if self.config.mlp_type == "transformer":
+            self.mlp = MLP(n)
+        else:
+            self.out = nn.Linear(n, n)
         self.norm = nn.LayerNorm(n)
 
-    def forward(self, x, scale_factor=1.0):
+    def forward(self, x, scale_factor):
         skip = (
             x if (not self.last or x.ndim == 2) else x[min(self.config.min_context, x.shape[0]) - 1 :]
         )  # last layer doesn't need MLP on all timesteps
         # SSM
-        x = self.ssm(x, scale_factor=scale_factor)
+        x = self.ssm(x, scale_factor)
 
         # self gated MLP
-        x = F.selu(x)
-        x = x * F.sigmoid(self.out(x))
+        if self.config.mlp_type == "transformer":
+            x = self.mlp(x)
+        else:
+            # default gated one linear layer mlp
+            x = F.selu(x)
+            x = x * F.sigmoid(self.out(x))
 
         # pre layernorm
         x = self.norm(x)
@@ -465,8 +488,9 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
         Returns:
             `torch.FloatTensor` of shape `(1, batch_size, encoder_state_dim)`
         """
-        x = encoder_inputs
-        output = x
+        if type(scale_factor) is not torch.Tensor or scale_factor.ndim == 0:
+            scale_factor = torch.ones(encoder_inputs.shape[1], device=encoder_inputs.device) * scale_factor
+        output = encoder_inputs
 
         all_hidden_states = []
 
@@ -521,7 +545,7 @@ class FlowStateFunctionalBasisDecoder(FlowStatePreTrainedModel):
         with torch.no_grad():
             if type(sampling_factor) is torch.Tensor and sampling_factor.ndim > 0:
                 # individual factor per sample
-                t = torch.stack([self.get_t(sf, target_points) for sf in sampling_factor], dim=0).to(device)
+                t = torch.stack([self.get_t(sf, target_points, device) for sf in sampling_factor], dim=0).to(device)
             else:
                 t = self.get_t(sampling_factor, target_points, device)
 
@@ -584,7 +608,6 @@ class FlowStateModel(FlowStatePreTrainedModel):
 
         self.config = config
 
-        n_inputs = 1
         self.norm = FlowStateCausalRevIN(with_missing=config.with_missing)
 
         n_inputs = 2 if config.with_missing else 1
@@ -594,11 +617,11 @@ class FlowStateModel(FlowStatePreTrainedModel):
 
         self.decoder = FlowStateFunctionalBasisDecoder(config)
 
-        trainable_paras = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
+        trainable_paras = sum(p.numel() for p in self.parameters() if p.requires_grad)
         decoder_paras = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-        logger.info(f"Number of encoder parameters: {trainable_paras * 1e-3}k")
+        logger.info(f" Total Number of parameters: {trainable_paras * 1e-3}k")
         logger.info(
-            f"Number of dencoder parameters: {decoder_paras * 1e-3}k ({100 * decoder_paras / trainable_paras:.2f}%)"
+            f"Number of decoder parameters: {decoder_paras * 1e-3}k ({100 * decoder_paras / trainable_paras:.2f}%)"
         )
 
     @add_start_docstrings_to_model_forward(FLOWSTATE_INPUTS_DOCSTRING)
@@ -751,12 +774,13 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
 
         self.model = FlowStateModel(config)
 
-    def _combine_cpm_predictions(self, pred, pred_len):
+    def _combine_cpm_predictions(self, pred, pred_len) -> torch.Tensor:
         n_preds, batch, quants, fl, n_ch = pred.shape
-        rest = pred[-1]
+        lastp = pred[-1]
+        rest = n_preds % fl - 1
         pred = torch.cat([pred[ix] for ix in range(0, n_preds, fl)], dim=2)
-        if pred.shape[2] < pred_len:
-            pred = torch.cat((pred, rest[:, :, -(pred_len - pred.shape[2]) :]), dim=2)
+        if rest > 0:
+            pred = torch.cat((pred, lastp[:, :, -rest:]), dim=2)
         pred = pred[:, :, :pred_len]
         return pred
 
@@ -774,7 +798,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         batch_first: Optional[bool] = None,
         scale_factor: Optional[float] = None,
         prediction_length: Optional[int] = None,
-        prediction_type: Optional[bool] = None,
+        prediction_type: Optional[str] = None,
     ) -> FlowStateForPredictionOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -824,20 +848,18 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
                 "`past_values` must have 3 dimensions of shape `(sequence_length, batch_size, num_input_channels)`."
             )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        max_context = min(8 * 1024, int(self.config.context_length / scale_factor))
         max_decoder_patch_len = int(self.config.decoder_patch_len / scale_factor + 1e-6)
         if prediction_length == -1:
             prediction_length = max_decoder_patch_len
         # prepare multi patch inferencing
         mask_n = max(0, prediction_length - max_decoder_patch_len)
-        max_context -= mask_n
-        if batch_first:
-            past_values = past_values[:, -max_context:]
-        else:
-            past_values = past_values[-max_context:]
+        max_context = min(16 * 1024, int(self.config.context_length / scale_factor)) - mask_n
+        if not batch_first:
+            past_values = past_values.transpose(0,1)
+        past_values = past_values[:, -max_context:]
         if mask_n > 0:
             self.model.config.min_context = (
-                past_values.shape[1] if batch_first else past_values.shape[0]
+                past_values.shape[1]
             )  # min context from which to start predicting
         else:
             self.model.config.min_context = 0
@@ -845,27 +867,30 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         model_output = self.model(
             past_values,
             return_dict=return_dict,
-            batch_first=batch_first,
+            batch_first=True,
             scale_factor=scale_factor,
             mask_n=mask_n,
         )
-
         if isinstance(model_output, tuple):
             model_output = FlowStateModelOutput(*model_output)
         model_output.last_hidden_state = self._combine_cpm_predictions(
             model_output.last_hidden_state, prediction_length
         )
 
-        if self.config.prediction_type == "quantile":
-            pass
-        elif self.config.prediction_type == "mean":
+        if prediction_type == "quantile":
+            # ensure correct order in quantiles
+            model_output.last_hidden_state = torch.quantile(model_output.last_hidden_state, torch.tensor(self.config.quantiles).to(past_values.device), 1).transpose(0,1)
+        elif prediction_type == "mean":
             # calculate an approximate mean from quantiles
             quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantiles)).abs()
             quant_prob /= quant_prob.sum()  # normalize quantile weights
             quant_prob = quant_prob.view(1, -1, 1, 1).to(past_values.device)
             model_output.last_hidden_state = (model_output.last_hidden_state * quant_prob).sum(dim=1)
-        elif self.config.prediction_type == "median":
-            model_output.last_hidden_state = model_output.last_hidden_state[:, 4, :]
+        elif prediction_type == "median":
+            if 0.5 not in self.config.quantiles:
+                raise RuntimeError("Median requested but not part of the quantiles.")
+            ix = self.config.quantiles.index(0.5)
+            model_output.last_hidden_state = model_output.last_hidden_state[:, ix, :]
         else:
             raise RuntimeError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
 
