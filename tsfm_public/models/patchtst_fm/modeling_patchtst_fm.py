@@ -67,23 +67,24 @@ class PatchTSTFMPreTrainedModel(PreTrainedModel):
 
 @dataclass
 class PatchTSTFMModelOutput(ModelOutput):
-    loss_mask: torch.Tensor = None
-    normed_target: torch.Tensor = None
+    loss_mask: Optional[torch.Tensor] = None
+    normed_target: Optional[torch.Tensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    quantile_outputs: torch.FloatTensor = None
+    quantile_outputs: Optional[torch.FloatTensor] = None
 
 
 @dataclass
 class PatchTSTFMPretrainingOutput(ModelOutput):
-    loss: torch.Tensor = None
+    loss: Optional[torch.Tensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    quantile_outputs: torch.Tensor = None
+    quantile_outputs: Optional[torch.Tensor] = None
 
 
 @dataclass
 class PatchTSTFMPredictionOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    quantile_outputs: torch.Tensor | List[torch.Tensor] = None
+    prediction_outputs: Optional[torch.Tensor | List[torch.Tensor]] = None
+    quantile_outputs: Optional[torch.Tensor | List[torch.Tensor]] = None
 
 
 class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
@@ -329,6 +330,16 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                     )
             forecast_samples = forecast_samples[:, :, :forecast_len]
 
+        quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
+        quant_prob /= quant_prob.sum()  # normalize quantile weights
+
+        if not list_input:
+            quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
+            point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
+        else:
+            quant_prob = quant_prob.view(-1, 1, 1).to(self.device)
+            point_forecast: List[torch.Tensor] = [(sample * quant_prob).sum(dim=0) for sample in forecast_samples]
+
         if quantile_levels is not None:
             quantile_indices = [self.backbone.quantile_levels.index(q) for q in quantile_levels]
 
@@ -336,7 +347,10 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 forecast_samples = [sample[quantile_indices, :] for sample in forecast_samples]
             else:
                 forecast_samples = forecast_samples[:, quantile_indices, :]
-        return PatchTSTFMPredictionOutput(quantile_outputs=forecast_samples, hidden_states=hidden_states)
+
+        return PatchTSTFMPredictionOutput(
+            prediction_outputs=point_forecast, quantile_outputs=forecast_samples, hidden_states=hidden_states
+        )
 
     def forecast_single_step_fast(
         self,
@@ -370,8 +384,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         nan_mask = torch.isnan(x_in)
         x_in = torch.where(nan_mask, x_mean.unsqueeze(1).expand_as(x_in), x_in)
-
-        # f_i_shape = (f_i,) + x_in.shape[1:]
 
         batch_size, _, n_dim = x_in.shape
         forecast_shape = (batch_size, forecast_length, n_dim)
