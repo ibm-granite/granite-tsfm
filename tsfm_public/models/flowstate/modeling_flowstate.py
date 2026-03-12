@@ -386,10 +386,9 @@ class MLP(nn.Module):
     """
     Simple Gated MLP Layer.
     """
-    def __init__(self, dim: int, exp_factor: int = 2, p_drop=0.2):
+    def __init__(self, dim: int, exp_factor: int = 2):
         super().__init__()
         self.dim = dim
-        self.drop = nn.Dropout(p=p_drop)
         self.rms_weight = nn.Parameter(torch.ones(dim))
         self.w1 = nn.Linear(dim, dim*exp_factor)
         self.w2 = nn.Linear(dim, dim*exp_factor)
@@ -398,7 +397,7 @@ class MLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip = x
         x = F.rms_norm(x, (self.dim,), self.rms_weight, 1e-6)
-        return self.w3(self.drop(F.silu(self.w1(x)) * self.w2(x))) + skip
+        return self.w3(F.silu(self.w1(x)) * self.w2(x)) + skip
 
 class FlowStateS5Layer(nn.Module):
     def __init__(self, config, last=False, ssm=True):
