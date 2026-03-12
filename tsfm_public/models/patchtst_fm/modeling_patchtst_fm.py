@@ -136,10 +136,10 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         return_dict: Optional[bool] = None,
         # **kwargs,
     ) -> PatchTSTFMModelOutput:
-        x = inputs.to(self.device)
-        pad_mask = pad_mask.to(self.device).bool()
-        pred_mask = pred_mask.to(self.device).bool()
-        miss_mask = miss_mask.to(self.device).bool()
+        x = inputs  # .to(self.device)
+        pad_mask = pad_mask.bool()  # to(self.device).bool()
+        pred_mask = pred_mask.bool()  # to(self.device).bool()
+        miss_mask = miss_mask.bool()  # to(self.device).bool()
         if x.ndim > 2:
             x = rearrange(x, "B N T -> (B N) T")
             pad_mask = rearrange(pad_mask, "B N T -> (B N) T")
