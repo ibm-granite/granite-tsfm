@@ -368,6 +368,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # output_hidden_states: whether to return hidden states
 
         miss_mask = ~observed_inputs_mask
+        device = x.device
 
         # x and observed_inputs_mask should be 2d or 3d
 
@@ -388,9 +389,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         batch_size, _, n_dim = x_in.shape
         forecast_shape = (batch_size, forecast_length, n_dim)
 
-        pred_mask = torch.cat([torch.zeros_like(x_in), torch.ones(forecast_shape)], dim=1)
-        miss_mask = torch.cat([miss_mask, torch.zeros(forecast_shape)], dim=1)
-        pad_mask = torch.cat([pad_mask, torch.zeros(forecast_shape)], dim=1)
+        pred_mask = torch.cat([torch.zeros_like(x_in), torch.ones(forecast_shape, device=device)], dim=1)
+        miss_mask = torch.cat([miss_mask, torch.zeros(forecast_shape, device=device)], dim=1)
+        pad_mask = torch.cat([pad_mask, torch.zeros(forecast_shape, device=device)], dim=1)
         x_in = torch.cat([x_in, x_mean.unsqueeze(1).repeat((1, forecast_length, 1))], dim=1)
 
         sample_len = s + forecast_length  # x_in.shape[1]
@@ -474,6 +475,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         time_index = []
         sample_lengths = []
 
+        device = x[0].device
         batch_size = len(x)
 
         # x: batch x time x num_channels
@@ -496,10 +498,10 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
             f_i_shape = (f_i,) + x_in.shape[1:]
 
-            pred_mask_i = torch.cat([torch.zeros_like(x_in), torch.ones(f_i_shape)], dim=0)
-            miss_mask_i = torch.cat([miss_mask_i, torch.zeros(f_i_shape)], dim=0)
-            pad_mask_i = torch.cat([pad_mask_i, torch.zeros(f_i_shape)], dim=0)
-            x_in = torch.cat([x_in, torch.ones(f_i_shape) * x_in_mean], dim=0)
+            pred_mask_i = torch.cat([torch.zeros_like(x_in), torch.ones(f_i_shape, device=device)], dim=0)
+            miss_mask_i = torch.cat([miss_mask_i, torch.zeros(f_i_shape, device=device)], dim=0)
+            pad_mask_i = torch.cat([pad_mask_i, torch.zeros(f_i_shape, device=device)], dim=0)
+            x_in = torch.cat([x_in, torch.ones(f_i_shape, device=device) * x_in_mean], dim=0)
             sample_len = x_in.shape[0]
             time_index_i = (
                 torch.arange(
