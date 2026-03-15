@@ -514,6 +514,7 @@ def get_base_model(args):
         estimate_errors=True,
         err_quantiles=[0.5, 0.9],
         estimate_error_weight=3,
+        post_init=False,
     )
 
     # Residual tail knob (safe default = quarter context)

@@ -258,6 +258,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         estimate_error_weight: float = 0.1,
         err_enable_mixer: bool = False,
         err_mixer_layers: int = 2,
+        enable_base_norm: bool = True,
         # mq_detach_mean_for_head: bool = False,
         # mq_median_mode: str = "biased",
         # mq_median_bias_shrink: float = 0.05,
@@ -369,6 +370,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.estimate_error_weight = estimate_error_weight
         self.err_enable_mixer = err_enable_mixer
         self.err_mixer_layers = err_mixer_layers
+        self.enable_base_norm = enable_base_norm
         super().__init__(**kwargs)
 
     def compute_total_num_patches_multiscale(self) -> int:
