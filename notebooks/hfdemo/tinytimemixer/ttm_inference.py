@@ -162,8 +162,8 @@ def build_test_dataset_from_model_config(model):
 @torch.no_grad()
 def run_inference_only(model_path: str) -> None:
     # Load model
-    model = TinyTimeMixerForPrediction.from_pretrained(
-        model_path, light_mode=True, decoder_mode="mix_channel"
+    model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
+        model_path
     )
     model.eval()
 
@@ -226,10 +226,10 @@ def run_inference_only(model_path: str) -> None:
         # - input_data:         preds[-3]         -> [N, L, C] (raw scale input)
         # - ground truth:       preds[-2]         -> [N, F, C] (raw scale)
         predictions_output = preds[0]
-        input_data = preds[-3]
-        forecast_groundtruth = preds[-2]
+        input_data = preds[-2]
+        forecast_groundtruth = preds[-1]
         has_quantiles = bool(getattr(model.config, "multi_quantile_head", False))
-        comb_q = preds[-1] if has_quantiles else None
+        comb_q = preds[1] if has_quantiles else None
 
         mse = float(np.mean((predictions_output - forecast_groundtruth) ** 2))
         print("\nMSE (forecast vs GT) =", mse)

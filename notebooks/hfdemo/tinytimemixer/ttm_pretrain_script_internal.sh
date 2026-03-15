@@ -14,5 +14,4 @@ python ttm_pretrain_sample.py  --context_length 90 \
                                --fft_length 2 \
                                --multi_quantile_head \
                                --save_dir /dccstor/tsfm-irl/vijaye12/opensource/g_fig/internal \
-                               --use_internal_tsfm
 

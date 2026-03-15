@@ -3281,7 +3281,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         if config.fft_length > 0:
             self.add_fft_tokens = TinyTimeMixerAddFFTPatches(config)
 
-        if self.config.multi_scale:
+        if self.config.multi_scale and self.config.enable_base_norm:
             self.base_norm = nn.LayerNorm(
                 self.config.num_patches * self.config.d_model, eps=config.norm_eps
             )
