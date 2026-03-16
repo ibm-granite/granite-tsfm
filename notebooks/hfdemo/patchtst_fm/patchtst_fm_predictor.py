@@ -51,7 +51,7 @@ class PatchTSTFMEvalPredictor:
                 else:
                     t = np.nan_to_num(t, np.nanmean(t))
 
-            target.append(torch.from_numpy(t).float())
+            target.append(torch.from_numpy(t).float().to(self.device))
         return target
 
     @torch.no_grad()
@@ -68,11 +68,11 @@ class PatchTSTFMEvalPredictor:
 
                     # with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.bf16):
                     model_outputs = self.model(
-                        inputs=target,
+                        past_values=target,
                         prediction_length=self.prediction_length,
                         quantile_levels=self.quantile_levels,
                     )
-                    pred_quantiles = [x.cpu().numpy() for x in model_outputs.quantile_predictions]
+                    pred_quantiles = [x.cpu().numpy() for x in model_outputs.quantile_outputs]
                     forecast_outputs.extend(pred_quantiles)
                 break
             except torch.cuda.OutOfMemoryError:
