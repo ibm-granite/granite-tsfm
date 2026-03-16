@@ -245,6 +245,8 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
 
 
 class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
+    main_input_name = "past_values"
+
     def __init__(self, config: PatchTSTFMConfig):
         super().__init__(config)
 
@@ -263,8 +265,10 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
     def forward(
         self,
-        inputs: List[torch.Tensor] | torch.Tensor,
-        observed_inputs_mask: Optional[List[torch.Tensor] | torch.Tensor] = None,
+        past_values: List[torch.Tensor] | torch.Tensor,
+        past_observed_mask: Optional[List[torch.Tensor] | torch.Tensor] = None,
+        # future_values: Optional[torch.Tensor] = None,  # future use
+        # future_observed_mask: Optional[torch.Tensor] = None,  # future use
         prediction_length: Optional[int] = None,
         quantile_levels: Optional[List[float]] = None,
         output_hidden_states: Optional[bool] = False,
@@ -272,7 +276,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSTFMPredictionOutput:
         forecast_len = prediction_length if prediction_length else self.config.prediction_length
-        list_input = isinstance(inputs, list)
+        list_input = isinstance(past_values, list)
 
         cl = self.config.context_length
         ul = -1
@@ -280,56 +284,43 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             f"Context Len: {cl} | Forecast Len: {forecast_len} | Input is tensor: {not list_input}",
         )
 
-        if not observed_inputs_mask:
+        if past_observed_mask is None:
             if list_input:
-                observed_inputs_mask = [~sample.isnan() for sample in inputs]
+                past_observed_mask = [~sample.isnan() for sample in past_values]
             else:
-                observed_inputs_mask = ~inputs.isnan()
+                past_observed_mask = ~past_values.isnan()
+
+        fl = max(
+            forecast_len,
+            ul,
+            self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
+        )
 
         if list_input:
-            cl = [cl] * len(inputs)
-            fl = [
-                max(
-                    forecast_len,
-                    ul,
-                    self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
-                )
-            ] * len(inputs)
+            cl = [cl] * len(past_values)
+            fl = [fl] * len(past_values)
             forecast_samples, hidden_states = self.forecast_single_step(
-                inputs,
+                past_values,
                 forecast_length=fl,
-                observed_inputs_mask=observed_inputs_mask,
+                observed_inputs_mask=past_observed_mask,
                 context_length=cl,
                 output_hidden_states=output_hidden_states,
             )
             forecast_samples = [sample[:, :forecast_len] for sample in forecast_samples]
         else:
-            if not (isinstance(inputs, torch.Tensor) and isinstance(observed_inputs_mask, torch.Tensor)):
-                raise ValueError("Both the `inputs` and `observed_values_mask` should be of type torch.Tensor.")
-
-            fl = max(
-                forecast_len,
-                ul,
-                self.config.d_patch * max(self.config.pretrain_mask_cont, 2),
-            )
+            if not (isinstance(past_values, torch.Tensor) and isinstance(past_observed_mask, torch.Tensor)):
+                raise ValueError("Both the `past_values` and `past_observed_mask` should be of type torch.Tensor.")
 
             forecast_samples, hidden_states = self.forecast_single_step_fast(
-                inputs,
+                past_values,
                 forecast_length=fl,
-                observed_inputs_mask=observed_inputs_mask,
+                observed_inputs_mask=past_observed_mask,
                 context_length=cl,
                 output_hidden_states=output_hidden_states,
             )
-            # do we really need this?
-            if False:
-                sample_lengths = [sample.shape[-1] for sample in forecast_samples]
-                if len(set(sample_lengths)) > 1:
-                    logger.warning(
-                        f"Forecast samples have different lengths: {sample_lengths}. "
-                        f"Truncating to minimum length: {min(sample_lengths)}"
-                    )
             forecast_samples = forecast_samples[:, :, :forecast_len]
 
+        # use internal quantile_levels to compute estimate of mean
         quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
         quant_prob /= quant_prob.sum()  # normalize quantile weights
 
@@ -381,6 +372,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         context = min(context_provided + forecast_length, context_length)
         s = context - forecast_length  # part of the context that was provided
         x_in = x[:, -s:, ...]
+        miss_mask = miss_mask[:, -s:, ...]
         pad_mask = torch.zeros_like(x_in)
 
         nan_mask = torch.isnan(x_in)
