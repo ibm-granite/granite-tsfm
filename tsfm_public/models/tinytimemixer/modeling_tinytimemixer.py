@@ -263,79 +263,6 @@ class MultiPinballLoss(nn.Module):
         return pinball
 
 
-class ErrorEstimatePinballLoss(nn.Module):
-    """
-    Pinball loss for predicted error quantiles.
-
-    Expected inputs:
-      pred:      [B, T, C]          (point forecast, e.g., q50)
-      target:    [B, T, C]          (ground truth)
-      pred_err:  [B, Qe, T, C]      (predicted abs-error quantiles)
-
-    Config fields used:
-      - err_quantiles (default: [0.5, 0.9])
-      - estimate_error_weight (default: 1.0)
-
-    Target is constructed internally as:
-      abs_error = |target - pred.detach()|
-
-    Final loss = pinball_mean * estimate_error_weight
-    """
-
-    def __init__(self, config, reduction: str = "mean"):
-        super().__init__()
-        self.reduction = reduction
-
-        err_q = getattr(config, "err_quantiles", None)
-        if err_q is None:
-            err_q = [0.5, 0.9]
-
-        self.taus = [float(q) for q in err_q]
-        self.estimate_error_weight = float(
-            getattr(config, "estimate_error_weight", 1.0)
-        )
-
-    def forward(
-        self,
-        pred: torch.Tensor,  # [B,T,C]
-        target: torch.Tensor,  # [B,T,C]
-        pred_err: torch.Tensor,  # [B,Qe,T,C]
-    ) -> torch.Tensor:
-
-        # ----------------------------
-        # Absolute error target
-        # ----------------------------
-        abs_error = torch.abs(target - pred)  # [B,T,C]
-        abs_error_exp = abs_error.unsqueeze(1)  # [B,1,T,C]
-
-        # ----------------------------
-        # Pinball loss
-        # ----------------------------
-        taus = torch.as_tensor(self.taus, device=pred_err.device, dtype=pred_err.dtype)
-
-        if taus.numel() != pred_err.size(1):
-            raise ValueError(
-                f"Mismatch: len(err_quantiles)={taus.numel()} "
-                f"but pred_err.size(1)={pred_err.size(1)}"
-            )
-
-        taus_exp = taus.view(1, -1, 1, 1)  # [1,Qe,1,1]
-        e = abs_error_exp - pred_err  # [B,Qe,T,C]
-
-        per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)
-
-        if self.reduction == "sum":
-            loss = per_elem.sum()
-        elif self.reduction == "mean":
-            loss = per_elem.mean()
-        elif self.reduction == "none":
-            loss = per_elem
-        else:
-            raise ValueError(f"Unsupported reduction: {self.reduction}")
-
-        return loss * self.estimate_error_weight
-
-
 # class MultiPinballLoss(nn.Module):
 #     """
 #     Quantile (pinball) loss for predictions shaped as [B, Q, T, C]
@@ -2536,141 +2463,6 @@ def _is_default_9_quantiles(q_list, tol=1e-12):
     return True
 
 
-class ErrorQuantileHead(nn.Module):
-    """
-    Error-quantile head (always: decoder FLATTEN + CONCAT), reusing mq_* config knobs.
-
-    Predicts quantiles of the *absolute error* |y_true - y_hat| (trained via pinball loss outside).
-
-    Inputs:
-      - mean_hat:            [B, T, C]
-      - decoder_hidden_state:[B, C, P, D]
-
-    Output:
-      - e_hat:               [B, Qe, T, C]  (positive), where Qe=len(config.err_quantiles)
-
-    Reused config fields (NO new eh_*):
-      - mq_hidden (int, default=8)
-      - mq_kernel_size (int, default=3)
-      - mq_eps (float, default=1e-6)
-      - mq_decoder_d_model (int, default=mq_hidden)   # used in flatten path (token proj)
-      - decoder_d_model (int)
-      - num_patches (int)
-      - err_quantiles (list[float], default=[0.5, 0.9])
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        # ---- reuse mq_* knobs ----
-        self.mq_hidden = int(getattr(config, "mq_hidden", 8))
-        self.mq_kernel_size = int(getattr(config, "mq_kernel_size", 3))
-        self.mq_eps = float(getattr(config, "mq_eps", 1e-6))
-
-        self.decoder_d_model = int(getattr(config, "decoder_d_model"))
-        self.num_patches = int(getattr(config, "num_patches"))
-
-        self.mq_decoder_d_model = int(
-            getattr(config, "mq_decoder_d_model", self.mq_hidden)
-        )
-
-        # ---- error quantiles from config ----
-        err_q = getattr(config, "err_quantiles", None)
-        if err_q is None:
-            err_q = [0.5, 0.9]
-        if not isinstance(err_q, (list, tuple)) or len(err_q) == 0:
-            raise ValueError("err_quantiles must be a non-empty list/tuple")
-        self.err_quantiles = [float(q) for q in err_q]
-        for q in self.err_quantiles:
-            if not (0.0 < q < 1.0):
-                raise ValueError(
-                    f"All err_quantiles must be in (0,1). Got {self.err_quantiles}"
-                )
-        self.num_err_quantiles = len(self.err_quantiles)
-
-        # ---- base stack over mean_hat (per-channel) ----
-        pad = self.mq_kernel_size // 2
-        self.dw = nn.Conv1d(1, 1, kernel_size=self.mq_kernel_size, padding=pad)
-        self.inorm = nn.InstanceNorm1d(1, affine=True)
-        self.pw1 = nn.Conv1d(1, self.mq_hidden, kernel_size=1)
-        self.act = nn.GELU()
-
-        # ---- decoder flatten + concat conditioning (always) ----
-        # token-wise projection: D -> md
-        self.dec_tok_proj = nn.Linear(self.decoder_d_model, self.mq_decoder_d_model)
-        # flatten: (P * md) -> hidden
-        flat_dim = self.num_patches * self.mq_decoder_d_model
-        self.dec_flat_to_hidden = nn.Linear(flat_dim, self.mq_hidden)
-
-        # concat doubles channels
-        pw2_in = self.mq_hidden * 2
-        self.pw2 = nn.Conv1d(pw2_in, self.num_err_quantiles, kernel_size=1)
-
-        # ensure positive outputs
-        self.pos_act = nn.Softplus()
-
-        self.err_mixer_block = None
-        if config.err_enable_mixer:
-            err_config = copy.deepcopy(config)
-            err_config.d_model = config.decoder_d_model
-            err_config.num_layers = config.err_mixer_layers
-            err_config.dropout = config.head_dropout
-            err_config.mode = "common_channel"
-            err_config.adaptive_patching_levels = 0
-            err_config.multi_scale = False
-            err_config.register_tokens = 0
-            err_config.fft_length = 0
-            self.err_mixer_block = TinyTimeMixerBlock(err_config)
-
-    def forward(
-        self, mean_hat: torch.Tensor, decoder_hidden_state: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        mean_hat:            [B, T, C]
-        decoder_hidden_state:[B, C, P, D]
-        returns e_hat:       [B, Qe, T, C]
-        """
-        # [B,T,C] -> [B,C,T]
-        mean_hat = mean_hat.detach()
-        decoder_hidden_state = decoder_hidden_state.detach()
-        mean_hat_ct = mean_hat.transpose(-1, -2).contiguous()
-        B, C, T = mean_hat_ct.shape
-
-        if self.err_mixer_block is not None:
-            decoder_hidden_state, _ = self.err_mixer_block(decoder_hidden_state)
-
-        # ---- conv features ----
-        x = mean_hat_ct.view(B * C, 1, T)  # [B*C,1,T]
-        x = self.inorm(self.dw(x))
-        h = self.act(self.pw1(x))  # [B*C,H,T]
-
-        # ---- decoder conditioning (flatten) ----
-        B2, C2, P, D = decoder_hidden_state.shape
-        if B2 != B or C2 != C:
-            raise ValueError(
-                f"decoder_hidden_state shape mismatch: got {decoder_hidden_state.shape}, "
-                f"expected [B={B}, C={C}, P, D]"
-            )
-        if P != self.num_patches:
-            raise ValueError(f"Expected num_patches={self.num_patches}, got P={P}")
-
-        dec_tok = self.dec_tok_proj(decoder_hidden_state)  # [B,C,P,md]
-        dec_flat = dec_tok.reshape(B, C, -1)  # [B,C,P*md]
-        cond = self.dec_flat_to_hidden(dec_flat)  # [B,C,H]
-
-        cond = cond.view(B * C, -1).unsqueeze(-1).expand(-1, -1, T)  # [B*C,H,T]
-
-        # ---- concat ----
-        h = torch.cat([h, cond], dim=1)  # [B*C,2H,T]
-
-        # ---- predict error quantiles (positive) ----
-        e = self.pw2(h).view(B, C, self.num_err_quantiles, T)  # [B,C,Qe,T]
-        e = self.pos_act(e) + self.mq_eps
-
-        # return [B,Qe,T,C]
-        return e.permute(0, 2, 3, 1).contiguous()
-
-
 class MultiQuantileHead(nn.Module):
     """
     Generic multi-quantile head.
@@ -3281,7 +3073,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         if config.fft_length > 0:
             self.add_fft_tokens = TinyTimeMixerAddFFTPatches(config)
 
-        if self.config.multi_scale and self.config.enable_base_norm:
+        if self.config.multi_scale or self.config.enable_base_norm_always:
             self.base_norm = nn.LayerNorm(
                 self.config.num_patches * self.config.d_model, eps=config.norm_eps
             )
@@ -3530,7 +3322,6 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
     scale: torch.FloatTensor = None
     input_data: torch.FloatTensor = None
     forecast_groundtruth: torch.FloatTensor = None
-    prediction_errors: torch.FloatTensor = None
     quantile_outputs: torch.FloatTensor = None
 
 
@@ -3547,7 +3338,6 @@ class TinyTimeMixerForDecomposedPredictionOutput(ModelOutput):
     residual_input: torch.FloatTensor = None
     trend_quantile_outputs: torch.FloatTensor = None
     residual_quantile_outputs: torch.FloatTensor = None
-    prediction_errors: torch.FloatTensor = None
     input_data: torch.FloatTensor = None
     forecast_groundtruth: torch.FloatTensor = None
 
@@ -3670,13 +3460,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         self.multi_quantile_head_block = None
         if config.multi_quantile_head:
             self.multi_quantile_head_block = MultiQuantileHead(config)
-
-        self.error_estimator = None
-        self.error_estimator_loss = None
-
-        if config.estimate_errors:
-            self.error_estimator = ErrorQuantileHead(config)
-            self.error_estimator_loss = ErrorEstimatePinballLoss(config)
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -3842,7 +3625,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         y_hat_quantiles = torch.zeros(1, device=y_hat.device)
 
-        prediction_errors = None
         loss_val = None
         y_hat_unscaled = y_hat
         if future_observed_mask is not None:
@@ -3903,22 +3685,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     # avoiding mask operations for performance benefits on normal scenarios.
                     loss_val = loss(y_hat, future_values)
 
-        if self.config.estimate_errors:
-            prediction_errors = self.error_estimator(
-                y_hat_unscaled, decoder_hidden_state=decoder_output
-            )
-            num_err_quantiles = self.error_estimator.num_err_quantiles
-            err_scale_expand = scale.unsqueeze(1).repeat(1, num_err_quantiles, 1, 1)
-            err_loc_expand = torch.zeros_like(err_scale_expand)
-            prediction_errors = self.backbone.scaler.inverse(
-                data=prediction_errors, loc=err_loc_expand, scale=err_scale_expand
-            )
-
-            if future_values is not None and return_loss is True and loss is not None:
-                loss_val = loss_val + self.error_estimator_loss(
-                    yp, yt, prediction_errors
-                )
-
         m_last_hidden_state = model_output.last_hidden_state
 
         if self.config.light_mode:
@@ -3943,7 +3709,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     scale,
                     past_values,
                     future_values,
-                    prediction_errors,
                     y_hat_quantiles,
                 ]
             )
@@ -3958,7 +3723,6 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             scale=scale,
             input_data=past_values,
             forecast_groundtruth=future_values,
-            prediction_errors=prediction_errors,
             quantile_outputs=y_hat_quantiles,
         )
 
@@ -4306,11 +4070,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
 
         self.residual_forecaster = TinyTimeMixerForPrediction(residual_config)
 
-        self.error_estimator_loss = None
-
-        if config.estimate_errors:
-            self.error_estimator_loss = ErrorEstimatePinballLoss(config)
-
         self.prediction_channel_indices = config.prediction_channel_indices
 
         self.loss = config.loss
@@ -4341,6 +4100,9 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerForDecomposedPredictionOutput:
+
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
+
         if self.decompose_prediction:
             return self._forward_decomposed(
                 past_values=past_values,
@@ -4431,7 +4193,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         m_quantile_outputs = model_output.quantile_outputs
         m_input_data = model_output.input_data
         m_forecast_groundtruth = model_output.forecast_groundtruth
-        prediction_errors = model_output.prediction_errors
         if self.config.light_mode:
             m_input_data = None
             m_forecast_groundtruth = None
@@ -4449,7 +4210,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                     None,
                     None,
                     None,
-                    prediction_errors,
                     m_input_data,
                     m_forecast_groundtruth,
                 ]
@@ -4459,7 +4219,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             loss=model_output.loss,
             prediction_outputs=m_prediction_outputs,
             quantile_outputs=m_quantile_outputs,
-            prediction_errors=prediction_errors,
             input_data=m_input_data,
             forecast_groundtruth=m_forecast_groundtruth,
         )
@@ -4708,12 +4467,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         trend_prediction_outputs = trend_prediction.prediction_outputs
         residual_prediction_outputs = residual_prediction.prediction_outputs
         combined_point_forecast = trend_prediction_outputs + residual_prediction_outputs
-        combined_prediction_errors = None
-        if self.config.estimate_errors:
-            combined_prediction_errors = (
-                trend_prediction.prediction_errors
-                + residual_prediction.prediction_errors
-            )
 
         trend_quantile_outputs = trend_prediction.quantile_outputs
         residual_quantile_outputs = residual_prediction.quantile_outputs
@@ -4781,20 +4534,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                 + self.residual_loss_weight * residual_loss
             )
 
-            if self.config.estimate_errors:
-                loss_val = loss_val + self.error_estimator_loss(
-                    combined_point_forecast,
-                    scaled_future_values,
-                    combined_prediction_errors,
-                )
-
-        if self.config.estimate_errors:
-            num_err_quantiles = combined_prediction_errors.shape[1]
-            err_scale_expand = scale.unsqueeze(1).repeat(1, num_err_quantiles, 1, 1)
-            err_loc_expand = torch.zeros_like(err_scale_expand)
-            combined_prediction_errors = self.scaler.inverse(
-                combined_prediction_errors, err_loc_expand, err_scale_expand
-            )
         if self.prediction_channel_indices is not None:
             loc = loc[..., self.prediction_channel_indices]
             scale = scale[..., self.prediction_channel_indices]
@@ -4846,23 +4585,24 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             past_values = None
             future_values = None
 
-        # if not return_dict:
-        #     return tuple(
-        #         v
-        #         for v in [
-        #             loss_val,
-        #             combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
-        #             combined_quantile_forecast,
-        #             trend_prediction_outputs,
-        #             residual_prediction_outputs,
-        #             trend_signal,
-        #             residual_signal,
-        #             trend_quantile_outputs,
-        #             residual_quantile_outputs,
-        #             past_values,
-        #             future_values,
-        #         ]
-        #     )
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    loss_val,
+                    combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
+                    combined_quantile_forecast,
+                    trend_prediction_outputs,
+                    residual_prediction_outputs,
+                    trend_signal,
+                    residual_signal,
+                    trend_quantile_outputs,
+                    residual_quantile_outputs,
+                    past_values,
+                    future_values,
+                ]
+            )
+
         return TinyTimeMixerForDecomposedPredictionOutput(
             loss=loss_val,
             prediction_outputs=combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
@@ -4875,5 +4615,4 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             residual_quantile_outputs=residual_quantile_outputs,
             input_data=past_values,
             forecast_groundtruth=future_values,
-            prediction_errors=combined_prediction_errors,
         )
