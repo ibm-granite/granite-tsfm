@@ -5,15 +5,38 @@ import copy
 import json
 import logging
 import os
+import tempfile
 import warnings
 from typing import Any, Dict, Optional, Tuple, Union
+from urllib.request import urlretrieve
 
-from transformers.utils import PushToHubMixin, cached_file, download_url, is_remote_url
+from transformers.utils.hub import PushToHubMixin, cached_file
 
 
 TSFM_CONFIG_NAME = "tsfm_config.json"
 
 LOGGER = logging.getLogger(__file__)
+
+
+def _is_remote_url(url_or_filename):
+    """Check if the input is a remote URL."""
+    if isinstance(url_or_filename, str):
+        return url_or_filename.startswith("http://") or url_or_filename.startswith("https://")
+    return False
+
+
+def _download_url(url):
+    """Download a file from a URL to a temporary location."""
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.basename(url)) as tmp_file:
+            tmp_path = tmp_file.name
+        # Download the file
+        urlretrieve(url, tmp_path)
+        return tmp_path
+    except Exception as e:
+        LOGGER.error(f"Failed to download {url}: {e}")
+        raise
 
 
 class TSFMConfig(PushToHubMixin):
@@ -341,9 +364,9 @@ class TSFMConfig(PushToHubMixin):
             # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
+        elif _is_remote_url(pretrained_model_name_or_path):
             configuration_file = pretrained_model_name_or_path
-            resolved_config_file = download_url(pretrained_model_name_or_path)
+            resolved_config_file = _download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", TSFM_CONFIG_NAME)
 

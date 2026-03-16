@@ -136,12 +136,10 @@ def load_model(
             config=config,
             local_files_only=LOCAL_FILES_ONLY,
             device_map=None,  # disable meta-tensors
-            low_cpu_mem_usage=False,
         )
 
     return AutoModel.from_pretrained(
         model_path,
         local_files_only=LOCAL_FILES_ONLY,
         device_map=None,  # disable meta-tensors
-        low_cpu_mem_usage=False,
     )

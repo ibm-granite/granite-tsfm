@@ -8,23 +8,42 @@ Adapted from HF FeatureExtractionMixin, but allows customization of the serializ
 import json
 import logging
 import os
+import tempfile
 import warnings
 from typing import Any, Union
+from urllib.request import urlretrieve
 
 import numpy as np
 from transformers.dynamic_module_utils import custom_object_save
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
 )
-from transformers.utils import (
-    cached_file,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
-)
+from transformers.utils.hub import cached_file
 
 
 LOGGER = logging.getLogger(__file__)
+
+
+def _is_remote_url(url_or_filename):
+    """Check if the input is a remote URL."""
+    if isinstance(url_or_filename, str):
+        return url_or_filename.startswith("http://") or url_or_filename.startswith("https://")
+    return False
+
+
+def _download_url(url):
+    """Download a file from a URL to a temporary location."""
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.basename(url)) as tmp_file:
+            tmp_path = tmp_file.name
+        # Download the file
+        urlretrieve(url, tmp_path)
+        return tmp_path
+    except Exception as e:
+        LOGGER.error(f"Failed to download {url}: {e}")
+        raise
+
 
 TYPE_TO_STRING = {
     int: "int",
@@ -144,10 +163,6 @@ class BaseProcessor(FeatureExtractionMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if is_offline_mode() and not local_files_only:
-            LOGGER.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
@@ -155,9 +170,9 @@ class BaseProcessor(FeatureExtractionMixin):
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_feature_extractor_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
+        elif _is_remote_url(pretrained_model_name_or_path):
             feature_extractor_file = pretrained_model_name_or_path
-            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
+            resolved_feature_extractor_file = _download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = cls.PROCESSOR_NAME
             try:
