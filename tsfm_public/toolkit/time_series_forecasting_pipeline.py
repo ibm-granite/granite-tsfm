@@ -65,6 +65,8 @@ class TimeSeriesPipeline(Pipeline):
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
 
+        forward_params = {k: v for k, v in forward_params.items() if k in signature_columns}
+
         # if len(dataset) < batch_size:
         # build a dataloader
         # collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
@@ -265,7 +267,14 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             else:
                 num_workers = self._num_workers
 
-        forward_kwargs = {"batch_size": batch_size, "num_workers": num_workers}
+        forward_kwargs = {
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+        }
+
+        for c in ["prediction_length", "quantile_levels"]:
+            if c in kwargs:
+                forward_kwargs[c] = kwargs[c]
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
@@ -430,7 +439,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         original input keys.
         """
 
-        model_outputs = self.model(**model_inputs)
+        model_outputs = self.model(**model_inputs, **kwargs)
 
         return model_outputs
 
@@ -483,6 +492,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
 
         # add probabilistic
         quantile_cols = []
+        prob_data = {}
+
         if self._probabilistic_processor is not None:
             # get the conformal bounds and add to the forecasts on the test set
             predictions_conformal = self._probabilistic_processor.predict(
@@ -492,16 +503,19 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             for j, q in enumerate(self._probabilistic_processor.quantiles):
                 for i, c in enumerate(prediction_columns):
                     col = f"{c}_q{q}"
-                    out[col] = predictions_conformal[..., i, j].tolist()
+                    prob_data[col] = predictions_conformal[..., i, j].tolist()
                     quantile_cols.append(col)
                     # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+            out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
         elif quantile_output_key in input.keys():
             # model has native support for quantiles
             for i, q in enumerate(self.model.config.quantiles):
                 for j, c in enumerate(prediction_columns):
                     col = f"{c}_q{q}"
-                    out[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
+                    prob_data[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
                     quantile_cols.append(col)
+            out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
+            for i, q in enumerate(self.model.config.quantiles):
                 if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
                     out = self.feature_extractor.inverse_scale_targets(out, suffix=f"_prediction_q{q}")
 
