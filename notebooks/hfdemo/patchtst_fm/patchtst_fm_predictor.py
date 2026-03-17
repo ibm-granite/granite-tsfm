@@ -72,7 +72,8 @@ class PatchTSTFMEvalPredictor:
                         prediction_length=self.prediction_length,
                         quantile_levels=self.quantile_levels,
                     )
-                    pred_quantiles = [x.cpu().numpy() for x in model_outputs.quantile_outputs]
+                    # wmg 2026-03-16: check below line, why is 0 needed?
+                    pred_quantiles = [x[:, :, 0].cpu().numpy() for x in model_outputs.quantile_outputs]
                     forecast_outputs.extend(pred_quantiles)
                 break
             except torch.cuda.OutOfMemoryError:
