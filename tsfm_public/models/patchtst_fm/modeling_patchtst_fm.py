@@ -332,7 +332,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             point_forecast: List[torch.Tensor] = [(sample * quant_prob).sum(dim=0) for sample in forecast_samples]
 
         if quantile_levels is not None:
-            quantile_indices = [self.backbone.quantile_levels.index(q) for q in quantile_levels]
+            quantile_indices = [self.config.quantile_levels.index(q) for q in quantile_levels]
 
             if list_input:
                 forecast_samples = [sample[quantile_indices, :] for sample in forecast_samples]
@@ -351,7 +351,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         context_length: int,
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Any]:
-
         # x: batch size x context x features
         # observed_inputs_mask: batch size x context x features
         # forecast_len: list of forecast lengths
