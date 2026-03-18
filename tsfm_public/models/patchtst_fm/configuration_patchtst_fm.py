@@ -51,5 +51,9 @@ class PatchTSTFMConfig(PretrainedConfig):
             quantiles = [i / (self.num_quantile - 1) for i in range(1, self.num_quantile - 1)]
             quantiles = [0.01] + quantiles + [0.99]
         self.quantile_levels = quantiles
-        self.quantiles = quantiles
+        # self.quantiles = quantiles
         super().__init__(**kwargs)
+
+    @property
+    def quantiles(self):
+        return self.quantile_levels
