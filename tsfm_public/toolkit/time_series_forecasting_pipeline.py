@@ -421,6 +421,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             )
 
         # use forecasting dataset to do the preprocessing
+        logger.info(f"Preprocessing with: {kwargs}")
         dataset = ForecastDFDataset(
             time_series,
             **kwargs,
