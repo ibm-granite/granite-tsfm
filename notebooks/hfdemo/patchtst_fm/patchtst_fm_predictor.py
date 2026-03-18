@@ -56,6 +56,7 @@ class PatchTSTFMEvalPredictor:
 
     @torch.no_grad()
     def predict(self, test_data_input, batch_size=2048, *args, **kwargs) -> List[Forecast]:
+        input_ndim = next(iter(test_data_input))["target"].ndim
         while True:
             try:
                 forecast_outputs = []
@@ -72,8 +73,9 @@ class PatchTSTFMEvalPredictor:
                         prediction_length=self.prediction_length,
                         quantile_levels=self.quantile_levels,
                     )
-                    # wmg 2026-03-16: check below line, why is 0 needed?
-                    pred_quantiles = [x[:, :, 0].cpu().numpy() for x in model_outputs.quantile_outputs]
+                    pred_quantiles = [
+                        (x.squeeze(-1) if input_ndim == 1 else x).cpu().numpy() for x in model_outputs.quantile_outputs
+                    ]
                     forecast_outputs.extend(pred_quantiles)
                 break
             except torch.cuda.OutOfMemoryError:
