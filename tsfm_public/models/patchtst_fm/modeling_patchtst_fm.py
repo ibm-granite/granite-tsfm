@@ -332,8 +332,12 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             point_forecast: List[torch.Tensor] = [(sample * quant_prob).sum(dim=0) for sample in forecast_samples]
 
         if quantile_levels is not None:
-            quantile_indices = [self.config.quantile_levels.index(q) for q in quantile_levels]
-
+            try:
+                quantile_indices = [self.config.quantile_levels.index(q) for q in quantile_levels]
+            except ValueError as e:
+                raise ValueError(
+                    f"Quantile levels {quantile_levels} not found in model config. Available quantile levels: {self.config.quantile_levels}."
+                ) from e
             if list_input:
                 forecast_samples = [sample[quantile_indices, :] for sample in forecast_samples]
             else:
