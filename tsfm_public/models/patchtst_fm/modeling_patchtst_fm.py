@@ -482,7 +482,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             s_i = c_i - f_i  # part of the context that was provided
             x_in = x_i[-s_i:]
             x_in = x_in.unsqueeze(-1) if x_in.ndim == 1 else x_in
-            miss_mask_i = ~observed_inputs_mask_i
+            miss_mask_i = ~observed_inputs_mask_i[-s_i:]
             miss_mask_i = miss_mask_i.unsqueeze(-1) if miss_mask_i.ndim == 1 else miss_mask_i
             pad_mask_i = torch.zeros_like(x_in)
             x_in_mean = x_in.nanmean(dim=0)
