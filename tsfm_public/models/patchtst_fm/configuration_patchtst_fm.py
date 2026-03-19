@@ -53,7 +53,3 @@ class PatchTSTFMConfig(PretrainedConfig):
         self.quantile_levels = quantiles
         # self.quantiles = quantiles
         super().__init__(**kwargs)
-
-    @property
-    def quantiles(self):
-        return self.quantile_levels
