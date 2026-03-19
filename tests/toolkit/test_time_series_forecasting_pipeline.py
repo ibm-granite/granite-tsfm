@@ -3,12 +3,16 @@
 
 """Tests the time series preprocessor and functions"""
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
 from transformers import PatchTSTConfig, PatchTSTForPrediction
 
-from tsfm_public import TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public import PatchTSTFMForPrediction, TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public.models.flowstate import FlowStateConfig, FlowStateForPrediction
+from tsfm_public.models.patchtst_fm import PatchTSTFMConfig
 from tsfm_public.toolkit.conformal import PostHocProbabilisticMethod, PostHocProbabilisticProcessor
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
@@ -26,6 +30,138 @@ def ttm_dummy_model(conf=None):
     model = TinyTimeMixerForPrediction(conf)
 
     return model
+
+
+@pytest.fixture(scope="module")
+def flowstate_dummy_model(conf=None):
+    """
+    Create a dummy FlowState model for testing purposes.
+
+    Args:
+        conf: Optional FlowStateConfig. If None, uses default configuration.
+
+    Returns:
+        FlowStateForPrediction: A FlowState model instance for testing.
+    """
+    if conf is None:
+        conf = FlowStateConfig()
+    model = FlowStateForPrediction(conf)
+
+    return model
+
+
+@pytest.fixture(scope="module")
+def patchtst_fm_dummy_model(conf=None):
+    """
+    Create a dummy PatchTST-FM model for testing purposes.
+
+    Args:
+        conf: Optional PatchTSTFMConfig. If None, uses default configuration.
+
+    Returns:
+        PatchTSTFMForPrediction: A PatchTST-FM model instance for testing.
+    """
+    if conf is None:
+        conf = PatchTSTFMConfig()
+    model = PatchTSTFMForPrediction(conf)
+
+    return model
+
+
+@pytest.fixture(scope="module")
+def random_sine_wave_data():
+    examples = 5
+    context_length = 512 + examples - 1
+    num_channels = 2
+    freq = "h"
+    timestamps = pd.date_range(start="2024-01-01", periods=context_length, freq=freq)
+
+    # Create synthetic data
+    t = np.linspace(0, 4 * np.pi, context_length)
+
+    data: dict[str, Any] = {"timestamp": timestamps}
+
+    for ch in range(num_channels):
+        # Combine sine waves with different frequencies
+        freq1 = 5 * (1.0 + ch * 0.2)
+        freq2 = 5 * (2.0 + ch * 0.3)
+        phase = ch * 0.5
+
+        series = (
+            np.sin(freq1 * t + phase)
+            + 0.5 * np.sin(freq2 * t + phase * 2)
+            + 0.1 * np.random.randn(context_length)  # Add noise
+        )
+
+        data[f"target_{ch}"] = series
+
+    df = pd.DataFrame(data)
+    return df
+
+
+# set up dummy models for patchtst-fm, flowstate, ttm
+# confirm that any passthrough parameters are actually passed during the forward call
+
+# ALL: prediction_length
+# FS: prediction_type, scale_factor
+# PatchTSTFM: quantile_levels
+# TTM: freq_token
+
+# define the combinations of models and parameters we want to test
+testable_param_map = {
+    "ttm_dummy_model": ["freq_token"],
+    "flowstate_dummy_model": ["prediction_length", "prediction_type", "scale_factor"],
+    "patchtst_fm_dummy_model": ["prediction_length", "quantile_levels"],
+}
+
+
+# this fixture couples a model with a parameter to test
+@pytest.fixture(
+    scope="module",
+    params=((model, param) for model, params in testable_param_map.items() for param in params),
+    ids=(f"{model}-{param}" for model, params in testable_param_map.items() for param in params),
+)
+def model_param(request):
+    model, param = request.param
+    yield request.getfixturevalue(model), param
+
+
+def test_models_parameters_in_forecasting_pipeline(random_sine_wave_data, model_param):
+    model, param = model_param
+
+    target_columns = ["target_0"]  # , "target_1"]
+    freq = "h"
+
+    if param == "prediction_length":
+        test_param = {"prediction_length": 7}
+    elif param == "freq_token":
+        test_param = {"freq_token": "10m"}
+    elif param == "prediction_type":
+        test_param = {"prediction_type": "median"}
+    elif param == "scale_factor":
+        test_param = {"scale_factor": 2}
+    elif param == "quantile_levels":
+        test_param = {"quantile_levels": [0.1, 0.5, 0.9]}
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column="timestamp",
+        id_columns=[],  # No ID columns for single series
+        target_columns=target_columns,
+        freq=freq,
+        context_length=model.config.context_length,
+        **test_param,
+    )
+
+    forecasts = forecast_pipeline(random_sine_wave_data)
+    if param == "prediction_length":
+        assert len(forecasts[target_columns[0]].iloc[0]) == test_param["prediction_length"]
+
+    if param == "quantile_levels":
+        num_quantiles = len(test_param["quantile_levels"])
+        assert (
+            forecasts.shape[1] == 1 + 2 * len(target_columns) + len(target_columns) * num_quantiles
+        ), f"Number of expetect columns does not match. Received: {forecasts.shape[1]} Expected {1 + 2 * len(target_columns) + len(target_columns) * num_quantiles}"
 
 
 def test_forecasting_pipeline_defaults():
