@@ -30,7 +30,7 @@ class FlowState_Gift_Wrapper:
         self.pretrain_context = cfg["context_length"]
         self.quantiles = cfg["quantiles"]
 
-        self.replace_nan = False # not necessary, mask as missing values takes care of this
+        self.replace_nan = False  # not necessary, mask as missing values takes care of this
         self.dynamic_batch_size = True
         self.n_ch = n_ch
         self.batch_size = batch_size
@@ -86,7 +86,7 @@ class FlowState_Gift_Wrapper:
         prev_cl = -1
         for cl, seq, _ in datalist:
             if self.dynamic_batch_size:
-                batch_size = int(self.batch_size * self.pretrain_context/cl)
+                batch_size = int(self.batch_size * self.pretrain_context / cl)
             else:
                 batch_size: int = self.batch_size
             if torch.isnan(seq).sum() > 0:
@@ -113,10 +113,10 @@ class FlowState_Gift_Wrapper:
     def predict(self, test_data):
         """
         Make predictions on test data using FlowState.
-        
+
         Args:
             test_data: Test dataset containing time series to predict
-            
+
         Returns:
             list: List of Gift_Forecast objects with predictions
         """
@@ -134,12 +134,14 @@ class FlowState_Gift_Wrapper:
             ).quantile_outputs
             pred = pred.squeeze(-1).transpose(-1, -2)  # pred has shape: batch, forecast_len, quantiles
             if self.enforce_only_positive:
-                # in some domains values have to be strictly positive (sales, nr of clicks on a website, nr of vehicles passing a sensor etc.). 
+                # in some domains values have to be strictly positive (sales, nr of clicks on a website, nr of vehicles passing a sensor etc.).
                 # This option checks whether a time series could be such a case and enforces that predictions are also positive
-                strict_positive = torch.all(torch.nan_to_num(batch.squeeze(-1), 1) >= 0, dim=0) # for each series separately (not to use information accross series)
+                strict_positive = torch.all(
+                    torch.nan_to_num(batch.squeeze(-1), 1) >= 0, dim=0
+                )  # for each series separately (not to use information accross series)
                 for ix, make_pos in enumerate(strict_positive):
                     if make_pos:
-                        pred[ix] = torch.clamp(pred[ix], min=0.)
+                        pred[ix] = torch.clamp(pred[ix], min=0.0)
             preds.extend(self.forecasts_from_batch(pred[:, : self.prediction_length].cpu()))
         # Reorder predictions back to original order
         preds_ = len(preds) * [None]
