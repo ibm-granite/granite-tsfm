@@ -332,9 +332,9 @@ class FlowStateS5Block(nn.Module):
         device = lambda_.device
         B_tilde = self.B_tilde_r + 1.0j * self.B_tilde_i
         scale_factor = scale_factor.repeat((lambda_.shape[0], 1)).T
-        log_Lambda_bar = scale_factor.unsqueeze(1) * lambda_[None, None, :] * torch.exp(self.log_Delta)
+        log_Lambda_bar = scale_factor.unsqueeze(1) * lambda_[None,None,:] * torch.exp(self.log_Delta)
         kernel = torch.einsum("bLd,L->bLd", log_Lambda_bar, torch.arange(L - 1, -1, -1, device=device)).exp()
-        B_bar = (1 / lambda_ * (kernel[:, -2] - 1.0))[..., None] * B_tilde
+        B_bar = (1 / lambda_ * (kernel[:,-2] - 1.0))[..., None] * B_tilde
 
         return kernel, B_bar
 
@@ -368,18 +368,13 @@ class FlowStateS5Block(nn.Module):
         Batch of S5 layer output sequences (L, B, H)"""
 
         kernel, B_bar = self.get_discretized(scale_factor, L=input_sequences.shape[0])
-        Bu_elements = (
-            torch.einsum("bnm,lbm->lbn", B_bar.real, input_sequences)
-            + torch.einsum("bnm,lbm->lbn", B_bar.imag, input_sequences) * 1.0j
-        )
+        Bu_elements = torch.einsum("bnm,lbm->lbn", B_bar.real, input_sequences) + torch.einsum("bnm,lbm->lbn", B_bar.imag, input_sequences) * 1.j
 
         xs = self.apply_ssm_kern_ff(Bu_elements, kernel)
         if self.last:
             input_sequences = input_sequences[min(self.config.min_context, input_sequences.shape[0]) - 1 :]
         # Compute SSM output sequence
-        xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r, xs.real) + torch.einsum(
-            "hn,...bn->...bh", self.C_tilde_i, -xs.imag
-        )
+        xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r, xs.real) + torch.einsum("hn,...bn->...bh", self.C_tilde_i, -xs.imag)
 
         if self.output_gating:
             xs = F.sigmoid(self.output_gate(xs)) * xs
@@ -387,25 +382,22 @@ class FlowStateS5Block(nn.Module):
 
         return xs
 
-
 class MLP(nn.Module):
     """
     Simple Gated MLP Layer.
     """
-
     def __init__(self, dim: int, exp_factor: int = 2):
         super().__init__()
         self.dim = dim
         self.rms_weight = nn.Parameter(torch.ones(dim))
-        self.w1 = nn.Linear(dim, dim * exp_factor)
-        self.w2 = nn.Linear(dim, dim * exp_factor)
-        self.w3 = nn.Linear(dim * exp_factor, dim)
+        self.w1 = nn.Linear(dim, dim*exp_factor)
+        self.w2 = nn.Linear(dim, dim*exp_factor)
+        self.w3 = nn.Linear(dim*exp_factor, dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip = x
         x = F.rms_norm(x, (self.dim,), self.rms_weight, 1e-6)
         return self.w3(F.silu(self.w1(x)) * self.w2(x)) + skip
-
 
 class FlowStateS5Layer(nn.Module):
     def __init__(self, config, last=False, ssm=True):
@@ -891,10 +883,12 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         mask_n = max(0, prediction_length - max_decoder_patch_len)
         max_context = min(16 * 1024, int(self.config.context_length / scale_factor)) - mask_n
         if not batch_first:
-            past_values = past_values.transpose(0, 1)
+            past_values = past_values.transpose(0,1)
         past_values = past_values[:, -max_context:]
         if mask_n > 0:
-            self.model.config.min_context = past_values.shape[1]  # min context from which to start predicting
+            self.model.config.min_context = (
+                past_values.shape[1]
+            )  # min context from which to start predicting
         else:
             self.model.config.min_context = 0
         # past_values: tensor [batch_size x seq_length x num_input_channels], or [seq_length x batch_size x num_input_channels]
@@ -911,9 +905,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             model_output.last_hidden_state, prediction_length
         )
 
-        quantiles = torch.quantile(
-            model_output.last_hidden_state, torch.tensor(self.config.quantiles).to(past_values.device), 1
-        ).transpose(0, 1)
+        quantiles = torch.quantile(model_output.last_hidden_state, torch.tensor(self.config.quantiles).to(past_values.device), 1).transpose(0,1)
         point_predictions = self._transform_quantiles_to(quantiles, prediction_type)
         loss_val = None
 
