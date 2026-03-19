@@ -129,7 +129,7 @@ class FlowStateConfig(PretrainedConfig):
             self.with_missing = True
         if self.context_length <= 0:
             raise ValueError("context_length should be positive")
-        
+
         # Ensure Backwards Compatibility
         if not hasattr(self, "out_gating"):
             self.out_gating = False

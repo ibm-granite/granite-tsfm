@@ -93,7 +93,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
             target_output["enc_output_last_hidden_state"] = self.__class__.enc_output_forprediction_last_hidden_state
             target_output["dec_output_last_hidden_state"] = self.__class__.dec_output_forprediction_last_hidden_state
             target_output["dec_output_hidden_states"] = self.__class__.dec_output_forprediction_hidden_states
-            
+
             target_names["target_output"] = "correct_forecast_output"
             target_names["enc_output_hidden_states"] = "enc_output_forprediction_hidden_states"
             target_names["enc_output_last_hidden_state"] = "enc_output_forprediction_last_hidden_state"
@@ -108,7 +108,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
             target_output["enc_output_last_hidden_state"] = self.__class__.enc_output_last_hidden_state
             target_output["dec_output_last_hidden_state"] = self.__class__.dec_output_last_hidden_state
             target_output["dec_output_hidden_states"] = self.__class__.dec_output_hidden_states
-            
+
             target_names["target_output"] = "correct_pred_output"
             target_names["enc_output_hidden_states"] = "enc_output_hidden_states"
             target_names["enc_output_last_hidden_state"] = "enc_output_last_hidden_state"
@@ -158,7 +158,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
     def _compare(self, actual, target, check_values, name=None, msg=""):
         # Check if overwrite mode is enabled
         overwrite_mode = True # os.environ.get('OVERWRITE_TEST_VALUES', '').lower() == 'true'
-        
+
         if overwrite_mode and name:
             # Load existing test_values.pt, update the specific key, and save
             test_values_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_values.pt')
@@ -166,7 +166,7 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 test_values = torch.load(test_values_path)
             except FileNotFoundError:
                 test_values = {}
-            
+
             # Handle both single values and lists
             if isinstance(actual, list):
                 # Target is a list, so actual should be too (or we're comparing element by element)
@@ -188,21 +188,21 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 # Single value
                 test_values[name] = actual.detach().clone()
                 print(f"{((actual - target).abs() / target * 100).mean()}% off on average")
-            
+
             torch.save(test_values, test_values_path)
             print(f"Overwritten '{name}' in test_values.pt")
             return  # Skip comparison in overwrite mode
-        
+
         # Handle list comparison
         if isinstance(target, list) and isinstance(actual, list):
             for i, (a, t) in enumerate(zip(actual, target)):
                 sub_name = f"{name}_{i}" if name else None
                 self._compare(a, t, check_values, name=sub_name, msg=f"{msg} (index {i})")
             return
-        
+
         if not check_values:
             actual, target = actual.shape, target.shape
-                
+
         torch.testing.assert_close(actual, target, rtol=TOLERANCE, atol=TOLERANCE, msg=msg)
 
     def compare_outputs(self, input_data, model_output, target_output, target_names, task, check_values):
@@ -441,16 +441,16 @@ class FlowStateFunctionalTests(unittest.TestCase):
                     4: "backbone_hidden_state",
                     5: "decoder_hidden_state",
                 }
-            
+
             for ind in range(len(model_output) - 1):
                 if target_output[ind] is not None:
                     model_ind = ind
                     if ind == 1:
                         model_ind = -1
-                    
+
                     # Construct attribute name
                     attr_name = f"{name_prefix}_{index_to_suffix.get(ind, 'unknown')}" if ind in index_to_suffix else None
-                    
+
                     self._compare(
                         model_output[model_ind],
                         target_output[ind],

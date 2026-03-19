@@ -113,10 +113,9 @@ class FlowState_Gift_Wrapper:
     def predict(self, test_data):
         """
         Make predictions on test data using FlowState.
-        
         Args:
             test_data: Test dataset containing time series to predict
-            
+
         Returns:
             list: List of Gift_Forecast objects with predictions
         """
@@ -134,7 +133,7 @@ class FlowState_Gift_Wrapper:
             ).quantile_outputs
             pred = pred.squeeze(-1).transpose(-1, -2)  # pred has shape: batch, forecast_len, quantiles
             if self.enforce_only_positive:
-                # in some domains values have to be strictly positive (sales, nr of clicks on a website, nr of vehicles passing a sensor etc.). 
+                # in some domains values have to be strictly positive (sales, nr of clicks on a website, nr of vehicles passing a sensor etc.).
                 # This option checks whether a time series could be such a case and enforces that predictions are also positive
                 strict_positive = torch.all(torch.nan_to_num(batch.squeeze(-1), 1) >= 0, dim=0) # for each series separately (not to use information accross series)
                 for ix, make_pos in enumerate(strict_positive):
