@@ -526,7 +526,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             # model has native support for quantiles
             # first we check if the model enables passing at runtime, and the user passed quantile_levels
             output_quantile_levels = (
-                self.model.config.quantiles
+                self.model.config.quantile_levels
                 if "quantile_levels" not in self._forward_params_model
                 else self._forward_params_model["quantile_levels"]
             )
