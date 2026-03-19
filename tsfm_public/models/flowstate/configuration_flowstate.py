@@ -119,6 +119,10 @@ class FlowStateConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    @property
+    def quantile_levels(self):
+        return self.quantiles
+
     def check_and_init_preprocessing(self):
         self.init_processing = True
 
