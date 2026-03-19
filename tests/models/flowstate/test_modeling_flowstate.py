@@ -63,13 +63,10 @@ class FlowStateFunctionalTests(unittest.TestCase):
             cls.constant_data if cls.params["batch_first"] else torch.transpose(cls.constant_data, 1, 0)
         )
         # load large stored values
-        test_values_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_values.pt')
+        test_values_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_values.pt")
         loaded_dict = torch.load(test_values_path)
         for key, value in loaded_dict.items():
             setattr(cls, key, value)
-
-
-
 
     def check_module(
         self,
@@ -157,11 +154,11 @@ class FlowStateFunctionalTests(unittest.TestCase):
 
     def _compare(self, actual, target, check_values, name=None, msg=""):
         # Check if overwrite mode is enabled
-        overwrite_mode = True # os.environ.get('OVERWRITE_TEST_VALUES', '').lower() == 'true'
+        overwrite_mode = True  # os.environ.get('OVERWRITE_TEST_VALUES', '').lower() == 'true'
 
         if overwrite_mode and name:
             # Load existing test_values.pt, update the specific key, and save
-            test_values_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_values.pt')
+            test_values_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_values.pt")
             try:
                 test_values = torch.load(test_values_path)
             except FileNotFoundError:
@@ -178,10 +175,10 @@ class FlowStateFunctionalTests(unittest.TestCase):
                     test_values[name] = [a.detach().clone() for a in actual]
                 # Compute average percentage difference across all tensors in the list
                 # try:
-                    # pct_diffs = [((a - t).abs() / t * 100).mean().item() for a, t in zip(actual, target)]
+                # pct_diffs = [((a - t).abs() / t * 100).mean().item() for a, t in zip(actual, target)]
                 # except:
-                    # print(f"Error computing percentage differences for {name}")
-                    # raise ValueError(f"Error computing percentage differences for {name}")
+                # print(f"Error computing percentage differences for {name}")
+                # raise ValueError(f"Error computing percentage differences for {name}")
                 # avg_pct_diff = sum(pct_diffs) / len(pct_diffs)
                 # print(f"{avg_pct_diff}% off on average")
             else:
@@ -226,14 +223,14 @@ class FlowStateFunctionalTests(unittest.TestCase):
             target_output["enc_output_hidden_states"],
             check_values,
             name=target_names["enc_output_hidden_states"],
-            msg="The hidden states of the encoder are different!"
+            msg="The hidden states of the encoder are different!",
         )
         self._compare(
             model_output.hidden_states[-1:],
             target_output["dec_output_hidden_states"],
             check_values,
             name=target_names["dec_output_hidden_states"],
-            msg="The hidden states of the decoder are different!"
+            msg="The hidden states of the decoder are different!",
         )
 
         if task == "forecast":
@@ -254,7 +251,11 @@ class FlowStateFunctionalTests(unittest.TestCase):
                 msg="The final output does not match!",
             )
             self._compare(
-                model_output.embedded_input, input_data, check_values, name="embedded_input", msg="The input of the embedding does not match!"
+                model_output.embedded_input,
+                input_data,
+                check_values,
+                name="embedded_input",
+                msg="The input of the embedding does not match!",
             )
             self._compare(
                 model_output.embedded_output,
@@ -449,7 +450,9 @@ class FlowStateFunctionalTests(unittest.TestCase):
                         model_ind = -1
 
                     # Construct attribute name
-                    attr_name = f"{name_prefix}_{index_to_suffix.get(ind, 'unknown')}" if ind in index_to_suffix else None
+                    attr_name = (
+                        f"{name_prefix}_{index_to_suffix.get(ind, 'unknown')}" if ind in index_to_suffix else None
+                    )
 
                     self._compare(
                         model_output[model_ind],
