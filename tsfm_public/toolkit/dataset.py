@@ -74,6 +74,9 @@ class BaseDFDataset(torch.utils.data.Dataset):
             there, missing = is_cols_in_df(data_df, y_cols)
             assert there, f"{missing} given in {y_cols} is not a valid column identifier in the data."
 
+        assert prediction_length >= 0, f"prediction_length must be non-negative, received: {prediction_length}"
+        assert context_length > 0, f"context_length must be positive, received: {context_length}"
+
         if timestamp_column:
             assert timestamp_column in list(
                 data_df.columns
