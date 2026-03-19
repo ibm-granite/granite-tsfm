@@ -38,6 +38,18 @@ from .time_series_preprocessor import create_timestamps, extend_time_series
 logger = logging.get_logger(__name__)
 
 
+# These parameters are the union of parameters accepted by support models
+MODEL_SPECIFIC_FORWARD_PARAMS = [
+    "quantile_levels",
+    "freq_token",
+    "scale_factor",
+    "prediction_length",
+    "prediction_type",
+]
+
+DEFAULT_PREDICTION_LENGTH = 8
+
+
 class TimeSeriesPipeline(Pipeline):
     quantile_output_key = "quantile_outputs"
     prediction_output_key = "prediction_outputs"
@@ -65,7 +77,7 @@ class TimeSeriesPipeline(Pipeline):
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
 
-        forward_params = {k: v for k, v in forward_params.items() if k in signature_columns}
+        self._forward_params_model = {k: v for k, v in forward_params.items() if k in signature_columns}
 
         # if len(dataset) < batch_size:
         # build a dataloader
@@ -86,7 +98,7 @@ class TimeSeriesPipeline(Pipeline):
         it = iter(dataloader)
         accumulator = defaultdict(list)
         while (batch := next(it, None)) is not None:
-            item = self.forward(batch, **forward_params)
+            item = self.forward(batch, **self._forward_params_model)
             if not model_output_key:
                 model_output_key = (
                     self.__class__.prediction_output_key
@@ -172,7 +184,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             kwargs["context_length"] = model.config.context_length
 
         if "prediction_length" not in kwargs:
-            kwargs["prediction_length"] = model.config.prediction_length
+            kwargs["prediction_length"] = (
+                model.config.prediction_length if model.config.prediction_length > 0 else DEFAULT_PREDICTION_LENGTH
+            )
 
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
@@ -272,7 +286,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "num_workers": num_workers,
         }
 
-        for c in ["prediction_length", "quantile_levels"]:
+        for c in MODEL_SPECIFIC_FORWARD_PARAMS:
             if c in kwargs:
                 forward_kwargs[c] = kwargs[c]
 
@@ -510,13 +524,19 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
         elif quantile_output_key in input.keys():
             # model has native support for quantiles
-            for i, q in enumerate(self.model.config.quantiles):
+            # first we check if the model enables passing at runtime, and the user passed quantile_levels
+            output_quantile_levels = (
+                self.model.config.quantiles
+                if "quantile_levels" not in self._forward_params_model
+                else self._forward_params_model["quantile_levels"]
+            )
+            for i, q in enumerate(output_quantile_levels):
                 for j, c in enumerate(prediction_columns):
                     col = f"{c}_q{q}"
                     prob_data[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
                     quantile_cols.append(col)
             out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
-            for i, q in enumerate(self.model.config.quantiles):
+            for i, q in enumerate(output_quantile_levels):
                 if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
                     out = self.feature_extractor.inverse_scale_targets(out, suffix=f"_prediction_q{q}")
 
