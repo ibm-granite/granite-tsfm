@@ -162,9 +162,7 @@ def build_test_dataset_from_model_config(model):
 @torch.no_grad()
 def run_inference_only(model_path: str) -> None:
     # Load model
-    model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
-        model_path
-    )
+    model = TinyTimeMixerForPrediction.from_pretrained(model_path)
     model.eval()
 
     # if torch.cuda.is_available():
