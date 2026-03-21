@@ -70,12 +70,11 @@ load_dotenv()
 # Ensure the output directory exists
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Few-shot configuration: Restricts the number of training samples based on available data
-# Supports 1K, 10K, or 50K few-shot samples depending on the target dataset
+# Few-shot configuration (Optional): Restricts the number of training samples based on available data
+# Supports 1K, 10K, or 50K few-shot samples. Can be enabled for faster execution.
 FS_MODE = None
 if args.few_shot_data_limit_config:
     FS_MODE = json.load(open(args.few_shot_data_limit_config))
-    print("Loaded few shot data limit config (only application for few-shot fine-tuning) for faster fine-tuning.")
     print(FS_MODE)
 
 # ============================================================================

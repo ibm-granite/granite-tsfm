@@ -23,8 +23,6 @@ python  ttm_r3_RAY.py  -ubfs 1 \
                         -fze 1 \
                         -fze_mode backtest_mean \
                         -fze_ratio 0.7 \
-                        -mmp resources/map.json \
-                        -mdp resource/ttm_r3_paths.json \
                         -fsdlc resources/fewshot_data_limit.json
                     
                     

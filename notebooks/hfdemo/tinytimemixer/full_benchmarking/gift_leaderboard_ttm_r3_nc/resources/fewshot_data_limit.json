@@ -1,4 +1,5 @@
 {
+    "meta-description": "This file defines data caps for few-shot training based on available dataset size. It is optional and can be enabled when faster fine-tuning is required.",
     "bitbrains_fast_storage/5T": "1K",
     "bitbrains_fast_storage/H": "10K",
     "bitbrains_rnd/5T": "1K",
