@@ -1,15 +1,5 @@
-source ~/.bashrc
-
-# Change this according to your environment
-conda activate gift
-
-export PYTHONPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-
-# Do not change this
-export TTM_MODEL_SOURCE=public
-
 python  ttm_r3_RAY.py  -ubfs 1 \
-                        -tv TTM-R3-Finetuned \
+                        -tv TTM-R3-Finetuned-2 \
                         -as 1 \
                         -ne 5 \
                         -dt 0  \

@@ -3,6 +3,9 @@ import json
 import os
 from pprint import pprint
 
+import pandas as pd
+import ray
+import torch
 from dotenv import load_dotenv
 from gift_eval.data import Dataset
 from gluonts.ev.metrics import (
@@ -11,11 +14,11 @@ from gluonts.ev.metrics import (
     MASE,
     MSE,
     MSIS,
-    MeanWeightedSumQuantileLoss,
     ND,
     NRMSE,
     RMSE,
     SMAPE,
+    MeanWeightedSumQuantileLoss,
 )
 from gluonts.model import evaluate_model
 from gluonts.time_feature import get_seasonality
@@ -23,18 +26,14 @@ from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc
     ttm_gluonts_predictor,
 )
 from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc.src.ttm_gluonts_predictor import (
-    TTMGluonTSPredictor,
     TTM_MAX_FORECAST_HORIZON,
+    TTMGluonTSPredictor,
 )
 from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc.src.utils import (
     delete_if_empty_csv,
     get_args,
     set_seed,
 )
-import pandas as pd
-import ray
-import torch
-
 
 # ============================================================================
 # Verify that the GIFT Eval TTM source path is correctly loaded
@@ -56,7 +55,6 @@ OUT_DIR = os.path.join(OUT_DIR, ttm_version)
 os.makedirs(OUT_DIR, exist_ok=True)
 
 
-
 # ============================================================================
 # Global Configuration
 # ============================================================================
@@ -75,25 +73,25 @@ os.makedirs(OUT_DIR, exist_ok=True)
 FS_MODE = None
 if args.few_shot_data_limit_config:
     FS_MODE = json.load(open(args.few_shot_data_limit_config))
-    print(FS_MODE)
+    # print(FS_MODE)
 
 # ============================================================================
 # Dataset Configuration
 # ============================================================================
 # Complete list of available datasets (commented out for reference)
-short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
-med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+# short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+# med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
 
 # Active datasets for current run
-# short_datasets = "ett1/H"
-# med_long_datasets = ""
+short_datasets = "solar/W"
+med_long_datasets = ""
 
 # Combine short and medium/long datasets into a single sorted list
 all_datasets = sorted(set(short_datasets.split() + med_long_datasets.split()))
 
 # Load dataset properties configuration
 # TODO: Make this path configurable and add error handling
-dataset_properties_map = json.load(open("dataset_properties.json"))
+dataset_properties_map = json.load(open("resources/dataset_properties.json"))
 print("num datsets =", len(all_datasets))
 
 
@@ -203,11 +201,13 @@ class CSVWriter:
 writer_actor = CSVWriter.remote(csv_file_path)
 
 
-@ray.remote(num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024)  # 64 GB memory allocation
+@ray.remote(
+    num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024
+)  # 64 GB memory allocation
 def run_dataset(ds_name, writer_actor, done_datasets):
     """
     Process a single dataset with TTM model evaluation.
-    
+
     Args:
         ds_name: Dataset name to process
         writer_actor: Ray actor for thread-safe CSV writing
@@ -215,7 +215,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
     """
     # Set PyTorch matrix multiplication precision
     torch.set_float32_matmul_precision(precision=args.torch_matmul_precision)
-    
+
     print(f"Processing dataset: {ds_name}")
     set_seed(SEED)
     terms = ["short", "medium", "long"]
@@ -353,7 +353,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
             # Adjust prediction length for long-horizon forecasting
             if dataset.prediction_length > TTM_MAX_FORECAST_HORIZON:
                 predictor.prediction_length = dataset.prediction_length
-            
+
             # Fine-tune the model on the training split
             predictor.train(
                 train_dataset=dataset.training_dataset,
@@ -397,7 +397,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
             allow_nan_forecast=False,
             seasonality=season_length,
         )
-        
+
         # Calculate in-sample error (currently set to 0)
         insample_error = 0
         result = [
@@ -427,7 +427,8 @@ def run_dataset(ds_name, writer_actor, done_datasets):
         ]
 
         # Write results to CSV via the writer actor
-        writer_actor.write_row.remote(result)
+        # writer_actor.write_row.remote(result)
+        ray.get(writer_actor.write_row.remote(result))
 
         print(f"Results for {ds_name} have been written to {csv_file_path}")
 
