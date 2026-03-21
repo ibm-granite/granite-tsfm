@@ -22,6 +22,7 @@ from gluonts.ev.metrics import (
 )
 from gluonts.model import evaluate_model
 from gluonts.time_feature import get_seasonality
+
 from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc.src import (
     ttm_gluonts_predictor,
 )
@@ -34,6 +35,7 @@ from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc
     get_args,
     set_seed,
 )
+
 
 # ============================================================================
 # Verify that the GIFT Eval TTM source path is correctly loaded
@@ -111,9 +113,7 @@ metrics = [
     RMSE(),
     NRMSE(),
     ND(),
-    MeanWeightedSumQuantileLoss(
-        quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    ),
+    MeanWeightedSumQuantileLoss(quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
 ]
 
 # Dataset name mappings for cleaner output
@@ -128,7 +128,7 @@ pretty_names = {
 # Results File Configuration
 # ============================================================================
 # Define the path for the CSV results file
-csv_file_path = os.path.join(OUT_DIR, f"all_results.csv")
+csv_file_path = os.path.join(OUT_DIR, "all_results.csv")
 delete_if_empty_csv(csv_file_path)
 # Track already processed datasets to enable resumption
 DONE_DATASETS = []
@@ -201,9 +201,7 @@ class CSVWriter:
 writer_actor = CSVWriter.remote(csv_file_path)
 
 
-@ray.remote(
-    num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024
-)  # 64 GB memory allocation
+@ray.remote(num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024)  # 64 GB memory allocation
 def run_dataset(ds_name, writer_actor, done_datasets):
     """
     Process a single dataset with TTM model evaluation.
@@ -220,9 +218,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
     set_seed(SEED)
     terms = ["short", "medium", "long"]
     for term in terms:
-        if (
-            term == "medium" or term == "long"
-        ) and ds_name not in med_long_datasets.split():
+        if (term == "medium" or term == "long") and ds_name not in med_long_datasets.split():
             continue
 
         print(f"Processing dataset: {ds_name}, term: {term}")
@@ -246,9 +242,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
         dataset = Dataset(name=ds_name, term=term, to_univariate=False)
         season_length = get_seasonality(dataset.freq)
 
-        print(
-            f"Dataset: {ds_name}, Freq = {dataset.freq}, H = {dataset.prediction_length}"
-        )
+        print(f"Dataset: {ds_name}, Freq = {dataset.freq}, H = {dataset.prediction_length}")
 
         # Determine appropriate context length based on available data
         all_lengths = []
@@ -295,9 +289,7 @@ def run_dataset(ds_name, writer_actor, done_datasets):
             force_zeroshot = True
         gluonts_predictor_args = {
             "context_length": min_context_length,
-            "prediction_length": min(
-                dataset.prediction_length, TTM_MAX_FORECAST_HORIZON
-            ),
+            "prediction_length": min(dataset.prediction_length, TTM_MAX_FORECAST_HORIZON),
             "test_data_label": dataset.test_data.label,
             "random_seed": SEED,
             "term": term,
@@ -440,9 +432,7 @@ print("Done datasets", DONE_DATASETS)
 # Execute Parallel Dataset Processing
 # ============================================================================
 # Submit all dataset processing tasks to Ray
-futures = [
-    run_dataset.remote(ds_name, writer_actor, DONE_DATASETS) for ds_name in all_datasets
-]
+futures = [run_dataset.remote(ds_name, writer_actor, DONE_DATASETS) for ds_name in all_datasets]
 
 # Wait for all tasks to complete
 results = ray.get(futures)

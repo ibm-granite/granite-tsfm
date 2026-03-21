@@ -308,7 +308,7 @@ class TimeSeriesProcessorBase(BaseProcessor):
 
         return df
 
-    def _clean_up_dataframe(self, df: pd.DataFrame) -> None:
+    def _clean_up_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Removes columns added during internal processing of the provided dataframe.
 
         Currently, the following checks are done:
@@ -323,7 +323,8 @@ class TimeSeriesProcessorBase(BaseProcessor):
 
         if not self.id_columns:
             if INTERNAL_ID_COLUMN in df.columns:
-                df.drop(columns=INTERNAL_ID_COLUMN, inplace=True)
+                return df.drop(columns=INTERNAL_ID_COLUMN)
+        return df
 
     def _check_dataset(self, dataset: Union[Dataset, pd.DataFrame]):
         """Basic checks for input dataset.
@@ -755,7 +756,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
         if self.scaling:
             self._train_scaler(df)
 
-        self._clean_up_dataframe(df)
+        df = self._clean_up_dataframe(df)
         return self
 
     def inverse_scale_targets(
@@ -810,7 +811,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
             inverse_scale_func,
             id_columns=id_columns,
         )
-        self._clean_up_dataframe(df_inv)
+        df_inv = self._clean_up_dataframe(df_inv)
         return df_inv
 
     def preprocess(
@@ -863,7 +864,7 @@ class TimeSeriesPreprocessor(TimeSeriesProcessorBase):
             )
             df = df_out
 
-        self._clean_up_dataframe(df)
+        df = self._clean_up_dataframe(df)
         return df
 
 
@@ -1227,6 +1228,6 @@ def extend_time_series(
         idx_names = list(new_time_series.index.names)
         idx_names[-1] = "__delete"
         new_time_series = new_time_series.reset_index(names=idx_names)
-        new_time_series.drop(columns=["__delete"], inplace=True)
+        new_time_series = new_time_series.drop(columns=["__delete"])
 
     return new_time_series

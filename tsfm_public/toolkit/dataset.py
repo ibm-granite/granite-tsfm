@@ -74,6 +74,9 @@ class BaseDFDataset(torch.utils.data.Dataset):
             there, missing = is_cols_in_df(data_df, y_cols)
             assert there, f"{missing} given in {y_cols} is not a valid column identifier in the data."
 
+        assert prediction_length >= 0, f"prediction_length must be non-negative, received: {prediction_length}"
+        assert context_length > 0, f"context_length must be positive, received: {context_length}"
+
         if timestamp_column:
             assert timestamp_column in list(
                 data_df.columns
@@ -649,7 +652,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y.iloc[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
             seq_y[:, self.y_mask_conditional] = 0
 
             ret = {
@@ -943,7 +946,7 @@ class ImputeForecastDFDataset(BaseConcatDFDataset):
             # seq_y: batch_size x pred_len x num_x_cols
             seq_y = self.y[
                 time_id + self.context_length : time_id + self.context_length + self.prediction_length
-            ].values
+            ].values.copy()
 
             seq_y[:, self._y_mask_conditional] = 0
 

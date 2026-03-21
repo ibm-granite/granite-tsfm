@@ -13,9 +13,11 @@ import pandas as pd
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
+
 from tsfm_public import TimeSeriesPreprocessor, get_datasets
 from tsfm_public.models.tinytimemixer.utils import get_ttm_args
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
+
 
 logger = logging.getLogger(__file__)
 
@@ -97,9 +99,7 @@ def pretrain(args, model, dset_train, dset_val):
         save_strategy="epoch",
         logging_strategy="epoch",
         save_total_limit=1,
-        logging_dir=os.path.join(
-            args.save_dir, "logs"
-        ),  # Make sure to specify a logging directory
+        logging_dir=os.path.join(args.save_dir, "logs"),  # Make sure to specify a logging directory
         load_best_model_at_end=True,  # Load the best model when training ends
         metric_for_best_model="eval_loss",  # Metric to monitor for early stopping
         greater_is_better=False,  # For loss
@@ -236,9 +236,7 @@ def inference(args, model_path, dset_test):
 
     predictions_dict = trainer.predict(dset_test)
 
-    predictions_output = predictions_dict.predictions[
-        0
-    ]  # [N, F, C] combined (inverse-scaled)
+    predictions_output = predictions_dict.predictions[0]  # [N, F, C] combined (inverse-scaled)
 
     if args.use_internal_tsfm:
         input_data = predictions_dict.predictions[1]  # [N, L, C] (raw scale)
@@ -307,9 +305,7 @@ def inference(args, model_path, dset_test):
             # ground truth for reference
             plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
             # (optional) band shading
-            plt.fill_between(
-                np.arange(len(q50)), q10, q90, alpha=0.15, label="P80 band"
-            )
+            plt.fill_between(np.arange(len(q50)), q10, q90, alpha=0.15, label="P80 band")
             plt.title(f"Combined Quantiles (Sample {idx}, Channel {ch})")
             plt.legend()
             plt.tight_layout()
@@ -358,7 +354,9 @@ if __name__ == "__main__":
     # Data prep
     # Dataset
     TARGET_DATASET = "etth1"
-    dataset_path = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"  # mention the dataset path
+    dataset_path = (
+        "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"  # mention the dataset path
+    )
     timestamp_column = "date"
     id_columns = []  # mention the ids that uniquely identify a time-series.
 

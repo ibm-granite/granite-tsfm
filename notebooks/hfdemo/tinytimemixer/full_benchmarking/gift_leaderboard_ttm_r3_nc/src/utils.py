@@ -12,6 +12,7 @@ from gluonts.time_feature.seasonality import get_seasonality
 from transformers import Trainer
 from transformers.utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 CUSTOM_SEASONALITIES = {
@@ -34,28 +35,19 @@ CUSTOM_SEASONALITIES = {
 class CustomMASETrainer(Trainer):
     def __init__(self, *args, freq=1, **kwargs):
         super().__init__(*args, **kwargs)
-        self.seasonal_period = get_seasonality(
-            freq=freq, seasonalities=CUSTOM_SEASONALITIES
-        )
-        logger.info(
-            f"Finetuning with MASE loss with freq={freq}, seasonality = {self.seasonal_period}"
-        )
+        self.seasonal_period = get_seasonality(freq=freq, seasonalities=CUSTOM_SEASONALITIES)
+        logger.info(f"Finetuning with MASE loss with freq={freq}, seasonality = {self.seasonal_period}")
 
-    def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
-    ):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Compute the MASE loss using the seasonal denominator based on in-sample values.
         """
         # Extract in-sample values from inputs
-        in_sample_values = inputs[
-            "past_values"
-        ]  # Ensure in-sample values are passed in the batch
+        in_sample_values = inputs["past_values"]  # Ensure in-sample values are passed in the batch
 
         # Compute the denominator (mean absolute seasonal error)
         diffs = torch.abs(
-            in_sample_values[:, self.seasonal_period :, :]
-            - in_sample_values[:, : -self.seasonal_period, :]
+            in_sample_values[:, self.seasonal_period :, :] - in_sample_values[:, : -self.seasonal_period, :]
         )
         scale_factor = torch.mean(diffs)
 
@@ -113,9 +105,7 @@ def plot_forecast(
         if label["target"].ndim == 1:
             label["target"] = label["target"].reshape(1, -1)
         feasible_plot_context = min(plot_context, sample["target"].shape[1])
-        ts_y_hat = np.arange(
-            feasible_plot_context, feasible_plot_context + prediction_length
-        )
+        ts_y_hat = np.arange(feasible_plot_context, feasible_plot_context + prediction_length)
         if probabilistic:
             if forecast_samples.ndim == 4:
                 y_hat = forecast_samples[index, :, :, channel]

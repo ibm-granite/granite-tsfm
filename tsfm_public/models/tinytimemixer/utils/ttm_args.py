@@ -72,12 +72,8 @@ def get_ttm_args():  # pragma: no cover
         default=None,
         help="Number of GPUs",
     )
-    parser.add_argument(
-        "--random_seed", "-rs", type=int, required=False, default=42, help="Random seed"
-    )
-    parser.add_argument(
-        "--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size"
-    )
+    parser.add_argument("--random_seed", "-rs", type=int, required=False, default=42, help="Random seed")
+    parser.add_argument("--batch_size", "-bs", type=int, required=False, default=3000, help="Batch size")
     parser.add_argument(
         "--num_epochs",
         "-ne",

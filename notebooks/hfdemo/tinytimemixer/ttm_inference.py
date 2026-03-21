@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import logging
 import os
 import random
@@ -9,12 +10,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, default_data_collator
+
 from tsfm_public import TimeSeriesPreprocessor, get_datasets
-from tsfm_public.models.tinytimemixer import (
-    TinyTimeMixerForDecomposedPrediction,
-    TinyTimeMixerForPrediction,
-)
+from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
+
 
 logger = logging.getLogger("ttm_infer_only")
 logging.basicConfig(level=logging.INFO)
@@ -24,9 +24,7 @@ logging.basicConfig(level=logging.INFO)
 # Demo dataset configuration
 # ---------------------------
 TARGET_DATASET = "etth1"
-DATASET_URL = (
-    "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
-)
+DATASET_URL = "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
 TIMESTAMP_COLUMN = "date"
 ID_COLUMNS = []  # ETTh1 is a single multivariate series
 
@@ -39,13 +37,6 @@ SPLIT_CONFIG = {
     "valid": [8640, 11520],
     "test": [11520, 14400],
 }
-
-import inspect
-
-import numpy as np
-import pandas as pd
-import torch
-from transformers import default_data_collator
 
 
 def make_ttm_collator(model):
@@ -64,11 +55,7 @@ def make_ttm_collator(model):
         if isinstance(v, pd.Timestamp):
             return True
         # list/array of timestamps
-        if (
-            isinstance(v, (list, tuple))
-            and len(v) > 0
-            and isinstance(v[0], pd.Timestamp)
-        ):
+        if isinstance(v, (list, tuple)) and len(v) > 0 and isinstance(v[0], pd.Timestamp):
             return True
         return False
 
@@ -133,9 +120,7 @@ def build_test_dataset_from_model_config(model):
     context_length = int(getattr(model.config, "context_length"))
     prediction_length = int(getattr(model.config, "prediction_length"))
 
-    logger.info(
-        f"Using model.config context_length={context_length}, prediction_length={prediction_length}"
-    )
+    logger.info(f"Using model.config context_length={context_length}, prediction_length={prediction_length}")
 
     data = pd.read_csv(DATASET_URL, parse_dates=[TIMESTAMP_COLUMN])
 
@@ -277,9 +262,7 @@ def run_inference_only(model_path: str) -> None:
                     plt.plot(q10, label="Combined q10", linewidth=1.0)
                     plt.plot(q90, label="Combined q90", linewidth=1.0)
                     plt.plot(forecast_ori, label="Ground Truth", linewidth=1.0)
-                    plt.fill_between(
-                        np.arange(len(q50)), q10, q90, alpha=0.15, label="Band"
-                    )
+                    plt.fill_between(np.arange(len(q50)), q10, q90, alpha=0.15, label="Band")
                     plt.title(f"Combined Quantiles (Sample {idx}, Channel {ch})")
                     plt.legend()
                     plt.tight_layout()
@@ -294,9 +277,7 @@ def run_inference_only(model_path: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="TTM inference-only (model_path only)."
-    )
+    parser = argparse.ArgumentParser(description="TTM inference-only (model_path only).")
     parser.add_argument(
         "--model_path",
         type=str,

@@ -7,6 +7,7 @@ from typing import Optional, Union
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
@@ -256,7 +257,6 @@ class TinyTimeMixerConfig(PretrainedConfig):
         enable_base_norm_always: bool = False,
         **kwargs,
     ):
-
         self.num_input_channels = num_input_channels
         self.context_length = context_length
         self.patch_length = patch_length
@@ -394,16 +394,12 @@ class TinyTimeMixerConfig(PretrainedConfig):
         if not hasattr(self, "num_patches") or self.num_patches is None:
             if self.multi_scale:
                 if self.masked_context_length is not None:
-                    raise Exception(
-                        "masked_context_length should be disabled when multi_scale is on"
-                    )
+                    raise Exception("masked_context_length should be disabled when multi_scale is on")
                 self.num_patches = self.compute_total_num_patches_multiscale()
 
             else:
                 context_length = (
-                    self.masked_context_length
-                    if self.masked_context_length is not None
-                    else self.context_length
+                    self.masked_context_length if self.masked_context_length is not None else self.context_length
                 )
                 self.num_patches = (
                     max(context_length, self.patch_length) - self.patch_length
@@ -422,31 +418,19 @@ class TinyTimeMixerConfig(PretrainedConfig):
                     self.num_patches += self.fft_length
 
         if self.prediction_filter_length is not None:
-            if (
-                self.prediction_filter_length > self.prediction_length
-                or self.prediction_filter_length <= 0
-            ):
-                raise ValueError(
-                    "prediction_filter_length should be positive and less than prediction_length"
-                )
+            if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:
+                raise ValueError("prediction_filter_length should be positive and less than prediction_length")
 
         if self.loss == "nll" and self.enable_forecast_channel_mixing:
-            raise ValueError(
-                "Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True"
-            )
+            raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
 
         if self.prediction_channel_indices is not None:
-            self.prediction_channel_indices.sort()
+            self.prediction_channel_indices = sorted(self.prediction_channel_indices)
 
         if self.exogenous_channel_indices is not None:
-            self.exogenous_channel_indices.sort()
+            self.exogenous_channel_indices = sorted(self.exogenous_channel_indices)
 
-        if (
-            self.exogenous_channel_indices is not None
-            and self.prediction_channel_indices is None
-        ):
-            self.prediction_channel_indices = list(
-                set(range(self.num_input_channels))
-                - set(self.exogenous_channel_indices)
+        if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
+            self.prediction_channel_indices = sorted(
+                set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
             )
-            self.prediction_channel_indices.sort()

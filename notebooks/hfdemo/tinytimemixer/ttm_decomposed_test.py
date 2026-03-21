@@ -20,11 +20,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 # First Party
 # First Party
 from transformers import Trainer, TrainerCallback, TrainingArguments, set_seed
+
 from tsfm_public import load_dataset
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
     TinyTimeMixerForDecomposedPrediction,
 )
+
 
 # from tsfm_public.models.tinytimemixer.utils import get_ttm_args
 
@@ -290,12 +292,8 @@ def get_ttm_args():
     parser.add_argument("--random_seed", type=int, default=42)
 
     # ---------------- Multi-stage (NEW) ----------------
-    parser.add_argument(
-        "--epochs_phase1", type=int, default=None, help="Trend-only epochs"
-    )
-    parser.add_argument(
-        "--epochs_phase2", type=int, default=None, help="Residual-only epochs"
-    )
+    parser.add_argument("--epochs_phase1", type=int, default=None, help="Trend-only epochs")
+    parser.add_argument("--epochs_phase2", type=int, default=None, help="Residual-only epochs")
     parser.add_argument("--epochs_phase3", type=int, default=None, help="Joint epochs")
 
     # ---------------- Base TTM Backbone ----------------
@@ -412,10 +410,7 @@ def params_to_opt(model: nn.Module):
     return [p for p in model.parameters() if p.requires_grad]
 
 
-def make_trainer(
-    model, dset_train, dset_val, args, lr, num_epochs, save_suffix, callback=None
-):
-
+def make_trainer(model, dset_train, dset_val, args, lr, num_epochs, save_suffix, callback=None):
     trainer_args = TrainingArguments(
         output_dir=os.path.join(args.save_dir, f"checkpoint_{save_suffix}"),
         overwrite_output_dir=True,
@@ -777,15 +772,11 @@ def pick_first_mid_last(qarr, quantile_values, idx: int, ch: int):
       - q_*_val are arrays of shape [F] for that sample+channel
     """
     if quantile_values is None:
-        raise ValueError(
-            "quantile_values must be provided (same order as qarr's Q dimension)."
-        )
+        raise ValueError("quantile_values must be provided (same order as qarr's Q dimension).")
 
     Q = qarr.shape[1]
     if len(quantile_values) != Q:
-        raise ValueError(
-            f"len(quantile_values)={len(quantile_values)} must match Q={Q}."
-        )
+        raise ValueError(f"len(quantile_values)={len(quantile_values)} must match Q={Q}.")
 
     low_i = 0
     mid_i = Q // 2
@@ -814,9 +805,7 @@ def plot_quantiles_first_mid_last(
     shade_label=None,  # optional override label for shaded band
     figsize=(12, 6),
 ):
-    q_low, q_mid, q_high, low, mid, high = pick_first_mid_last(
-        qarr, quantile_values, idx, ch
-    )
+    q_low, q_mid, q_high, low, mid, high = pick_first_mid_last(qarr, quantile_values, idx, ch)
 
     plt.figure(figsize=figsize)
 
@@ -1004,23 +993,15 @@ def inference(args, model_path, dset_test, label="iid"):
         print("prediction_errors shape:", prediction_errors.shape)
 
     # Unpack (matches your TinyTimeMixerForDecomposedPredictionOutput ordering)
-    predictions_output = predictions_dict.predictions[
-        0
-    ]  # [N, F, C] combined (inverse-scaled)
-    trend_prediction_outputs = predictions_dict.predictions[
-        2
-    ]  # [N, F, C] (inverse-scaled)
-    residual_prediction_outputs = predictions_dict.predictions[
-        3
-    ]  # [N, F, C] (inverse-scaled)
+    predictions_output = predictions_dict.predictions[0]  # [N, F, C] combined (inverse-scaled)
+    trend_prediction_outputs = predictions_dict.predictions[2]  # [N, F, C] (inverse-scaled)
+    residual_prediction_outputs = predictions_dict.predictions[3]  # [N, F, C] (inverse-scaled)
     input_data = predictions_dict.predictions[-2]  # [N, L, C] (raw scale)
     trend_input = predictions_dict.predictions[4]  # [N, L, C] trend (raw scale)
     residual_input_t = predictions_dict.predictions[5]  # [N, L, C] residual (raw scale)
     forecast_groundtruth = predictions_dict.predictions[-1]  # [N, F, C] (raw scale)
     L_res = residual_input_t.shape[1]
-    residual_input = np.full_like(
-        input_data, np.nan
-    )  # fill with NaN so it does not draw
+    residual_input = np.full_like(input_data, np.nan)  # fill with NaN so it does not draw
 
     residual_input[:, -L_res:] = residual_input_t  # right-aligned residual
     has_quantiles = model.config.multi_quantile_head
@@ -1154,9 +1135,7 @@ def inference(args, model_path, dset_test, label="iid"):
             # )
 
         if has_quantiles:
-            quantile_values = (
-                model.config.quantile_list
-            )  # [0.01, 0.05, 0.5, 0.95, 0.99]
+            quantile_values = model.config.quantile_list  # [0.01, 0.05, 0.5, 0.95, 0.99]
             if quantile_values is None:
                 quantile_values = [i / 10.0 for i in range(1, 10)]
             # ---------------- Extra quantile plots ----------------
