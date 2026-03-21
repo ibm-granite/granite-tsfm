@@ -22,7 +22,6 @@ from gluonts.ev.metrics import (
 )
 from gluonts.model import evaluate_model
 from gluonts.time_feature import get_seasonality
-
 from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc.src import (
     ttm_gluonts_predictor,
 )
@@ -35,7 +34,6 @@ from notebooks.hfdemo.tinytimemixer.full_benchmarking.gift_leaderboard_ttm_r3_nc
     get_args,
     set_seed,
 )
-
 
 # ============================================================================
 # Verify that the GIFT Eval TTM source path is correctly loaded
@@ -81,12 +79,12 @@ if args.few_shot_data_limit_config:
 # Dataset Configuration
 # ============================================================================
 # Complete list of available datasets (commented out for reference)
-# short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
-# med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
 
 # Active datasets for current run
-short_datasets = "solar/W"
-med_long_datasets = ""
+# short_datasets = "solar/W"
+# med_long_datasets = ""
 
 # Combine short and medium/long datasets into a single sorted list
 all_datasets = sorted(set(short_datasets.split() + med_long_datasets.split()))
@@ -113,7 +111,9 @@ metrics = [
     RMSE(),
     NRMSE(),
     ND(),
-    MeanWeightedSumQuantileLoss(quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
+    MeanWeightedSumQuantileLoss(
+        quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    ),
 ]
 
 # Dataset name mappings for cleaner output
@@ -201,7 +201,9 @@ class CSVWriter:
 writer_actor = CSVWriter.remote(csv_file_path)
 
 
-@ray.remote(num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024)  # 64 GB memory allocation
+@ray.remote(
+    num_cpus=10, num_gpus=1, memory=64 * 1024 * 1024 * 1024
+)  # 64 GB memory allocation
 def run_dataset(ds_name, writer_actor, done_datasets):
     """
     Process a single dataset with TTM model evaluation.
@@ -218,7 +220,9 @@ def run_dataset(ds_name, writer_actor, done_datasets):
     set_seed(SEED)
     terms = ["short", "medium", "long"]
     for term in terms:
-        if (term == "medium" or term == "long") and ds_name not in med_long_datasets.split():
+        if (
+            term == "medium" or term == "long"
+        ) and ds_name not in med_long_datasets.split():
             continue
 
         print(f"Processing dataset: {ds_name}, term: {term}")
@@ -242,7 +246,9 @@ def run_dataset(ds_name, writer_actor, done_datasets):
         dataset = Dataset(name=ds_name, term=term, to_univariate=False)
         season_length = get_seasonality(dataset.freq)
 
-        print(f"Dataset: {ds_name}, Freq = {dataset.freq}, H = {dataset.prediction_length}")
+        print(
+            f"Dataset: {ds_name}, Freq = {dataset.freq}, H = {dataset.prediction_length}"
+        )
 
         # Determine appropriate context length based on available data
         all_lengths = []
@@ -289,7 +295,9 @@ def run_dataset(ds_name, writer_actor, done_datasets):
             force_zeroshot = True
         gluonts_predictor_args = {
             "context_length": min_context_length,
-            "prediction_length": min(dataset.prediction_length, TTM_MAX_FORECAST_HORIZON),
+            "prediction_length": min(
+                dataset.prediction_length, TTM_MAX_FORECAST_HORIZON
+            ),
             "test_data_label": dataset.test_data.label,
             "random_seed": SEED,
             "term": term,
@@ -395,18 +403,18 @@ def run_dataset(ds_name, writer_actor, done_datasets):
         result = [
             ds_config,
             args.ttm_version,
-            res["MSE[mean]"][0],
-            res["MSE[0.5]"][0],
-            res["MAE[mean]"][0],
-            res["MAE[0.5]"][0],
-            res["MASE[0.5]"][0],
-            res["MAPE[0.5]"][0],
-            res["sMAPE[0.5]"][0],
-            res["MSIS"][0],
-            res["RMSE[mean]"][0],
-            res["NRMSE[mean]"][0],
-            res["ND[0.5]"][0],
-            res["mean_weighted_sum_quantile_loss"][0],
+            res["MSE[mean]"].iloc[0],
+            res["MSE[0.5]"].iloc[0],
+            res["MAE[mean]"].iloc[0],
+            res["MAE[0.5]"].iloc[0],
+            res["MASE[0.5]"].iloc[0],
+            res["MAPE[0.5]"].iloc[0],
+            res["sMAPE[0.5]"].iloc[0],
+            res["MSIS"].iloc[0],
+            res["RMSE[mean]"].iloc[0],
+            res["NRMSE[mean]"].iloc[0],
+            res["ND[0.5]"].iloc[0],
+            res["mean_weighted_sum_quantile_loss"].iloc[0],
             dataset_properties_map[ds_key]["domain"],
             dataset_properties_map[ds_key]["num_variates"],
             dataset.prediction_length,
@@ -432,7 +440,9 @@ print("Done datasets", DONE_DATASETS)
 # Execute Parallel Dataset Processing
 # ============================================================================
 # Submit all dataset processing tasks to Ray
-futures = [run_dataset.remote(ds_name, writer_actor, DONE_DATASETS) for ds_name in all_datasets]
+futures = [
+    run_dataset.remote(ds_name, writer_actor, DONE_DATASETS) for ds_name in all_datasets
+]
 
 # Wait for all tasks to complete
 results = ray.get(futures)

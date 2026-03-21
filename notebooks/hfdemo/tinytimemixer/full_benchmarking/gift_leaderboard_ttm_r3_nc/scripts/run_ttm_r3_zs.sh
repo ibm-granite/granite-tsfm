@@ -1,5 +1,5 @@
 python  ttm_r3_RAY.py  -ubfs 1 \
-                    -tv TTM-R3-Pretrained-p4 \
+                    -tv TTM-R3-PT \
                     -as 1 \
                     -ne 0 \
                     -rn 1 \

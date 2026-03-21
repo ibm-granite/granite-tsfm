@@ -1,5 +1,5 @@
 python  ttm_r3_RAY.py  -ubfs 1 \
-                        -tv TTM-R3-FT-Lite \
+                        -tv TTM-R3-FT-2 \
                         -as 1 \
                         -ne 5 \
                         -dt 0  \
@@ -14,6 +14,6 @@ python  ttm_r3_RAY.py  -ubfs 1 \
                         -fze_mode backtest_mean \
                         -fze_ratio 0.7 \
                         -fsdlc resources/fewshot_data_limit.json \
-                        --use_lite 1
+                        -tmp high 
                     
                     
