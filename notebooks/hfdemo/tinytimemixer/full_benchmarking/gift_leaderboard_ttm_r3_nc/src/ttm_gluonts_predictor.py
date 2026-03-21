@@ -452,7 +452,7 @@ class TTMGluonTSPredictor:
         # ---- Keep ZS snapshots for ALL models (if enabled) ----
         self.ttm_zeroshot_list = None
         self.ttm_zeroshot = None
-        if ft_zs_ensemble:
+        if ft_zs_ensemble and not self.force_zeroshot:
             self.ttm_zeroshot_list = [copy.deepcopy(m) for m in self.ttm_list]
             self.ttm_zeroshot = self.ttm_zeroshot_list[0]
 
@@ -1029,6 +1029,8 @@ class TTMGluonTSPredictor:
         Adds finetune logging per model (success/failure, samples, error).
         """
         # ---- NEW: init per-run logs ----
+
+        self.num_epochs = num_epochs
         if hasattr(self, "_init_run_logs"):
             self._init_run_logs()
 
@@ -1450,10 +1452,10 @@ class TTMGluonTSPredictor:
         else:
             dataset = dset_valid
 
-        print(
-            "Train Samples before search filtering --->",
-            len(dataset) * self.get_channels(dataset),
-        )
+        # print(
+        #     "Train Samples before search filtering --->",
+        #     len(dataset) * self.get_channels(dataset),
+        # )
 
         while True:
             try:
@@ -1611,13 +1613,13 @@ class TTMGluonTSPredictor:
         self.ensemble_log["extra"] = extra
 
         # Print compact log for visibility
-        print("\n[EnsembleLog]")
-        print("  mode:", mode)
-        print("  models:", model_ids)
-        if self.ensemble_log["weights"] is not None:
-            print("  weights_summary:", self.ensemble_log["weights"])
-        if extra is not None:
-            print("  extra:", extra)
+        # print("\n[EnsembleLog]")
+        # print("  mode:", mode)
+        # print("  models:", model_ids)
+        # if self.ensemble_log["weights"] is not None:
+        #     print("  weights_summary:", self.ensemble_log["weights"])
+        # if extra is not None:
+        #     print("  extra:", extra)
 
     def print_finetune_log(self):
         """
@@ -1725,7 +1727,7 @@ class TTMGluonTSPredictor:
             # --- ensure minimum length via zero-prepending ---
             if T < context_length + k:
                 required = (context_length + k) - T
-                logger.info(
+                logger.debug(
                     f"[RBTest] item={item_id} (idx={i}): "
                     f"T={T} too short for context_length={context_length}+k={k}. "
                     f"Prepending {required} zeros."
@@ -1836,7 +1838,7 @@ class TTMGluonTSPredictor:
         w_ft_global = global_conf_ft / (global_conf_ft + global_conf_zs + eps)
         w_zs_global = global_conf_zs / (global_conf_ft + global_conf_zs + eps)
 
-        logger.info(
+        logger.debug(
             f"[RBTest] GLOBAL: median_err_ft={global_err_ft:.4f}, "
             f"median_err_zs={global_err_zs:.4f}, "
             f"w_ft_global={w_ft_global:.4f}, w_zs_global={w_zs_global:.4f}"
@@ -2005,7 +2007,7 @@ class TTMGluonTSPredictor:
                 cl_i.append(getattr(model.config, "context_length", context_length))
                 if T < cl_i[-1] + k:
                     required = (cl_i[-1] + k) - T
-                    logger.info(
+                    logger.debug(
                         f"[RBTest-ALL] item={item_id} (idx={i}): "
                         f"T={T} too short for context_length={cl_i[-1]}+k={cl_i[-1] + k}. "
                         f"Prepending {required} zeros."
@@ -2545,11 +2547,11 @@ class TTMGluonTSPredictor:
         model_ids = []
         series_ids = None
 
-        # Finetuned models
+        # Predict from Base models
         for mi, model in enumerate(self.ttm_list):
             mk = self.model_keys[mi] if hasattr(self, "model_keys") else None
             mid = f"FT::{mk}" if mk is not None else f"FT::model_{mi}"
-            logger.info(f"[Predict] {mid}")
+            logger.debug(f"[Predict] {mid}")
 
             f, ids = _single_model_predict(model, test_data_input_scaled, batch_size)
             if f.size > 0:
@@ -2559,7 +2561,7 @@ class TTMGluonTSPredictor:
             if series_ids is None:
                 series_ids = ids
 
-        # Zeroshot models (optional)
+        # Ensemble with Zeroshot models if base models were finetuned and ensemble enabled
         if (
             self.ft_zs_ensemble
             and hasattr(self, "ttm_zeroshot_list")
@@ -2568,7 +2570,7 @@ class TTMGluonTSPredictor:
             for mi, model in enumerate(self.ttm_zeroshot_list):
                 mk = self.model_keys[mi] if hasattr(self, "model_keys") else None
                 mid = f"ZS::{mk}" if mk is not None else f"ZS::model_{mi}"
-                logger.info(f"[Predict] {mid}")
+                logger.debug(f"[Predict] {mid}")
 
                 f, _ = _single_model_predict(model, test_data_input_scaled, batch_size)
                 if f.size > 0:
@@ -2582,7 +2584,7 @@ class TTMGluonTSPredictor:
         M = stacked_all.shape[0]
         num_series = len(test_data_input)
         logger.info(
-            f"[Predict] Dataset={self.ds_name}, Num series={num_series}, Num models={M}"
+            f"[Predict] Dataset={self.ds_name}, Num series={num_series}, NM={M}"
         )
 
         # -------- Ensemble across ALL models --------
@@ -2712,7 +2714,7 @@ class TTMGluonTSPredictor:
                     extra=info,
                 )
 
-            print("rolling backtest weighted ensemble across ALL models")
+            # print("rolling backtest weighted ensemble across ALL models")
 
         else:
             raise Exception("Invalid ft_zs_ensemble_mode")
