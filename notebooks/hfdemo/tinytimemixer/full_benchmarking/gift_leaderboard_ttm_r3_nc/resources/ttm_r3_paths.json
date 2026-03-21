@@ -1,0 +1,12 @@
+{
+    "decv3-52-16": "ibm-research/ttm-r3/156-16-dec-52-r3", 
+    "decvonofft-90-30": "ibm-research/ttm-r3/512-30-dec-90-r3",  
+    "decv0-512-48": "ibm-research/ttm-r3/1024-48-dec-512-r3", 
+    "decv2-512-48": "ibm-research/ttm-r3/768-48-dec-512-r3", 
+    "base-1536-96": "ibm-research/ttm-r3/main", 
+    "base-1536-720": "ibm-research/ttm-r3/2048-720-r3", 
+	"base-2560-96": "ibm-research/ttm-r3/2560-96-r3", 
+	"base-2560-720": "ibm-research/ttm-r3/2560-720-r3", 
+    "base-3072-96": "ibm-research/ttm-r3/3072-96-r3", 
+    "base-3072-720": "ibm-research/ttm-r3/3072-720-r3"
+}
