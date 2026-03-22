@@ -2445,7 +2445,7 @@ class TTMGluonTSPredictor:
                         extra={"used_model_ids": [model_ids[ft0], model_ids[zs0]]},
                     )
 
-                print("median aggregate across PRIMARY FT+ZS only")
+                # print("median aggregate across PRIMARY FT+ZS only")
 
             else:
                 # fallback: only FT primary exists
@@ -2461,7 +2461,7 @@ class TTMGluonTSPredictor:
                         extra={"used_model_ids": [model_ids[ft0]]},
                     )
 
-                print("primary FT only (no ZS available)")
+                # print("primary FT only (no ZS available)")
 
         elif self.ft_zs_ensemble_mode == "mean":
             forecast_samples = np.mean(stacked_all, axis=0)
