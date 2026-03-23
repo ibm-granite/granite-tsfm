@@ -10,14 +10,25 @@ import pandas as pd
 import pytest
 from transformers import PatchTSTConfig, PatchTSTForPrediction
 
-from tsfm_public import PatchTSTFMForPrediction, TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public import (
+    PatchTSTFMForPrediction,
+    TinyTimeMixerConfig,
+    TinyTimeMixerForDecomposedPrediction,
+    TinyTimeMixerForPrediction,
+)
 from tsfm_public.models.flowstate import FlowStateConfig, FlowStateForPrediction
 from tsfm_public.models.patchtst_fm import PatchTSTFMConfig
-from tsfm_public.toolkit.conformal import PostHocProbabilisticMethod, PostHocProbabilisticProcessor
+from tsfm_public.toolkit.conformal import (
+    PostHocProbabilisticMethod,
+    PostHocProbabilisticProcessor,
+)
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
-from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING, TimeSeriesPreprocessor
+from tsfm_public.toolkit.time_series_preprocessor import (
+    DEFAULT_FREQUENCY_MAPPING,
+    TimeSeriesPreprocessor,
+)
 from tsfm_public.toolkit.util import select_by_index
 
 
@@ -27,6 +38,17 @@ def ttm_dummy_model(conf=None):
 
     if conf is None:
         conf = TinyTimeMixerConfig()
+    model = TinyTimeMixerForPrediction(conf)
+
+    return model
+
+
+@pytest.fixture(scope="module")
+def ttm_probabilistic_dummy_model(conf=None):
+    # model_path = "ibm-granite/granite-timeseries-ttm-v1"
+
+    if conf is None:
+        conf = TinyTimeMixerConfig(multi_quantile_head=True)
     model = TinyTimeMixerForPrediction(conf)
 
     return model
@@ -267,6 +289,90 @@ def test_forecasting_pipeline_forecasts(patchtst_base_model, etth_data_base):
     assert forecasts.shape == (10, 2 * len(target_columns) + 1)
 
 
+def test_ttm_native_probabilistc_forecasting_pipeline(etth_data_base):
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl, multi_quantile_head=True)
+    model = TinyTimeMixerForPrediction(config=conf)
+    quantile_levels = conf.quantile_levels
+    timestamp_column = "date"
+    id_columns = []
+    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+
+    context_length = model.config.context_length
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        batch_size=10,
+    )
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length - 9
+
+    data = etth_data_base.copy()
+
+    test_data = select_by_index(
+        data,
+        id_columns=id_columns,
+        start_index=test_start_index,
+        end_index=test_end_index,
+    )
+    forecasts = forecast_pipeline(test_data)
+
+    print(forecasts.keys())
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    for i in quantile_levels:
+        assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
+
+
+def test_ttm_decomposed_native_probabilistc_forecasting_pipeline(etth_data_base):
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl, multi_quantile_head=True)
+    model = TinyTimeMixerForDecomposedPrediction(config=conf)
+    quantile_levels = conf.quantile_levels
+    timestamp_column = "date"
+    id_columns = []
+    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+
+    context_length = model.config.context_length
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        batch_size=10,
+    )
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length - 9
+
+    data = etth_data_base.copy()
+
+    test_data = select_by_index(
+        data,
+        id_columns=id_columns,
+        start_index=test_start_index,
+        end_index=test_end_index,
+    )
+    forecasts = forecast_pipeline(test_data)
+
+    print(forecasts.keys())
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    for i in quantile_levels:
+        assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
+
+
 def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_base_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
@@ -417,7 +523,11 @@ def test_prediction_filter_length(etth_data):
     assert model.config.prediction_filter_length == pfl
 
     forecast_pipeline = TimeSeriesForecastingPipeline(
-        model=model, feature_extractor=tsp, explode_forecasts=False, inverse_scale_outputs=True, device="cpu"
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=False,
+        inverse_scale_outputs=True,
+        device="cpu",
     )
     forecasts = forecast_pipeline(train_data.iloc[:200])
 
@@ -462,7 +572,9 @@ def test_probabilistic_forecasts(etth_data):
     forecasts_cal = forecast_pipeline(train_data.iloc[-200:])
 
     conformal = PostHocProbabilisticProcessor(
-        window=100, quantiles=[0.1, 0.9], method=PostHocProbabilisticMethod.CONFORMAL.value
+        window=100,
+        quantiles=[0.1, 0.9],
+        method=PostHocProbabilisticMethod.CONFORMAL.value,
     )
 
     # prepare calibration data
