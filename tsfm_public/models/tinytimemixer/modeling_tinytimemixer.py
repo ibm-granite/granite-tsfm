@@ -141,7 +141,9 @@ class MultiPinballLoss(nn.Module):
             0.8,
             0.9,
         ]
-        self.static_taus = None if self._use_default_linspace else [float(q) for q in sorted(qlist)]
+        self.static_taus = (
+            None if self._use_default_linspace else [float(q) for q in sorted(qlist)]
+        )
 
         self.penalize_large_width_ratio = float(
             getattr(config, "penalize_large_width_ratio", 0.0)
@@ -4086,7 +4088,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         self.config = config
 
         self.multi_quantile_head = config.multi_quantile_head
-
+        self.num_input_channels = config.num_input_channels
         self.forecast_loss_type = config.forecast_loss_type
         self.trend_loss_weight = config.trend_loss_weight
         self.residual_loss_weight = config.residual_loss_weight
@@ -4125,8 +4127,12 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
             metadata=metadata,
         )
 
-    def set_stage(self, forecast_loss_type: str, w_tr: float, w_res: float, w_joint: float):
-        print(f"[MODEL] set_stage → {forecast_loss_type}  weights=({w_tr},{w_res},{w_joint})")
+    def set_stage(
+        self, forecast_loss_type: str, w_tr: float, w_res: float, w_joint: float
+    ):
+        print(
+            f"[MODEL] set_stage → {forecast_loss_type}  weights=({w_tr},{w_res},{w_joint})"
+        )
         self.forecast_loss_type = forecast_loss_type
         self.trend_loss_weight = float(w_tr)
         self.residual_loss_weight = float(w_res)
@@ -4374,27 +4380,44 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         trend_quantile_outputs = trend_prediction.quantile_outputs
         residual_quantile_outputs = residual_prediction.quantile_outputs
 
-        if self.config.combine_quantiles_via_variance:
-            combined_quantile_forecast = self.combine_quantiles_fast(
-                trend_quantile_outputs, residual_quantile_outputs
-            )
+        if trend_quantile_outputs is None or residual_quantile_outputs is None:
+            combined_quantile_forecast = None
         else:
-            combined_quantile_forecast = (
-                trend_quantile_outputs + residual_quantile_outputs
-            )
+            if self.config.combine_quantiles_via_variance:
+                combined_quantile_forecast = self.combine_quantiles_fast(
+                    trend_quantile_outputs, residual_quantile_outputs
+                )
+            else:
+                combined_quantile_forecast = (
+                    trend_quantile_outputs + residual_quantile_outputs
+                )
 
         loss_val = None
 
         tau_tgt = r_tgt = None
+        base_loss = self._choose_loss()
 
-        if future_values is not None and return_loss:
-            base_loss = self._choose_loss()
+        if self.prediction_channel_indices is not None:
+            loc = loc[..., self.prediction_channel_indices]
+            scale = scale[..., self.prediction_channel_indices]
+            trend_signal = trend_signal[..., self.prediction_channel_indices]
+            residual_signal = residual_signal[..., self.prediction_channel_indices]
+            scaled_past_values = scaled_past_values[
+                ..., self.prediction_channel_indices
+            ]
 
-            if self.prediction_filter_length is not None and future_values.shape[1] != self.prediction_filter_length:
+        if future_values is not None and return_loss and base_loss is not None:
+
+            if (
+                self.prediction_filter_length is not None
+                and future_values.shape[1] != self.prediction_filter_length
+            ):
                 future_values = future_values[:, : self.prediction_filter_length, :]
 
                 if future_observed_mask is not None:
-                    future_observed_mask = future_observed_mask[:, : self.prediction_filter_length, :]
+                    future_observed_mask = future_observed_mask[
+                        :, : self.prediction_filter_length, :
+                    ]
 
             if (
                 self.prediction_channel_indices is not None
@@ -4404,7 +4427,9 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                 future_values = future_values[..., self.prediction_channel_indices]
 
                 if future_observed_mask is not None:
-                    future_observed_mask = future_observed_mask[..., self.prediction_channel_indices]
+                    future_observed_mask = future_observed_mask[
+                        ..., self.prediction_channel_indices
+                    ]
 
             # scale future with SAME (loc, scale) used for past
             scaled_future_values = self.scaler.transform(future_values, loc, scale)
@@ -4452,10 +4477,6 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
                 + self.trend_loss_weight * trend_loss
                 + self.residual_loss_weight * residual_loss
             )
-
-        if self.prediction_channel_indices is not None:
-            loc = loc[..., self.prediction_channel_indices]
-            scale = scale[..., self.prediction_channel_indices]
 
         # inverse to get back original scale
         combined_point_forecast = self.scaler.inverse(
