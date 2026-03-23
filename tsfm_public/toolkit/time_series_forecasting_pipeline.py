@@ -148,6 +148,29 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
     Time Series Forecasting using HF time series forecasting models. This pipeline consumes a `pandas.DataFrame`
     containing the time series data and produces a new `pandas.DataFrame` containing the forecasts.
 
+    Parameter priority:
+    1. passed kwargs, either during init or during call
+
+    2. certain kwargs extracted from the feature_extractor
+            "context_length",
+            "prediction_length",
+            "id_columns",
+            "timestamp_column",
+            "target_columns",
+            "observable_columns",
+            "control_columns",
+            "conditional_columns",
+            "categorical_columns",
+            "static_categorical_columns",
+            "freq"
+
+    3. certain kwargs extracted from the model.config
+            "context_length"
+            "prediction_length" a default of 8 is used when the default prediction_length is negative
+
+    In addition -- certain model specific arguments are passed directly to the model forward call. These are
+    given by MODEL_SPECIFIC_FORWARD_PARAMS.
+
     """
 
     def __init__(
@@ -167,6 +190,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         # autopopulate from feature extractor and model
         if "feature_extractor" in kwargs:
             for p in [
+                "context_length",
+                "prediction_length",
                 "id_columns",
                 "timestamp_column",
                 "target_columns",
