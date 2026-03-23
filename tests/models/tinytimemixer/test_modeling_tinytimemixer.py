@@ -16,6 +16,7 @@ from transformers import set_seed
 
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
+    TinyTimeMixerForDecomposedPrediction,
     TinyTimeMixerForMaskedPrediction,
     TinyTimeMixerForPrediction,
     TinyTimeMixerModel,
@@ -210,19 +211,25 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         task,
         params=None,
         output_hidden_states=True,
+        prediction_type=["base", "mask", "decompose"],
         mask_prediction=False,
         future_observed_mask=None,  # None, int, bool
         past_observed_mask=None,  # None, int, bool
         input_data=None,
+        decomposed_prediction=False,
     ):
         if input_data is None:
             input_data = self.__class__.data
         config = TinyTimeMixerConfig(**params)
         if task == "forecast":
-            if mask_prediction is False:
-                mdl = TinyTimeMixerForPrediction(config)
+            if decomposed_prediction or mask_prediction:
+                if decomposed_prediction:
+                    mdl = TinyTimeMixerForDecomposedPrediction(config)
+                elif mask_prediction:
+                    mdl = TinyTimeMixerForMaskedPrediction(config)
             else:
-                mdl = TinyTimeMixerForMaskedPrediction(config)
+                mdl = TinyTimeMixerForPrediction(config)
+
             if (
                 "target_channel_filtered" in params
                 and params["target_channel_filtered"]
@@ -326,7 +333,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             enc_output_shape[-2] += 1
             dec_output_shape[-2] += 1
 
-        if mask_prediction is False:
+        if mask_prediction is False and decomposed_prediction is False:
             self.assertEqual(list(output.backbone_hidden_state.shape), enc_output_shape)
             self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
 

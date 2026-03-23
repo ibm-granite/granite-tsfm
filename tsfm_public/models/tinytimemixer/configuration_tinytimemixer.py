@@ -251,7 +251,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         mq_decoder_d_model: int = 8,
         mq_use_positional: bool = False,
         combine_quantiles_via_variance: bool = False,
-        quantile_list=None,
+        quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         penalize_large_width_ratio: float = 0.0,
         width_penalty_mode: str = "boundary",
         enable_base_norm_always: bool = False,
@@ -350,7 +350,7 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.mq_decoder_d_model = mq_decoder_d_model
         self.mq_use_positional = mq_use_positional
         self.combine_quantiles_via_variance = combine_quantiles_via_variance
-        self.quantile_list = quantile_list
+        self.quantile_levels = quantile_levels
 
         self.penalize_large_width_ratio = penalize_large_width_ratio
         self.width_penalty_mode = width_penalty_mode

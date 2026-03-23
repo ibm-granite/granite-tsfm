@@ -108,8 +108,8 @@ class MultiPinballLoss(nn.Module):
     against targets shaped as [B, T, C].
 
     Taus:
-      - if config.quantile_list is None -> torch.linspace(0.1,0.9,Q) (preserves old default)
-      - else -> sorted(config.quantile_list)
+      - if config.quantile_levels is None -> torch.linspace(0.1,0.9,Q) (preserves old default)
+      - else -> sorted(config.quantile_levels)
 
     Optional horizon weighting via `horizon_weights` (shape [T]).
 
@@ -126,8 +126,20 @@ class MultiPinballLoss(nn.Module):
         super().__init__()
         self.reduction = reduction
 
-        qlist = getattr(config, "quantile_list", None)
-        self._use_default_linspace = qlist is None
+        qlist = getattr(config, "quantile_levels", None)
+        # self._use_default_linspace = qlist is None
+        # to allow backward compatibility
+        self._use_default_linspace = qlist is None or qlist == [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+        ]
         self.static_taus = None if self._use_default_linspace else [float(q) for q in sorted(qlist)]
 
         self.penalize_large_width_ratio = float(getattr(config, "penalize_large_width_ratio", 0.0))
@@ -173,7 +185,7 @@ class MultiPinballLoss(nn.Module):
         if taus.numel() != pred.size(1):
             raise ValueError(
                 f"taus length ({taus.numel()}) must match pred.size(1) ({pred.size(1)}). "
-                f"config.quantile_list={self.static_taus}"
+                f"config.quantile_levels={self.static_taus}"
             )
 
         # ----------------------------
@@ -181,7 +193,7 @@ class MultiPinballLoss(nn.Module):
         # ----------------------------
         target_exp = target.unsqueeze(1)  # [B,1,T,C]
         taus_exp = taus.view(1, -1, 1, 1)  # [1,Q,1,1]
-
+        print("target:", target_exp.shape, pred.shape)
         e = target_exp - pred  # [B,Q,T,C]
         per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
 
@@ -248,7 +260,7 @@ class MultiPinballLoss(nn.Module):
 #     Quantile (pinball) loss for predictions shaped as [B, Q, T, C]
 #     against targets shaped as [B, T, C].
 
-#     Taus are taken from config.quantile_list by default (sorted).
+#     Taus are taken from config.quantile_levels by default (sorted).
 #     Falls back to [0.1..0.9] if not present.
 
 #     Adds optional horizon weighting via `horizon_weights` (shape [T]).
@@ -258,7 +270,7 @@ class MultiPinballLoss(nn.Module):
 #         super().__init__()
 #         self.reduction = reduction
 
-#         qlist = getattr(config, "quantile_list", None)
+#         qlist = getattr(config, "quantile_levels", None)
 
 #         if qlist is None:
 #             self.static_taus = None
@@ -320,7 +332,7 @@ class MultiPinballLoss(nn.Module):
 #         if taus.numel() != pred.size(1):
 #             raise ValueError(
 #                 f"taus length ({taus.numel()}) must match pred.size(1) ({pred.size(1)}). "
-#                 f"config.quantile_list={self.static_taus}"
+#                 f"config.quantile_levels={self.static_taus}"
 #             )
 
 #         # Broadcast shapes
@@ -2310,11 +2322,11 @@ class MultiQuantileHead(nn.Module):
     """
     Generic multi-quantile head.
 
-    - Uses config.quantile_list (default: [0.1..0.9]) instead of hardcoded 9 quantiles.
+    - Uses config.quantile_levels (default: [0.1..0.9]) instead of hardcoded 9 quantiles.
     - Assumes:
-        * quantile_list contains 0.5 (median)
-        * len(quantile_list) is odd
-    - For the default quantile_list = [0.1,0.2,...,0.9], this produces *exactly*
+        * quantile_levels contains 0.5 (median)
+        * len(quantile_levels) is odd
+    - For the default quantile_levels = [0.1,0.2,...,0.9], this produces *exactly*
       the same tensor layout/values as the original hardcoded implementation.
     """
 
@@ -2340,7 +2352,7 @@ class MultiQuantileHead(nn.Module):
         # -----------------------------
         # Quantile list (generic)
         # -----------------------------
-        qlist = getattr(config, "quantile_list", None)
+        qlist = getattr(config, "quantile_levels", None)
         if qlist is None:
             qlist = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
@@ -2350,7 +2362,7 @@ class MultiQuantileHead(nn.Module):
 
         Q = len(qlist)
         if Q % 2 != 1:
-            raise ValueError(f"quantile_list must be odd length, got {Q}: {qlist}")
+            raise ValueError(f"quantile_levels must be odd length, got {Q}: {qlist}")
         # median must exist
         # NOTE: float comparisons can be finicky; use a small tolerance
         median_idx = None
@@ -2359,7 +2371,7 @@ class MultiQuantileHead(nn.Module):
                 median_idx = i
                 break
         if median_idx is None:
-            raise ValueError(f"quantile_list must contain 0.5 (median). Got: {qlist}")
+            raise ValueError(f"quantile_levels must contain 0.5 (median). Got: {qlist}")
 
         # we assume odd -> symmetric counts around median index
         k_down = median_idx
@@ -2368,7 +2380,7 @@ class MultiQuantileHead(nn.Module):
             # You said we can assume odd+median; if you also always want symmetry,
             # keep this check. If you want to allow non-symmetric lists, remove it.
             raise ValueError(
-                f"quantile_list must have equal counts below/above median. "
+                f"quantile_levels must have equal counts below/above median. "
                 f"Got k_down={k_down}, k_up={k_up}, list={qlist}"
             )
 
@@ -3426,7 +3438,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             scale = model_output.scale
         # loc/scale: batch_size x 1 x prediction_channel_indices or num_targets
 
-        y_hat_quantiles = torch.zeros(1, device=y_hat.device)
+        y_hat_quantiles = None  # torch.zeros(1, device=y_hat.device)
 
         loss_val = None
         # y_hat_unscaled = y_hat
@@ -3780,15 +3792,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
     """
 
     def __init__(self, config: TinyTimeMixerConfig):
-        self.decompose_prediction = bool(getattr(config, "decompose", True))
-
-        if self.decompose_prediction or True:
-            self._init_decomposed(config)
-        else:
-            self._init_standard(config)
-
-    def _init_standard(self, config: TinyTimeMixerConfig):
-        self.forecaster = TinyTimeMixerForPrediction(config)
+        self._init_decomposed(config)
 
     def _init_decomposed(self, config: TinyTimeMixerConfig):
         super().__init__(config)
@@ -3844,6 +3848,8 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
 
         self.prediction_channel_indices = config.prediction_channel_indices
 
+        self.prediction_filter_length = config.prediction_filter_length
+
         self.loss = config.loss
 
         self.config = config
@@ -3874,124 +3880,17 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
     ) -> TinyTimeMixerForDecomposedPredictionOutput:
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        if self.decompose_prediction:
-            return self._forward_decomposed(
-                past_values=past_values,
-                future_values=future_values,
-                past_observed_mask=past_observed_mask,
-                future_observed_mask=future_observed_mask,
-                output_hidden_states=output_hidden_states,
-                return_loss=return_loss,
-                return_dict=return_dict,
-                freq_token=freq_token,
-                static_categorical_values=static_categorical_values,
-                metadata=metadata,
-            )
-        else:
-            return self._forward_standard(
-                past_values=past_values,
-                future_values=future_values,
-                past_observed_mask=past_observed_mask,
-                future_observed_mask=future_observed_mask,
-                output_hidden_states=output_hidden_states,
-                return_loss=return_loss,
-                return_dict=return_dict,
-                freq_token=freq_token,
-                static_categorical_values=static_categorical_values,
-                metadata=metadata,
-            )
-
-    def _forward_standard(
-        self,
-        past_values: torch.Tensor,
-        future_values: Optional[torch.Tensor] = None,
-        past_observed_mask: Optional[torch.Tensor] = None,
-        future_observed_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = False,
-        return_loss: bool = True,
-        return_dict: Optional[bool] = None,
-        freq_token: Optional[torch.Tensor] = None,
-        static_categorical_values: Optional[torch.Tensor] = None,
-        metadata: Optional[torch.Tensor] = None,
-    ) -> TinyTimeMixerForDecomposedPredictionOutput:
-        r"""
-        past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-            in `[0, 1]` or `[False, True]`:
-                - 1 or True for values that are **observed**,
-                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
-        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
-            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-            values of the time series, that serve as labels for the model. The `future_values` is what the
-            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
-            required for a pretraining task.
-
-            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
-            pass the target data with all channels, as channel Filtering for both prediction and target will be
-            manually applied before the loss computation.
-        future_observed_mask (`torch.Tensor` of shape `(batch_size, prediction_length, num_targets)`, *optional*):
-            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
-            in `[0, 1]` or `[False, True]`:
-                - 1 or True for values that are **observed**,
-                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
-        return_loss (`bool`,  *optional*):
-            Whether to return the loss in the `forward` call.
-        static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
-            Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
-            TinyTimeMixerConfig param `categorical_vocab_size_list`
-        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
-            to support custom trainers. Defaults to None.
-
-        Returns:
-
-        """
-
-        model_output = self.forecaster(
+        return self._forward_decomposed(
             past_values=past_values,
             future_values=future_values,
             past_observed_mask=past_observed_mask,
             future_observed_mask=future_observed_mask,
             output_hidden_states=output_hidden_states,
             return_loss=return_loss,
-            return_dict=True,
+            return_dict=return_dict,
             freq_token=freq_token,
             static_categorical_values=static_categorical_values,
             metadata=metadata,
-        )
-
-        m_prediction_outputs = model_output.prediction_outputs
-        m_quantile_outputs = model_output.quantile_outputs
-        m_input_data = model_output.input_data
-        m_forecast_groundtruth = model_output.forecast_groundtruth
-        if self.config.light_mode:
-            m_input_data = None
-            m_forecast_groundtruth = None
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    model_output.loss,
-                    m_prediction_outputs,
-                    m_quantile_outputs,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    m_input_data,
-                    m_forecast_groundtruth,
-                ]
-            )
-
-        return TinyTimeMixerForDecomposedPredictionOutput(
-            loss=model_output.loss,
-            prediction_outputs=m_prediction_outputs,
-            quantile_outputs=m_quantile_outputs,
-            input_data=m_input_data,
-            forecast_groundtruth=m_forecast_groundtruth,
         )
 
     def set_stage(self, forecast_loss_type: str, w_tr: float, w_res: float, w_joint: float):
@@ -4046,7 +3945,12 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
           x_res_ctx  : [B, L_res_ctx, C]
         """
         B, L_ctx, C = past_scaled.shape
-        L_res = min(self.config.residual_context_length, L_ctx)
+        L_res = (
+            min(self.config.residual_context_length, L_ctx)
+            if self.config.residual_context_length is not None
+            else L_ctx
+        )
+        # L_res = min(self.config.residual_context_length, L_ctx)
         x_short = past_scaled[:, -L_res:, :]  # [B,L_res,C]
         tau_tail = tau_ctx_est[:, -L_res:, :].detach()  # stop-grad
         return x_short - tau_tail, L_res  # [B,L_res,C]
@@ -4243,6 +4147,22 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
 
         if future_values is not None and return_loss:
             base_loss = self._choose_loss()
+
+            if self.prediction_filter_length is not None and future_values.shape[1] != self.prediction_filter_length:
+                future_values = future_values[:, : self.prediction_filter_length, :]
+
+                if future_observed_mask is not None:
+                    future_observed_mask = future_observed_mask[:, : self.prediction_filter_length, :]
+
+            if (
+                self.prediction_channel_indices is not None
+                and future_values.shape[2] != len(self.prediction_channel_indices)
+                and future_values.shape[2] == self.num_input_channels
+            ):
+                future_values = future_values[..., self.prediction_channel_indices]
+
+                if future_observed_mask is not None:
+                    future_observed_mask = future_observed_mask[..., self.prediction_channel_indices]
 
             # scale future with SAME (loc, scale) used for past
             scaled_future_values = self.scaler.transform(future_values, loc, scale)
