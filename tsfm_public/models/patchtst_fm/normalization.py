@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Normalization utilities for PatchTST-FM"""
+
 import torch
 import torch.nn as nn
 

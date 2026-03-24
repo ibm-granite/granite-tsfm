@@ -93,7 +93,9 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         self.config = config
         self.quantile_levels = config.quantile_levels
         self.pos_embed = LearnedPositionalEmbedding(d_model=config.d_model, max_len=config.n_patch, type="add")
-        assert config.d_model % config.n_head == 0, "[QuantileDecoder] d_model must be divisible by n_head"
+        assert config.d_model % config.n_head == 0, (
+            f"d_model must be divisible by n_head, received d_model={config.d_model} with n_head={config.n_head}"
+        )
 
         self.blocks = nn.ModuleList(
             [
@@ -395,11 +397,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             # just pass
 
             inputs = x_in
-            # inputs.append(x_in)
-            # pred_mask.append(pred_mask_i)
-            # pad_mask.append(pad_mask_i)
-            # miss_mask.append(miss_mask_i)
-            # time_index.append(time_index_i)
             ts_ends = (0, sample_len)
 
         elif sample_len < self.config.context_length:

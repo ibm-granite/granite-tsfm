@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Tools for PatchTST-FM"""
+
 import os
 import random
 import time

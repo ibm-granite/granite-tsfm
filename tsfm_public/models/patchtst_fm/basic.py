@@ -1,3 +1,7 @@
+# Copyright contributors to the TSFM project
+#
+"""Basic modeling components for PatchTST-FM"""
+
 from typing import Optional, Type
 
 import torch
