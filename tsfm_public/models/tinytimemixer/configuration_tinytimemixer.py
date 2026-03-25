@@ -297,13 +297,12 @@ class TinyTimeMixerConfig(PretrainedConfig):
             raise ValueError("Distribution head cannot be enabled when enable_forecast_channel_mixing is set to True")
 
         if self.prediction_channel_indices is not None:
-            self.prediction_channel_indices.sort()
+            self.prediction_channel_indices = sorted(self.prediction_channel_indices)
 
         if self.exogenous_channel_indices is not None:
-            self.exogenous_channel_indices.sort()
+            self.exogenous_channel_indices = sorted(self.exogenous_channel_indices)
 
         if self.exogenous_channel_indices is not None and self.prediction_channel_indices is None:
-            self.prediction_channel_indices = list(
+            self.prediction_channel_indices = sorted(
                 set(range(self.num_input_channels)) - set(self.exogenous_channel_indices)
             )
-            self.prediction_channel_indices.sort()
