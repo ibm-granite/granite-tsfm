@@ -11,12 +11,14 @@ from typing import Optional, Union
 import numpy as np
 import yaml
 from transformers import PreTrainedModel
+
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
     TinyTimeMixerForDecomposedPrediction,
     TinyTimeMixerForPrediction,
 )
 from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING
+
 
 LOGGER = logging.getLogger(__file__)
 LOGGER.setLevel(logging.INFO)
@@ -105,9 +107,7 @@ def get_random_ttm(
     else:
         raise ValueError("Wrong size. Should be either of these [small/medium/large].")
     if context_length < cl_lower_bound:
-        raise ValueError(
-            f"Context length should be at least {cl_lower_bound} if `size={size}`."
-        )
+        raise ValueError(f"Context length should be at least {cl_lower_bound} if `size={size}`.")
 
     cl = context_length if context_length % 2 == 0 else context_length - 1
 
@@ -234,20 +234,14 @@ def get_model(
 
                 # Calculate shortest TTM context length, will be needed later
                 available_model_keys = list(available_models.keys())
-                available_ttm_context_lengths = [
-                    available_models[m]["context_length"] for m in available_model_keys
-                ]
+                available_ttm_context_lengths = [available_models[m]["context_length"] for m in available_model_keys]
                 shortest_ttm_context_length = min(available_ttm_context_lengths)
 
                 # Step 1: Filter models based on freq (R)
                 if model_path_type == 1 or model_path_type == 2:
                     # Only, r2.1 models are suitable for Daily or longer freq
                     if R >= 8:
-                        models = [
-                            m
-                            for m in available_models.keys()
-                            if "r2.1" in available_models[m]["release"]
-                        ]
+                        models = [m for m in available_models.keys() if "r2.1" in available_models[m]["release"]]
                     else:
                         models = list(available_models.keys())
                 else:
@@ -264,9 +258,7 @@ def get_model(
                             f"shortest context length for TTMs: {shortest_ttm_context_length}. "
                             "Set `force_return=zeropad` to get a TTM with longer context."
                         )
-                    elif (
-                        force_return == ForceReturn.ZEROPAD.value
-                    ):  # force_return.startswith("zero"):
+                    elif force_return == ForceReturn.ZEROPAD.value:  # force_return.startswith("zero"):
                         # Keep all models. Zero-padding must be done outside.
                         selected_models_ = models
                         LOGGER.warning(
@@ -280,13 +272,8 @@ def get_model(
                     for m in models:
                         if available_models[m]["context_length"] <= context_length:
                             selected_models_.append(m)
-                        if (
-                            available_models[m]["context_length"]
-                            <= lowest_context_length
-                        ):
-                            lowest_context_length = available_models[m][
-                                "context_length"
-                            ]
+                        if available_models[m]["context_length"] <= lowest_context_length:
+                            lowest_context_length = available_models[m]["context_length"]
                             shortest_context_models.append(m)
 
                 if len(selected_models_) == 0:
@@ -296,9 +283,7 @@ def get_model(
                             f"than the requested context length = {context_length}. "
                             "Set `force_return=zeropad` to get a TTM with longer context."
                         )
-                    elif (
-                        force_return == ForceReturn.ZEROPAD.value
-                    ):  # force_return.startswith("zero"):
+                    elif force_return == ForceReturn.ZEROPAD.value:  # force_return.startswith("zero"):
                         selected_models_ = shortest_context_models
                         LOGGER.warning(
                             "Could not find a TTM with `context_length` shorter "
@@ -312,14 +297,10 @@ def get_model(
                     if prefer_longer_context:
                         reference_context = min(
                             context_length,
-                            max(
-                                [available_models[m]["context_length"] for m in models]
-                            ),
+                            max([available_models[m]["context_length"] for m in models]),
                         )
                     else:
-                        reference_context = min(
-                            [available_models[m]["context_length"] for m in models]
-                        )
+                        reference_context = min([available_models[m]["context_length"] for m in models])
                     if reference_context <= TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT:
                         # Step 3a: Filter based on L1 preference
                         if prefer_l1_loss:
@@ -352,18 +333,10 @@ def get_model(
                     highest_prediction_length = -np.inf
                     highest_prediction_model = None
                     for m in models:
-                        if (
-                            int(available_models[m]["prediction_length"])
-                            >= prediction_length
-                        ):
+                        if int(available_models[m]["prediction_length"]) >= prediction_length:
                             selected_models_.append(m)
-                        if (
-                            available_models[m]["prediction_length"]
-                            > highest_prediction_length
-                        ):
-                            highest_prediction_length = available_models[m][
-                                "prediction_length"
-                            ]
+                        if available_models[m]["prediction_length"] > highest_prediction_length:
+                            highest_prediction_length = available_models[m]["prediction_length"]
                             highest_prediction_model = m
                     if len(selected_models_) == 0:
                         if force_return is None:
@@ -373,9 +346,7 @@ def get_model(
                                 "Set `force_return=rolling` to get a TTM with shorted prediction "
                                 "length. Rolling must be done outside."
                             )
-                        elif (
-                            force_return == ForceReturn.ROLLING.value
-                        ):  # force_return.startswith("roll"):
+                        elif force_return == ForceReturn.ROLLING.value:  # force_return.startswith("roll"):
                             selected_models_.append(highest_prediction_model)
                             LOGGER.warning(
                                 "Could not find a TTM with `prediction_length` higher "
@@ -386,11 +357,7 @@ def get_model(
                     models = selected_models_
 
                 # Step 7: Do not allow unknow frequency
-                if (
-                    freq_prefix_tuning
-                    and (freq is not None)
-                    and (freq not in DEFAULT_FREQUENCY_MAPPING.keys())
-                ):
+                if freq_prefix_tuning and (freq is not None) and (freq not in DEFAULT_FREQUENCY_MAPPING.keys()):
                     LOGGER.warning(
                         f"The specified frequency ({freq}) is not in the set of "
                         f"allowed resolutions: {list(DEFAULT_FREQUENCY_MAPPING.keys())}."
@@ -406,19 +373,20 @@ def get_model(
                             "to get a randomly initialized TTM of size small/medium/large "
                             "respectively."
                         )
-                    elif force_return in [
-                        ForceReturn.RANDOM_INIT_SMALL.value,
-                        ForceReturn.RANDOM_INIT_MEDIUM.value,
-                        ForceReturn.RANDOM_INIT_LARGE.value,
-                    ]:  # "sma" in force_return.lower() or "med" in force_return.lower() or "lar" in force_return.lower():
+                    elif (
+                        force_return
+                        in [
+                            ForceReturn.RANDOM_INIT_SMALL.value,
+                            ForceReturn.RANDOM_INIT_MEDIUM.value,
+                            ForceReturn.RANDOM_INIT_LARGE.value,
+                        ]
+                    ):  # "sma" in force_return.lower() or "med" in force_return.lower() or "lar" in force_return.lower():
                         LOGGER.info(
                             "Trying to build a TTM with random weights since no "
                             "suitable pre-trained TTM could be found. You must "
                             "train this TTM before using it for inference."
                         )
-                        model = get_random_ttm(
-                            context_length, prediction_length, size=force_return
-                        )
+                        model = get_random_ttm(context_length, prediction_length, size=force_return)
                         LOGGER.info(
                             "Returning a randomly initialized TTM with context length "
                             f"= {model.config.context_length}, prediction length "
@@ -442,9 +410,7 @@ def get_model(
                     model_key = models[0]
 
                 # selected_context_length = available_models[model_key]["context_length"]
-                selected_prediction_length = available_models[model_key][
-                    "prediction_length"
-                ]
+                selected_prediction_length = available_models[model_key]["prediction_length"]
                 if selected_prediction_length > prediction_length:
                     prediction_filter_length = prediction_length
                     LOGGER.warning(
@@ -516,9 +482,7 @@ def get_model(
                 **kwargs,
             )
 
-        LOGGER.info(
-            f"Model loaded successfully from {model_path}, revision = {ttm_model_revision}."
-        )
+        LOGGER.info(f"Model loaded successfully from {model_path}, revision = {ttm_model_revision}.")
         LOGGER.info(
             f"[TTM] context_length = {model.config.context_length}, prediction_length = {model.config.prediction_length}"
         )
