@@ -221,6 +221,41 @@ def get_ttm_args():  # pragma: no cover
         help="head_dropout",
     )
 
+    parser.add_argument("--multi_scale", action="store_true")
+
+    parser.add_argument(
+        "--register_tokens",
+        type=int,
+        required=False,
+        default=0,
+        help="Number of  register tokens",
+    )
+
+    parser.add_argument(
+        "--fft_length",
+        type=int,
+        required=False,
+        default=0,
+        help="FFT Length",
+    )
+
+    parser.add_argument(
+        "--point_extra_weight",
+        type=float,
+        required=False,
+        default=1,
+        help="Extra weight to add to median quantile along with other quantiles.",
+    )
+
+    parser.add_argument("--multi_quantile_head", action="store_true")
+
+    parser.add_argument(
+        "-i",
+        "--use_internal_tsfm",
+        action="store_true",
+        help="Use internal tsfm.models.tinytimemixer",
+    )
+
     # Parsing the arguments
     args = parser.parse_args()
     args.early_stopping = int_to_bool(args.early_stopping)
