@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, default_data_collator
 from tsfm_public import TimeSeriesPreprocessor, get_datasets
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerForDecomposedPrediction,
@@ -162,7 +162,8 @@ def build_test_dataset_from_model_config(model):
 @torch.no_grad()
 def run_inference_only(model_path: str) -> None:
     # Load model
-    model = TinyTimeMixerForPrediction.from_pretrained(model_path)
+    model = TinyTimeMixerForDecomposedPrediction.from_pretrained(model_path)
+    # model = TinyTimeMixerForPrediction.from_pretrained(model_path)
     model.eval()
 
     # if torch.cuda.is_available():
@@ -187,7 +188,7 @@ def run_inference_only(model_path: str) -> None:
         dataloader_num_workers=2,
         # bf16=torch.cuda.is_available(),  # safe auto-enable if GPU
         # remove_unused_columns=False,  # <-- critical for torch.compile
-        bf16=True,
+        # bf16=True,
     )
     trainer = Trainer(
         model=model,
@@ -229,11 +230,22 @@ def run_inference_only(model_path: str) -> None:
         has_quantiles = bool(getattr(model.config, "multi_quantile_head", False))
         comb_q = preds[1] if has_quantiles else None
 
+        # predictions_output = preds[0]
+        # input_data = preds[-3]
+        # forecast_groundtruth = preds[-2]
+        # has_quantiles = bool(getattr(model.config, "multi_quantile_head", False))
+        # comb_q = preds[-1] if has_quantiles else None
+
         mse = float(np.mean((predictions_output - forecast_groundtruth) ** 2))
         print("\nMSE (forecast vs GT) =", mse)
 
+        cl = model.config.context_length
+        fl = model.config.prediction_length
         # Save a few plots near the model_path
-        save_folder = os.path.join(model_path, "inference_plots")
+        save_folder = os.path.join(
+            "/dccstor/tsfm-irl/vijaye12/hacking/ttm_r3_models/nd",
+            "inference_plots_" + str(cl) + "_" + str(fl),
+        )
         os.makedirs(save_folder, exist_ok=True)
 
         num_samples = predictions_output.shape[0]

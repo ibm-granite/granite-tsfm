@@ -1,5 +1,5 @@
 python  ttm_r3_RAY.py  -ubfs 1 \
-                        -tv TTM-R3-FT-OO \
+                        -tv TTM-R3-FT-V2 \
                         -as 1 \
                         -ne 5 \
                         -dt 0  \
