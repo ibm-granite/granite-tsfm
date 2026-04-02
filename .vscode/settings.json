@@ -55,6 +55,8 @@
     "editor.defaultFormatter": "vscode.json-language-features"
   },
   "python.testing.pytestArgs": [
-    "services/inference"
+    "tests",
+    "services/inference",
+    "services/finetuning"
   ],
 }
