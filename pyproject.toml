@@ -21,7 +21,7 @@ dependencies = [
     "deprecated",
     "urllib3>=1.26.19", # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
-    "torch>=2.10,<2.11",
+    "torch==2.6.0",
     "scikit-learn<1.8",
     "pandas>=2.3.3,<4",
     "filelock>=3.20.3",  
@@ -48,6 +48,7 @@ notebooks = [
 ]
 testing = [
     "pytest",
+    "pytest-xdist",
     "pytest-coverage",
     "granite-tsfm[notebooks]",
     "parameterized",
