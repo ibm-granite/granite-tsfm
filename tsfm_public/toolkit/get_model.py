@@ -158,6 +158,7 @@ def get_model(
     return_model_key: bool = False,
     use_lite: bool = False,
     model_revision: str = None,
+    prefer_known_mappings: bool = True,
     **kwargs,
 ) -> Union[str, PreTrainedModel]:
     """TTM Model card offers a suite of models with varying `context_length` and `prediction_length` combinations.
@@ -231,6 +232,17 @@ def get_model(
                     available_models = filtered_models
                 else:
                     available_models = model_revisions["research-use-models"]
+                    filtered_models = {}
+                    if model_path_type == 3:
+                        for k in available_models.keys():
+                            if available_models[k]["release"].startswith("r2"):
+                                filtered_models[k] = available_models[k]
+                    if model_path_type == 4:
+                        for k in available_models.keys():
+                            if available_models[k]["release"].startswith("r3"):
+                                filtered_models[k] = available_models[k]
+
+                    available_models = filtered_models
 
                 # Calculate shortest TTM context length, will be needed later
                 available_model_keys = list(available_models.keys())
@@ -433,25 +445,66 @@ def get_model(
 
             elif model_path_type == 4:
                 # ttm-r3 research selection
-                base_revision = get_model(
-                    model_path="ibm-granite/granite-timeseries-ttm-r2",
-                    model_name=model_name,
-                    context_length=context_length,
-                    prediction_length=prediction_length,
-                    freq_prefix_tuning=freq_prefix_tuning,
-                    freq=freq,
-                    prefer_l1_loss=prefer_l1_loss,
-                    prefer_longer_context=prefer_longer_context,
-                    force_return=force_return,
-                    return_model_key=True,
-                )
-                ttm_model_revision = _select_ttm_r3_revision(
-                    base_revision=base_revision,
-                    context_length=context_length,
-                    prediction_length=prediction_length,
-                    freq=freq,
-                    use_lite=use_lite,
-                )
+                config_dir = resources.files("tsfm_public.resources.model_paths_config")
+                with open(os.path.join(config_dir, "ttm.yaml"), "r") as file:
+                    model_revisions = yaml.safe_load(file)
+
+                available_models = model_revisions["research-use-models"]
+
+                if prefer_known_mappings:
+                    try:
+                        base_revision = get_model(
+                            model_path="ibm-granite/granite-timeseries-ttm-r2",
+                            model_name=model_name,
+                            context_length=context_length,
+                            prediction_length=prediction_length,
+                            freq_prefix_tuning=freq_prefix_tuning,
+                            freq=freq,
+                            prefer_l1_loss=prefer_l1_loss,
+                            prefer_longer_context=prefer_longer_context,
+                            force_return=force_return,
+                            return_model_key=True,
+                        )
+
+                        protected_revision = _select_ttm_r3_revision_known_mapping(
+                            base_revision=base_revision,
+                            context_length=context_length,
+                            prediction_length=prediction_length,
+                            freq=freq,
+                            use_lite=use_lite,
+                        )
+
+                        if protected_revision is not None:
+                            ttm_model_revision = protected_revision
+                        else:
+                            ttm_model_revision = _select_ttm_r3_revision_direct(
+                                available_models=available_models,
+                                context_length=context_length,
+                                prediction_length=prediction_length,
+                                prefer_longer_context=prefer_longer_context,
+                                use_lite=use_lite,
+                            )
+                    except Exception as e:
+                        LOGGER.warning(
+                            "Known-mapping path for r3 failed; falling back to direct r3 selection. "
+                            f"Reason: {type(e).__name__}: {e}"
+                        )
+                        ttm_model_revision = _select_ttm_r3_revision_direct(
+                            available_models=available_models,
+                            context_length=context_length,
+                            prediction_length=prediction_length,
+                            prefer_longer_context=prefer_longer_context,
+                            use_lite=use_lite,
+                        )
+                else:
+                    ttm_model_revision = _select_ttm_r3_revision_direct(
+                        available_models=available_models,
+                        context_length=context_length,
+                        prediction_length=prediction_length,
+                        prefer_longer_context=prefer_longer_context,
+                        use_lite=use_lite,
+                    )
+
                 prediction_filter_length = prediction_length
                 model_key = ttm_model_revision
 
@@ -492,13 +545,13 @@ def get_model(
     return model
 
 
-def _select_ttm_r3_revision(
+def _select_ttm_r3_revision_known_mapping(
     base_revision: str,
     context_length: int,
     prediction_length: int,
     freq: Optional[str] = None,
     use_lite: bool = False,
-) -> str:
+) -> Optional[str]:
     def _maybe_lite(key: str) -> str:
         return key.replace("-r3", "-lite-r3") if use_lite else key
 
@@ -507,7 +560,7 @@ def _select_ttm_r3_revision(
         return _maybe_lite(base)
 
     if (
-        base_revision == "52-16-ft-l1-r2.1"
+        base_revision in ["52-16-ft-r2.1", "52-16-ft-l1-r2.1"]
         or base_revision.startswith("TTM(")
         or (freq is not None and freq.startswith("A"))
     ):
@@ -518,7 +571,7 @@ def _select_ttm_r3_revision(
         else:
             return _maybe_lite("1024-48-dec-512-r3")
 
-    if base_revision == "90-30-ft-l1-r2.1":
+    if base_revision in ["90-30-ft-r2.1", "90-30-ft-l1-r2.1"]:
         if context_length <= 512:
             return _maybe_lite("512-30-dec-90-r3")
         elif context_length < 756:
@@ -538,4 +591,78 @@ def _select_ttm_r3_revision(
     if base_revision == "1536-720-r2":
         return _maybe_lite("2048-720-r3")
 
-    raise ValueError(f"Invalid base revision for r3 mapping: {base_revision}")
+    return None
+    # raise ValueError(f"Invalid base revision for r3 mapping: {base_revision}")
+
+
+def _select_ttm_r3_revision_direct(
+    available_models: dict,
+    context_length: int,
+    prediction_length: int,
+    prefer_longer_context: bool = True,
+    use_lite: bool = False,
+) -> str:
+    def _is_lite_key(key: str) -> bool:
+        return "-lite-r3" in key
+
+    r3_models = {k: v for k, v in available_models.items() if str(v.get("release", "")).startswith("r3")}
+
+    if use_lite:
+        r3_models = {k: v for k, v in r3_models.items() if _is_lite_key(k)}
+    else:
+        r3_models = {k: v for k, v in r3_models.items() if not _is_lite_key(k)}
+
+    if len(r3_models) == 0:
+        raise ValueError("No r3 models found for the requested lite/non-lite mode.")
+
+    candidates = []
+    for key, meta in r3_models.items():
+        candidates.append(
+            {
+                "key": key,
+                "context_length": int(meta["context_length"]),
+                "prediction_length": int(meta["prediction_length"]),
+                "is_decomposed": "-dec-" in key,
+            }
+        )
+
+    feasible_context = [m for m in candidates if m["context_length"] <= context_length]
+    if len(feasible_context) > 0:
+        candidates = feasible_context
+
+    feasible_horizon = [m for m in candidates if m["prediction_length"] >= prediction_length]
+    if len(feasible_horizon) > 0:
+        candidates = feasible_horizon
+
+    def _score(m):
+        c = m["context_length"]
+        p = m["prediction_length"]
+        is_dec = m["is_decomposed"]
+
+        horizon_shortfall = max(0, prediction_length - p)
+        exact_horizon_penalty = 0 if p == prediction_length else 1
+        horizon_over = max(0, p - prediction_length)
+        context_over = max(0, c - context_length)
+
+        if prefer_longer_context:
+            context_fit_penalty = max(0, context_length - c)
+            context_tiebreak = -c
+        else:
+            context_fit_penalty = abs(context_length - c)
+            context_tiebreak = c
+
+        decomposed_penalty = 0 if (prediction_length <= 336 and is_dec) else 1
+
+        return (
+            horizon_shortfall,
+            exact_horizon_penalty,
+            horizon_over,
+            context_over,
+            context_fit_penalty,
+            decomposed_penalty,
+            context_tiebreak,
+            p,
+        )
+
+    best = min(candidates, key=_score)
+    return best["key"]
