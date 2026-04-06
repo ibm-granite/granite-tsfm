@@ -351,37 +351,33 @@ research-use-models:
         prediction_length: 336
         residual_context_length: 512
 
-    1024-96-dec-1024-r3:
+    1024-96-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1024-96-dec-1024-r3
+        revision: 1024-96-r3
         context_length: 1024
         prediction_length: 96
-        residual_context_length: 1024
     
-    1024-720-dec-1024-r3:
+    1024-720-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1024-720-dec-1024-r3
+        revision: 1024-720-r3
         context_length: 1024
         prediction_length: 720
-        residual_context_length: 1024
     
-    1536-96-dec-1536-r3:
+    1536-96-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1536-96-dec-1536-r3
+        revision: 1536-96-r3
         context_length: 1536
         prediction_length: 96
-        residual_context_length: 1536
     
-    1536-720-dec-1536-r3:
+    1536-720-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1536-720-dec-1536-r3
+        revision: 1536-720-r3
         context_length: 1536
         prediction_length: 720
-        residual_context_length: 1536
 
     # ---------------- LITE MODELS ----------------
 
@@ -515,34 +511,30 @@ research-use-models:
         prediction_length: 336
         residual_context_length: 512
 
-    1024-96-dec-1024-lite-r3:
+    1024-96-lite-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1024-96-dec-1024-lite-r3
+        revision: 1024-96-lite-r3
         context_length: 1024
         prediction_length: 96
-        residual_context_length: 1024
     
-    1024-720-dec-1024-lite-r3:
+    1024-720-lite-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1024-720-dec-1024-lite-r3
+        revision: 1024-720-lite-r3
         context_length: 1024
         prediction_length: 720
-        residual_context_length: 1024
     
-    1536-96-dec-1536-lite-r3:
+    1536-96-lite-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1536-96-dec-1536-lite-r3
+        revision: 1536-96-lite-r3
         context_length: 1536
         prediction_length: 96
-        residual_context_length: 1536
     
-    1536-720-dec-1536-lite-r3:
+    1536-720-lite-r3:
         release: r3
         model_card: ibm-research/ttm-r3
-        revision: 1536-720-dec-1536-lite-r3
+        revision: 1536-720-lite-r3
         context_length: 1536
         prediction_length: 720
-        residual_context_length: 1536
