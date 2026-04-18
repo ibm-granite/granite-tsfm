@@ -1116,8 +1116,8 @@ wheels = [
 
 [[package]]
 name = "granite-tsfm"
-version = "0.3.4.dev149+g0e35c4e63"
-source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=destiny#0e35c4e63a1ea53c076370e53b392d94327d08a0" }
+version = "0.3.5.dev158+g5bc25fcd2"
+source = { git = "https://github.com/ibm-granite/granite-tsfm.git?branch=transformers5.x#5bc25fcd2ab157f7f27cf97add8a16ec354d5059" }
 dependencies = [
     { name = "datasets" },
     { name = "deprecated" },
@@ -3664,8 +3664,8 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "4.57.6"
-source = { registry = "https://pypi.org/simple" }
+version = "5.2.0"
+source = { git = "https://github.com/ssiegel95/transformers?branch=ibm_tsfm#b1889ff44fed401dcfee6ce30fc4d282d4b12078" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -3677,10 +3677,6 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
     { name = "typer-slim" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/35/67252acc1b929dc88b6602e8c4a982e64f31e733b804c14bc24b47da35e6/transformers-4.57.6.tar.gz", hash = "sha256:55e44126ece9dc0a291521b7e5492b572e6ef2766338a610b9ab5afbb70689d3", size = 10134912, upload-time = "2026-01-16T10:38:39.284Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/03/b8/e484ef633af3887baeeb4b6ad12743363af7cce68ae51e938e00aaa0529d/transformers-4.57.6-py3-none-any.whl", hash = "sha256:4c9e9de11333ddfe5114bc872c9f370509198acf0b87a832a0ab9458e2bd0550", size = 11993498, upload-time = "2026-01-16T10:38:31.289Z" },
 ]
 
 [package.optional-dependencies]

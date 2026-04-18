@@ -28,6 +28,10 @@ dependencies = [
     "einops>=0.7",
 ]
 
+# temporary until PR for HF is approved
+[tool.uv.sources]
+transformers = { git = "https://github.com/huggingface/transformers", branch = "main" }
+
 # test commit
 [tool.setuptools]
 packages = ["tsfm_public", "tsfmhfdemos"]
