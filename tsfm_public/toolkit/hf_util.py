@@ -5,6 +5,31 @@ import importlib
 from transformers import AutoConfig
 
 
+# Allowlist of safe module prefixes for security
+ALLOWED_MODULE_PREFIXES = (
+    "tsfm_public.",
+    "tsfminference.",
+    "tsfmfinetuning.",
+    "transformers.",
+)
+
+
+def _validate_module_path(module_path: str) -> None:
+    """Validate that module_path is from an allowed prefix.
+    
+    Args:
+        module_path (str): The module path to validate.
+        
+    Raises:
+        ValueError: If module_path is not from an allowed prefix.
+    """
+    if not any(module_path.startswith(prefix) for prefix in ALLOWED_MODULE_PREFIXES):
+        raise ValueError(
+            f"Module path '{module_path}' is not allowed. "
+            f"Only modules starting with {ALLOWED_MODULE_PREFIXES} are permitted for security reasons."
+        )
+
+
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
     """Register a configuration for a particular model architecture
 
@@ -16,11 +41,15 @@ def register_config(model_type: str, model_config_name: str, module_path: str) -
 
     Raises:
         RuntimeError: Raised when the module cannot be imported from the provided module path.
+        ValueError: Raised when module_path is not from an allowed prefix.
     """
     # example
     # model_type: "tinytimemixer"
     # model_config_name: "TinyTimeMixerConfig"
     # module_path: "tsfm"  # place where config should be importable
+
+    # Validate module_path for security
+    _validate_module_path(module_path)
 
     try:
         mod = importlib.import_module(module_path)
