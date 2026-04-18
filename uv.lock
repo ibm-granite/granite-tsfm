@@ -1017,7 +1017,7 @@ requires-dist = [
     { name = "tensorboard", marker = "extra == 'notebooks'" },
     { name = "toml", marker = "extra == 'demos'" },
     { name = "torch", specifier = ">=2.10,<2.11" },
-    { name = "transformers", extras = ["torch"], git = "https://github.com/ssiegel95/transformers?branch=ibm_tsfm" },
+    { name = "transformers", extras = ["torch"], git = "https://github.com/huggingface/transformers?branch=main" },
     { name = "urllib3", specifier = ">=1.26.19" },
 ]
 provides-extras = ["all", "notebooks", "testing", "dev", "ogv", "demos"]
@@ -3649,8 +3649,8 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.2.0"
-source = { git = "https://github.com/ssiegel95/transformers?branch=ibm_tsfm#b1889ff44fed401dcfee6ce30fc4d282d4b12078" }
+version = "5.3.0.dev0"
+source = { git = "https://github.com/huggingface/transformers?branch=main#5c1c72be5f864d10d0efe8ece0768d9ed6ee4fdd" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy" },
@@ -3660,7 +3660,7 @@ dependencies = [
     { name = "safetensors" },
     { name = "tokenizers" },
     { name = "tqdm" },
-    { name = "typer-slim" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
@@ -3693,18 +3693,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/24/cb09efec5cc954f7f9b930bf8279447d24618bb6758d4f6adf2574c41780/typer-0.24.1.tar.gz", hash = "sha256:e39b4732d65fbdcde189ae76cf7cd48aeae72919dea1fdfc16593be016256b45", size = 118613, upload-time = "2026-02-21T16:54:40.609Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4a/91/48db081e7a63bb37284f9fbcefda7c44c277b18b0e13fbc36ea2335b71e6/typer-0.24.1-py3-none-any.whl", hash = "sha256:112c1f0ce578bfb4cab9ffdabc68f031416ebcc216536611ba21f04e9aa84c9e", size = 56085, upload-time = "2026-02-21T16:54:41.616Z" },
-]
-
-[[package]]
-name = "typer-slim"
-version = "0.24.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a7/a7/e6aecc4b4eb59598829a3b5076a93aff291b4fdaa2ded25efc4e1f4d219c/typer_slim-0.24.0.tar.gz", hash = "sha256:f0ed36127183f52ae6ced2ecb2521789995992c521a46083bfcdbb652d22ad34", size = 4776, upload-time = "2026-02-16T22:08:51.2Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/24/5480c20380dfd18cf33d14784096dca45a24eae6102e91d49a718d3b6855/typer_slim-0.24.0-py3-none-any.whl", hash = "sha256:d5d7ee1ee2834d5020c7c616ed5e0d0f29b9a4b1dd283bdebae198ec09778d0e", size = 3394, upload-time = "2026-02-16T22:08:49.92Z" },
 ]
 
 [[package]]

@@ -30,7 +30,7 @@ dependencies = [
 
 # temporary until PR for HF is approved
 [tool.uv.sources]
-transformers = { git = "https://github.com/ssiegel95/transformers", branch = "ibm_tsfm" }
+transformers = { git = "https://github.com/huggingface/transformers", branch = "main" }
 
 # test commit
 [tool.setuptools]
