@@ -25,6 +25,18 @@ a finetuneing job on a kubernetes-based system.
 uv sync --locked  --extra dev --editable
 ```
 
+## Security configuration
+
+When using `file://` inputs for finetuning data, you must set `ALLOWED_DATA_DIR` to a directory that contains all permitted training datasets. The service resolves each `file://` URI and rejects any path that falls outside this directory.
+
+Example:
+
+```sh
+export ALLOWED_DATA_DIR=/data
+```
+
+Only files and directories under `ALLOWED_DATA_DIR` should be mounted into the runtime for finetuning jobs.
+
 ### Testing locally
 
 This will run basic unit tests. You should run them and confirm they pass before
