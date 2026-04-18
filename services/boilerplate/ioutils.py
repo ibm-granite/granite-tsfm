@@ -10,7 +10,7 @@ import random
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 from urllib.parse import unquote, urlparse
 from urllib.request import pathname2url, url2pathname
 
@@ -42,6 +42,29 @@ def get_object_name(s3_uri):
     return s3_uri[s3_uri.find(bn) + len(bn) + 1 :]
 
 
+def _get_allowed_data_dir() -> Optional[Path]:
+    allowed_data_dir = os.getenv("ALLOWED_DATA_DIR")
+    if not allowed_data_dir:
+        return None
+
+    allowed_path = Path(allowed_data_dir).expanduser().resolve()
+    if not allowed_path.exists() or not allowed_path.is_dir():
+        raise ValueError("Configured ALLOWED_DATA_DIR is not an existing directory.")
+    return allowed_path
+
+
+def _ensure_path_within_allowed_dir(path: Path, allowed_dir: Optional[Path]) -> Path:
+    if allowed_dir is None:
+        raise ValueError("Local file access is disabled. Configure ALLOWED_DATA_DIR to enable file:// inputs.")
+
+    try:
+        path.relative_to(allowed_dir)
+    except ValueError as ex:
+        raise ValueError("Resolved file path is outside the configured ALLOWED_DATA_DIR.") from ex
+
+    return path
+
+
 def resolve_file_uri(uri: str) -> Path:
     """Convert a file:// URI to a local Path, supporting both absolute and relative paths."""
     parsed = urlparse(uri)
@@ -49,14 +72,22 @@ def resolve_file_uri(uri: str) -> Path:
     if parsed.scheme != "file":
         raise ValueError(f"Unsupported URI scheme: {parsed.scheme}")
 
+    allowed_dir = _get_allowed_data_dir()
+
     # --- Handle relative URIs (file:./data/file.csv, file://./data/file.csv)
     if parsed.netloc in ("", "."):
         if uri.startswith("file://./") or uri.startswith("file:./"):
             rel_path = unquote(parsed.path.lstrip("./"))
-            return (Path.cwd() / rel_path).resolve()
+            answer = (Path.cwd() / rel_path).resolve()
+            answer = _ensure_path_within_allowed_dir(answer, allowed_dir)
+            root_logger.info(f"Resolved file URI {uri} to path {answer}")
+            return answer
         if not parsed.path.startswith("/"):
             rel_path = unquote(parsed.path)
-            return (Path.cwd() / rel_path).resolve()
+            answer = (Path.cwd() / rel_path).resolve()
+            answer = _ensure_path_within_allowed_dir(answer, allowed_dir)
+            root_logger.info(f"Resolved file URI {uri} to path {answer}")
+            return answer
 
     # --- Handle absolute file paths (Windows or POSIX)
     path = url2pathname(parsed.path)
@@ -66,6 +97,7 @@ def resolve_file_uri(uri: str) -> Path:
         path = f"//{parsed.netloc}{path}"
 
     answer = Path(path).resolve()
+    answer = _ensure_path_within_allowed_dir(answer, allowed_dir)
     root_logger.info(f"Resolved file URI {uri} to path {answer}")
     return answer
 
@@ -250,10 +282,7 @@ def to_pandas(uri: str, **kwargs) -> pd.DataFrame:
             float,
         ),
     ):
-        raise ValueError(
-            f"""column '{timestamp_column}' can not be parsed to a datetime or other numeric type.
-            pandas assigns it to type {answer.dtypes[timestamp_column]}."""
-        )
+        raise ValueError("The specified timestamp column must be datetime-like or numeric.")
 
     return answer
 
