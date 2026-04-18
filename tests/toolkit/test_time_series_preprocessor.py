@@ -13,6 +13,7 @@ import pytest
 from tsfm_public.toolkit.time_series_preprocessor import (
     DEFAULT_FREQUENCY_MAPPING,
     OrdinalEncoder,
+    PowerTransformer,
     StandardScaler,
     TimeSeriesPreprocessor,
     create_timestamps,
@@ -41,6 +42,21 @@ def test_standard_scaler(sample_data):
     state = scaler.to_dict()
 
     assert StandardScaler.from_dict(state).to_dict() == state
+
+
+def test_power_scaler(sample_data):
+    scaler = PowerTransformer()
+
+    columns = ["val", "val2"]
+
+    # check shape preserved
+    result = scaler.fit_transform(sample_data[columns])
+    assert result.shape == sample_data[columns].shape
+
+    # check serialization
+    state = scaler.to_dict()
+
+    assert PowerTransformer.from_dict(state).to_dict() == state
 
 
 def test_ordinal_encoder(sample_data):
@@ -815,3 +831,19 @@ def test_time_series_preprocessor_serializes(ts_data_runs):
         new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
         assert len(new_tsp.target_scaler_dict.keys()) == len(tsp.target_scaler_dict.keys())
         assert len(new_tsp.target_scaler_dict.keys()) == 1
+
+    tsp = TimeSeriesPreprocessor(
+        timestamp_column="timestamp",
+        prediction_length=2,
+        context_length=5,
+        id_columns=["asset_id", "run_id"],
+        target_columns=["value1"],
+        scaler_type="power",
+        scaling=True,
+    )
+    tsp.train(df)
+
+    with tempfile.TemporaryDirectory() as d:
+        tsp.save_pretrained(d)
+        new_tsp = TimeSeriesPreprocessor.from_pretrained(d)
+        assert new_tsp.target_scaler_dict.keys() == tsp.target_scaler_dict.keys()
