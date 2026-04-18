@@ -31,7 +31,9 @@ TSFM_PYTHON_LOGGING_FORMAT = os.getenv(
     "%(levelname)s:p-%(process)d:t-%(thread)d:%(filename)s:%(funcName)s:%(message)s",
 )
 
-TSFM_ALLOW_LOAD_FROM_HF_HUB = int(os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB", "1")) == 1
+# Security: Default to disabling loading from HuggingFace Hub to prevent
+# unauthenticated remote code execution. Operators must explicitly opt-in.
+TSFM_ALLOW_LOAD_FROM_HF_HUB = int(os.getenv("TSFM_ALLOW_LOAD_FROM_HF_HUB", "0")) == 1
 
 # use TSFM_MODEL_DIR preferentially. If not set, use HF_HOME or the system tempdir if that's not set.
 TSFM_MODEL_DIR: str = os.environ.get("TSFM_MODEL_DIR", os.environ.get("HF_HOME", tempfile.gettempdir()))

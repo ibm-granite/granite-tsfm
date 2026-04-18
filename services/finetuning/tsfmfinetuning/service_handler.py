@@ -85,6 +85,7 @@
 import enum
 import importlib
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -99,6 +100,16 @@ from .inference_payloads import (
 
 
 LOGGER = logging.getLogger(__file__)
+
+# Security: Allowlist of trusted module prefixes for handler loading
+ALLOWED_HANDLER_MODULE_PREFIXES = (
+    "tsfm_public.",
+    "tsfminference.",
+    "tsfmfinetuning.",
+)
+
+# Security: Environment variable to explicitly trust remote code
+TSFM_TRUST_REMOTE_CODE = int(os.getenv("TSFM_TRUST_REMOTE_CODE", "0")) == 1
 
 
 class HandlerFunction(enum.Enum):
@@ -207,6 +218,29 @@ class ServiceHandler:
             return None
 
 
+def _validate_handler_module_path(module_path: str) -> None:
+    """Validate that the handler module path is from a trusted source.
+    
+    Security: This function prevents arbitrary code execution by ensuring that
+    only modules from allowlisted prefixes can be loaded. This protects against
+    attacks where an attacker publishes a malicious HuggingFace repo with a
+    crafted tsfm_config.json that attempts to load arbitrary Python modules.
+    
+    Args:
+        module_path: The module path to validate
+        
+    Raises:
+        ValueError: If the module path is not from an allowed prefix
+    """
+    if not any(module_path.startswith(prefix) for prefix in ALLOWED_HANDLER_MODULE_PREFIXES):
+        raise ValueError(
+            f"Security: Handler module path '{module_path}' is not allowed. "
+            f"Only modules with the following prefixes are permitted: {ALLOWED_HANDLER_MODULE_PREFIXES}. "
+            f"If you trust this module and want to load it anyway, set TSFM_TRUST_REMOTE_CODE=1 "
+            f"environment variable (use with caution)."
+        )
+
+
 def get_service_handler_class(
     config: TSFMConfig, handler_function: str = HandlerFunction.INFERENCE.value
 ) -> "ServiceHandler":
@@ -220,7 +254,18 @@ def get_service_handler_class(
         raise ValueError(f"Unknown handler_function `{handler_function}`")
 
     if getattr(config, handler_module_path_identifier, None) and getattr(config, handler_class_name_identifier, None):
-        module = importlib.import_module(getattr(config, handler_module_path_identifier))
+        module_path = getattr(config, handler_module_path_identifier)
+        
+        # Security: Validate module path before loading
+        if not TSFM_TRUST_REMOTE_CODE:
+            _validate_handler_module_path(module_path)
+        else:
+            LOGGER.warning(
+                f"TSFM_TRUST_REMOTE_CODE is enabled. Loading handler module '{module_path}' without validation. "
+                f"This may pose a security risk if loading from untrusted sources."
+            )
+        
+        module = importlib.import_module(module_path)
         my_class = getattr(module, getattr(config, handler_class_name_identifier))
 
     elif handler_function == HandlerFunction.INFERENCE.value:
