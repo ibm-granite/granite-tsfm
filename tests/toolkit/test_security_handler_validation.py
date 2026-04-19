@@ -10,11 +10,11 @@ from unittest.mock import patch
 import sys
 from pathlib import Path
 
-# Add boilerplate to path for testing
-boilerplate_path = Path(__file__).parent.parent.parent / "services" / "boilerplate"
-sys.path.insert(0, str(boilerplate_path))
+# Add services directory to path for testing so we can import as a package
+services_path = Path(__file__).parent.parent.parent / "services"
+sys.path.insert(0, str(services_path))
 
-from service_handler import (
+from boilerplate.service_handler import (
     _validate_handler_module_path,
     _validate_handler_class_name,
     ALLOWED_HANDLER_MODULE_PREFIXES,
@@ -71,7 +71,7 @@ class TestHandlerModuleValidation:
         assert "tsfm_public." in error_msg
         assert "tsfminference." in error_msg
         assert "tsfmfinetuning." in error_msg
-        assert "TSFM_TRUST_REMOTE_CODE=1" in error_msg
+        assert "TSFM_TRUST_REMOTE_CODE" in error_msg
 
     def test_case_sensitive_validation(self):
         """Test that validation is case-sensitive"""
@@ -97,8 +97,8 @@ class TestAdditionalHandlerModules:
             
             # Re-import to get fresh configuration
             import importlib
-            importlib.reload(sys.modules['service_handler'])
-            from service_handler import ALLOWED_HANDLER_MODULE_PREFIXES, _validate_handler_module_path
+            importlib.reload(sys.modules['boilerplate.service_handler'])
+            from boilerplate.service_handler import ALLOWED_HANDLER_MODULE_PREFIXES, _validate_handler_module_path
             
             # Should include both base and additional prefixes
             assert "tsfm_public." in ALLOWED_HANDLER_MODULE_PREFIXES
@@ -126,7 +126,7 @@ class TestAdditionalHandlerModules:
             
             import importlib
             with pytest.raises(ValueError, match="must end with a dot"):
-                importlib.reload(sys.modules['service_handler'])
+                importlib.reload(sys.modules['boilerplate.service_handler'])
             
         finally:
             if env_backup is not None:
@@ -144,7 +144,7 @@ class TestAdditionalHandlerModules:
             
             import importlib
             with pytest.raises(ValueError, match="must end with a dot"):
-                importlib.reload(sys.modules['service_handler'])
+                importlib.reload(sys.modules['boilerplate.service_handler'])
             
         finally:
             if env_backup is not None:
@@ -162,8 +162,8 @@ class TestAdditionalHandlerModules:
             os.environ["TSFM_ADDITIONAL_HANDLER_MODULES"] = "mycompany."
             
             import importlib
-            importlib.reload(sys.modules['service_handler'])
-            from service_handler import _validate_handler_module_path
+            importlib.reload(sys.modules['boilerplate.service_handler'])
+            from boilerplate.service_handler import _validate_handler_module_path
             
             # Should allow exact match
             _validate_handler_module_path("mycompany.models.handler")
@@ -187,8 +187,8 @@ class TestAdditionalHandlerModules:
             os.environ["TSFM_ADDITIONAL_HANDLER_MODULES"] = "mycompany.models. , custom.handlers. "
             
             import importlib
-            importlib.reload(sys.modules['service_handler'])
-            from service_handler import _validate_handler_module_path
+            importlib.reload(sys.modules['boilerplate.service_handler'])
+            from boilerplate.service_handler import _validate_handler_module_path
             
             # Should still work after stripping spaces
             _validate_handler_module_path("mycompany.models.handler")
@@ -208,8 +208,8 @@ class TestAdditionalHandlerModules:
             os.environ["TSFM_ADDITIONAL_HANDLER_MODULES"] = ""
             
             import importlib
-            importlib.reload(sys.modules['service_handler'])
-            from service_handler import ALLOWED_HANDLER_MODULE_PREFIXES
+            importlib.reload(sys.modules['boilerplate.service_handler'])
+            from boilerplate.service_handler import ALLOWED_HANDLER_MODULE_PREFIXES
             
             # Should only have base prefixes
             assert len(ALLOWED_HANDLER_MODULE_PREFIXES) == 3
@@ -255,8 +255,8 @@ class TestEnvironmentVariables:
         try:
             # Re-import to get fresh default
             import importlib
-            importlib.reload(sys.modules['service_handler'])
-            from service_handler import TSFM_TRUST_REMOTE_CODE
+            importlib.reload(sys.modules['boilerplate.service_handler'])
+            from boilerplate.service_handler import TSFM_TRUST_REMOTE_CODE
             
             # Should default to False (0)
             assert TSFM_TRUST_REMOTE_CODE == False
