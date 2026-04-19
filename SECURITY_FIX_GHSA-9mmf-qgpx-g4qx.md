@@ -217,5 +217,5 @@ Even with these fixes:
 
 ## Credits
 
-Security vulnerability reported by: [Reporter name if available]
+Security vulnerability reported by: Martin Brodeur
 Fix implemented by: Bob (AI Security Engineer)
