@@ -63,12 +63,33 @@ def _validate_handler_module_path(module_path: str) -> None:
         raise ValueError(
             f"Security: Handler module path '{module_path}' is not allowed. "
             f"Only modules with the following prefixes are permitted: {ALLOWED_HANDLER_MODULE_PREFIXES}. "
-            f"If you trust this module and want to load it anyway, set TSFM_TRUST_REMOTE_CODE=1 "
-            f"environment variable (use with caution)."
+            f"Contact your security team before enabling TSFM_TRUST_REMOTE_CODE in production."
         )
 ```
 
 **Impact:** Blocks all attempts to load arbitrary Python modules. Only trusted internal modules can be loaded.
+
+### 1.5. Handler Class Name Validation (Defense in Depth)
+
+**File:** `services/boilerplate/service_handler.py`
+
+Added validation for handler class names to enforce naming conventions:
+
+```python
+def _validate_handler_class_name(class_name: str) -> None:
+    """Validate that the handler class name follows expected naming conventions."""
+    allowed_suffixes = ("Handler", "ServiceHandler")
+    if not any(class_name.endswith(suffix) for suffix in allowed_suffixes):
+        raise ValueError(
+            f"Security: Handler class name '{class_name}' does not match allowed pattern. "
+            f"Class names must end with one of: {allowed_suffixes}. "
+            f"Contact your security team before enabling TSFM_TRUST_REMOTE_CODE in production."
+        )
+```
+
+**Impact:** Provides a second layer of defense. Even if an allowlisted module re-exports dangerous objects (like `subprocess` or `os`) at module level, the class name validation prevents accessing them via the `class_name` field in `tsfm_config.json`.
+
+**Example Attack Blocked:** If `tsfm_public.some_module` were to contain `from subprocess import Popen`, an attacker could not exploit it because `Popen` doesn't end with `Handler` or `ServiceHandler`.
 
 ### 2. Explicit Trust Requirement (Defense in Depth)
 
@@ -128,14 +149,24 @@ export TSFM_MODEL_DIR=/path/to/local/models
 
 ### For Developers
 
-**Custom Handler Modules:** If you have custom handler modules, ensure they use allowed prefixes:
+**Custom Handler Modules:** If you have custom handler modules, you have two options:
+
+1. **Recommended:** Add your module prefix to the allowlist via environment variable:
+```bash
+export TSFM_ADDITIONAL_HANDLER_MODULES="mycompany.models.,custom.handlers."
+```
+This allows your custom modules while maintaining security validation. Each prefix should end with a dot.
+
+2. **Built-in prefixes:** Ensure your modules use one of the built-in allowed prefixes:
 - `tsfm_public.*`
 - `tsfminference.*`
 - `tsfmfinetuning.*`
 
+**Handler Class Naming:** All handler classes must end with either `Handler` or `ServiceHandler` to pass validation.
+
 **Testing with Untrusted Code:** For development/testing only:
 ```bash
-export TSFM_TRUST_REMOTE_CODE=1  # USE WITH EXTREME CAUTION
+export TSFM_TRUST_REMOTE_CODE=1  # USE WITH EXTREME CAUTION - BYPASSES ALL VALIDATION
 ```
 
 ## Validation
@@ -179,26 +210,33 @@ curl -X POST http://localhost:8000/v1/inference/forecasting \
 
 This fix implements multiple layers of security:
 
-1. **Allowlist validation** - Primary defense, blocks malicious modules
-2. **Explicit trust requirement** - Requires operator consent to bypass validation
-3. **Secure defaults** - HF Hub loading disabled by default
-4. **Logging** - Warnings when security features are disabled
+1. **Module path allowlist validation** - Primary defense, blocks malicious modules
+2. **Configurable additional modules** - Allows extending the allowlist securely via environment variable
+3. **Class name validation** - Secondary defense, blocks dangerous objects even from allowed modules
+4. **Explicit trust requirement** - Requires operator consent to bypass validation
+5. **Secure defaults** - HF Hub loading disabled by default
+6. **Logging** - Warnings when security features are disabled
 
 ### Residual Risks
 
 Even with these fixes:
 
-- **Trusted module vulnerabilities:** If vulnerabilities exist in allowed modules (`tsfm_public.*`, etc.), they could still be exploited
-- **Operator misconfiguration:** Setting `TSFM_TRUST_REMOTE_CODE=1` removes protection
+- **Trusted module vulnerabilities:** If vulnerabilities exist in allowed modules (`tsfm_public.*`, etc.) and the vulnerable code follows the naming convention (ends with `Handler` or `ServiceHandler`), they could still be exploited
+- **Operator misconfiguration:** Setting `TSFM_TRUST_REMOTE_CODE=1` removes all protection
 - **Local file attacks:** If attacker can write to `TSFM_MODEL_DIR`, they could still inject malicious configs
+- **Class name bypass:** If an allowed module contains a class ending with `Handler` or `ServiceHandler` that itself provides dangerous functionality, it could be exploited
 
 ### Recommendations
 
-1. **Never set `TSFM_TRUST_REMOTE_CODE=1` in production**
+1. **Never set `TSFM_TRUST_REMOTE_CODE=1` in production** - Contact your security team first
 2. **Use local model directories** instead of HF Hub when possible
 3. **Restrict write access** to `TSFM_MODEL_DIR`
 4. **Monitor logs** for security warnings
 5. **Keep dependencies updated** to patch vulnerabilities in allowed modules
+6. **Code review handler classes** - Ensure all handler classes in allowed modules follow secure coding practices
+7. **Principle of least privilege** - Run services with minimal required permissions
+8. **Audit additional modules** - If using `TSFM_ADDITIONAL_HANDLER_MODULES`, ensure those modules are from trusted sources and regularly audited
+9. **Use specific prefixes** - When adding custom modules, use specific prefixes (e.g., `mycompany.tsfm.handlers.`) rather than broad ones (e.g., `mycompany.`)
 
 ## References
 
