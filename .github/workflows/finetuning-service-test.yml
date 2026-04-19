@@ -43,5 +43,5 @@ jobs:
     #    make image
     - name: test local
       run: |
-        $HOME/.local/bin/uv run --locked --directory=services/finetuning  make test_local
+        ALLOWED_DATA_DIR="./data" $HOME/.local/bin/uv run --locked --directory=services/finetuning  make test_local
         
