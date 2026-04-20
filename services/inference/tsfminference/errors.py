@@ -79,7 +79,7 @@
 #                                                               #
 #                                                               #
 #################################################################
-# Canonical source: services/boilerplate/service_handler.py
+# Canonical source: services/boilerplate/service_handler.py 
 # — regenerate with 'make boilerplate'
 
 from enum import IntEnum
