@@ -158,7 +158,7 @@ class TSFMForecastingTuningHandler:
                 param_val_saved = getattr(preprocessor, param)
                 if param_val != param_val_saved:
                     raise ValueError(
-                        f"Attempted to use a fine-tuned model with a different schema, please confirm you have the correct model_id and schema. Error in parameter {param}: received {param_val} but expected {param_val_saved}."
+                        f"Attempted to use a fine-tuned model with a different schema. Please confirm you have the correct model_id and schema. Error in parameter {param}."
                     )
 
         model_config_kwargs = self._get_config_kwargs(

@@ -78,6 +78,8 @@
 #                                                               #
 #                                                               #
 #################################################################
+# Canonical source: services/boilerplate/service_handler.py
+# — regenerate with 'make boilerplate'
 
 """Service handler utils for TSFM models"""
 

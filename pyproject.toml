@@ -51,6 +51,7 @@ testing = [
     "pytest-coverage",
     "granite-tsfm[notebooks]",
     "parameterized",
+    "pydantic>1,<3",
 ]
 dev = ["granite-tsfm[testing]", "ruff==0.5.7"]
 
