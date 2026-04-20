@@ -79,7 +79,7 @@
 #                                                               #
 #                                                               #
 #################################################################
-# Canonical source: services/boilerplate/service_handler.py 
+# Canonical source: services/boilerplate/service_handler.py
 # — regenerate with 'make boilerplate'
 
 """Light weight checks on data frame contents to keep Q/A happy."""

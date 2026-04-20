@@ -31,40 +31,42 @@ _BASE_ALLOWED_HANDLER_MODULE_PREFIXES = (
 # Each prefix MUST end with a dot to ensure exact module path matching
 _ADDITIONAL_ALLOWED_PREFIXES = os.getenv("TSFM_ADDITIONAL_HANDLER_MODULES", "")
 
+
 def _validate_and_parse_additional_prefixes(prefixes_str: str) -> tuple:
     """Parse and validate additional module prefixes from environment variable.
-    
+
     Security: Enforces that each prefix ends with a dot to prevent overly broad matches.
     For example, "mycompany." is safe, but "mycompany" would match "mycompany_evil".
-    
+
     Args:
         prefixes_str: Comma-separated string of module prefixes
-        
+
     Returns:
         Tuple of validated prefixes
-        
+
     Raises:
         ValueError: If any prefix doesn't end with a dot
     """
     if not prefixes_str.strip():
-        return tuple()
-    
+        return ()
+
     prefixes = []
     for prefix in prefixes_str.split(","):
         prefix = prefix.strip()
         if not prefix:
             continue
-        
+
         if not prefix.endswith("."):
             raise ValueError(
                 f"Security: Additional handler module prefix '{prefix}' must end with a dot ('.'). "
                 f"This ensures exact module path matching and prevents overly broad allowlists. "
                 f"Example: use 'mycompany.models.' instead of 'mycompany.models'"
             )
-        
+
         prefixes.append(prefix)
-    
+
     return tuple(prefixes)
+
 
 _additional_prefixes = _validate_and_parse_additional_prefixes(_ADDITIONAL_ALLOWED_PREFIXES)
 
@@ -189,15 +191,15 @@ class ServiceHandler:
 
 def _validate_handler_module_path(module_path: str) -> None:
     """Validate that the handler module path is from a trusted source.
-    
+
     Security: This function prevents arbitrary code execution by ensuring that
     only modules from allowlisted prefixes can be loaded. This protects against
     attacks where an attacker publishes a malicious HuggingFace repo with a
     crafted tsfm_config.json that attempts to load arbitrary Python modules.
-    
+
     Args:
         module_path: The module path to validate
-        
+
     Raises:
         ValueError: If the module path is not from an allowed prefix
     """
@@ -211,15 +213,15 @@ def _validate_handler_module_path(module_path: str) -> None:
 
 def _validate_handler_class_name(class_name: str) -> None:
     """Validate that the handler class name follows expected naming conventions.
-    
+
     Security: This function provides defense-in-depth by ensuring that class names
     match expected handler naming patterns. This prevents attacks where an allowlisted
     module might re-export dangerous objects (like subprocess or os) at module level,
     which could be accessed via the class_name field in tsfm_config.json.
-    
+
     Args:
         class_name: The class name to validate
-        
+
     Raises:
         ValueError: If the class name does not match allowed patterns
     """
@@ -248,7 +250,7 @@ def get_service_handler_class(
     if getattr(config, handler_module_path_identifier, None) and getattr(config, handler_class_name_identifier, None):
         module_path = getattr(config, handler_module_path_identifier)
         class_name = getattr(config, handler_class_name_identifier)
-        
+
         # Security: Validate module path and class name before loading
         if not TSFM_TRUST_REMOTE_CODE:
             _validate_handler_module_path(module_path)
@@ -259,7 +261,7 @@ def get_service_handler_class(
                 f"and class '{class_name}' without validation. "
                 f"This may pose a security risk if loading from untrusted sources."
             )
-        
+
         module = importlib.import_module(module_path)
         my_class = getattr(module, class_name)
 
