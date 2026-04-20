@@ -119,10 +119,10 @@ ALLOWED_MODULE_PREFIXES = (
 
 def _validate_module_path(module_path: str) -> None:
     """Validate that module_path is from an allowed prefix.
-    
+
     Args:
         module_path (str): The module path to validate.
-        
+
     Raises:
         ValueError: If module_path is not from an allowed prefix.
     """
@@ -256,5 +256,6 @@ def load_model(
         device_map=None,  # disable meta-tensors
         low_cpu_mem_usage=False,
     )
+
 
 # Made with Bob
