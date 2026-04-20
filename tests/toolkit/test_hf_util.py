@@ -9,9 +9,8 @@ from tsfm_public.toolkit.hf_util import register_config
 
 
 def test_register_config():
-    with pytest.raises(Exception) as ex:
+    with pytest.raises(Exception) as _:
         register_config("patchtst", "PatchTSTConfig", "UnkownRandomModule")
 
-    with pytest.raises(Exception) as ex:
+    with pytest.raises(Exception) as _:
         register_config("patchtst", "PatchTSTConfig2", "transformers")
-
