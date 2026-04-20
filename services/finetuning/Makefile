@@ -30,7 +30,7 @@ fetchdata:
 	uv run --locked python tests/fetchdata.py
 
 test_local: clone_models fetchdata boilerplate
-	uv run --locked pytest tests
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 TSFM_MODEL_DIR=./mytest-tsfm uv run --locked pytest tests
 
 install_dev: boilerplate
 	uv sync --locked  --extra dev --editable
