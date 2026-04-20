@@ -177,5 +177,7 @@ else:
 
 
 # register local models now
-register_config(model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public.models.tinytimemixer")
+register_config(
+    model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public.models.tinytimemixer"
+)
 register_config(model_type="tspulse", model_config_name="TSPulseConfig", module_path="tsfm_public.models.tspulse")
