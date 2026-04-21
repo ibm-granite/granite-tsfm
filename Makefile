@@ -7,14 +7,14 @@ check_dirs := tests tsfm_public tsfmhfdemos notebooks services
 # this target runs checks on all files
 
 quality:
-	ruff check $(check_dirs)
-	ruff format --check $(check_dirs)
+	uv run ruff check $(check_dirs)
+	uv run ruff format --check $(check_dirs)
 
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	ruff check $(check_dirs) --fix 
-	ruff format $(check_dirs)
+	uv run ruff check $(check_dirs) --fix 
+	uv run ruff format $(check_dirs)
 
 # update uv lock files
 # for cve compliance
