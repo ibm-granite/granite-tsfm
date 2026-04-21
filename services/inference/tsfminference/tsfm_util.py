@@ -86,6 +86,7 @@
 
 import importlib
 import logging
+import os
 import pathlib
 from typing import Any, Dict, Optional, Union
 
@@ -107,6 +108,83 @@ LOCAL_FILES_ONLY = not TSFM_ALLOW_LOAD_FROM_HF_HUB
 
 
 LOGGER = logging.getLogger(__file__)
+
+
+# Security: Base allowlist of trusted module prefixes
+_BASE_ALLOWED_MODULE_PREFIXES = (
+    "tsfm_public.",
+    "tsfminference.",
+    "tsfmfinetuning.",
+    "transformers.",
+)
+
+# Security: Allow additional trusted module prefixes via environment variable
+# Format: comma-separated list of module prefixes, e.g., "mycompany.models.,custom.modules."
+# Each prefix MUST end with a dot to ensure exact module path matching
+_ADDITIONAL_ALLOWED_MODULE_PREFIXES = os.getenv("TSFM_ADDITIONAL_MODULE_PREFIXES", "")
+
+
+def _validate_and_parse_additional_prefixes(prefixes_str: str) -> tuple:
+    """Parse and validate additional module prefixes from environment variable.
+
+    Security: Enforces that each prefix ends with a dot to prevent overly broad matches.
+    For example, "mycompany." is safe, but "mycompany" would match "mycompany_evil".
+
+    Args:
+        prefixes_str: Comma-separated string of module prefixes
+
+    Returns:
+        Tuple of validated prefixes
+
+    Raises:
+        ValueError: If any prefix doesn't end with a dot
+    """
+    if not prefixes_str.strip():
+        return ()
+
+    prefixes = []
+    for prefix in prefixes_str.split(","):
+        prefix = prefix.strip()
+        if not prefix:
+            continue
+
+        if not prefix.endswith("."):
+            raise ValueError(
+                f"Security: Additional module prefix '{prefix}' must end with a dot ('.'). "
+                f"This ensures exact module path matching and prevents overly broad allowlists. "
+                f"Example: use 'mycompany.models.' instead of 'mycompany.models'"
+            )
+
+        prefixes.append(prefix)
+
+    return tuple(prefixes)
+
+
+_additional_prefixes = _validate_and_parse_additional_prefixes(_ADDITIONAL_ALLOWED_MODULE_PREFIXES)
+
+# Combine base and additional prefixes
+ALLOWED_MODULE_PREFIXES = _BASE_ALLOWED_MODULE_PREFIXES + _additional_prefixes
+
+if _additional_prefixes:
+    LOGGER.info(
+        f"Additional module prefixes enabled: {_additional_prefixes}. Ensure these modules are from trusted sources."
+    )
+
+
+def _validate_module_path(module_path: str) -> None:
+    """Validate that module_path is from an allowed prefix.
+
+    Args:
+        module_path (str): The module path to validate.
+
+    Raises:
+        ValueError: If module_path is not from an allowed prefix.
+    """
+    if not any(module_path.startswith(prefix) for prefix in ALLOWED_MODULE_PREFIXES):
+        raise ValueError(
+            f"Module path '{module_path}' is not allowed. "
+            f"Only modules starting with {ALLOWED_MODULE_PREFIXES} are permitted for security reasons."
+        )
 
 
 def load_config(
@@ -158,17 +236,24 @@ def _get_model_class(config: PretrainedConfig, module_path: Optional[str] = None
         AttributeError: Raised if the module at module_path cannot be loaded.
         AttributeError: If the architecture provided by the config cannot be loaded from
             the module.
+        ValueError: Raised when module_path is not from an allowed prefix.
 
     Returns:
         type: The class for the model.
     """
     if module_path is not None:
+        # safe b/c mp still has to be in ALLOWED_MODULE_PREFIXES
+        mp = module_path + "." if not module_path.endswith(".") else module_path
+        _validate_module_path(mp)
         try:
             mods = [importlib.import_module(module_path)]
         except ModuleNotFoundError as exc:
             raise AttributeError("Could not load module '{module_path}'.") from exc
     else:
         mods = [transformers, tsfm_public]
+        # Validate module_path for security
+        # not needed b/c we know we are loading from trusted sources
+        # _validate_module_path(module_path)
 
     # get architecture from model config
     architectures = getattr(config, "architectures", [])
