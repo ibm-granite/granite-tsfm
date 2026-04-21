@@ -79,7 +79,7 @@
 #                                                               #
 #                                                               #
 #################################################################
-# Canonical source: services/boilerplate/service_handler.py 
+# Canonical source: services/boilerplate/service_handler.py
 # — regenerate with 'make boilerplate'
 
 """Utilities for directory operations."""
