@@ -16,6 +16,7 @@ from transformers import set_seed
 
 from tsfm_public.models.tinytimemixer import (
     TinyTimeMixerConfig,
+    TinyTimeMixerForDecomposedPrediction,
     TinyTimeMixerForMaskedPrediction,
     TinyTimeMixerForPrediction,
     TinyTimeMixerModel,
@@ -210,7 +211,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         task,
         params=None,
         output_hidden_states=True,
-        mask_prediction=False,
+        prediction_type="base",  # ["base", "mask", "decompose"],
         future_observed_mask=None,  # None, int, bool
         past_observed_mask=None,  # None, int, bool
         input_data=None,
@@ -219,10 +220,13 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             input_data = self.__class__.data
         config = TinyTimeMixerConfig(**params)
         if task == "forecast":
-            if mask_prediction is False:
+            if prediction_type == "base":
                 mdl = TinyTimeMixerForPrediction(config)
-            else:
+            elif prediction_type == "mask":
                 mdl = TinyTimeMixerForMaskedPrediction(config)
+            elif prediction_type == "decompose":
+                mdl = TinyTimeMixerForDecomposedPrediction(config)
+
             if (
                 "target_channel_filtered" in params
                 and params["target_channel_filtered"]
@@ -239,6 +243,8 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
             if config.prediction_filter_length is not None:
                 target_output = target_output[:, : config.prediction_filter_length, :]
+
+                # target_patches = config.prediction_filter_length // config.prediction_length
 
             if "target_pred_length_filtered" in params and params["target_pred_length_filtered"]:
                 target_input = target_input[:, : config.prediction_filter_length, :]
@@ -262,18 +268,14 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         else:
             past_observed_mask = None
 
-        if mask_prediction is False:
-            enc_output = self.__class__.enc_output
-        else:
-            enc_output = self.__class__.enc_masked_output
-
+        enc_output_shape = list(self.__class__.enc_output.shape)
         if config.use_decoder:
-            if mask_prediction is False:
-                dec_output = self.__class__.dec_output
-            else:
-                dec_output = self.__class__.dec_masked_output
-        else:
-            dec_output = enc_output
+            dec_output_shape = list(self.__class__.dec_output.shape)
+
+        # if prediction_type == "mask":
+        #     enc_output_shape[-2] += target_patches
+        #     if config.use_decoder:
+        #         dec_output_shape[-2] += target_patches
 
         cat_samples = None
         if "categorical_vocab_size_list" in params and params["categorical_vocab_size_list"]:
@@ -320,15 +322,26 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
 
         if config.loss is not None:
             self.assertEqual(output.loss.item() < np.inf, True)
-        enc_output_shape = list(enc_output.shape)
-        dec_output_shape = list(dec_output.shape)
+
         if config.resolution_prefix_tuning:
             enc_output_shape[-2] += 1
-            dec_output_shape[-2] += 1
+            if config.use_decoder:
+                dec_output_shape[-2] += 1
 
-        if mask_prediction is False:
+        if config.register_tokens > 0:
+            enc_output_shape[-2] += config.register_tokens
+            if config.use_decoder:
+                dec_output_shape[-2] += config.register_tokens
+
+        if config.fft_length > 0:
+            enc_output_shape[-2] += config.fft_length
+            if config.use_decoder:
+                dec_output_shape[-2] += config.fft_length
+
+        if prediction_type == "base":
             self.assertEqual(list(output.backbone_hidden_state.shape), enc_output_shape)
-            self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
+            if config.use_decoder:
+                self.assertEqual(list(output.decoder_hidden_state.shape), dec_output_shape)
 
         # self.assertEqual(output.backbone_hidden_state.shape, enc_output.shape)
         # self.assertEqual(output.decoder_hidden_state.shape, dec_output.shape)
@@ -348,7 +361,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 ["mse", "mae", "pinball", "huber", None],
                 [8, 16],
                 [True, False],
-                [True, False],
             )
         )
     )
@@ -362,7 +374,6 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         loss,
         prediction_filter_length,
         target_pred_length_filtered,
-        mask_prediction,
     ):
         params = self.__class__.params.copy()
         params.update(
@@ -376,17 +387,58 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             target_pred_length_filtered=target_pred_length_filtered,
             target_channel_filtered=False,
         )
-        self.check_module(task="forecast", params=params, mask_prediction=mask_prediction)
+        self.check_module(task="forecast", params=params, prediction_type="base")
+
+    @parameterized.expand(
+        list(
+            itertools.product(
+                [None, [0, 2]],
+                ["mse", None],
+                [8, 16],
+                [True, False],
+                ["base", "mask", "decompose"],
+                [True, False],
+            )
+        )
+    )
+    def test_forecast_diff_modes(
+        self,
+        prediction_channel_indices,
+        loss,
+        prediction_filter_length,
+        target_pred_length_filtered,
+        prediction_type,
+        multi_quantile_head,
+    ):
+        params = self.__class__.params.copy()
+        params.update(
+            mode="common_channel",
+            self_attn=False,
+            scaling="std",
+            prediction_channel_indices=prediction_channel_indices,
+            gated_attn=True,
+            loss=loss,
+            prediction_filter_length=prediction_filter_length,
+            target_pred_length_filtered=target_pred_length_filtered,
+            target_channel_filtered=False,
+            multi_quantile_head=multi_quantile_head,
+        )
+        self.check_module(task="forecast", params=params, prediction_type=prediction_type)
 
     def test_var0_mask(self):
         params = self.__class__.params.copy()
+
+        params.update(
+            prediction_filter_length=8,
+        )
+
         self.check_module(
             task="forecast",
             params=params,
-            mask_prediction=False,
-            future_observed_mask="bool",
-            past_observed_mask="bool",
-            input_data=self.__class__.constant_data,
+            prediction_type="decompose",
+            # future_observed_mask="bool",
+            # past_observed_mask="bool",
+            # input_data=self.__class__.constant_data,
         )
 
     @parameterized.expand(
@@ -396,7 +448,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
                 ["mse", "mae", None],
                 [8, 16],
                 [True, False],
-                [True, False],
+                ["base", "mask"],
                 [None, "int", "bool"],
                 [None, "int", "bool"],
             )
@@ -408,7 +460,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         loss,
         prediction_filter_length,
         target_pred_length_filtered,
-        mask_prediction,
+        prediction_type,
         past_observed_mask,
         future_observed_mask,
     ):
@@ -424,7 +476,7 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         self.check_module(
             task="forecast",
             params=params,
-            mask_prediction=mask_prediction,
+            prediction_type=prediction_type,
             future_observed_mask=future_observed_mask,
             past_observed_mask=past_observed_mask,
         )

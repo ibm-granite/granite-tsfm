@@ -11,6 +11,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers.modeling_utils import PreTrainedModel
 from transformers.time_series_utils import (
     NegativeBinomialOutput,
@@ -68,6 +69,411 @@ TINYTIMEMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
+def update_patch_mask(patch_mask: torch.Tensor, K: int, mode: str = "prepend") -> torch.Tensor:
+    """
+    Add K patches (all valid = all False) either at the beginning or end
+    of a patch-level mask.
+
+    Args:
+        patch_mask (Tensor): Boolean mask of shape (B, C, N),
+            where B = batch size, C = channels, N = number of patches.
+            True means this patch is masked (invalid),
+            False means valid.
+        K (int): Number of patches (all valid = all False) to add.
+        mode (str): "prepend" to add at the beginning,
+                    "postpend" to add at the end.
+
+    Returns:
+        Tensor: Updated boolean mask of shape (B, C, N + K).
+    """
+    if patch_mask is None:
+        return patch_mask
+
+    B, C, N = patch_mask.shape
+    extra_mask = torch.zeros((B, C, K), dtype=torch.bool, device=patch_mask.device)
+
+    if mode == "prepend":
+        new_mask = torch.cat([extra_mask, patch_mask], dim=2)
+    elif mode == "postpend":
+        new_mask = torch.cat([patch_mask, extra_mask], dim=2)
+    else:
+        raise ValueError("mode must be 'prepend' or 'postpend'")
+
+    return new_mask
+
+
+class MultiPinballLoss(nn.Module):
+    """
+    Quantile (pinball) loss for predictions shaped as [B, Q, T, C]
+    against targets shaped as [B, T, C].
+
+    Taus:
+      - if config.quantile_levels is None -> torch.linspace(0.1,0.9,Q) (preserves old default)
+      - else -> sorted(config.quantile_levels)
+
+    Optional horizon weighting via `horizon_weights` (shape [T]).
+
+    Optional width regularization (training-time sharpness control):
+      - config.penalize_large_width_ratio: float (0 disables)
+      - config.width_penalty_mode: "boundary" or "wis" (default: "boundary")
+
+        "boundary": penalize only outer width (q_max - q_min)
+        "wis": penalize mean of symmetric interval widths across all pairs
+               (q_high(i) - q_low(i)) for i=0..k-1 where Q=2k+1
+    """
+
+    def __init__(self, config, reduction: str = "mean"):
+        super().__init__()
+        self.reduction = reduction
+
+        qlist = getattr(config, "quantile_levels", None)
+        # self._use_default_linspace = qlist is None
+        # to allow backward compatibility
+        self._use_default_linspace = qlist is None or qlist == [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+        ]
+        self.static_taus = None if self._use_default_linspace else [float(q) for q in sorted(qlist)]
+
+        self.penalize_large_width_ratio = float(getattr(config, "penalize_large_width_ratio", 0.0))
+        self.width_penalty_mode = str(getattr(config, "width_penalty_mode", "boundary")).lower()
+        if self.width_penalty_mode not in ("boundary", "wis"):
+            raise ValueError(f"width_penalty_mode must be 'boundary' or 'wis', got: {self.width_penalty_mode}")
+
+    @staticmethod
+    def build_two_stage_horizon_weights(
+        T: int,
+        cut_ratio: float = 0.30,
+        floor: float = 0.30,
+        device=None,
+        dtype=None,
+    ) -> torch.Tensor:
+        cut = int(round(cut_ratio * T))
+        cut = max(1, min(T, cut))
+
+        w = torch.ones(T, device=device, dtype=dtype)
+        if cut < T:
+            w[cut:] = torch.linspace(1.0, float(floor), T - cut, device=device, dtype=dtype)
+
+        return w / (w.mean() + 1e-12)
+
+    def forward(
+        self,
+        pred: torch.Tensor,  # [B, Q, T, C]
+        target: torch.Tensor,  # [B, T, C]
+        taus=None,
+        horizon_weights: torch.Tensor = None,  # [T] optional
+    ) -> torch.Tensor:
+        # ----------------------------
+        # Resolve taus
+        # ----------------------------
+        if taus is None:
+            if self._use_default_linspace:
+                taus = torch.linspace(0.1, 0.9, pred.size(1), device=pred.device, dtype=pred.dtype)
+            else:
+                taus = torch.as_tensor(self.static_taus, device=pred.device, dtype=pred.dtype)
+        else:
+            taus = torch.as_tensor(taus, device=pred.device, dtype=pred.dtype)
+
+        if taus.numel() != pred.size(1):
+            raise ValueError(
+                f"taus length ({taus.numel()}) must match pred.size(1) ({pred.size(1)}). "
+                f"config.quantile_levels={self.static_taus}"
+            )
+
+        # ----------------------------
+        # Pinball loss per element
+        # ----------------------------
+        target_exp = target.unsqueeze(1)  # [B,1,T,C]
+        taus_exp = taus.view(1, -1, 1, 1)  # [1,Q,1,1]
+        print("target:", target_exp.shape, pred.shape)
+        e = target_exp - pred  # [B,Q,T,C]
+        per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
+
+        # Quantile weights (keep your behavior)
+        per_elem = per_elem * torch.ones_like(taus).view(1, -1, 1, 1)
+
+        # Horizon weights
+        hw = None
+        if horizon_weights is not None:
+            hw = horizon_weights.to(device=pred.device, dtype=pred.dtype)
+            if hw.ndim != 1 or hw.numel() != pred.size(2):
+                raise ValueError("horizon_weights must be shape [T] and match pred.size(2)")
+            per_elem = per_elem * hw.view(1, 1, -1, 1)
+
+        # Reduce pinball
+        if self.reduction == "none":
+            pinball = per_elem
+        elif self.reduction == "sum":
+            pinball = per_elem.sum()
+        elif self.reduction == "mean":
+            pinball = per_elem.mean()
+        else:
+            raise ValueError(f"Unsupported reduction: {self.reduction}")
+
+        # ----------------------------
+        # Width regularization (optional)
+        # ----------------------------
+        if self.penalize_large_width_ratio > 0.0:
+            Q = pred.size(1)
+            if Q < 3:
+                raise ValueError("Width penalty requires at least 3 quantiles (Q>=3).")
+
+            if self.width_penalty_mode == "boundary":
+                # outermost interval only: q_max - q_min
+                width = pred[:, -1, :, :] - pred[:, 0, :, :]  # [B,T,C]
+                if hw is not None:
+                    width = width * hw.view(1, -1, 1)
+                width_pen = width.sum() if self.reduction == "sum" else width.mean()
+
+            else:  # "wis"
+                # average over all symmetric interval widths:
+                # (q_{high} - q_{low}) for pairs (0,-1), (1,-2), ...
+                if Q % 2 != 1:
+                    raise ValueError(f"WIS-like width penalty expects odd Q (median present). Got Q={Q}.")
+                k = (Q - 1) // 2
+
+                # accumulate widths for each pair
+                widths = []
+                for i in range(k):
+                    w_i = pred[:, -(i + 1), :, :] - pred[:, i, :, :]  # [B,T,C]
+                    if hw is not None:
+                        w_i = w_i * hw.view(1, -1, 1)
+                    widths.append(w_i.mean() if self.reduction != "sum" else w_i.sum())
+
+                width_pen = torch.stack(widths).mean()
+
+            pinball = pinball + self.penalize_large_width_ratio * width_pen
+
+        return pinball
+
+
+# class MultiPinballLoss(nn.Module):
+#     """
+#     Quantile (pinball) loss for predictions shaped as [B, Q, T, C]
+#     against targets shaped as [B, T, C].
+
+#     Taus are taken from config.quantile_levels by default (sorted).
+#     Falls back to [0.1..0.9] if not present.
+
+#     Adds optional horizon weighting via `horizon_weights` (shape [T]).
+#     """
+
+#     def __init__(self, config, reduction: str = "mean"):
+#         super().__init__()
+#         self.reduction = reduction
+
+#         qlist = getattr(config, "quantile_levels", None)
+
+#         if qlist is None:
+#             self.static_taus = None
+#         else:
+#             self.static_taus = [float(q) for q in sorted(qlist)]
+
+#         # if qlist is None:
+#         #     qlist = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+#         # # keep deterministic order
+#         # self.static_taus = [float(q) for q in sorted(qlist)]
+
+#     @staticmethod
+#     def build_two_stage_horizon_weights(
+#         T: int,
+#         cut_ratio: float = 0.30,  # auto "30%" by default
+#         floor: float = 0.30,  # long-horizon still has weight >= floor
+#         device=None,
+#         dtype=None,
+#     ) -> torch.Tensor:
+#         """
+#         Two-stage schedule:
+#           - t < cut: weight = 1.0
+#           - t >= cut: linearly decays from 1.0 to `floor`
+
+#         Returns weights normalized to mean=1 for stable loss scale.
+#         """
+#         cut = int(round(cut_ratio * T))
+#         cut = max(1, min(T, cut))
+
+#         w = torch.ones(T, device=device, dtype=dtype)
+#         if cut < T:
+#             w[cut:] = torch.linspace(
+#                 1.0, float(floor), T - cut, device=device, dtype=dtype
+#             )
+
+#         # normalize to keep loss magnitude comparable
+#         w = w / (w.mean() + 1e-12)
+#         return w
+
+#     def forward(
+#         self,
+#         pred: torch.Tensor,  # [B, Q, T, C]
+#         target: torch.Tensor,  # [B, T, C]
+#         taus=None,
+#         horizon_weights: torch.Tensor = None,  # [T] optional
+#     ) -> torch.Tensor:
+
+#         # Resolve taus
+#         if self.static_taus is None:
+#             taus = torch.linspace(
+#                 0.1, 0.9, pred.size(1), device=pred.device, dtype=pred.dtype
+#             )
+#         else:
+#             taus = torch.as_tensor(
+#                 self.static_taus, device=pred.device, dtype=pred.dtype
+#             )
+
+#         # Safety: ensure Q matches pred.size(1) when using default taus
+#         if taus.numel() != pred.size(1):
+#             raise ValueError(
+#                 f"taus length ({taus.numel()}) must match pred.size(1) ({pred.size(1)}). "
+#                 f"config.quantile_levels={self.static_taus}"
+#             )
+
+#         # Broadcast shapes
+#         target_exp = target.unsqueeze(1)  # [B, 1, T, C]
+#         taus_exp = taus.view(1, -1, 1, 1)  # [1, Q, 1, 1]
+
+#         # Pinball loss per element
+#         e = target_exp - pred  # [B, Q, T, C]
+#         per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
+
+#         # Quantile weights (keep your current behavior)
+#         wq = torch.ones_like(taus)  # [Q]
+#         per_elem = per_elem * wq.view(1, -1, 1, 1)
+
+#         # Horizon weights (optional)
+#         if horizon_weights is not None:
+#             hw = horizon_weights.to(device=pred.device, dtype=pred.dtype)
+#             if hw.ndim != 1 or hw.numel() != pred.size(2):
+#                 raise ValueError(
+#                     "horizon_weights must be shape [T] and match pred.size(2)"
+#                 )
+#             per_elem = per_elem * hw.view(1, 1, -1, 1)
+
+#         # Reduction
+#         if self.reduction == "none":
+#             return per_elem
+#         if self.reduction == "sum":
+#             return per_elem.sum()
+#         if self.reduction == "mean":
+#             return per_elem.mean()
+
+#         raise ValueError(f"Unsupported reduction: {self.reduction}")
+
+
+# class MultiPinballLoss(nn.Module):
+#     """
+#     Quantile (pinball) loss for predictions shaped as [B, Q, T, C]
+#     against targets shaped as [B, T, C].
+
+#     Adds optional horizon weighting via `horizon_weights` (shape [T]).
+#     """
+
+#     def __init__(self, config, taus=None, reduction: str = "mean"):
+#         super().__init__()
+#         self.reduction = reduction
+#         self.static_taus = None if taus is None else list(taus)
+
+#     @staticmethod
+#     def build_two_stage_horizon_weights(
+#         T: int,
+#         cut_ratio: float = 0.30,  # auto "30%" by default
+#         floor: float = 0.30,  # long-horizon still has weight >= floor
+#         device=None,
+#         dtype=None,
+#     ) -> torch.Tensor:
+#         """
+#         Two-stage schedule:
+#           - t < cut: weight = 1.0
+#           - t >= cut: linearly decays from 1.0 to `floor`
+
+#         Returns weights normalized to mean=1 for stable loss scale.
+#         """
+#         cut = int(round(cut_ratio * T))
+#         cut = max(1, min(T, cut))
+
+#         w = torch.ones(T, device=device, dtype=dtype)
+#         if cut < T:
+#             w[cut:] = torch.linspace(
+#                 1.0, float(floor), T - cut, device=device, dtype=dtype
+#             )
+#         # normalize to keep loss magnitude comparable
+#         w = w / (w.mean() + 1e-12)
+#         return w
+
+#     def forward(
+#         self,
+#         pred: torch.Tensor,  # [B, Q, T, C]
+#         target: torch.Tensor,  # [B, T, C]
+#         taus=None,
+#         horizon_weights: torch.Tensor = None,  # [T] optional
+#     ) -> torch.Tensor:
+
+#         # Resolve taus
+#         if taus is None:
+#             if self.static_taus is not None:
+#                 taus = torch.as_tensor(
+#                     self.static_taus, device=pred.device, dtype=pred.dtype
+#                 )
+#             else:
+#                 taus = torch.linspace(
+#                     0.1, 0.9, pred.size(1), device=pred.device, dtype=pred.dtype
+#                 )
+#         else:
+#             taus = torch.as_tensor(taus, device=pred.device, dtype=pred.dtype)
+
+#         # Broadcast shapes
+#         target_exp = target.unsqueeze(1)  # [B, 1, T, C]
+#         taus_exp = taus.view(1, -1, 1, 1)  # [1, Q, 1, 1]
+
+#         # Pinball loss per element
+#         e = target_exp - pred  # [B, Q, T, C]
+#         per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
+
+#         # Quantile weights (keep your current behavior)
+#         wq = torch.ones_like(taus)  # [Q]
+#         wq_exp = wq.view(1, -1, 1, 1)  # [1,Q,1,1]
+#         per_elem = per_elem * wq_exp
+
+#         # Horizon weights (new)
+#         if horizon_weights is not None:
+#             hw = horizon_weights.to(device=pred.device, dtype=pred.dtype)
+#             assert hw.ndim == 1 and hw.numel() == pred.size(
+#                 2
+#             ), "horizon_weights must be shape [T]"
+#             hw_exp = hw.view(1, 1, -1, 1)  # [1,1,T,1]
+#             per_elem = per_elem * hw_exp
+
+#         # Reduction
+#         if self.reduction == "none":
+#             return per_elem
+#         elif self.reduction == "sum":
+#             return per_elem.sum()
+#         elif self.reduction == "mean":
+#             return per_elem.mean()
+#         else:
+#             raise ValueError(f"Unsupported reduction: {self.reduction}")
+
+
+def weighted_l1_over_horizon(y_hat: torch.Tensor, target: torch.Tensor, horizon_weights: torch.Tensor = None):
+    """
+    y_hat, target: [B, T, C]
+    horizon_weights: [T] optional
+    """
+    l1 = (y_hat - target).abs()  # [B,T,C]
+    if horizon_weights is not None:
+        hw = horizon_weights.to(device=y_hat.device, dtype=y_hat.dtype)
+        assert hw.ndim == 1 and hw.numel() == y_hat.size(1), "horizon_weights must be shape [T]"
+        l1 = l1 * hw.view(1, -1, 1)
+    return l1.mean()
+
+
 class PinballLoss(nn.Module):
     def __init__(self, quantile: float):
         """
@@ -98,6 +504,147 @@ class PinballLoss(nn.Module):
 
 
 class TinyTimeMixerGatedAttention(nn.Module):
+    """
+    Backward-compatible gated attention operating on last dim: x[..., C].
+
+    Config:
+      - config.gate_mode   : {"softmax", "sigmoid", "glu", "group_sigmoid"}
+                             default = "softmax"
+      - config.gate_groups : int (default = 8, used only for group_sigmoid)
+      - config.use_register_context_gating : bool (default = False)
+            If True, the gate will depend on both x and a context tensor
+            (typically derived from register tokens): [x || context].
+    """
+
+    def __init__(self, config, in_size: int, out_size: int):
+        super().__init__()
+        assert in_size == out_size, "Gated attention expects in_size == out_size"
+
+        self.C = in_size
+        self.mode = getattr(config, "gate_mode", "softmax")  # backward compatible
+        self.groups = getattr(config, "gate_groups", 8)
+
+        # NEW: whether to use register context as extra input to the gate
+        self.use_reg_context = getattr(config, "use_register_context_gating", False)
+
+        requested = getattr(config, "gate_groups", 8)
+        self.groups = self.pick_gate_groups(self.C, requested)
+        self.group_size = self.C // self.groups
+
+        if self.mode == "group_sigmoid":
+            assert self.C % self.groups == 0, "channels must be divisible by gate_groups"
+            self.group_size = self.C // self.groups
+
+        # ---- Projection ----
+        # Input to the gate:
+        #   - normally: x      → dim = C
+        #   - with context: [x || ctx] → dim = 2C
+        gate_in_dim = self.C * (2 if self.use_reg_context else 1)
+
+        if self.mode == "glu":
+            # GLU needs 2*C outputs (content + gate)
+            self.attn_layer = nn.Linear(gate_in_dim, 2 * self.C)
+        else:
+            self.attn_layer = nn.Linear(gate_in_dim, self.C)
+
+        # Optional: call this from outside after construction if you want identity-ish init
+        # self._init_identity_weights()
+
+    def pick_gate_groups(self, C: int, requested_G: int) -> int:
+        if requested_G <= 1:
+            return 1
+
+        if C % requested_G == 0:
+            return requested_G
+
+        for g in range(min(requested_G, C), 0, -1):
+            if C % g == 0:
+                return g
+
+        return 1
+
+    def _init_identity_weights(self):
+        if self.mode == "softmax":
+            nn.init.zeros_(self.attn_layer.weight)
+            nn.init.zeros_(self.attn_layer.bias)
+
+        elif self.mode in ("sigmoid", "group_sigmoid"):
+            nn.init.zeros_(self.attn_layer.weight)
+            nn.init.zeros_(self.attn_layer.bias)
+
+        elif self.mode == "glu":
+            weight = self.attn_layer.weight
+            bias = self.attn_layer.bias
+
+            a_w, b_w = weight.chunk(2, dim=0)
+            a_b, b_b = bias.chunk(2, dim=0)
+
+            nn.init.xavier_uniform_(a_w)
+            nn.init.zeros_(b_w)
+
+            nn.init.zeros_(a_b)
+            nn.init.zeros_(b_b)
+
+        else:
+            raise ValueError(f"Unknown gate_mode: {self.mode}")
+
+    def forward(self, x: torch.Tensor, context=None) -> torch.Tensor:
+        """
+        x:       [..., C]
+        context: [..., C] or broadcastable to x (e.g. [B, 1, C])
+                 Only used if self.use_reg_context == True.
+
+        If use_reg_context is False, 'context' is ignored and behavior is
+        identical to the original implementation.
+        """
+        if self.use_reg_context:
+            if context is None:
+                raise ValueError(
+                    "TinyTimeMixerGatedAttention: use_reg_context=True "
+                    "but no context tensor was provided to forward()."
+                )
+
+            # Broadcast context to match x shape (except last dim)
+            # e.g., context [B, 1, C] -> [B, T, C]
+            # or [B, C] -> [B, T, C] depending on your call site.
+            # This relies on standard PyTorch broadcasting rules.
+            ctx = context
+            # Ensure last dim matches
+            assert ctx.shape[-1] == self.C, f"context last dim must be {self.C}, got {ctx.shape[-1]}"
+
+            # Let broadcasting handle missing dims as long as they are compatible
+            # (e.g., x [B,T,C], ctx [B,1,C] or [1,1,C])
+            z = torch.cat([x, ctx.expand_as(x)], dim=-1)
+        else:
+            z = x  # no context → behave exactly as before
+
+        if self.mode == "glu":
+            a, b = self.attn_layer(z).chunk(2, dim=-1)
+            gate = torch.sigmoid(b)
+            return a * gate
+
+        logits = self.attn_layer(z)
+
+        if self.mode == "softmax":
+            gate = F.softmax(logits, dim=-1)
+
+        elif self.mode == "sigmoid":
+            gate = torch.sigmoid(logits)
+
+        elif self.mode == "group_sigmoid":
+            g = logits.view(*z.shape[:-1], self.groups, self.group_size)
+            g = g.mean(dim=-1, keepdim=True)
+            gate = torch.sigmoid(g)
+            gate = gate.expand(*z.shape[:-1], self.groups, self.group_size)
+            gate = gate.reshape(*z.shape[:-1], self.C)
+
+        else:
+            raise ValueError(f"Unknown gate_mode: {self.mode}")
+
+        return x * gate
+
+
+class TinyTimeMixerGatedAttentionOLD(nn.Module):
     """
     Module that applies gated attention to input data.
 
@@ -308,7 +855,9 @@ class TinyTimeMixerChannelFeatureMixerBlock(nn.Module):
 
         if config.gated_attn:
             self.gating_block = TinyTimeMixerGatedAttention(
-                in_size=config.num_input_channels, out_size=config.num_input_channels
+                config=config,
+                in_size=config.num_input_channels,
+                out_size=config.num_input_channels,
             )
 
     def forward(self, inputs: torch.Tensor):
@@ -516,7 +1065,9 @@ class PatchMixerBlock(nn.Module):
         )
 
         if config.gated_attn:
-            self.gating_block = TinyTimeMixerGatedAttention(in_size=config.num_patches, out_size=config.num_patches)
+            self.gating_block = TinyTimeMixerGatedAttention(
+                config=config, in_size=config.num_patches, out_size=config.num_patches
+            )
 
         if config.self_attn:
             self.self_attn_layer = TinyTimeMixerAttention(
@@ -585,7 +1136,9 @@ class FeatureMixerBlock(nn.Module):
         )
 
         if config.gated_attn:
-            self.gating_block = TinyTimeMixerGatedAttention(in_size=config.d_model, out_size=config.d_model)
+            self.gating_block = TinyTimeMixerGatedAttention(
+                config=config, in_size=config.d_model, out_size=config.d_model
+            )
 
     def forward(self, hidden: torch.Tensor):
         """
@@ -663,6 +1216,7 @@ class ForecastChannelHeadMixer(nn.Module):
         )
         if config.fcm_gated_attn:
             self.fcm_gating_block = TinyTimeMixerGatedAttention(
+                config=config,
                 in_size=self.total_channel_count * (scl_features),
                 out_size=self.total_channel_count * (scl_features),
             )
@@ -1206,6 +1760,21 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
 
+        # if isinstance(module, MultiQuantileHead):
+        #     # Initialize MQ temperature parameter if enabled.
+        #     # This avoids doing init inside the head and keeps HF-style init central.
+        #     if (
+        #         getattr(module, "enable_delta_temperature", False)
+        #         and module._temp_u is not None
+        #     ):
+        #         init_temp = float(getattr(self.config, "mq_temperature_init", 1.0))
+        #         init_temp = max(init_temp, 1e-8)
+
+        #         # softplus^{-1}(x) = log(exp(x) - 1)
+        #         init_u = torch.log(torch.expm1(torch.tensor(init_temp)))
+
+        #         with torch.no_grad():
+        #             module._temp_u.data.fill_(init_u)
         if isinstance(module, TinyTimeMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
@@ -1242,6 +1811,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 nn.init.xavier_uniform_(module.weight)
             else:
                 module.reset_parameters()
+        elif isinstance(module, nn.Conv1d):
+            nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
 
 
 class TinyTimeMixerPatchify(nn.Module):
@@ -1328,7 +1899,41 @@ class TinyTimeMixerStdScaler(nn.Module):
 
         variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
-        return (data - loc) / scale, loc, scale
+        normalized = self.transform(data, loc, scale)
+        return normalized, loc, scale
+
+    def transform(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Undo normalization + affine transform on observed values.
+        """
+        normalized = (data - loc) / scale
+
+        # if self.suppress_outliers:
+        #     normalized = torch.arcsinh(normalized)
+
+        return normalized
+
+    def inverse(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Undo normalization + affine transform on observed values.
+        """
+
+        # if self.suppress_outliers:
+        #     data = torch.sinh(data)
+
+        restored = data * scale + loc
+        # restored = torch.where(observed_indicator.bool(), restored, data)
+        return restored
 
 
 class TinyTimeMixerMeanScaler(nn.Module):
@@ -1384,6 +1989,35 @@ class TinyTimeMixerMeanScaler(nn.Module):
 
         return scaled_data, torch.zeros_like(scale), scale
 
+    def transform(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Undo normalization + affine transform on observed values.
+        """
+        normalized = data / scale
+
+        # if self.suppress_outliers:
+        #     normalized = torch.arcsinh(normalized)
+
+        return normalized
+
+    def inverse(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Undo normalization + affine transform on observed values.
+        """
+        restored = data * scale + loc
+        # restored = torch.where(observed_indicator.bool(), restored, data)
+        return restored
+
 
 class TinyTimeMixerNOPScaler(nn.Module):
     """
@@ -1411,6 +2045,28 @@ class TinyTimeMixerNOPScaler(nn.Module):
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
 
+    def transform(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor = None,
+        scale: torch.Tensor = None,
+    ) -> torch.Tensor:
+        """ """
+        return data
+
+    def inverse(
+        self,
+        data: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Undo normalization + affine transform on observed values.
+        """
+        restored = data * scale + loc
+        # restored = torch.where(observed_indicator.bool(), restored, data)
+        return restored
+
 
 @dataclass
 class TinyTimeMixerEncoderOutput(ModelOutput):
@@ -1426,6 +2082,797 @@ class TinyTimeMixerEncoderOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class MultiScaleFromPatchedSequence(nn.Module):
+    def __init__(self, config: TinyTimeMixerConfig):
+        super().__init__()
+
+        self.patch_len = config.patch_length
+        self.d_model = config.d_model
+        max_seq_len = config.context_length
+
+        self.max_scales = 0
+        seq_len = max_seq_len
+        while seq_len >= self.patch_len:
+            self.max_scales += 1
+            seq_len = seq_len // 2
+
+        self.projectors = nn.ModuleList([nn.Linear(self.patch_len, self.d_model) for _ in range(self.max_scales)])
+
+    def forward(self, patched_x):
+        B, C, P, L = patched_x.shape
+        S = P * L
+        x = patched_x.view(B, C, S)
+
+        outputs = []
+        # downsampled_sequences = []
+        # num_patches_per_scale = []
+
+        i = 0
+        while True:
+            factor = 2**i
+            if S < factor or S // factor < self.patch_len:
+                break
+
+            downsampled = F.avg_pool1d(x, kernel_size=factor, stride=factor)
+            # downsampled_sequences.append((i, downsampled[0, 0].tolist()))
+
+            S_i = downsampled.shape[-1]
+            num_patch_i = S_i // self.patch_len
+            if num_patch_i == 0:
+                break
+
+            downsampled = downsampled[:, :, -num_patch_i * self.patch_len :]
+            patches = downsampled.reshape(B, C, num_patch_i, self.patch_len)
+
+            projected = self.projectors[i](patches.reshape(B * C * num_patch_i, self.patch_len))
+            projected = projected.reshape(B, C, num_patch_i, self.d_model)
+            # summed = projected.sum(dim=2)
+            outputs.append(projected)
+            # num_patches_per_scale.append(num_patch_i)
+
+            i += 1
+
+        outputs.reverse()  # add hierarchies features to end
+        return torch.cat(outputs, dim=2)
+        # num_patches_per_scale, downsampled_sequences
+
+
+class TinyTimeMixerAddLearnableRegisterTokens(nn.Module):
+    def __init__(self, config: TinyTimeMixerConfig, device):
+        super(TinyTimeMixerAddLearnableRegisterTokens, self).__init__()
+        self.register_tokens = config.register_tokens
+        d_model = config.d_model
+
+        self.patch_tokens = None
+        # Learnable patch tokens (p): shape (num_patch_tokens x d_model)
+        if self.register_tokens > 0:
+            self.patch_tokens = nn.Parameter(torch.randn(self.register_tokens, d_model).to(device))
+
+    def forward(self, x, patch_mask=None):
+        # Input x shape: batch x num_channels x num_patches x d_model
+        batch_size, num_channels, num_patches, d_model = x.size()
+
+        if self.patch_tokens is not None:
+            # Expand patch tokens along the batch and channel dimensions
+            # Result shape: (1 x 1 x num_patch_tokens x d_model)
+            patch_tokens_expanded = self.patch_tokens.unsqueeze(0).unsqueeze(0)
+
+            # Add patch tokens to the num_patches dimension
+            # Shape: (batch x num_channels x (num_patches + num_patch_tokens) x d_model)
+            x = torch.cat(
+                [patch_tokens_expanded.expand(batch_size, num_channels, -1, -1), x],
+                dim=2,
+            )
+            patch_mask = update_patch_mask(patch_mask, self.register_tokens)
+
+        return x, patch_mask
+
+
+class TinyTimeMixerAddFFTPatches(nn.Module):
+    """
+    Backward-compatible FFT token injection.
+
+    Default behavior (backward compatible):
+      - get_one_freq_emb = False
+      - fft_ignore_dc    = False
+      - Adds k FFT tokens (one per selected freq id), each token has dim = d_model
+        x: [B, C, P, D] -> [B, C, P+k, D]
+
+    Optional behavior (get_one_freq_emb = True):
+      - Embeds each of the top-k freq ids into d_freq (auto-chosen)
+      - Concats k*d_freq and projects to d_model to form ONE token
+      - Adds only 1 token:
+        x: [B, C, P, D] -> [B, C, P+1, D]
+
+    Config params used:
+      - config.fft_length (int)
+      - config.d_model (int)
+      - config.context_length (int)
+      - config.use_fft_embedding (bool, default False)
+      - config.get_one_freq_emb (bool, default False)
+
+      - config.fft_ignore_dc (bool, default False)   # keep exact old behavior by default
+
+      - config.fft_d_freq_min (int, default 4)       # only used when get_one_freq_emb=True
+      - config.fft_d_freq_max (int, default 64)      # only used when get_one_freq_emb=True
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.d_model = int(config.d_model)
+
+        self.seq_len = int(config.context_length)
+        self.max_freq_bins = self.seq_len // 2 + 1  # rfft output length
+
+        # Cap fft_k to avoid torch.topk crash
+        self.fft_k = min(int(getattr(config, "fft_length", 4)), self.max_freq_bins)
+
+        self.use_fft_embedding = bool(getattr(config, "use_fft_embedding", False))
+
+        # New flag (default False): keep old behavior unless enabled
+        self.get_one_freq_emb = bool(getattr(config, "get_one_freq_emb", False))
+
+        # Backward-compatible default: do NOT ignore DC unless enabled
+        self.fft_ignore_dc = bool(getattr(config, "fft_ignore_dc", False))
+
+        # ----- Build embedding modules -----
+        if self.get_one_freq_emb:
+            # Auto d_freq based on fft_k and d_model, but clamp to meaningful range
+            raw = max(1, self.d_model // max(1, self.fft_k))
+
+            d_freq_min = int(getattr(config, "fft_d_freq_min", 4))
+            d_freq_max = int(getattr(config, "fft_d_freq_max", 64))
+            self.d_freq = int(max(d_freq_min, min(d_freq_max, raw)))
+
+            if self.use_fft_embedding:
+                self.freq_embedding = nn.Embedding(self.max_freq_bins, self.d_freq)
+            else:
+                self.freq_index_mlp = nn.Sequential(
+                    nn.Linear(1, self.d_freq),
+                    nn.ReLU(),
+                    nn.Linear(self.d_freq, self.d_freq),
+                )
+
+            # Concat k embeddings (k*d_freq) -> project to d_model (one token)
+            self.freq_concat_proj = nn.Linear(self.fft_k * self.d_freq, self.d_model)
+
+        else:
+            # Original behavior: each of k tokens is d_model-sized
+            self.d_freq = self.d_model
+
+            if self.use_fft_embedding:
+                self.freq_embedding = nn.Embedding(self.max_freq_bins, self.d_model)
+            else:
+                self.freq_index_mlp = nn.Sequential(
+                    nn.Linear(1, self.d_model),
+                    nn.ReLU(),
+                    nn.Linear(self.d_model, self.d_model),
+                )
+
+    def forward(self, x, raw_input, patch_mask=None):
+        """
+        Args:
+            x: [B, C, P, D] patched tokens
+            raw_input: [B, S, C] original time-series (or longer; we slice to context_length)
+            patch_mask: optional mask corresponding to x's patch dimension
+
+        Returns:
+            x: updated tokens
+            patch_mask: updated mask (if provided)
+        """
+        # slice for maskedprediction workflow
+        raw_input = raw_input[:, : self.seq_len, :]  # [B, S, C]
+        B, S, C = raw_input.shape
+
+        # FFT: [B, F, C] where F = S//2 + 1
+        fft = torch.fft.rfft(raw_input, dim=1)
+        mag = fft.abs()  # [B, F, C]
+
+        # Keep backward compatibility by default (fft_ignore_dc=False)
+        if self.fft_ignore_dc:
+            mag[:, 0, :] = 0.0
+
+        # Top-k selection along frequency dimension
+        # (fft_k was already capped to max_freq_bins in __init__)
+        topk = torch.topk(mag, self.fft_k, dim=1)
+        topk_indices = topk.indices.permute(0, 2, 1)  # [B, C, k]
+
+        # Embed frequency ids -> [B, C, k, d_*]
+        if self.use_fft_embedding:
+            freq_tokens = self.freq_embedding(topk_indices)
+        else:
+            norm_bin_indices = topk_indices.float() / float(self.max_freq_bins)  # [B, C, k]
+            freq_tokens = self.freq_index_mlp(norm_bin_indices.unsqueeze(-1))
+
+        if not self.get_one_freq_emb:
+            # Original behavior: prepend k tokens
+            x = torch.cat([freq_tokens, x], dim=2)  # [B, C, P+k, D]
+            if patch_mask is not None:
+                patch_mask = update_patch_mask(patch_mask, self.fft_k)
+            return x, patch_mask
+
+        # New behavior: build one token from top-k embeddings
+        # freq_tokens: [B, C, k, d_freq] -> [B, C, k*d_freq] -> proj -> [B, C, 1, d_model]
+        freq_flat = freq_tokens.reshape(B, C, self.fft_k * self.d_freq)
+        one_token = self.freq_concat_proj(freq_flat).unsqueeze(2)
+
+        x = torch.cat([one_token, x], dim=2)  # [B, C, P+1, D]
+        if patch_mask is not None:
+            patch_mask = update_patch_mask(patch_mask, 1)
+        return x, patch_mask
+
+
+DEFAULT_Q = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+
+def _is_default_9_quantiles(q_list, tol=1e-12):
+    if len(q_list) != 9:
+        return False
+    for q1, q2 in zip(q_list, DEFAULT_Q):
+        if abs(q1 - q2) > tol:
+            return False
+    return True
+
+
+class MultiQuantileHead(nn.Module):
+    """
+    Generic multi-quantile head.
+
+    - Uses config.quantile_levels (default: [0.1..0.9]) instead of hardcoded 9 quantiles.
+    - Assumes:
+        * quantile_levels contains 0.5 (median)
+        * len(quantile_levels) is odd
+    - For the default quantile_levels = [0.1,0.2,...,0.9], this produces *exactly*
+      the same tensor layout/values as the original hardcoded implementation.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.mq_hidden = int(getattr(config, "mq_hidden", 8))
+        self.mq_kernel_size = int(getattr(config, "mq_kernel_size", 3))
+        self.mq_eps = float(getattr(config, "mq_eps", 1e-6))
+
+        self.decoder_d_model = int(config.decoder_d_model)
+        self.num_patches = int(config.num_patches)  # ← use backbone config
+
+        self.mq_use_decoder_pool = bool(getattr(config, "mq_use_decoder_pool", False))
+        self.mq_cond_path = str(getattr(config, "mq_cond_path", "pool")).lower()
+        self.mq_cond_mode = str(getattr(config, "mq_cond_mode", "add")).lower()
+
+        assert self.mq_cond_path in ("pool", "flatten")
+        assert self.mq_cond_mode in ("add", "concat")
+
+        self.mq_q50_type = str(getattr(config, "mq_q50_type", "median")).lower()
+
+        # -----------------------------
+        # Quantile list (generic)
+        # -----------------------------
+        qlist = getattr(config, "quantile_levels", None)
+        if qlist is None:
+            qlist = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+        # normalize + sort
+        qlist = [float(q) for q in qlist]
+        qlist = sorted(qlist)
+
+        Q = len(qlist)
+        if Q % 2 != 1:
+            raise ValueError(f"quantile_levels must be odd length, got {Q}: {qlist}")
+        # median must exist
+        # NOTE: float comparisons can be finicky; use a small tolerance
+        median_idx = None
+        for i, q in enumerate(qlist):
+            if abs(q - 0.5) < 1e-12:
+                median_idx = i
+                break
+        if median_idx is None:
+            raise ValueError(f"quantile_levels must contain 0.5 (median). Got: {qlist}")
+
+        # we assume odd -> symmetric counts around median index
+        k_down = median_idx
+        k_up = Q - median_idx - 1
+        if k_down != k_up:
+            # You said we can assume odd+median; if you also always want symmetry,
+            # keep this check. If you want to allow non-symmetric lists, remove it.
+            raise ValueError(
+                f"quantile_levels must have equal counts below/above median. "
+                f"Got k_down={k_down}, k_up={k_up}, list={qlist}"
+            )
+
+        self.quantile_list = qlist
+        self.num_quantiles = Q
+        self.median_index = median_idx
+        self.k_side = k_down  # number below (and above) median
+
+        # --- base stack ---
+        pad = self.mq_kernel_size // 2
+        self.dw = nn.Conv1d(1, 1, kernel_size=self.mq_kernel_size, padding=pad)
+        self.inorm = nn.InstanceNorm1d(1, affine=True)
+        self.pw1 = nn.Conv1d(1, self.mq_hidden, kernel_size=1)
+        self.act = nn.GELU()
+
+        # --- decoder conditioning ---
+        if self.mq_use_decoder_pool:
+            if self.mq_cond_path == "pool":
+                self.dec_proj = nn.Linear(self.decoder_d_model, self.mq_hidden)
+            else:  # flatten path
+                self.mq_decoder_d_model = int(getattr(config, "mq_decoder_d_model", self.mq_hidden))
+
+                # D → md (token-wise)
+                self.dec_tok_proj = nn.Linear(self.decoder_d_model, self.mq_decoder_d_model)
+
+                # (num_patches * md) → hidden
+                flat_dim = self.num_patches * self.mq_decoder_d_model
+                self.dec_flat_to_hidden = nn.Linear(flat_dim, self.mq_hidden)
+
+        # adjust pw2 for concat
+        pw2_in = self.mq_hidden
+        if self.mq_use_decoder_pool and self.mq_cond_mode == "concat":
+            pw2_in = self.mq_hidden * 2
+
+        # IMPORTANT: out_channels is now generic (Q)
+        self.pw2 = nn.Conv1d(pw2_in, self.num_quantiles, kernel_size=1)
+
+    def forward(self, mean_hat, decoder_hidden_state=None):
+        # mean_hat: [B,T,C]
+        mean_hat_ct = mean_hat.transpose(-1, -2).contiguous()  # [B,C,T]
+        B, C, T = mean_hat_ct.shape
+
+        x = mean_hat_ct.view(B * C, 1, T)
+        x = self.inorm(self.dw(x))
+        h = self.act(self.pw1(x))  # [B*C,H,T]
+
+        if self.mq_use_decoder_pool:
+            if decoder_hidden_state is None:
+                raise ValueError("decoder_hidden_state required")
+
+            if self.mq_cond_path == "pool":
+                dec_pool = decoder_hidden_state.mean(dim=2)  # [B,C,D]
+                cond = self.dec_proj(dec_pool)  # [B,C,H]
+            else:  # flatten path
+                B2, C2, P, D = decoder_hidden_state.shape
+                if P != self.num_patches:
+                    raise ValueError(f"Expected {self.num_patches} patches, got {P}")
+
+                dec_tok = self.dec_tok_proj(decoder_hidden_state)  # [B,C,P,md]
+                dec_flat = dec_tok.reshape(B2, C2, -1)  # [B,C,P*md]
+                cond = self.dec_flat_to_hidden(dec_flat)  # [B,C,H]
+
+            cond = cond.view(B * C, -1).unsqueeze(-1).expand(-1, -1, T)  # [B*C,H,T]
+
+            if self.mq_cond_mode == "add":
+                h = h + cond
+            else:
+                h = torch.cat([h, cond], dim=1)
+
+        # o: [B,C,Q,T]
+        o = self.pw2(h).view(B, C, self.num_quantiles, T)
+
+        # Channel layout matches the old behavior when Q=9:
+        #   o[:, :, 0, :]      -> bias50
+        #   o[:, :, 1:1+k, :]  -> down_raw (nearest->farthest below median)
+        #   o[:, :, 1+k:, :]   -> up_raw   (nearest->farthest above median)
+        k = self.k_side
+        bias50 = o[:, :, 0:1, :]
+        down_raw = o[:, :, 1 : 1 + k, :]
+        up_raw = o[:, :, 1 + k : 1 + 2 * k, :]
+
+        down_inc = F.softplus(down_raw) + self.mq_eps
+        up_inc = F.softplus(up_raw) + self.mq_eps
+
+        # median anchor
+        q50 = mean_hat_ct.unsqueeze(2)  # [B,C,1,T]
+        if self.mq_q50_type == "median":
+            q50 = q50 + bias50
+
+        # cumulative distances (nearest -> farthest)
+        down_cum = torch.cumsum(down_inc, dim=2)  # [B,C,k,T]
+        up_cum = torch.cumsum(up_inc, dim=2)  # [B,C,k,T]
+
+        if _is_default_9_quantiles(self.quantile_list):
+            # hardcoded identical graph
+            q40 = q50 - down_cum[:, :, 0:1, :]
+            q30 = q50 - down_cum[:, :, 1:2, :]
+            q20 = q50 - down_cum[:, :, 2:3, :]
+            q10 = q50 - down_cum[:, :, 3:4, :]
+
+            q60 = q50 + up_cum[:, :, 0:1, :]
+            q70 = q50 + up_cum[:, :, 1:2, :]
+            q80 = q50 + up_cum[:, :, 2:3, :]
+            q90 = q50 + up_cum[:, :, 3:4, :]
+
+            qhat_ctqt = torch.cat([q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2)
+        else:
+            # generic flip-based path
+            down_near_to_far = q50 - down_cum
+            up_near_to_far = q50 + up_cum
+            down_asc = torch.flip(down_near_to_far, dims=[2])
+            qhat_ctqt = torch.cat([down_asc, q50, up_near_to_far], dim=2)
+        # # quantiles around median
+        # # down_near_to_far: [q_(median-1), q_(median-2), ..., q_(lowest)] in that order
+        # down_near_to_far = q50 - down_cum
+        # up_near_to_far = q50 + up_cum
+
+        # # Assemble in ascending quantile order:
+        # #   [lowest ... just-below-median, median, just-above-median ... highest]
+        # # Old code did: [q10,q20,q30,q40,q50,q60,q70,q80,q90]
+        # down_asc = torch.flip(
+        #     down_near_to_far, dims=[2]
+        # )  # farthest->nearest => ascending tail below median
+        # qhat_ctqt = torch.cat([down_asc, q50, up_near_to_far], dim=2)  # [B,C,Q,T]
+
+        # return: [B,Q,T,C]
+        return qhat_ctqt.permute(0, 2, 3, 1).contiguous()
+
+
+# class MultiQuantileHead(nn.Module):
+
+#     def __init__(self, config):
+#         super().__init__()
+
+#         self.mq_hidden = int(getattr(config, "mq_hidden", 8))
+#         self.mq_kernel_size = int(getattr(config, "mq_kernel_size", 3))
+#         self.mq_eps = float(getattr(config, "mq_eps", 1e-6))
+
+#         self.decoder_d_model = int(config.decoder_d_model)
+#         self.num_patches = int(config.num_patches)  # ← use backbone config
+
+#         self.mq_use_decoder_pool = bool(getattr(config, "mq_use_decoder_pool", False))
+#         self.mq_cond_path = str(getattr(config, "mq_cond_path", "pool")).lower()
+#         self.mq_cond_mode = str(getattr(config, "mq_cond_mode", "add")).lower()
+
+#         assert self.mq_cond_path in ("pool", "flatten")
+#         assert self.mq_cond_mode in ("add", "concat")
+
+#         self.mq_q50_type = str(getattr(config, "mq_q50_type", "median")).lower()
+
+#         # --- base stack ---
+#         pad = self.mq_kernel_size // 2
+#         self.dw = nn.Conv1d(1, 1, kernel_size=self.mq_kernel_size, padding=pad)
+#         self.inorm = nn.InstanceNorm1d(1, affine=True)
+#         self.pw1 = nn.Conv1d(1, self.mq_hidden, kernel_size=1)
+#         self.act = nn.GELU()
+
+#         # --- decoder conditioning ---
+#         if self.mq_use_decoder_pool:
+
+#             if self.mq_cond_path == "pool":
+#                 self.dec_proj = nn.Linear(self.decoder_d_model, self.mq_hidden)
+
+#             else:  # flatten path
+
+#                 self.mq_decoder_d_model = int(
+#                     getattr(config, "mq_decoder_d_model", self.mq_hidden)
+#                 )
+
+#                 # D → md (token-wise)
+#                 self.dec_tok_proj = nn.Linear(
+#                     self.decoder_d_model,
+#                     self.mq_decoder_d_model,
+#                 )
+
+#                 # (num_patches * md) → hidden
+#                 flat_dim = self.num_patches * self.mq_decoder_d_model
+#                 self.dec_flat_to_hidden = nn.Linear(flat_dim, self.mq_hidden)
+
+#         # adjust pw2 for concat
+#         pw2_in = self.mq_hidden
+#         if self.mq_use_decoder_pool and self.mq_cond_mode == "concat":
+#             pw2_in = self.mq_hidden * 2
+
+#         self.pw2 = nn.Conv1d(pw2_in, 9, kernel_size=1)
+
+#     def forward(self, mean_hat, decoder_hidden_state=None):
+
+#         mean_hat_ct = mean_hat.transpose(-1, -2).contiguous()
+#         B, C, T = mean_hat_ct.shape
+
+#         x = mean_hat_ct.view(B * C, 1, T)
+#         x = self.inorm(self.dw(x))
+#         h = self.act(self.pw1(x))  # [B*C,H,T]
+
+#         if self.mq_use_decoder_pool:
+
+#             if decoder_hidden_state is None:
+#                 raise ValueError("decoder_hidden_state required")
+
+#             if self.mq_cond_path == "pool":
+
+#                 dec_pool = decoder_hidden_state.mean(dim=2)  # [B,C,D]
+#                 cond = self.dec_proj(dec_pool)
+
+#             else:  # flatten path
+
+#                 B2, C2, P, D = decoder_hidden_state.shape
+#                 assert (
+#                     P == self.num_patches
+#                 ), f"Expected {self.num_patches} patches, got {P}"
+
+#                 # [B,C,P,D] → [B,C,P,md]
+#                 dec_tok = self.dec_tok_proj(decoder_hidden_state)
+
+#                 # flatten patches
+#                 dec_flat = dec_tok.reshape(B2, C2, -1)
+
+#                 # project to hidden
+#                 cond = self.dec_flat_to_hidden(dec_flat)  # [B,C,H]
+
+#             cond = cond.view(B * C, -1).unsqueeze(-1).expand(-1, -1, T)
+
+#             if self.mq_cond_mode == "add":
+#                 h = h + cond
+#             else:
+#                 h = torch.cat([h, cond], dim=1)
+
+#         o = self.pw2(h).view(B, C, 9, T)
+
+#         bias50 = o[:, :, 0:1, :]
+#         down_raw = o[:, :, 1:5, :]
+#         up_raw = o[:, :, 5:9, :]
+
+#         down_inc = F.softplus(down_raw) + self.mq_eps
+#         up_inc = F.softplus(up_raw) + self.mq_eps
+
+#         q50 = mean_hat_ct.unsqueeze(2)
+#         if self.mq_q50_type == "median":
+#             q50 = q50 + bias50
+
+#         down_cum = torch.cumsum(down_inc, dim=2)
+#         up_cum = torch.cumsum(up_inc, dim=2)
+
+#         q40 = q50 - down_cum[:, :, 0:1, :]
+#         q30 = q50 - down_cum[:, :, 1:2, :]
+#         q20 = q50 - down_cum[:, :, 2:3, :]
+#         q10 = q50 - down_cum[:, :, 3:4, :]
+
+#         q60 = q50 + up_cum[:, :, 0:1, :]
+#         q70 = q50 + up_cum[:, :, 1:2, :]
+#         q80 = q50 + up_cum[:, :, 2:3, :]
+#         q90 = q50 + up_cum[:, :, 3:4, :]
+
+#         qhat_ctqt = torch.cat([q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2)
+
+#         return qhat_ctqt.permute(0, 2, 3, 1).contiguous()
+
+
+# ----------------------------
+# # Multi-Quantile Head (9 taus)
+# # ----------------------------
+# class MultiQuantileHeadOLD(nn.Module):
+#     """
+#     9-quantile head (0.1..0.9) with optional CRPS improvements.
+
+#     Default behavior = IDENTICAL to your current implementation.
+#     New behavior is enabled only if config.mq_* flags are set.
+
+#     Input:  mean_hat [B, T, C]
+#     Output: qhat     [B, 9, T, C]  for taus = 0.1..0.9
+#     """
+
+#     def __init__(self, config):
+#         super().__init__()
+
+#         # --- Base params (same as before) ---
+#         hidden = int(getattr(config, "mq_hidden", 8))
+#         kernel_size = int(getattr(config, "mq_kernel_size", 3))
+#         self.eps = float(getattr(config, "mq_eps", 1e-6))
+#         pad = kernel_size // 2
+
+#         # --- Optional CRPS flags ---
+#         self.detach_mean_for_head = bool(
+#             getattr(config, "mq_detach_mean_for_head", False)
+#         )
+#         self.median_mode = str(getattr(config, "mq_median_mode", "biased"))
+#         self.median_bias_shrink = float(getattr(config, "mq_median_bias_shrink", 0.05))
+
+#         self.enable_delta_temperature = bool(
+#             getattr(config, "mq_enable_delta_temperature", False)
+#         )
+#         self.temperature_per_horizon = bool(
+#             getattr(config, "mq_temperature_per_horizon", False)
+#         )
+
+#         self.prediction_length = int(getattr(config, "prediction_length", 0))
+#         if self.prediction_length <= 0:
+#             raise ValueError(
+#                 "config.prediction_length must be set (>0) for MultiQuantileHead."
+#             )
+
+#         if self.median_mode not in ("biased", "fixed", "shrink"):
+#             raise ValueError(
+#                 f"mq_median_mode must be one of ['biased','fixed','shrink'], got {self.median_mode}"
+#             )
+
+#         # --- Core layers (UNCHANGED from your baseline) ---
+#         self.dw = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=pad, bias=True)
+#         self.inorm = nn.InstanceNorm1d(1, affine=True)
+#         self.pw1 = nn.Conv1d(1, hidden, kernel_size=1, bias=True)
+#         self.pw2 = nn.Conv1d(
+#             hidden, 9, kernel_size=1, bias=True
+#         )  # [bias50, 4*down, 4*up]
+#         self.act = nn.GELU()
+
+#         # --- Optional temperature parameter (INIT done in model._init_weights) ---
+#         self._temp_u = None
+#         if self.enable_delta_temperature:
+#             if self.temperature_per_horizon:
+#                 self._temp_u = nn.Parameter(torch.zeros(self.prediction_length))
+#             else:
+#                 self._temp_u = nn.Parameter(torch.zeros(1))
+
+#     def _get_temp(self, T: int, device, dtype):
+#         """
+#         Returns multiplicative temperature for deltas.
+#         - scalar:       [1,1,1,1]
+#         - per-horizon:  [1,1,1,T]
+#         """
+#         if not self.enable_delta_temperature:
+#             return None
+#         if self._temp_u is None:
+#             return None
+
+#         if self.temperature_per_horizon:
+#             if T > self._temp_u.numel():
+#                 raise ValueError(
+#                     f"T={T} exceeds configured prediction_length={self._temp_u.numel()} for mq_temperature_per_horizon."
+#                 )
+#             temp = (
+#                 F.softplus(self._temp_u[:T]).to(device=device, dtype=dtype) + self.eps
+#             )
+#             return temp.view(1, 1, 1, T)
+
+#         temp = F.softplus(self._temp_u).to(device=device, dtype=dtype) + self.eps
+#         return temp.view(1, 1, 1, 1)
+
+#     def forward(self, mean_hat: torch.Tensor) -> torch.Tensor:
+#         """
+#         mean_hat: [B, T, C]
+#         returns:  [B, 9, T, C]
+#         """
+#         if mean_hat.dim() != 3:
+#             raise ValueError("mean_hat must be rank-3: [B, T, C].")
+
+#         mean_hat_ct = mean_hat.transpose(-1, -2)  # [B, C, T]
+#         B, C, T = mean_hat_ct.shape
+
+#         # Optional: protect point predictor from quantile gradients
+#         cond = mean_hat_ct.detach() if self.detach_mean_for_head else mean_hat_ct
+
+#         x = cond.reshape(B * C, 1, T)
+#         x = self.dw(x)
+#         x = self.inorm(x)
+#         h = self.act(self.pw1(x))
+#         o = self.pw2(h).reshape(B, C, 9, T)
+
+#         bias50 = o[:, :, 0:1, :]  # [B,C,1,T]
+#         down_raw = o[:, :, 1:5, :]  # [B,C,4,T]
+#         up_raw = o[:, :, 5:9, :]  # [B,C,4,T]
+
+#         down_inc = F.softplus(down_raw) + self.eps
+#         up_inc = F.softplus(up_raw) + self.eps
+
+#         # Optional temperature scaling (starts as 1.0 if mq_temperature_init=1.0)
+#         temp = self._get_temp(T, down_inc.device, down_inc.dtype)
+#         if temp is not None:
+#             down_inc = down_inc * temp
+#             up_inc = up_inc * temp
+
+#         # Median/anchor
+#         if self.median_mode == "fixed":
+#             q50 = mean_hat_ct.unsqueeze(2)  # MASE-safe anchor
+#         elif self.median_mode == "shrink":
+#             q50 = mean_hat_ct.unsqueeze(2) + self.median_bias_shrink * bias50
+#         else:  # "biased" (baseline behavior)
+#             q50 = mean_hat_ct.unsqueeze(2) + bias50
+
+#         # cumulative distances from median
+#         down_cum = torch.cumsum(down_inc, dim=2)
+#         up_cum = torch.cumsum(up_inc, dim=2)
+
+#         q40 = q50 - down_cum[:, :, 0:1, :]
+#         q30 = q50 - down_cum[:, :, 1:2, :]
+#         q20 = q50 - down_cum[:, :, 2:3, :]
+#         q10 = q50 - down_cum[:, :, 3:4, :]
+
+#         q60 = q50 + up_cum[:, :, 0:1, :]
+#         q70 = q50 + up_cum[:, :, 1:2, :]
+#         q80 = q50 + up_cum[:, :, 2:3, :]
+#         q90 = q50 + up_cum[:, :, 3:4, :]
+
+#         qhat_ctqt = torch.cat(
+#             [q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2
+#         )  # [B,C,9,T]
+#         qhat = qhat_ctqt.permute(0, 2, 3, 1).contiguous()  # [B,9,T,C]
+#         return qhat
+
+
+# class MultiQuantileHead(nn.Module):
+#     """
+#     Turn mean forecasts [B, C, T] into quantiles [B, C, 9, T] for q = 0.1..0.9.
+#     - Channel independent: same weights applied to every channel.
+#     - Monotonic by construction using positive cumulative deltas (softplus).
+#     - Deltas are conditioned on the mean via a small temporal conv stack.
+
+#     Quantile layout (dim=2): [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+#     """
+
+#     def __init__(self, hidden: int = 8, kernel_size: int = 3, eps: float = 1e-6):
+#         super().__init__()
+#         self.eps = eps
+#         pad = kernel_size // 2
+
+#         # Per-channel temporal features (shared across channels)
+#         self.dw = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=pad, bias=True)
+#         self.inorm = nn.InstanceNorm1d(1, affine=True)  # time-wise stabilization
+#         # Lightweight projection to quantile params
+#         self.pw1 = nn.Conv1d(1, hidden, kernel_size=1, bias=True)
+#         self.pw2 = nn.Conv1d(
+#             hidden, 9, kernel_size=1, bias=True
+#         )  # [bias50, 4*down, 4*up]
+
+#         self.act = nn.GELU()
+
+#     def _safe_time_norm(self, x, eps=1e-3, clip=10.0):
+#         # x: [B*C, 1, T]
+#         mu = x.mean(dim=2, keepdim=True)
+#         var = x.var(dim=2, unbiased=False, keepdim=True)
+#         xn = (x - mu) / (var.add_(eps).sqrt_())
+#         return xn.clamp_(-clip, clip)
+
+#     def forward(self, mean_hat: torch.Tensor) -> torch.Tensor:
+#         """
+#         mean_hat: [B, T,C]
+#         returns qhat: [B, 9, T,C] for quantiles [0.1,...,0.9]
+#         """
+#         mean_hat = mean_hat.transpose(-1, -2)  # [B, C, T]
+#         assert mean_hat.dim() == 3, "mean_hat must be [B, C, T]"
+#         B, C, T = mean_hat.shape
+
+#         x = mean_hat.reshape(B * C, 1, T)  # share weights across channels
+#         x = self.dw(x)
+#         x = self.inorm(x)
+#         h = self.act(self.pw1(x))
+#         o = self.pw2(h)  # [B*C, 9, T]
+#         o = o.reshape(B, C, 9, T)
+
+#         bias50 = o[:, :, 0:1, :]  # [B,C,1,T]
+#         down_raw = o[:, :, 1:5, :]  # [B,C,4,T]
+#         up_raw = o[:, :, 5:9, :]  # [B,C,4,T]
+
+#         # Positive increments -> monotone quantiles
+#         down_inc = F.softplus(down_raw) + self.eps
+#         up_inc = F.softplus(up_raw) + self.eps
+
+#         q50 = (
+#             mean_hat.unsqueeze(2) + bias50
+#         )  # allow median to deviate from mean if helpful
+
+#         # cumulative distances from median
+#         down_cum = torch.cumsum(down_inc, dim=2)
+#         up_cum = torch.cumsum(up_inc, dim=2)
+
+#         q40 = q50 - down_cum[:, :, 0:1, :]
+#         q30 = q50 - down_cum[:, :, 1:2, :]
+#         q20 = q50 - down_cum[:, :, 2:3, :]
+#         q10 = q50 - down_cum[:, :, 3:4, :]
+
+#         q60 = q50 + up_cum[:, :, 0:1, :]
+#         q70 = q50 + up_cum[:, :, 1:2, :]
+#         q80 = q50 + up_cum[:, :, 2:3, :]
+#         q90 = q50 + up_cum[:, :, 3:4, :]
+
+#         qhat = torch.cat(
+#             [q10, q20, q30, q40, q50, q60, q70, q80, q90], dim=2
+#         )  # [B,C,9,T]
+
+#         qhat = qhat.permute(0, 2, 3, 1)  # [B,9,T,C]
+
+#         return qhat
 
 
 class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
@@ -1445,7 +2892,10 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
 
         self.use_return_dict = config.use_return_dict
 
-        self.patcher = nn.Linear(config.patch_length, config.d_model)
+        if config.multi_scale:
+            self.patcher = MultiScaleFromPatchedSequence(config)
+        else:
+            self.patcher = nn.Linear(config.patch_length, config.d_model)
         if config.use_positional_encoding:
             self.positional_encoder = TinyTimeMixerPositionalEncoding(config=config)
         else:
@@ -1464,6 +2914,19 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         self.resolution_prefix_tuning = config.resolution_prefix_tuning
         self.d_model = config.d_model
 
+        self.add_tokens = None
+        self.add_fft_tokens = None
+        self.base_norm = None
+        if config.register_tokens > 0:
+            device = next(self.parameters()).device
+            self.add_tokens = TinyTimeMixerAddLearnableRegisterTokens(config, device)
+
+        if config.fft_length > 0:
+            self.add_fft_tokens = TinyTimeMixerAddFFTPatches(config)
+
+        if self.config.multi_scale or self.config.enable_base_norm_always:
+            self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
+
         # # Initialize weights and apply final processing
         # if config.post_init:
         #     self.post_init()
@@ -1475,6 +2938,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         freq_token: Optional[torch.Tensor] = None,
+        unpatched_past_values: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, TinyTimeMixerEncoderOutput]:
         r"""
         Args:
@@ -1497,7 +2961,6 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
-
         if self.resolution_prefix_tuning:
             if freq_token is not None:
                 freq_embedding = self.freq_mod(freq_token.long())  # bs x d_model
@@ -1515,9 +2978,21 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
             else:
                 raise Exception("Expecting freq_token in forward")
 
+        if self.add_tokens is not None:
+            patches, _ = self.add_tokens(patches)
+
+        if self.add_fft_tokens is not None:
+            patches, _ = self.add_fft_tokens(patches, unpatched_past_values)
         # add positional encoder
         if self.positional_encoder is not None:
             patches = self.positional_encoder(patches)
+
+        if self.base_norm is not None:
+            B, C, P, D = patches.shape
+
+            patches = patches.reshape(B, C, P * D)
+            patches = self.base_norm(patches)
+            patches = patches.reshape(B, C, P, D)
 
         last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 
@@ -1623,6 +3098,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             freq_token=freq_token,
+            unpatched_past_values=scaled_past_values,
         )
 
         if isinstance(encoder_output, tuple):
@@ -1679,6 +3155,26 @@ class TinyTimeMixerForPredictionOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loc: torch.FloatTensor = None
     scale: torch.FloatTensor = None
+    input_data: torch.FloatTensor = None
+    forecast_groundtruth: torch.FloatTensor = None
+    quantile_outputs: torch.FloatTensor = None
+
+
+@dataclass
+class TinyTimeMixerForDecomposedPredictionOutput(ModelOutput):
+    """ """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_outputs: torch.FloatTensor = None
+    quantile_outputs: torch.FloatTensor = None
+    trend_prediction_outputs: torch.FloatTensor = None
+    residual_prediction_outputs: torch.FloatTensor = None
+    trend_input: torch.FloatTensor = None
+    residual_input: torch.FloatTensor = None
+    trend_quantile_outputs: torch.FloatTensor = None
+    residual_quantile_outputs: torch.FloatTensor = None
+    input_data: torch.FloatTensor = None
+    forecast_groundtruth: torch.FloatTensor = None
 
 
 @dataclass
@@ -1786,6 +3282,10 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             distribution_output=self.distribution_output,
         )
 
+        self.multi_quantile_head_block = None
+        if config.multi_quantile_head:
+            self.multi_quantile_head_block = MultiQuantileHead(config)
+
         # Initialize weights and apply final processing
         if config.post_init:
             self.post_init()
@@ -1853,7 +3353,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         elif past_values.shape[1] < sequence_length:
             raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
 
-        if self.loss == "mse":
+        if self.multi_quantile_head_block is not None:
+            loss = MultiPinballLoss(self.config)
+        elif self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
         elif self.loss == "mae":
             loss = nn.L1Loss(reduction="mean")
@@ -1936,12 +3438,15 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             scale = model_output.scale
         # loc/scale: batch_size x 1 x prediction_channel_indices or num_targets
 
-        loss_val = None
+        y_hat_quantiles = None  # torch.zeros(1, device=y_hat.device)
 
+        loss_val = None
+        # y_hat_unscaled = y_hat
         if future_observed_mask is not None:
             fut_mask_bool = future_observed_mask.type(torch.bool)
 
         if self.distribution_output:
+            raise Exception("distribution_output: Deprecated workflow")
             distribution = self.distribution_output.distribution(y_hat, loc=loc, scale=scale)
             if future_values is not None and return_loss is True and loss is not None:
                 if future_observed_mask is not None and (~fut_mask_bool).any():
@@ -1955,8 +3460,31 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                 else:
                     loss_val = loss(distribution, future_values)
                 loss_val = weighted_average(loss_val)
+
+        elif self.multi_quantile_head_block is not None:
+            num_quantiles = self.multi_quantile_head_block.num_quantiles
+            median_index = num_quantiles // 2
+            y_hat_quantiles = self.multi_quantile_head_block(y_hat, decoder_hidden_state=decoder_output)
+            y_hat = y_hat_quantiles[:, median_index, ...]
+            # y_hat_unscaled = y_hat
+            y_hat = self.backbone.scaler.inverse(data=y_hat, loc=loc, scale=scale)
+
+            loc_expand = loc.unsqueeze(1).repeat(1, num_quantiles, 1, 1)
+            scale_expand = scale.unsqueeze(1).repeat(1, num_quantiles, 1, 1)
+
+            y_hat_quantiles = self.backbone.scaler.inverse(data=y_hat_quantiles, loc=loc_expand, scale=scale_expand)
+
+            if future_values is not None and return_loss is True and loss is not None:
+                yq = y_hat_quantiles
+                yt = future_values
+                yp = y_hat
+
+                loss_val = loss(yq, yt, horizon_weights=None) + float(
+                    getattr(self.config, "point_extra_weight", 0.0)
+                ) * weighted_l1_over_horizon(yp, yt, horizon_weights=None)
+
         else:
-            y_hat = y_hat * scale + loc
+            y_hat = self.backbone.scaler.inverse(data=y_hat, loc=loc, scale=scale)
             if future_values is not None and return_loss is True and loss is not None:
                 if future_observed_mask is not None:
                     loss_val = loss(y_hat[fut_mask_bool], future_values[fut_mask_bool])
@@ -1964,28 +3492,45 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
                     # avoiding mask operations for performance benefits on normal scenarios.
                     loss_val = loss(y_hat, future_values)
 
+        m_last_hidden_state = model_output.last_hidden_state
+
+        if self.config.light_mode:
+            m_last_hidden_state = None
+            decoder_output = None
+            hidden_states = None
+            loc = None
+            scale = None
+            past_values = None
+            future_values = None
+
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     loss_val,
                     y_hat,
-                    model_output.last_hidden_state,
+                    m_last_hidden_state,
                     decoder_output,
                     hidden_states,
                     loc,
                     scale,
+                    past_values,
+                    future_values,
+                    y_hat_quantiles,
                 ]
             )
 
         return TinyTimeMixerForPredictionOutput(
             loss=loss_val,
             prediction_outputs=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
-            backbone_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
+            backbone_hidden_state=m_last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             decoder_hidden_state=decoder_output,  # x: [batch_size x nvars x num_patch x decoder_d_model]
             hidden_states=hidden_states,
             loc=loc,
             scale=scale,
+            input_data=past_values,
+            forecast_groundtruth=future_values,
+            quantile_outputs=y_hat_quantiles,
         )
 
     def generate(
@@ -2144,4 +3689,594 @@ class TinyTimeMixerForMaskedPrediction(TinyTimeMixerForPrediction):
             freq_token=freq_token,
             static_categorical_values=static_categorical_values,
             metadata=metadata,
+        )
+
+
+# ---------------------------
+# Gaussian kernel helper
+# ---------------------------
+def _gaussian_kernel(w: int, device=None, dtype=None, sigma: Optional[float] = None) -> torch.Tensor:
+    """
+    Create a 1D Gaussian kernel of length w (odd), normalized to sum=1.
+    sigma default is proportional to window, giving a smooth low-pass.
+    """
+    assert w % 2 == 1 and w >= 3, "w must be odd and >=3"
+    if sigma is None:
+        # A gentle default; ~95% mass inside window
+        sigma = 0.25 * w
+    r = (w - 1) // 2
+    x = torch.arange(-r, r + 1, device=device, dtype=dtype)
+    k = torch.exp(-0.5 * (x / sigma) ** 2)
+    k = (k / (k.sum() + 1e-12)).view(1, 1, w)  # [1,1,w]
+    return k
+
+
+def robust_lowess_like(
+    x: torch.Tensor,
+    frac: float = 0.15,
+    iters: int = 2,
+    eps: float = 1e-8,
+    pad_mode: str = "reflect",
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Robust LOWESS-like smoothing via Gaussian local average + Tukey bisquare reweighting.
+
+    Args:
+        x        : [B, T, C] float tensor
+        frac     : fraction of T for local window length (w = round(frac*T), forced odd)
+        iters    : robust reweighting iterations
+        eps      : numerical stability
+        pad_mode : F.pad mode for time padding
+
+    Returns:
+        trend    : [B, T, C]
+        residual : [B, T, C]
+    """
+    assert x.dim() == 3, "x must be [B, T, C]"
+    B, T, C = x.shape
+    device, dtype = x.device, x.dtype
+
+    # choose odd window length (bounded)
+    w = max(5, int(round(frac * T)))
+    if w % 2 == 0:
+        w += 1
+    w = min(w, T if T % 2 == 1 else T - 1)  # ensure w <= T and odd
+
+    # gaussian kernel
+    k = _gaussian_kernel(w, device=device, dtype=dtype)  # [1,1,w]
+
+    def _gauss_conv(y: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # y: [B,T,C], weights: [B,T,C] or None
+        y_bc_t = y.permute(0, 2, 1).contiguous().reshape(B * C, 1, T)  # [BC,1,T]
+        if weights is None:
+            num = F.conv1d(F.pad(y_bc_t, (w // 2, w // 2), mode=pad_mode), k)
+            den = F.conv1d(F.pad(torch.ones_like(y_bc_t), (w // 2, w // 2), mode=pad_mode), k)
+        else:
+            wts_bc_t = weights.permute(0, 2, 1).contiguous().reshape(B * C, 1, T)
+            num = F.conv1d(F.pad(y_bc_t * wts_bc_t, (w // 2, w // 2), mode=pad_mode), k)
+            den = F.conv1d(F.pad(wts_bc_t, (w // 2, w // 2), mode=pad_mode), k)
+        out = num / (den + eps)
+        return out.view(B, C, T).permute(0, 2, 1).contiguous()  # [B,T,C]
+
+    # initial smooth (no robust weights)
+    trend = _gauss_conv(x, weights=None)
+    # DC guard: keep per-series mean aligned
+    trend = trend - trend.mean(dim=1, keepdim=True) + x.mean(dim=1, keepdim=True)
+
+    # robust reweighting loops (Tukey bisquare on centered residuals with MAD scale)
+    for _ in range(iters):
+        resid = x - trend
+        resid_med = resid.median(dim=1, keepdim=True).values  # [B,1,C]
+        resid_c = resid - resid_med
+        mad = torch.median(torch.abs(resid_c), dim=1, keepdim=True).values + eps  # [B,1,C]
+        u = resid_c / (6.0 * mad)  # scaled residuals
+        wts = (1.0 - torch.clamp(u**2, 0.0, 1.0)) ** 2  # Tukey's bisquare ∈ [0,1]
+
+        trend = _gauss_conv(x, weights=wts)
+        trend = trend - trend.mean(dim=1, keepdim=True) + x.mean(dim=1, keepdim=True)
+
+    residual = x - trend
+    return trend, residual
+
+
+class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
+    r"""
+    `TinyTimeMixer` for forecasting application.
+
+    Args:
+        config (`TinyTimeMixerConfig`, *required*):
+            Configuration.
+
+    Returns:
+        `None`.
+    """
+
+    def __init__(self, config: TinyTimeMixerConfig):
+        self._init_decomposed(config)
+
+    def _init_decomposed(self, config: TinyTimeMixerConfig):
+        super().__init__(config)
+
+        trend_config = copy.deepcopy(config)
+
+        if config.trend_patch_length is not None:
+            trend_config.patch_length = config.trend_patch_length
+        if config.trend_patch_stride is not None:
+            trend_config.patch_stride = config.trend_patch_stride
+        if config.trend_d_model is not None:
+            trend_config.d_model = config.trend_d_model
+        if config.trend_decoder_d_model is not None:
+            trend_config.decoder_d_model = config.trend_decoder_d_model
+        if config.trend_num_layers is not None:
+            trend_config.num_layers = config.trend_num_layers
+        if config.trend_decoder_num_layers is not None:
+            trend_config.decoder_num_layers = config.trend_decoder_num_layers
+        if config.trend_register_tokens is not None:
+            trend_config.register_tokens = config.trend_register_tokens
+        if config.trend_fft_length is not None:
+            trend_config.fft_length = config.trend_fft_length
+
+        if config.trend_multi_scale is not None:
+            trend_config.multi_scale = config.trend_multi_scale
+        if config.trend_adaptive_patching_levels is not None:
+            trend_config.adaptive_patching_levels = config.trend_adaptive_patching_levels
+        if config.trend_head_d_model is not None:
+            trend_config.head_d_model = config.trend_head_d_model
+
+        trend_config.num_patches = None
+        trend_config.scaling = None  # "std"
+
+        residual_config = copy.deepcopy(config)
+
+        if config.residual_context_length is not None:
+            residual_config.context_length = config.residual_context_length
+
+        residual_config.scaling = None  # "std"
+
+        self.use_return_dict = config.use_return_dict
+
+        if config.scaling == "mean":
+            self.scaler = TinyTimeMixerMeanScaler(config)
+        elif config.scaling == "std" or config.scaling is True:
+            self.scaler = TinyTimeMixerStdScaler(config)
+        else:
+            self.scaler = TinyTimeMixerNOPScaler(config)
+
+        self.trend_forecaster = TinyTimeMixerForPrediction(trend_config)
+
+        self.residual_forecaster = TinyTimeMixerForPrediction(residual_config)
+
+        self.prediction_channel_indices = config.prediction_channel_indices
+
+        self.prediction_filter_length = config.prediction_filter_length
+
+        self.loss = config.loss
+
+        self.config = config
+
+        self.multi_quantile_head = config.multi_quantile_head
+        self.num_input_channels = config.num_input_channels
+        self.forecast_loss_type = config.forecast_loss_type
+        self.trend_loss_weight = config.trend_loss_weight
+        self.residual_loss_weight = config.residual_loss_weight
+        self.joint_loss_weight = config.joint_loss_weight
+
+        # Initialize weights and apply final processing
+        if config.post_init:
+            self.post_init()
+
+    def forward(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
+
+        return self._forward_decomposed(
+            past_values=past_values,
+            future_values=future_values,
+            past_observed_mask=past_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=return_loss,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+
+    def set_stage(self, forecast_loss_type: str, w_tr: float, w_res: float, w_joint: float):
+        print(f"[MODEL] set_stage → {forecast_loss_type}  weights=({w_tr},{w_res},{w_joint})")
+        self.forecast_loss_type = forecast_loss_type
+        self.trend_loss_weight = float(w_tr)
+        self.residual_loss_weight = float(w_res)
+        self.joint_loss_weight = float(w_joint)
+
+    def _choose_loss(self):
+        if self.multi_quantile_head:
+            return MultiPinballLoss(self.config)
+        if self.loss == "mse":
+            return nn.MSELoss(reduction="mean")
+        elif self.loss == "mae":
+            return nn.L1Loss(reduction="mean")
+        elif self.loss == "pinball":
+            return PinballLoss(quantile=self.config.quantile)
+        elif self.loss == "huber":
+            return nn.HuberLoss(delta=self.config.huber_delta)
+        elif self.loss is None:
+            return None
+        else:
+            raise ValueError("Invalid loss function: Allowed values: mse, mae, huber, pinball")
+
+    def _build_targets(
+        self,
+        past_scaled: torch.Tensor,
+        future_scaled: torch.Tensor,
+    ):
+        """
+        Build trend/residual targets from teacher on [past ⊕ future] (zero-phase).
+        Returns:
+          tau_tgt [B, L_fut, C], r_tgt [B, L_fut, C]
+        """
+
+        with torch.no_grad():
+            # concat along time: [B, L_ctx+L_fut, C]
+            x_full = torch.cat([past_scaled, future_scaled], dim=1)
+            tau_full, _ = robust_lowess_like(x_full)  # returns (trend,resid) on full
+            L_fut = future_scaled.size(1)
+            tau_tgt = tau_full[:, -L_fut:, :]  # [B,L_fut,C]
+            r_tgt = future_scaled - tau_tgt  # [B,L_fut,C]
+        return tau_tgt, r_tgt
+
+    def _detrend_short_ctx(self, past_scaled: torch.Tensor, tau_ctx_est: torch.Tensor):
+        """
+        Use model context trend (stop-grad) to detrend the *short* residual context.
+        past_scaled : [B, L_ctx, C]
+        tau_ctx_est : [B, L_ctx, C] (model estimate over context)
+        Returns:
+          x_res_ctx  : [B, L_res_ctx, C]
+        """
+        B, L_ctx, C = past_scaled.shape
+        L_res = (
+            min(self.config.residual_context_length, L_ctx)
+            if self.config.residual_context_length is not None
+            else L_ctx
+        )
+        # L_res = min(self.config.residual_context_length, L_ctx)
+        x_short = past_scaled[:, -L_res:, :]  # [B,L_res,C]
+        tau_tail = tau_ctx_est[:, -L_res:, :].detach()  # stop-grad
+        return x_short - tau_tail, L_res  # [B,L_res,C]
+
+    def combine_quantiles_fast(self, trend_q, resid_q, eps: float = 1e-8):
+        if trend_q is None and resid_q is None:
+            return None
+        if trend_q is None:
+            return resid_q
+        if resid_q is None:
+            return trend_q
+
+        B, Q, L, C = trend_q.shape
+        k = Q // 2
+
+        trend_q50 = trend_q[:, k : k + 1, :, :]
+        resid_q50 = resid_q[:, k : k + 1, :, :]
+        combined_q50 = trend_q50 + resid_q50
+
+        trend_width = trend_q - trend_q50
+        resid_width = resid_q - resid_q50
+
+        # Stable sqrt (prevents sqrt(0) backward blow-up)
+        x = trend_width.square() + resid_width.square()
+        combined_width_mag = torch.sqrt(x + eps)
+
+        sign = torch.sign(trend_width + resid_width)
+        combined_width = sign * combined_width_mag
+
+        # Force exact median width to 0 WITHOUT in-place ops
+        # mask shape: [1,Q,1,1] broadcast to [B,Q,L,C]
+        q_idx = torch.arange(Q, device=trend_q.device).view(1, Q, 1, 1)
+        median_mask = q_idx == k
+        combined_width = torch.where(median_mask, torch.zeros_like(combined_width), combined_width)
+
+        combined_q = combined_q50 + combined_width
+        return combined_q
+
+    # def combine_quantiles_fast(
+    #     self,
+    #     trend_q: torch.Tensor,  # [B,Q,L,C]
+    #     resid_q: torch.Tensor,  # [B,Q,L,C]
+    # ):
+    #     """
+    #     Fast deterministic quantile combination using sqrt-of-squares width rule.
+
+    #     Assumptions:
+    #     - Q is odd
+    #     - Median is at center index (Q // 2)
+    #     - Same quantile ordering for both models
+
+    #     Returns:
+    #     combined_q: [B,Q,L,C]
+    #     """
+
+    #     if trend_q is None and resid_q is None:
+    #         return None
+
+    #     B, Q, L, C = trend_q.shape
+    #     k = Q // 2  # median index
+
+    #     # ----------------------------
+    #     # 1) Combine median
+    #     # ----------------------------
+    #     trend_q50 = trend_q[:, k : k + 1, :, :]  # [B,1,L,C]
+    #     resid_q50 = resid_q[:, k : k + 1, :, :]  # [B,1,L,C]
+
+    #     combined_q50 = trend_q50 + resid_q50  # [B,1,L,C]
+
+    #     # ----------------------------
+    #     # 2) Compute widths relative to median
+    #     # ----------------------------
+    #     trend_width = trend_q - trend_q50  # [B,Q,L,C]
+    #     resid_width = resid_q - resid_q50  # [B,Q,L,C]
+
+    #     # sqrt-of-squares combination
+    #     combined_width_mag = torch.sqrt(trend_width.pow(2) + resid_width.pow(2))
+
+    #     # Preserve side (lower vs upper)
+    #     sign = torch.sign(trend_width + resid_width)
+
+    #     combined_width = sign * combined_width_mag  # [B,Q,L,C]
+
+    #     # ----------------------------
+    #     # 3) Add back median
+    #     # ----------------------------
+    #     combined_q = combined_q50 + combined_width
+
+    #     # Ensure exact median (avoid tiny numerical drift)
+    #     combined_q[:, k : k + 1, :, :] = combined_q50
+
+    #     return combined_q
+
+    def _forward_decomposed(
+        self,
+        past_values: torch.Tensor,
+        future_values: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
+        return_dict: Optional[bool] = None,
+        freq_token: Optional[torch.Tensor] = None,
+        static_categorical_values: Optional[torch.Tensor] = None,
+        metadata: Optional[torch.Tensor] = None,
+    ) -> TinyTimeMixerForDecomposedPredictionOutput:
+        r"""
+        past_observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
+
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
+        future_observed_mask (`torch.Tensor` of shape `(batch_size, prediction_length, num_targets)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]` or `[False, True]`:
+                - 1 or True for values that are **observed**,
+                - 0 or False for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
+        static_categorical_values (`torch.FloatTensor` of shape `(batch_size, number_of_categorical_variables)`, *optional*):
+            Tokenized categorical values can be passed here. Ensure to pass in the same order as the vocab size list used in the
+            TinyTimeMixerConfig param `categorical_vocab_size_list`
+        metadata (`torch.Tensor`, *optional*): A tensor containing metadata. Currently unused in TinyTimeMixer, but used
+            to support custom trainers. Defaults to None.
+
+        Returns:
+
+        """
+
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
+        scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
+
+        with torch.no_grad():
+            trend_signal, _ = robust_lowess_like(scaled_past_values)
+
+        residual_signal, L_res = self._detrend_short_ctx(scaled_past_values, trend_signal)
+
+        residual_observed_mask = past_observed_mask[:, -L_res:, :].contiguous()
+
+        trend_prediction = self.trend_forecaster(
+            past_values=scaled_past_values,
+            # past_values=trend_signal,
+            future_values=future_values,
+            past_observed_mask=past_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=False,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+
+        residual_prediction = self.residual_forecaster(
+            past_values=residual_signal,
+            future_values=future_values,
+            past_observed_mask=residual_observed_mask,
+            future_observed_mask=future_observed_mask,
+            output_hidden_states=output_hidden_states,
+            return_loss=False,
+            return_dict=return_dict,
+            freq_token=freq_token,
+            static_categorical_values=static_categorical_values,
+            metadata=metadata,
+        )
+
+        trend_prediction_outputs = trend_prediction.prediction_outputs
+        residual_prediction_outputs = residual_prediction.prediction_outputs
+        combined_point_forecast = trend_prediction_outputs + residual_prediction_outputs
+
+        trend_quantile_outputs = trend_prediction.quantile_outputs
+        residual_quantile_outputs = residual_prediction.quantile_outputs
+
+        if trend_quantile_outputs is None or residual_quantile_outputs is None:
+            combined_quantile_forecast = None
+        else:
+            if self.config.combine_quantiles_via_variance:
+                combined_quantile_forecast = self.combine_quantiles_fast(
+                    trend_quantile_outputs, residual_quantile_outputs
+                )
+            else:
+                combined_quantile_forecast = trend_quantile_outputs + residual_quantile_outputs
+
+        loss_val = None
+
+        tau_tgt = r_tgt = None
+        base_loss = self._choose_loss()
+
+        if self.prediction_channel_indices is not None:
+            loc = loc[..., self.prediction_channel_indices]
+            scale = scale[..., self.prediction_channel_indices]
+            trend_signal = trend_signal[..., self.prediction_channel_indices]
+            residual_signal = residual_signal[..., self.prediction_channel_indices]
+            scaled_past_values = scaled_past_values[..., self.prediction_channel_indices]
+
+        if future_values is not None and return_loss and base_loss is not None:
+            if self.prediction_filter_length is not None and future_values.shape[1] != self.prediction_filter_length:
+                future_values = future_values[:, : self.prediction_filter_length, :]
+
+                if future_observed_mask is not None:
+                    future_observed_mask = future_observed_mask[:, : self.prediction_filter_length, :]
+
+            if (
+                self.prediction_channel_indices is not None
+                and future_values.shape[2] != len(self.prediction_channel_indices)
+                and future_values.shape[2] == self.num_input_channels
+            ):
+                future_values = future_values[..., self.prediction_channel_indices]
+
+                if future_observed_mask is not None:
+                    future_observed_mask = future_observed_mask[..., self.prediction_channel_indices]
+
+            # scale future with SAME (loc, scale) used for past
+            scaled_future_values = self.scaler.transform(future_values, loc, scale)
+            tau_tgt, r_tgt = self._build_targets(scaled_past_values, scaled_future_values)  # [B,L_fut,C] each
+
+            if self.multi_quantile_head:
+                # pinball on quantiles vs raw future
+                point_extra_weight = self.config.point_extra_weight
+                joint_loss = base_loss(
+                    combined_quantile_forecast, scaled_future_values
+                ) + point_extra_weight * F.l1_loss(combined_point_forecast, scaled_future_values)
+                trend_loss = (
+                    base_loss(trend_quantile_outputs, tau_tgt)
+                    + 0.1
+                    * F.l1_loss(
+                        trend_prediction_outputs[:, 1:, :] - trend_prediction_outputs[:, :-1, :],
+                        tau_tgt[:, 1:, :] - tau_tgt[:, :-1, :],
+                    )
+                    + point_extra_weight * F.l1_loss(trend_prediction_outputs, tau_tgt)
+                )
+                residual_loss = base_loss(residual_quantile_outputs, r_tgt) + point_extra_weight * F.l1_loss(
+                    residual_prediction_outputs, r_tgt
+                )
+
+            else:
+                joint_loss = base_loss(combined_point_forecast, scaled_future_values)
+
+                trend_loss = base_loss(trend_prediction_outputs, tau_tgt) + 0.1 * base_loss(
+                    trend_prediction_outputs[:, 1:, :] - trend_prediction_outputs[:, :-1, :],
+                    tau_tgt[:, 1:, :] - tau_tgt[:, :-1, :],
+                )
+
+                residual_loss = base_loss(residual_prediction_outputs, r_tgt)
+
+            loss_val = (
+                self.joint_loss_weight * joint_loss
+                + self.trend_loss_weight * trend_loss
+                + self.residual_loss_weight * residual_loss
+            )
+
+        # inverse to get back original scale
+        combined_point_forecast = self.scaler.inverse(data=combined_point_forecast, loc=loc, scale=scale)
+
+        trend_prediction_outputs = self.scaler.inverse(data=trend_prediction_outputs, loc=loc, scale=scale)
+
+        residual_prediction_outputs = self.scaler.inverse(data=residual_prediction_outputs, loc=loc, scale=scale)
+
+        trend_signal = self.scaler.inverse(data=trend_signal, loc=loc, scale=scale)
+
+        residual_signal = self.scaler.inverse(data=residual_signal, loc=loc, scale=scale)
+
+        if self.multi_quantile_head:
+            num_quantiles = self.trend_forecaster.multi_quantile_head_block.num_quantiles
+            loc_exp = loc.unsqueeze(1).repeat(1, num_quantiles, 1, 1)
+            scale_exp = scale.unsqueeze(1).repeat(1, num_quantiles, 1, 1)
+
+            # y_hat_quantiles = y_hat_quantiles.reshape(-1, s, c)
+            combined_quantile_forecast = self.scaler.inverse(
+                data=combined_quantile_forecast, loc=loc_exp, scale=scale_exp
+            )
+            trend_quantile_outputs = self.scaler.inverse(data=trend_quantile_outputs, loc=loc_exp, scale=scale_exp)
+            residual_quantile_outputs = self.scaler.inverse(
+                data=residual_quantile_outputs, loc=loc_exp, scale=scale_exp
+            )
+
+        if self.config.light_mode:
+            trend_prediction_outputs = None
+            residual_prediction_outputs = None
+            trend_signal = None
+            residual_signal = None
+            trend_quantile_outputs = None
+            residual_quantile_outputs = None
+            past_values = None
+            future_values = None
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    loss_val,
+                    combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
+                    combined_quantile_forecast,
+                    trend_prediction_outputs,
+                    residual_prediction_outputs,
+                    trend_signal,
+                    residual_signal,
+                    trend_quantile_outputs,
+                    residual_quantile_outputs,
+                    past_values,
+                    future_values,
+                ]
+            )
+
+        return TinyTimeMixerForDecomposedPredictionOutput(
+            loss=loss_val,
+            prediction_outputs=combined_point_forecast,  # tensor [batch_size x prediction_length x num_input_channels]
+            quantile_outputs=combined_quantile_forecast,
+            trend_prediction_outputs=trend_prediction_outputs,
+            residual_prediction_outputs=residual_prediction_outputs,
+            trend_input=trend_signal,
+            residual_input=residual_signal,
+            trend_quantile_outputs=trend_quantile_outputs,
+            residual_quantile_outputs=residual_quantile_outputs,
+            input_data=past_values,
+            forecast_groundtruth=future_values,
         )

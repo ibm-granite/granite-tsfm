@@ -14,7 +14,12 @@ def test_granite_r1_models():
     mp = "ibm-granite/granite-timeseries-ttm-r1"
     for cl in [512, 1024]:
         for fl in [96]:
-            model_key = get_model(model_path=mp, context_length=cl, prediction_length=fl, return_model_key=True)
+            model_key = get_model(
+                model_path=mp,
+                context_length=cl,
+                prediction_length=fl,
+                return_model_key=True,
+            )
             assert int(model_key.split("-")[1]) == fl
             assert int(model_key.split("-")[0]) == cl
 
@@ -55,7 +60,12 @@ def test_research_r2_models():
     mp = "ibm-research/ttm-research-r2"
     for cl in [512, 1024, 1536]:
         for fl in [96, 192, 336, 720]:
-            model_key = get_model(model_path=mp, context_length=cl, prediction_length=fl, return_model_key=True)
+            model_key = get_model(
+                model_path=mp,
+                context_length=cl,
+                prediction_length=fl,
+                return_model_key=True,
+            )
             assert int(model_key.split("-")[1]) == fl
             assert int(model_key.split("-")[0]) == cl
 
@@ -65,7 +75,12 @@ def test_granite_r2_basic_models():
     # 12 high freq models
     for cl in [512, 1024, 1536]:
         for fl in [96, 192, 336, 720]:
-            model_key = get_model(model_path=mp, context_length=cl, prediction_length=fl, return_model_key=True)
+            model_key = get_model(
+                model_path=mp,
+                context_length=cl,
+                prediction_length=fl,
+                return_model_key=True,
+            )
             assert int(model_key.split("-")[1]) == fl
             assert int(model_key.split("-")[0]) == cl
 
@@ -81,7 +96,11 @@ def test_granite_r2_basic_models():
     cl = 52
     fl = 16
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -98,7 +117,11 @@ def test_granite_r2_basic_models():
     cl = 90
     fl = 30
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -108,7 +131,11 @@ def test_granite_r2_basic_models():
     cl = 180
     fl = 60
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -118,7 +145,11 @@ def test_granite_r2_basic_models():
     cl = 360
     fl = 60
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -128,7 +159,11 @@ def test_granite_r2_basic_models():
     cl = 512
     fl = 48
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=False, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=False,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -137,7 +172,11 @@ def test_granite_r2_basic_models():
     cl = 512
     fl = 48
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_l1_loss=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_l1_loss=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == fl
     assert int(model_key.split("-")[0]) == cl
@@ -210,7 +249,11 @@ def test_prefer_longer_context():
     cl = 100
     fl = 20
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_longer_context=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_longer_context=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == 30
     assert int(model_key.split("-")[0]) == 90
@@ -219,7 +262,11 @@ def test_prefer_longer_context():
     cl = 100
     fl = 20
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_longer_context=False, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_longer_context=False,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == 30
     assert int(model_key.split("-")[0]) == 90
@@ -228,7 +275,11 @@ def test_prefer_longer_context():
     cl = 100
     fl = 10
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_longer_context=False, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_longer_context=False,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == 16
     assert int(model_key.split("-")[0]) == 52
@@ -237,7 +288,11 @@ def test_prefer_longer_context():
     cl = 100
     fl = 10
     model_key = get_model(
-        model_path=mp, context_length=cl, prediction_length=fl, prefer_longer_context=True, return_model_key=True
+        model_path=mp,
+        context_length=cl,
+        prediction_length=fl,
+        prefer_longer_context=True,
+        return_model_key=True,
     )
     assert int(model_key.split("-")[1]) == 30
     assert int(model_key.split("-")[0]) == 90
@@ -377,8 +432,26 @@ test_cases_granite_r2 = [
     (36, 12, "M", False, False, True, "random_init_small", "TTM(small)"),
     (512, 96, "oov", False, False, True, None, "512-96-r2"),
     (512, 96, "5min", False, False, True, None, "512-96-r2"),
-    (512, 96, "random", False, False, True, None, "512-96-r2"),  # Invalid freq, but ft=False
-    (512, 96, "random", True, False, True, "random_init_medium", "TTM(medium)"),  # Invalid freq, but ft=True
+    (
+        512,
+        96,
+        "random",
+        False,
+        False,
+        True,
+        None,
+        "512-96-r2",
+    ),  # Invalid freq, but ft=False
+    (
+        512,
+        96,
+        "random",
+        True,
+        False,
+        True,
+        "random_init_medium",
+        "TTM(medium)",
+    ),  # Invalid freq, but ft=True
     (20, 6, "W", True, True, False, "zeropad", "52-16-ft-l1-r2.1"),
     (200, 24, "W", True, False, True, "zeropad", "180-60-ft-l1-r2.1"),
     (200, 24, "W", True, False, False, "zeropad", "90-30-ft-r2.1"),
@@ -491,3 +564,132 @@ def test_all_cases_research_r2(cl, fl, res, ft, l1, longer, force_return, expect
         return_model_key=True,
     )
     assert model_key == expected
+
+
+# (cl, fl, freq, prefer_known_mappings, use_lite, expected)
+test_cases_r3_known_mappings = [
+    (52, 16, None, True, False, "156-16-dec-52-r3"),
+    (90, 30, None, True, False, "512-30-dec-90-r3"),
+    (512, 48, None, True, False, "768-48-dec-512-r3"),
+    (1536, 96, None, True, False, "2048-96-r3"),
+    (1536, 720, None, True, False, "2048-720-r3"),
+    (52, 16, None, True, True, "156-16-dec-52-lite-r3"),
+    (90, 30, None, True, True, "512-30-dec-90-lite-r3"),
+    (512, 48, None, True, True, "768-48-dec-512-lite-r3"),
+    (1536, 96, None, True, True, "2048-96-lite-r3"),
+    (1536, 720, None, True, True, "2048-720-lite-r3"),
+]
+
+
+@pytest.mark.parametrize(
+    "cl, fl, freq, prefer_known_mappings, use_lite, expected",
+    test_cases_r3_known_mappings,
+)
+def test_r3_known_mappings(cl, fl, freq, prefer_known_mappings, use_lite, expected):
+    model_key = get_model(
+        "ibm-research/ttm-r3",
+        context_length=cl,
+        prediction_length=fl,
+        freq=freq,
+        prefer_known_mappings=prefer_known_mappings,
+        use_lite=use_lite,
+        return_model_key=True,
+    )
+    assert model_key == expected
+
+
+# (cl, fl, freq, prefer_known_mappings, use_lite, expected)
+test_cases_r3_generic = [
+    (180, 60, None, False, False, "180-60-dec-180-r3"),
+    (360, 60, None, False, False, "360-60-dec-360-r3"),
+    (512, 96, None, False, False, "512-96-dec-512-r3"),
+    (512, 336, None, False, False, "512-336-dec-512-r3"),
+    (1024, 96, None, False, False, "1024-96-r3"),
+    (1024, 720, None, False, False, "1024-720-r3"),
+    (1536, 96, None, False, False, "1536-96-r3"),
+    (1536, 720, None, False, False, "1536-720-r3"),
+    (2048, 96, None, False, False, "2048-96-r3"),
+    (2048, 720, None, False, False, "2048-720-r3"),
+    (2560, 96, None, False, False, "2560-96-r3"),
+    (2560, 720, None, False, False, "2560-720-r3"),
+    (3072, 96, None, False, False, "3072-96-r3"),
+    (3072, 720, None, False, False, "3072-720-r3"),
+    (180, 60, None, False, True, "180-60-dec-180-lite-r3"),
+    (360, 60, None, False, True, "360-60-dec-360-lite-r3"),
+    (512, 96, None, False, True, "512-96-dec-512-lite-r3"),
+    (512, 336, None, False, True, "512-336-dec-512-lite-r3"),
+    (1024, 96, None, False, True, "1024-96-lite-r3"),
+    (1024, 720, None, False, True, "1024-720-lite-r3"),
+    (1536, 96, None, False, True, "1536-96-lite-r3"),
+    (1536, 720, None, False, True, "1536-720-lite-r3"),
+    (2048, 96, None, False, True, "2048-96-lite-r3"),
+    (2048, 720, None, False, True, "2048-720-lite-r3"),
+]
+
+
+@pytest.mark.parametrize("cl, fl, freq, prefer_known_mappings, use_lite, expected", test_cases_r3_generic)
+def test_r3_generic_selection(cl, fl, freq, prefer_known_mappings, use_lite, expected):
+    model_key = get_model(
+        "ibm-research/ttm-r3",
+        context_length=cl,
+        prediction_length=fl,
+        freq=freq,
+        prefer_known_mappings=prefer_known_mappings,
+        use_lite=use_lite,
+        return_model_key=True,
+    )
+    assert model_key == expected
+
+
+# (cl, fl, freq, use_lite, expected)
+test_cases_r3_hybrid_fallback = [
+    (180, 60, None, False, "180-60-dec-180-r3"),
+    (360, 60, None, False, "360-60-dec-360-r3"),
+    (512, 96, None, False, "512-96-dec-512-r3"),
+    (512, 336, None, False, "512-336-dec-512-r3"),
+    (1024, 96, None, False, "1024-96-r3"),
+    (1024, 720, None, False, "1024-720-r3"),
+    (180, 60, None, True, "180-60-dec-180-lite-r3"),
+    (360, 60, None, True, "360-60-dec-360-lite-r3"),
+    (512, 96, None, True, "512-96-dec-512-lite-r3"),
+    (512, 336, None, True, "512-336-dec-512-lite-r3"),
+]
+
+
+@pytest.mark.parametrize("cl, fl, freq, use_lite, expected", test_cases_r3_hybrid_fallback)
+def test_r3_known_mapping_then_fallback(cl, fl, freq, use_lite, expected):
+    model_key = get_model(
+        "ibm-research/ttm-r3",
+        context_length=cl,
+        prediction_length=fl,
+        freq=freq,
+        prefer_known_mappings=True,
+        use_lite=use_lite,
+        return_model_key=True,
+    )
+    assert model_key == expected
+
+
+def test_r3_try_except_fallback_returns_some_model():
+    model_key = get_model(
+        "ibm-research/ttm-r3",
+        context_length=52,
+        prediction_length=200,
+        prefer_known_mappings=True,
+        return_model_key=True,
+    )
+    assert model_key is not None
+    assert model_key.endswith("-r3")
+
+
+def test_r3_try_except_fallback_returns_some_lite_model():
+    model_key = get_model(
+        "ibm-research/ttm-r3",
+        context_length=52,
+        prediction_length=200,
+        prefer_known_mappings=True,
+        use_lite=True,
+        return_model_key=True,
+    )
+    assert model_key is not None
+    assert model_key.endswith("-lite-r3")
