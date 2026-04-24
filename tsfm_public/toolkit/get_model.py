@@ -6,6 +6,7 @@ import enum
 import logging
 import os
 from importlib import resources
+from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
@@ -53,18 +54,34 @@ class ModelSize(enum.Enum):
 
 def check_ttm_model_path(model_path):
     if (
-        "ibm/TTM" in model_path
-        or "ibm-granite/granite-timeseries-ttm-r1" in model_path
-        or "ibm-granite/granite-timeseries-ttm-v1" in model_path
-        or "ibm-granite/granite-timeseries-ttm-1m" in model_path
+        model_path.startswith("ibm/TTM")
+        or model_path.startswith("ibm-granite/granite-timeseries-ttm-r1")
+        or model_path.startswith("ibm-granite/granite-timeseries-ttm-v1")
+        or model_path.startswith("ibm-granite/granite-timeseries-ttm-1m")
     ):
         return 1
-    elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
+    elif model_path.startswith("ibm-granite/granite-timeseries-ttm-r2"):
         return 2
-    elif "ibm-research/ttm-research-r2" in model_path:
+    elif model_path.startswith("ibm-research/ttm-research-r2"):
         return 3
     else:
         return 0
+
+
+# def check_ttm_model_path(model_path):
+#     if (
+#         "ibm/TTM" in model_path
+#         or "ibm-granite/granite-timeseries-ttm-r1" in model_path
+#         or "ibm-granite/granite-timeseries-ttm-v1" in model_path
+#         or "ibm-granite/granite-timeseries-ttm-1m" in model_path
+#     ):
+#         return 1
+#     elif "ibm-granite/granite-timeseries-ttm-r2" in model_path:
+#         return 2
+#     elif "ibm-research/ttm-research-r2" in model_path:
+#         return 3
+#     else:
+#         return 0
 
 
 def get_random_ttm(
@@ -148,7 +165,7 @@ def get_model(
     force_return: Optional[str] = None,
     return_model_key: bool = False,
     **kwargs,
-) -> Union[str, PreTrainedModel]:
+) -> Union[str, PreTrainedModel, None]:
     """TTM Model card offers a suite of models with varying `context_length` and `prediction_length` combinations.
     This wrapper automatically selects the right model based on the given input `context_length` and
     `prediction_length` abstracting away the internal complexity.
@@ -188,10 +205,13 @@ def get_model(
     """
     LOGGER.info(f"Loading model from: {model_path}")
 
+    model_key = None  # fix unbound local issue
+
     if model_name.lower() == "ttm":
         model_path_type = check_ttm_model_path(model_path)
+        LOGGER.info(f"Model path type is {model_path_type}")
         prediction_filter_length = None
-        ttm_model_revision = None
+        ttm_model_revision = None  # maybe should be "main"?
         if model_path_type != 0:
             if context_length is None or prediction_length is None:
                 raise ValueError(
@@ -420,8 +440,17 @@ def get_model(
             prediction_filter_length = prediction_length
 
         if return_model_key:
+            LOGGER.info(f"Would load from {model_path}, revision = {ttm_model_revision}.")
             return model_key
 
+        LOGGER.info(f"Attempting model load from {model_path}, revision = {ttm_model_revision}.")
+
+        if model_path_type == 0 and not Path(model_path).is_dir():
+            raise ValueError(
+                f"Model path {model_path} is not a valid local path, loading of arbitrary remote models is not permitted."
+            )
+
+        # if (model_path_type == 0 and Path(model_path).is_dir()) or model_path_type != 0:
         # Load model
         model = TinyTimeMixerForPrediction.from_pretrained(
             model_path,
