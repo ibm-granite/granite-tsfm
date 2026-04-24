@@ -491,3 +491,21 @@ def test_all_cases_research_r2(cl, fl, res, ft, l1, longer, force_return, expect
         return_model_key=True,
     )
     assert model_key == expected
+
+
+def test_invalid_model_path():
+    with pytest.raises(ValueError):
+        mk = get_model(
+            model_path="evil_repo/evil_ttm",
+            return_model_key=False,
+        )
+
+    mk = get_model(model_path="evil_ibm/TTM_evil", return_model_key=True, context_length=512, prediction_length=96)
+    assert mk is None
+
+    # substring attack -- not properly validated model
+    with pytest.raises(ValueError):
+        mk = get_model(
+            model_path="evil_ibm/TTM",
+            return_model_key=False,
+        )
