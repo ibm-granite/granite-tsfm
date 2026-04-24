@@ -86,15 +86,15 @@ stop_service_image:
 
 test_local: clone_models boilerplate stop_service_local insert-torch-cpu-index
 	@make start_service_local
-	uv run --locked --extra dev pytest --cov=tsfminference --cov-report term-missing tests ../tests
-	uv run --locked --extra dev locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 TSFM_MODEL_DIR=./mytest-tsfm uv run --locked --extra dev pytest --cov=tsfminference --cov-report term-missing tests ../tests
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 TSFM_MODEL_DIR=./mytest-tsfm uv run --locked --extra dev locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	  --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_local || true
 	@make remove-torch-cpu-index
 
 test_image: insert-torch-cpu-index clone_models start_service_image 
-	uv run --locked --index-strategy unsafe-best-match pytest tests ../tests
-	uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 uv run --locked --index-strategy unsafe-best-match pytest tests ../tests
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 uv run --locked --index-strategy unsafe-best-match locust -f tests/locust/locustfile.py --config tests/locust/locust.conf \
 	 --headless --only-summary --check-fail-ratio 0.01
 	@make stop_service_image || true
 	@make remove-torch-cpu-index
