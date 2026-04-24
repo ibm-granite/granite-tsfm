@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from transformers import PreTrainedModel
 from transformers.data.data_collator import default_data_collator
 from transformers.trainer_utils import RemoveColumnsCollator
-from transformers.utils import logging
+from transformers.utils import check_torch_load_is_safe, logging
 
 
 logger = logging.get_logger(__name__)
@@ -60,7 +60,8 @@ def load_model(
     path, model, opt: Optional[Optimizer] = None, with_opt: bool = False, device: str = "cpu", strict: bool = True
 ) -> nn.Module:
     "load the saved model"
-    state = torch.load(path, map_location=device)
+    check_torch_load_is_safe()
+    state = torch.load(path, map_location=device, weights_only=True)
     if not opt:
         with_opt = False
     model_state = state["model"] if with_opt else state
