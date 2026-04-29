@@ -3360,6 +3360,8 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         elif past_values.shape[1] < sequence_length:
             raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
 
+        if past_observed_mask is not None and past_observed_mask.shape[1] > sequence_length:
+            past_observed_mask = past_observed_mask[:, -sequence_length:, :]
         if self.multi_quantile_head_block is not None:
             loss = MultiPinballLoss(self.config)
         elif self.loss == "mse":

@@ -262,7 +262,10 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
             future_observed_mask = None
 
         if past_observed_mask == "int":
-            past_observed_mask = self.generate_mask(shape=input_data.shape)
+            mask_shape = list(input_data.shape)
+            mask_shape[1] += 10
+            past_observed_mask = self.generate_mask(shape=tuple(mask_shape))
+            # past_observed_mask = self.generate_mask(shape=input_data.shape)
         elif past_observed_mask == "bool":
             past_observed_mask = self.generate_mask(shape=input_data.shape, dtype=torch.bool)
         else:
