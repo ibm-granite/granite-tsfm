@@ -194,7 +194,7 @@ class MultiPinballLoss(nn.Module):
         # ----------------------------
         target_exp = target.unsqueeze(1)  # [B,1,T,C]
         taus_exp = taus.view(1, -1, 1, 1)  # [1,Q,1,1]
-        print("target:", target_exp.shape, pred.shape)
+        # print("target:", target_exp.shape, pred.shape)
         e = target_exp - pred  # [B,Q,T,C]
         per_elem = torch.maximum(taus_exp * e, (taus_exp - 1.0) * e)  # [B,Q,T,C]
 
@@ -3358,10 +3358,40 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         if past_values.shape[1] > sequence_length:
             past_values = past_values[:, -sequence_length:, :]
         elif past_values.shape[1] < sequence_length:
-            raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
+            pad_length = sequence_length - past_values.shape[1]
 
-        if past_observed_mask is not None and past_observed_mask.shape[1] > sequence_length:
-            past_observed_mask = past_observed_mask[:, -sequence_length:, :]
+            # Left-pad zeros in the beginning of the time dimension.
+            # Shape: [B, pad_length, C]
+            pad_values = past_values.new_zeros(
+                past_values.shape[0],
+                pad_length,
+                *past_values.shape[2:],
+            )
+            past_values = torch.cat([pad_values, past_values], dim=1)
+
+        # elif past_values.shape[1] < sequence_length:
+        #     raise ValueError("Context length in `past_values` is shorter that TTM context_length.")
+
+        if past_observed_mask is not None:
+            if past_observed_mask.shape[1] > sequence_length:
+                past_observed_mask = past_observed_mask[:, -sequence_length:, :]
+
+            elif past_observed_mask.shape[1] < sequence_length:
+                pad_length = sequence_length - past_observed_mask.shape[1]
+
+                # Left-pad mask with zeros/False.
+                # This marks padded values as unobserved.
+                pad_mask = past_observed_mask.new_zeros(
+                    past_observed_mask.shape[0],
+                    pad_length,
+                    *past_observed_mask.shape[2:],
+                )
+
+                past_observed_mask = torch.cat([pad_mask, past_observed_mask], dim=1)
+
+        # if past_observed_mask is not None and past_observed_mask.shape[1] > sequence_length:
+        #     past_observed_mask = past_observed_mask[:, -sequence_length:, :]
+
         if self.multi_quantile_head_block is not None:
             loss = MultiPinballLoss(self.config)
         elif self.loss == "mse":

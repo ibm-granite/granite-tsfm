@@ -428,6 +428,34 @@ class TinyTimeMixerFunctionalTests(unittest.TestCase):
         )
         self.check_module(task="forecast", params=params, prediction_type=prediction_type)
 
+    @parameterized.expand(["base", "mask", "decompose"])
+    def test_forecast_short_context_zero_padding(self, prediction_type):
+        params = self.__class__.params.copy()
+        params.update(
+            mode="common_channel",
+            self_attn=False,
+            scaling="std",
+            prediction_channel_indices=None,
+            gated_attn=True,
+            loss=None,
+            prediction_filter_length=8,
+            target_pred_length_filtered=True,
+            target_channel_filtered=False,
+            multi_quantile_head=False,
+        )
+
+        # context_length is 32 in default test params.
+        # Pass only 16 points. Model should left zero-pad internally to 32.
+        short_input = self.__class__.data[:, -16:, :]
+
+        self.check_module(
+            task="forecast",
+            params=params,
+            prediction_type=prediction_type,
+            input_data=short_input,
+            past_observed_mask="bool",
+        )
+
     def test_var0_mask(self):
         params = self.__class__.params.copy()
 

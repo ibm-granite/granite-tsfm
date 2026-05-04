@@ -670,26 +670,108 @@ def test_r3_known_mapping_then_fallback(cl, fl, freq, use_lite, expected):
     assert model_key == expected
 
 
-def test_r3_try_except_fallback_returns_some_model():
-    model_key = get_model(
-        "ibm-research/ttm-r3",
-        context_length=52,
-        prediction_length=200,
-        prefer_known_mappings=True,
-        return_model_key=True,
-    )
-    assert model_key is not None
-    assert model_key.endswith("-r3")
+def test_r3_fallback_does_not_return_shorter_horizon_without_force_return():
+    with pytest.raises(ValueError, match="prediction_length"):
+        get_model(
+            "ibm-research/ttm-r3",
+            context_length=52,
+            prediction_length=200,
+            prefer_known_mappings=True,
+            return_model_key=True,
+        )
 
 
-def test_r3_try_except_fallback_returns_some_lite_model():
+def test_r3_fallback_does_not_return_shorter_lite_horizon_without_force_return():
+    with pytest.raises(ValueError, match="prediction_length"):
+        get_model(
+            "ibm-research/ttm-r3",
+            context_length=52,
+            prediction_length=200,
+            prefer_known_mappings=True,
+            use_lite=True,
+            return_model_key=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "prefer_known_mappings,use_lite", [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_r3_cl_123_fl_45_raises_without_force_return(prefer_known_mappings, use_lite):
+    with pytest.raises(ValueError, match="prediction_length"):
+        get_model(
+            "ibm-research/ttm-r3",
+            context_length=123,
+            prediction_length=45,
+            prefer_known_mappings=prefer_known_mappings,
+            use_lite=use_lite,
+            return_model_key=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "use_lite,expected",
+    [
+        (False, "90-30-dec-90-r3"),
+        (True, "90-30-dec-90-lite-r3"),
+    ],
+)
+def test_r3_cl_123_fl_45_allows_shorter_horizon_with_rolling(use_lite, expected):
     model_key = get_model(
         "ibm-research/ttm-r3",
-        context_length=52,
-        prediction_length=200,
-        prefer_known_mappings=True,
-        use_lite=True,
+        context_length=123,
+        prediction_length=45,
+        prefer_known_mappings=False,
+        use_lite=use_lite,
+        force_return="rolling",
         return_model_key=True,
     )
-    assert model_key is not None
-    assert model_key.endswith("-lite-r3")
+
+    assert model_key == expected
+
+
+# def test_r3_try_except_fallback_returns_some_model():
+#     model_key = get_model(
+#         "ibm-research/ttm-r3",
+#         context_length=52,
+#         prediction_length=200,
+#         prefer_known_mappings=True,
+#         return_model_key=True,
+#     )
+#     assert model_key is not None
+#     assert model_key.endswith("-r3")
+
+
+# def test_r3_try_except_fallback_returns_some_lite_model():
+#     model_key = get_model(
+#         "ibm-research/ttm-r3",
+#         context_length=52,
+#         prediction_length=200,
+#         prefer_known_mappings=True,
+#         use_lite=True,
+#         return_model_key=True,
+#     )
+#     assert model_key is not None
+#     assert model_key.endswith("-lite-r3")
+
+
+def test_invalid_model_path():
+    with pytest.raises(ValueError):
+        mk = get_model(
+            model_path="evil_repo/evil_ttm",
+            return_model_key=False,
+        )
+
+    mk = get_model(
+        model_path="evil_ibm/TTM_evil",
+        return_model_key=True,
+        context_length=512,
+        prediction_length=96,
+    )
+    assert mk is None
+
+    # substring attack -- not properly validated model
+    with pytest.raises(ValueError):
+        mk = get_model(
+            model_path="evil_ibm/TTM",
+            return_model_key=False,
+        )

@@ -501,6 +501,7 @@ def get_model(
                                 prediction_length=prediction_length,
                                 prefer_longer_context=prefer_longer_context,
                                 use_lite=use_lite,
+                                force_return=force_return,
                             )
                     except Exception as e:
                         LOGGER.warning(
@@ -513,6 +514,7 @@ def get_model(
                             prediction_length=prediction_length,
                             prefer_longer_context=prefer_longer_context,
                             use_lite=use_lite,
+                            force_return=force_return,
                         )
                 else:
                     ttm_model_revision = _select_ttm_r3_revision_direct(
@@ -521,6 +523,7 @@ def get_model(
                         prediction_length=prediction_length,
                         prefer_longer_context=prefer_longer_context,
                         use_lite=use_lite,
+                        force_return=force_return,
                     )
 
                 prediction_filter_length = prediction_length
@@ -628,6 +631,7 @@ def _select_ttm_r3_revision_direct(
     prediction_length: int,
     prefer_longer_context: bool = True,
     use_lite: bool = False,
+    force_return: Optional[str] = None,
 ) -> str:
     def _is_lite_key(key: str) -> bool:
         return "-lite-r3" in key
@@ -653,13 +657,68 @@ def _select_ttm_r3_revision_direct(
             }
         )
 
-    feasible_context = [m for m in candidates if m["context_length"] <= context_length]
-    if len(feasible_context) > 0:
+    all_candidates = candidates
+
+    # Normal path:
+    # Use only models whose native context_length fits within the provided input context.
+    feasible_context = [m for m in all_candidates if m["context_length"] <= context_length]
+
+    # Models that satisfy both normal constraints.
+    feasible_context_and_horizon = [m for m in feasible_context if m["prediction_length"] >= prediction_length]
+
+    if len(feasible_context_and_horizon) > 0:
+        candidates = feasible_context_and_horizon
+
+    elif force_return == ForceReturn.ZEROPAD.value:
+        # Zero-pad path:
+        # Relax context constraint, but DO NOT relax forecast horizon.
+        # This allows CL=123, FL=45 to select 180-60-dec-180-r3,
+        # because context can be padded from 123 -> 180 and FL 60 >= 45.
+        candidates = [m for m in all_candidates if m["prediction_length"] >= prediction_length]
+
+        if len(candidates) == 0:
+            raise ValueError(
+                "Could not find an r3 TTM with `prediction_length` higher than or equal "
+                f"to requested prediction_length = {prediction_length}, even with zeropad."
+            )
+
+        LOGGER.warning(
+            "Could not find an r3 TTM satisfying both "
+            f"context_length <= {context_length} and "
+            f"prediction_length >= {prediction_length}. "
+            "Returning a longer-context model because force_return='zeropad'. "
+            "Zero-padding must be done outside."
+        )
+
+    elif force_return == ForceReturn.ROLLING.value:
+        # Rolling path:
+        # Keep context-safe models, but allow shorter forecast horizon.
+        if len(feasible_context) == 0:
+            raise ValueError(
+                "Could not find an r3 TTM with `context_length` shorter than or equal "
+                f"to requested context_length = {context_length}. "
+                "Set `force_return=zeropad` to get a TTM with longer context."
+            )
+
         candidates = feasible_context
 
-    feasible_horizon = [m for m in candidates if m["prediction_length"] >= prediction_length]
-    if len(feasible_horizon) > 0:
-        candidates = feasible_horizon
+        LOGGER.warning(
+            "Could not find an r3 TTM satisfying both "
+            f"context_length <= {context_length} and "
+            f"prediction_length >= {prediction_length}. "
+            "Returning a shorter-horizon model because force_return='rolling'. "
+            "Rolling must be done outside."
+        )
+
+    else:
+        raise ValueError(
+            "Could not find an r3 TTM satisfying both "
+            f"context_length <= {context_length} and "
+            f"prediction_length >= {prediction_length}. "
+            "Set `force_return=zeropad` to get a longer-context model, or "
+            "set `force_return=rolling` to get a shorter-horizon model. "
+            "Rolling must be done outside."
+        )
 
     def _score(m):
         c = m["context_length"]
