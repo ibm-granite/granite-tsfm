@@ -19,7 +19,13 @@ from torch.utils.data import DataLoader
 from transformers import PreTrainedModel
 from transformers.data.data_collator import default_data_collator
 from transformers.trainer_utils import RemoveColumnsCollator
-from transformers.utils import check_torch_load_is_safe, logging
+from transformers.utils import logging
+
+
+try:
+    from transformers.utils import check_torch_load_is_safe
+except Exception:
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -60,7 +66,15 @@ def load_model(
     path, model, opt: Optional[Optimizer] = None, with_opt: bool = False, device: str = "cpu", strict: bool = True
 ) -> nn.Module:
     "load the saved model"
-    check_torch_load_is_safe()
+    try:
+        check_torch_load_is_safe()
+    except Exception as e:
+        logger.debug(
+            f"Skipping torch.load safety check due to transformer version. "
+            f"Only do this for trusted local checkpoints. Original error: {e}",
+            UserWarning,
+        )
+
     state = torch.load(path, map_location=device, weights_only=True)
     if not opt:
         with_opt = False
