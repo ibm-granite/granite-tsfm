@@ -218,23 +218,23 @@ def freeze_all_params(model: nn.Module):
         p.requires_grad = False
 
 
-# revision_map = {
-#     "2048-96-r3": ["2560-96-r3", "3072-96-r3"],
-#     "2048-720-r3": ["2560-720-r3", "3072-720-r3"],
-#     "2048-96-lite-r3": ["2560-96-lite-r3", "3072-96-lite-r3"],
-#     "2048-720-lite-r3": ["2560-720-lite-r3", "3072-720-lite-r3"],
-# }
-
-
 revision_map = {
-    "156-16-dec-52-r3": ["52-16-dec-52-r3"],
-    "512-30-dec-90-r3": ["180-60-dec-180-r3"],
-    "768-48-dec-512-r3": ["512-48-dec-512-r3"],
-    "2048-96-r3": ["1536-96-r3", "2560-96-r3", "3072-96-r3"],
-    "2048-720-r3": ["1536-720-r3", "2560-720-r3", "3072-720-r3"],
+    "2048-96-r3": ["2560-96-r3", "3072-96-r3"],
+    "2048-720-r3": ["2560-720-r3", "3072-720-r3"],
     "2048-96-lite-r3": ["2560-96-lite-r3", "3072-96-lite-r3"],
     "2048-720-lite-r3": ["2560-720-lite-r3", "3072-720-lite-r3"],
 }
+
+
+# revision_map = {
+#     "156-16-dec-52-r3": ["52-16-dec-52-r3"],
+#     "512-30-dec-90-r3": ["180-60-dec-180-r3"],
+#     "768-48-dec-512-r3": ["512-48-dec-512-r3"],
+#     "2048-96-r3": ["1536-96-r3", "2560-96-r3", "3072-96-r3"],
+#     "2048-720-r3": ["1536-720-r3", "2560-720-r3", "3072-720-r3"],
+#     "2048-96-lite-r3": ["2560-96-lite-r3", "3072-96-lite-r3"],
+#     "2048-720-lite-r3": ["2560-720-lite-r3", "3072-720-lite-r3"],
+# }
 
 
 class ZeroShotMedianAnchoredTrainer(Trainer):
@@ -437,6 +437,7 @@ class TTMGluonTSPredictor:
                 model_keys.extend(revision_map[base_model_key])
 
         self.model_keys = model_keys
+        # self._dump_ensemble_model_selection()
         # ---- Load ALL models into self.ttm_list ----
         self.ttm_list = []
         for mk in model_keys:
@@ -461,6 +462,39 @@ class TTMGluonTSPredictor:
         if ft_zs_ensemble and not self.force_zeroshot:
             self.ttm_zeroshot_list = [copy.deepcopy(m) for m in self.ttm_list]
             self.ttm_zeroshot = self.ttm_zeroshot_list[0]
+
+    def _dump_ensemble_model_selection(self):
+        """
+        Dump dataset -> primary model key -> secondary ensemble keys.
+        One row per TTMGluonTSPredictor initialization.
+        """
+        dump_dir = self.out_dir or "."
+        os.makedirs(dump_dir, exist_ok=True)
+
+        dump_path = os.path.join(dump_dir, "ensemble_model_selection.csv")
+
+        primary_key = self.model_keys[0] if len(self.model_keys) > 0 else None
+        secondary_keys = self.model_keys[1:] if len(self.model_keys) > 1 else []
+
+        row = pd.DataFrame(
+            [
+                {
+                    "data_name": self.ds_name,
+                    "primary_model_key": primary_key,
+                    "secondary_model_keys": ",".join(map(str, secondary_keys)),
+                    "all_model_keys": ",".join(map(str, self.model_keys)),
+                    "ft_zs_ensemble": self.ft_zs_ensemble,
+                    "ft_zs_ensemble_mode": self.ft_zs_ensemble_mode,
+                }
+            ]
+        )
+
+        row.to_csv(
+            dump_path,
+            mode="a",
+            header=not os.path.exists(dump_path),
+            index=False,
+        )
 
     def weighted_mean_from_stacked(self, stacked, q_low="0.1", q_high="0.9", eps=1e-6):
         """
