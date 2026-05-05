@@ -32,7 +32,7 @@ def test_label_encodes(ts_data_nested):
     assert len(tsp.label_encoder.classes_) == len(df.label.unique())
 
     df_prep = tsp.preprocess(df)
-    assert df_prep.label.dtype == "int64"
+    assert df_prep.label.dtype in ["int64", "int32"]
 
 
 def test_scaling(ts_data_nested):

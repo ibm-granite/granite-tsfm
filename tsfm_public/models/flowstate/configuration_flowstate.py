@@ -87,13 +87,14 @@ class FlowStateConfig(PretrainedConfig):
         encoder_num_layers: int = 6,
         encoder_state_dim: int = 512,
         encoder_num_hippo_blocks: int = 8,
+        mlp_type: str = "gated",
         # Decoder specific configuration
         decoder_patch_len: int = 24,
         decoder_dim: int = 256,
         decoder_type: str = "legs",
         # Loss function / Prediction
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        prediction_type: str = "quantile",
+        prediction_type: str = "mean",
         **kwargs,
     ):
         self.init_processing = False
@@ -107,6 +108,7 @@ class FlowStateConfig(PretrainedConfig):
         self.encoder_state_dim = encoder_state_dim
         self.encoder_num_hippo_blocks = encoder_num_hippo_blocks
         self.embedding_feature_dim = embedding_feature_dim
+        self.mlp_type = mlp_type
 
         self.decoder_patch_len = decoder_patch_len
         self.decoder_dim = decoder_dim
@@ -116,6 +118,10 @@ class FlowStateConfig(PretrainedConfig):
         self.prediction_type = prediction_type
 
         super().__init__(**kwargs)
+
+    @property
+    def quantile_levels(self):
+        return self.quantiles
 
     def check_and_init_preprocessing(self):
         self.init_processing = True
@@ -128,6 +134,10 @@ class FlowStateConfig(PretrainedConfig):
         if self.context_length <= 0:
             raise ValueError("context_length should be positive")
 
+        # Ensure Backwards Compatibility
+        if not hasattr(self, "out_gating"):
+            self.out_gating = False
+
         # Check embedding parameters
         if not hasattr(self, "embedding_feature_dim") or self.embedding_feature_dim <= 0:
             raise ValueError("embedding_feature_dim must be provided and positive")
@@ -139,6 +149,8 @@ class FlowStateConfig(PretrainedConfig):
             raise ValueError("encoder_state_dim must be provided and positive")
         if not hasattr(self, "encoder_num_hippo_blocks") or self.encoder_num_hippo_blocks <= 0:
             raise ValueError("encoder_num_hippo_blocks must be provided and positive")
+        if not hasattr(self, "mlp_type"):
+            self.trend_expert = "gated"
         if self.encoder_state_dim % self.encoder_num_hippo_blocks != 0:
             raise ValueError("encoder_state_dim has to be divisible by encoder_num_hippo_blocks.")
 
@@ -148,11 +160,19 @@ class FlowStateConfig(PretrainedConfig):
         if not hasattr(self, "decoder_dim") or self.decoder_dim <= 0:
             raise ValueError("decoder_dim must be provided and positive")
         if not hasattr(self, "decoder_type") or self.decoder_type not in ["legs", "hlegs", "four"]:
-            raise ValueError("decoder_type must be provided and one of `['legs', 'hlegs', 'four']`")
+            raise ValueError(
+                f"decoder_type must be provided and one of `['legs', 'hlegs', 'four']`, but found {self.decoder_type}"
+            )
 
         # Check loss paramter
         if not hasattr(self, "quantiles") or min(self.quantiles) < 0.0 or max(self.quantiles) > 1.0:
             raise ValueError("The values of quantiles must be provided and between [0, 1]")
 
-        if not hasattr(self, "prediction_type") and self.prediction_type not in ["quantile", "mean", "median"]:
-            raise ValueError("Unknown prediction_type detected. Should be one of ['quantile', 'mean', 'median']")
+        if self.prediction_type == "quantile":
+            logger.warning(
+                "Quantiles are now availble in the `quantile_outputs` key of the model output and `prediction_type='quantile'` is deprecated. Setting `prediction_type` to `mean`."
+            )
+            self.prediction_type = "mean"
+
+        if not hasattr(self, "prediction_type") or self.prediction_type not in ["mean", "median"]:
+            raise ValueError("Unknown prediction_type detected. Should be one of ['mean', 'median']")

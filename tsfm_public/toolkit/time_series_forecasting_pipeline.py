@@ -38,7 +38,22 @@ from .time_series_preprocessor import create_timestamps, extend_time_series
 logger = logging.get_logger(__name__)
 
 
+# These parameters are the union of parameters accepted by support models
+MODEL_SPECIFIC_FORWARD_PARAMS = [
+    "quantile_levels",
+    "freq_token",
+    "scale_factor",
+    "prediction_length",
+    "prediction_type",
+]
+
+DEFAULT_PREDICTION_LENGTH = 8
+
+
 class TimeSeriesPipeline(Pipeline):
+    quantile_output_key = "quantile_outputs"
+    prediction_output_key = "prediction_outputs"
+
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
         """Replaces base `run_single` method which does batching during inference. This is needed to support
         large inference requests.
@@ -62,6 +77,8 @@ class TimeSeriesPipeline(Pipeline):
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
 
+        self._forward_params_model = {k: v for k, v in forward_params.items() if k in signature_columns}
+
         # if len(dataset) < batch_size:
         # build a dataloader
         # collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
@@ -79,12 +96,19 @@ class TimeSeriesPipeline(Pipeline):
 
         # iterate over dataloader
         it = iter(dataloader)
-        accumulator = []
+        accumulator = defaultdict(list)
         while (batch := next(it, None)) is not None:
-            item = self.forward(batch, **forward_params)
+            item = self.forward(batch, **self._forward_params_model)
             if not model_output_key:
-                model_output_key = "prediction_outputs" if "prediction_outputs" in item.keys() else "prediction_logits"
-            accumulator.append(item[model_output_key])
+                model_output_key = (
+                    self.__class__.prediction_output_key
+                    if self.__class__.prediction_output_key in item.keys()
+                    else "prediction_logits"
+                )
+
+            accumulator[self.__class__.prediction_output_key].append(item[model_output_key])
+            if self.__class__.quantile_output_key in item.keys():
+                accumulator[self.__class__.quantile_output_key].append(item[self.__class__.quantile_output_key])
 
         if copy_dataset_keys:
             # collect all ouputs needed for post processing
@@ -100,9 +124,15 @@ class TimeSeriesPipeline(Pipeline):
 
             # without shuffling in the dataloader above, we assume that order is preserved
             # otherwise we need to incorporate sequence id somewhere and do a proper join
-            model_outputs["prediction_outputs"] = torch.cat(accumulator, axis=0)
+            model_outputs[self.__class__.prediction_output_key] = torch.cat(
+                accumulator[self.__class__.prediction_output_key], axis=0
+            )
+            if self.__class__.quantile_output_key in accumulator.keys():
+                model_outputs[self.__class__.quantile_output_key] = torch.cat(
+                    accumulator[self.__class__.quantile_output_key], axis=0
+                )
         else:
-            model_outputs = accumulator
+            model_outputs = accumulator[self.__class__.prediction_output_key]
 
         # call postprocess
         outputs = self.postprocess(model_outputs, **postprocess_params)
@@ -154,7 +184,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             kwargs["context_length"] = model.config.context_length
 
         if "prediction_length" not in kwargs:
-            kwargs["prediction_length"] = model.config.prediction_length
+            kwargs["prediction_length"] = (
+                model.config.prediction_length if model.config.prediction_length > 0 else DEFAULT_PREDICTION_LENGTH
+            )
 
         # check if we need to use the frequency token, get token if needed
         use_frequency_token = getattr(model.config, "resolution_prefix_tuning", False)
@@ -206,6 +238,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             "static_categorical_columns",
             "future_time_series",
             "impute_method",
+            "fill_value",
+            "max_context_length",
         ]
         postprocess_params = [
             "prediction_length",
@@ -247,23 +281,14 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             else:
                 num_workers = self._num_workers
 
-        forward_kwargs = {"batch_size": batch_size, "num_workers": num_workers}
+        forward_kwargs = {
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+        }
 
-        # if "id_columns" in kwargs:
-        #     preprocess_kwargs["id_columns"] = kwargs["id_columns"]
-        #     postprocess_kwargs["id_columns"] = kwargs["id_columns"]
-        # if "timestamp_column" in kwargs:
-        #     preprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-        #     postprocess_kwargs["timestamp_column"] = kwargs["timestamp_column"]
-        # if "input_columns" in kwargs:
-        #     preprocess_kwargs["input_columns"] = kwargs["input_columns"]
-        #     postprocess_kwargs["input_columns"] = kwargs["input_columns"]
-        # if "output_columns" in kwargs:
-        #     preprocess_kwargs["output_columns"] = kwargs["output_columns"]
-        #     postprocess_kwargs["output_columns"] = kwargs["output_columns"]
-        # elif "input_columns" in kwargs:
-        #     preprocess_kwargs["output_columns"] = kwargs["input_columns"]
-        #     postprocess_kwargs["output_columns"] = kwargs["input_columns"]
+        for c in MODEL_SPECIFIC_FORWARD_PARAMS:
+            if c in kwargs:
+                forward_kwargs[c] = kwargs[c]
 
         return preprocess_kwargs, forward_kwargs, postprocess_kwargs
 
@@ -410,6 +435,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             )
 
         # use forecasting dataset to do the preprocessing
+        logger.info(f"Preprocessing with: {kwargs}")
         dataset = ForecastDFDataset(
             time_series,
             **kwargs,
@@ -428,7 +454,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         original input keys.
         """
 
-        model_outputs = self.model(**model_inputs)
+        model_outputs = self.model(**model_inputs, **kwargs)
 
         return model_outputs
 
@@ -443,7 +469,8 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         """
         out = {}
 
-        model_output_key = "prediction_outputs"  #  if "prediction_outputs" in input.keys() else "prediction_logits"
+        model_output_key = self.__class__.prediction_output_key
+        quantile_output_key = self.__class__.quantile_output_key
 
         # name the predictions of target columns
         # outputs should only have size equal to target columns
@@ -455,6 +482,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
         for i, c in enumerate(kwargs["target_columns"]):
             prediction_columns.append(f"{c}_prediction" if add_known_ground_truth else c)
             out[prediction_columns[-1]] = input[model_output_key][:, :, i].detach().cpu().numpy().tolist()
+
         # provide the ground truth values for the targets
         # when future is unknown, we will have augmented the provided dataframe with NaN values to cover the future
         if add_known_ground_truth:
@@ -478,7 +506,9 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                 out = self.feature_extractor.inverse_scale_targets(out, suffix="_prediction")
 
         # add probabilistic
-        conformal_cols = []
+        quantile_cols = []
+        prob_data = {}
+
         if self._probabilistic_processor is not None:
             # get the conformal bounds and add to the forecasts on the test set
             predictions_conformal = self._probabilistic_processor.predict(
@@ -488,9 +518,27 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
             for j, q in enumerate(self._probabilistic_processor.quantiles):
                 for i, c in enumerate(prediction_columns):
                     col = f"{c}_q{q}"
-                    out[col] = predictions_conformal[..., i, j].tolist()
-                    conformal_cols.append(col)
+                    prob_data[col] = predictions_conformal[..., i, j].tolist()
+                    quantile_cols.append(col)
                     # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
+            out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
+        elif quantile_output_key in input.keys():
+            # model has native support for quantiles
+            # first we check if the model enables passing at runtime, and the user passed quantile_levels
+            output_quantile_levels = (
+                self.model.config.quantile_levels
+                if "quantile_levels" not in self._forward_params_model
+                else self._forward_params_model["quantile_levels"]
+            )
+            for i, q in enumerate(output_quantile_levels):
+                for j, c in enumerate(prediction_columns):
+                    col = f"{c}_q{q}"
+                    prob_data[col] = input[quantile_output_key][:, i, :, j].detach().cpu().numpy().tolist()
+                    quantile_cols.append(col)
+            out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
+            for i, q in enumerate(output_quantile_levels):
+                if self.feature_extractor is not None and kwargs["inverse_scale_outputs"]:
+                    out = self.feature_extractor.inverse_scale_targets(out, suffix=f"_prediction_q{q}")
 
         if kwargs["explode_forecasts"]:
             # we made only one forecast per time series, explode results
@@ -508,7 +556,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                         tmp[c] = row[c]
                 for p in prediction_columns:
                     tmp[p] = row[p]
-                for c in conformal_cols:
+                for c in quantile_cols:
                     tmp[c] = row[c]
 
                 out_explode.append(pd.DataFrame(tmp))

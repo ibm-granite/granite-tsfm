@@ -1,8 +1,12 @@
 """Miscellaneous utilities for huggingface transformers"""
 
 import importlib
+import logging
 
 from transformers import AutoConfig
+
+
+LOGGER = logging.getLogger(__file__)
 
 
 def register_config(model_type: str, model_config_name: str, module_path: str) -> None:
@@ -16,6 +20,7 @@ def register_config(model_type: str, model_config_name: str, module_path: str) -
 
     Raises:
         RuntimeError: Raised when the module cannot be imported from the provided module path.
+        ValueError: Raised when module_path is not from an allowed prefix.
     """
     # example
     # model_type: "tinytimemixer"

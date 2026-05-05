@@ -9,7 +9,6 @@ boilerplate:
 		echo $$f; \
 		cat ../boilerplate/warning.txt > tsfmfinetuning/$$(basename $$f); \
 		cat $$f>>tsfmfinetuning/$$(basename $$f); \
-		if ! grep $$(basename $$f) tsfmfinetuning/.gitignore; then echo $$(basename $$f) >> tsfmfinetuning/.gitignore; fi \
 		done
 
 image: boilerplate
@@ -28,10 +27,10 @@ clone_models:
 
 fetchdata:
 	rm -rf data || true
-	python tests/fetchdata.py
+	uv run --locked python tests/fetchdata.py
 
 test_local: clone_models fetchdata boilerplate
-	pytest -s tests
+	TSFM_ALLOW_LOAD_FROM_HF_HUB=1 TSFM_MODEL_DIR=./mytest-tsfm uv run --locked pytest tests
 
 install_dev: boilerplate
-	pip install poetry && poetry install --with dev
+	uv sync --locked  --extra dev --editable

@@ -1,5 +1,6 @@
 """Tests for util functions"""
 
+import os
 import tempfile
 
 import pandas as pd
@@ -96,9 +97,11 @@ def test_convert_tsfile():
 10,20,30,40,50:2
 11,12,13,14,15:3
 """
-    with tempfile.NamedTemporaryFile() as t:
-        t.write(data.encode("utf-8"))
-        t.flush()
-        df = convert_tsfile(t.name)
-
-    assert df.shape == (15, 3)
+    try:
+        fp, fn = tempfile.mkstemp()
+        os.close(fp)
+        open(fn, "wb").write(data.encode("utf-8"))
+        df = convert_tsfile(fn)
+        assert df.shape == (15, 3)
+    finally:
+        os.unlink(fn)

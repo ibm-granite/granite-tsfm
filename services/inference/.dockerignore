@@ -1,6 +1,6 @@
 **
 !tsfminference
-!poetry.lock
+!uv.lock
 !pyproject.toml
 !cuda.repo-x86_64
 

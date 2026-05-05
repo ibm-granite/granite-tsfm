@@ -632,7 +632,7 @@ def test_posthoc_probabilistic_processor_with_id_columns(id_columns, input_type)
     g1_idx = g1_idx[:window_size]
     g2_idx = g2_idx[:window_size]
 
-    sel_idx = g1_idx.append(g2_idx)
+    sel_idx = g1_idx.union(g2_idx)
     y_cal_gt = y_gt.loc[sel_idx]
     y_cal_pred = y_pred.loc[sel_idx]
 
@@ -646,7 +646,7 @@ def test_posthoc_probabilistic_processor_with_id_columns(id_columns, input_type)
     g1_idx = g1_idx[window_size:]
     g2_idx = g2_idx[window_size:]
 
-    sel_idx = g1_idx.append(g2_idx)
+    sel_idx = g1_idx.union(g2_idx)
     # y_test_gt = y_gt.loc[sel_idx]
     y_test_pred = y_pred.loc[sel_idx]
     id_columns_test = forecasts[id_columns].copy().loc[sel_idx].values

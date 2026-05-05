@@ -14,16 +14,28 @@ a finetuneing job on a kubernetes-based system.
 - git
 - git-lfs (available in many system package managers such as apt, dnf, and brew)
 - python >=3.10, <3.13
-- poetry (`pip install poetry`)
+- uv (see [this page](https://docs.astral.sh/uv/getting-started/installation/) for installation instruction)
 - zsh or bash
 - docker or podman (to run examples, we have not tested well with podman)
-- kubectl for deploying a local test cluster
+- kubectl (necessary only for deploying a local test cluster)
 
 ## Installation
 
 ```sh
-pip install poetry && poetry install --with dev
+uv sync --locked  --extra dev --editable
 ```
+
+## Security configuration
+
+When using `file://` inputs for finetuning data, you must set `ALLOWED_DATA_DIR` to a directory that contains all permitted training datasets. The service resolves each `file://` URI and rejects any path that falls outside this directory.
+
+Example:
+
+```sh
+export ALLOWED_DATA_DIR=/data
+```
+
+Only files and directories under `ALLOWED_DATA_DIR` should be mounted into the runtime for finetuning jobs.
 
 ### Testing locally
 
@@ -41,7 +53,10 @@ work. You must also have proper permissions on your system to build images. We a
 or `podman` that has been aliased as `docker` or has been installed with the podman-docker package that will do this for you.
 
 ```zsh
-make image
+# If you are using podman, you must prefix the next command with
+# CONTAINER_BUILDER=podman
+# For finetuning, we only support building the GPU image
+CONTAINER_BUILDER=docker make image
 ```
 
 Note that be default we build an image **without** GPU support. This makes the development image much smaller
@@ -69,7 +84,7 @@ and monitor an ayschronous finetuning job.
 First:
 
 - [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Install helm](https://helm.sh/docs/intro/install/)
+  
 - If you are using podman, you will need to enable the use of an insecure (using http instead of https)
   local container registry by creating a file called `/etc/containers/registries.conf.d/localhost.conf`
   with the following content:

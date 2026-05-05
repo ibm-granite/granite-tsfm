@@ -20,7 +20,7 @@ timeseries foundation models. At present it provide inference endpoints for the 
 - git
 - git-lfs
 - python >=3.10, <3.13
-- poetry (`pip install poetry`)
+- uv (see [this page](https://docs.astral.sh/uv/getting-started/installation/) for installation instruction)
 - zsh or bash
 - (optional) docker or podman
 - (optional) kubectl if you plan on testing kubernetes-based deployments
@@ -28,7 +28,7 @@ timeseries foundation models. At present it provide inference endpoints for the 
 ## Installation
 
 ```sh
-pip install poetry && poetry install --with dev
+uv sync --locked  --extra dev --editable
 ```
 
 ### Testing using a local server instance
@@ -44,7 +44,11 @@ work. You must also have proper permissions on your system to build images. We a
 or `podman` that has been aliased as `docker` or has been installed with the podman-docker package that will do this for you.
 
 ```bash
-make image
+# If you are using podman, you must prefix the next command with
+# CONTAINER_BUILDER=podman
+# If you with to build only the GPU-enabled image as well as the CPU
+# image set SKIP_GPU_BUILD to 1
+CONTAINER_BUILDER=docker SKIP_GPU_BUILD=0 make image
 ```
 
 After a successful build you should have a local image named
@@ -61,6 +65,7 @@ tsfminference                                             latest               d
 ### Using the built image
 
 ```sh
+make image
 make test_image
 
 docker run -p 8000:8000 -d --rm --name tsfmserver tsfminference
