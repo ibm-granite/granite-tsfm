@@ -68,7 +68,7 @@ def check_ttm_model_path(model_path):
         return 2
     elif model_path.startswith("ibm-research/ttm-research-r2"):
         return 3
-    elif "ibm-research/ttm-r3" in model_path:
+    elif model_path.startswith("ibm-research/ttm-r3"):
         return 4
     else:
         return 0
