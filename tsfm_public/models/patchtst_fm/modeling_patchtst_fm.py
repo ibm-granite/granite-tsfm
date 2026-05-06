@@ -320,16 +320,28 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             )
             forecast_samples = forecast_samples[:, :, :forecast_len]
 
-        # use internal quantile_levels to compute estimate of mean
-        quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
-        quant_prob /= quant_prob.sum()  # normalize quantile weights
+        # forecast_samples: (batch x num quantiles x forecast length)
+
+        # Integrate quantile function to estimate mean
+        # Q(p) = F^{-1}(p) = x
+        # F(Q(p)) = p
+        # f(Q(p)) Q'(p) = 1
+        # f(Q(p)) = 1/Q'(p)
+        # mu = \int x f(x) dx = \int Q(p) dp
+        # Quantiles are approximately evenly spaced
+        dq = torch.tensor(
+            (self.config.quantile_levels[-1] - self.config.quantile_levels[0]) / len(self.config.quantile_levels)
+        )  # ~1/len(quantiles)
+
+        # quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
+        # quant_prob /= quant_prob.sum()  # normalize quantile weights
 
         if not list_input:
-            quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
-            point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
+            # quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
+            point_forecast: torch.Tensor = dq * forecast_samples.sum(dim=1)
         else:
-            quant_prob = quant_prob.view(-1, 1, 1).to(self.device)
-            point_forecast: List[torch.Tensor] = [(sample * quant_prob).sum(dim=0) for sample in forecast_samples]
+            # quant_prob = quant_prob.view(-1, 1, 1).to(self.device)
+            point_forecast: List[torch.Tensor] = [dq * sample.sum(dim=0) for sample in forecast_samples]
 
         if quantile_levels is not None:
             try:
