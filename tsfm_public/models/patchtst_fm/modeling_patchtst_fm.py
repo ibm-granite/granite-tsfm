@@ -333,14 +333,15 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             (self.config.quantile_levels[-1] - self.config.quantile_levels[0]) / len(self.config.quantile_levels)
         )  # ~1/len(quantiles)
 
+        # Old approach
         # quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
         # quant_prob /= quant_prob.sum()  # normalize quantile weights
+        # quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
+        # point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
 
         if not list_input:
-            # quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
             point_forecast: torch.Tensor = dq * forecast_samples.sum(dim=1)
         else:
-            # quant_prob = quant_prob.view(-1, 1, 1).to(self.device)
             point_forecast: List[torch.Tensor] = [dq * sample.sum(dim=0) for sample in forecast_samples]
 
         if quantile_levels is not None:
