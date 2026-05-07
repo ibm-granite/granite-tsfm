@@ -340,9 +340,14 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
 
         if not list_input:
-            point_forecast: torch.Tensor = dq * forecast_samples.sum(dim=1)
+            point_forecast: torch.Tensor = dq * (
+                0.5 * (forecast_samples[:, 0, ...] + forecast_samples[:, -1, ...])
+                + forecast_samples[:, 1:-1, ...].sum(dim=1)
+            )
         else:
-            point_forecast: List[torch.Tensor] = [dq * sample.sum(dim=0) for sample in forecast_samples]
+            point_forecast: List[torch.Tensor] = [
+                dq * (0.5 * (sample[0, ...] + sample[-1, ...]) + sample.sum(dim=0)) for sample in forecast_samples
+            ]
 
         if quantile_levels is not None:
             try:
