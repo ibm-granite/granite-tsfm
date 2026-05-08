@@ -626,6 +626,8 @@ class ForecastDFDataset(BaseConcatDFDataset):
             seq_x[context_start - time_id - self.context_length :, :] = self.X.iloc[
                 context_start : time_id + self.context_length
             ].values.astype(np.float32)
+            pad_mask = np.ones_like(seq_x, dtype=bool)
+            pad_mask[context_start - time_id - self.context_length :] = False
 
             if not self.autoregressive_modeling:
                 seq_x[:, self.x_mask_targets] = 0
@@ -662,6 +664,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
                 ),
                 "past_observed_mask": np_to_torch(~np.isnan(seq_x)),
                 "future_observed_mask": np_to_torch(~np.isnan(seq_y)),
+                "pad_mask": np_to_torch(pad_mask),
             }
 
             if self.datetime_col:
