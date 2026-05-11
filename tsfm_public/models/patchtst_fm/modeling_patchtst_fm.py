@@ -331,10 +331,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # f(Q(p)) Q'(p) = 1
         # f(Q(p)) = 1/Q'(p)
         # mu = \int x f(x) dx = \int Q(p) dp
-        # Quantiles are approximately evenly spaced
-        dq = torch.tensor(
-            (self.config.quantile_levels[-1] - self.config.quantile_levels[0]) / len(self.config.quantile_levels)
-        )  # ~1/len(quantiles)
 
         # Old approach
         # quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
@@ -342,16 +338,17 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
         # point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
 
-        if not list_input:
-            point_forecast: torch.Tensor = torch.trapz(forecast_samples, torch.tensor(self.config.quantile_levels), dim=1)
-            # extend tails
-            point_forecast += forecast_samples[:, 0]*self.config.quantile_levels[0] + forecast_samples[:, -1])*self.config.quantile_levels[-1]
-        else:
-            point_forecast: List[torch.Tensor] = [
-                torch.trapz(samples, torch.tensor(self.config.quantile_levels), dim=0) +
-                sample[0]*self.config.quantile_levels[0] + sample[-1]*self.config.quantile_levels[-1]
-                for sample in forecast_samples
-            ]
+        q_levels = torch.tensor(self.config.quantile_levels, device=forecast_samples[0].device)
+        with torch.no_grad():
+            if not list_input:
+                point_forecast: torch.Tensor = torch.trapz(forecast_samples, q_levels, dim=1)
+                # extend tails
+                point_forecast += forecast_samples[:, 0] * q_levels[0] + forecast_samples[:, -1] * (1 - q_levels[-1])
+            else:
+                point_forecast: List[torch.Tensor] = [
+                    torch.trapz(sample, q_levels, dim=0) + sample[0] * q_levels[0] + sample[-1] * (1 - q_levels[-1])
+                    for sample in forecast_samples
+                ]
 
         if quantile_levels is not None:
             try:
