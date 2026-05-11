@@ -281,9 +281,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         cl = self.config.context_length
         ul = -1
-        logger.info(
-            f"Context Len: {cl} | Forecast Len: {forecast_len} | Input is tensor: {not list_input}",
-        )
+        # logger.info(
+        #     f"Context Len: {cl} | Forecast Len: {forecast_len} | Input is tensor: {not list_input}",
+        # )
 
         if past_observed_mask is None:
             if list_input:
