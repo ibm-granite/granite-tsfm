@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from transformers import PatchTSTConfig, PatchTSTForPrediction
 
 from tsfm_public import (
@@ -622,3 +623,87 @@ def test_probabilistic_forecasts(etth_data):
     assert len(forecasts[f"{target_columns[0]}"]) == pfl
     assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[0]}"]) == pfl
     assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[1]}"]) == pfl
+
+
+def test_expanding_context(patchtst_fm_dummy_model):
+    model = patchtst_fm_dummy_model
+    pred_len = 24
+    # Generate sine wave data
+    t = np.linspace(0, 4 * np.pi, 200)
+    sine_wave = np.sin(t)
+
+    # Initialize PatchTST Model
+    quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    model.eval()
+
+    ## Call PatchTST with model
+    series = np.expand_dims(sine_wave, axis=0)
+    series = torch.from_numpy(series).float()
+    with torch.no_grad():
+        model_outputs = model(
+            past_values=series,
+            prediction_length=pred_len,
+            quantile_levels=quantile_levels,
+        )
+    pred_quantiles_forward_model = model_outputs.quantile_outputs.detach().cpu().numpy()
+    pred_quantiles_forward_model = pred_quantiles_forward_model.squeeze()
+
+    ## Call PatchTST with model (pass a list of tensor)
+    with torch.no_grad():
+        model_outputs = model(
+            past_values=[series.reshape(-1)],
+            prediction_length=pred_len,
+            quantile_levels=quantile_levels,
+        )
+    pred_quantiles_forward_model_2 = model_outputs.quantile_outputs[0].detach().cpu().numpy()
+    pred_quantiles_forward_model_2 = pred_quantiles_forward_model_2.squeeze()
+
+    ## Call PatchTST with TimeSeriesForecastingPipeline
+    data = pd.DataFrame(
+        {
+            "timestamp": pd.date_range(start="2020-01-01", periods=len(sine_wave), freq="h"),
+            "target": sine_wave,
+        }
+    )
+    # Create forecasting pipeline
+    context_length = len(data)
+    fpipe = TimeSeriesForecastingPipeline(
+        model=model,
+        id_columns=[],
+        timestamp_column="timestamp",
+        target_columns=["target"],
+        max_context_length=model.config.context_length,
+        context_length=context_length,
+        prediction_length=pred_len,
+        batch_size=16,
+        impute_method=None,
+        # device=device,
+        quantile_levels=quantile_levels,
+        device="cpu",
+    )
+
+    # Generate forecasts
+    forecast = fpipe(data)
+    assert len(forecast) == 1, "No more than one row should be returned, context_length = len(data)"
+
+    target_quantiles = []
+    for q in quantile_levels:
+        q_col = f"target_prediction_q{q}"
+        q_array = np.array([np.stack(z) for z in forecast[q_col].values])  # n_samples x prediction_lenght
+        target_quantiles.append(q_array)  # (n_samples, prediction_length)
+    pred_quantiles_pipeline = np.stack(target_quantiles, axis=-1)
+    pred_quantiles_pipeline = np.transpose(pred_quantiles_pipeline, (0, 2, 1))
+    pred_quantiles_pipeline = pred_quantiles_pipeline[-1, ...].squeeze()
+
+    for ix_q, q in enumerate(quantile_levels):
+        np.testing.assert_allclose(
+            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model[ix_q, :])),
+            0,
+            err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct tensor).",
+        )
+
+        np.testing.assert_allclose(
+            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model_2[ix_q, :])),
+            0,
+            err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct list).",
+        )
