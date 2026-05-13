@@ -906,7 +906,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
                 pad_mask = pad_mask.transpose(0, 1)
 
         if pad_mask is not None:
-            # if pad_mask is not uniform, we take the minium index
+            # if pad_mask is not uniform, we take the minimum index
             start_idx = pad_mask.to(torch.int).argmin(dim=1).min()
             past_values = past_values[:, start_idx:, ...]
 
