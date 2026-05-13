@@ -626,7 +626,7 @@ def test_probabilistic_forecasts(etth_data):
 
 
 def test_expanding_context(patchtst_fm_dummy_model):
-    model = patchtst_fm_dummy_model
+    model = patchtst_fm_dummy_model.to("cpu")
     pred_len = 24
     # Generate sine wave data
     t = np.linspace(0, 4 * np.pi, 200)
