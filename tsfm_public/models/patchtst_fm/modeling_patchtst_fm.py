@@ -32,7 +32,6 @@ class LearnedPositionalEmbedding(nn.Module):
         self.type = type
 
     def forward(self, x, offset: Optional[int] = 0):
-        logger.info(f"LearnedPositionalEmbedding offset is {offset}")
         positions = torch.arange(start=offset, end=x.size(-2) + offset, device=x.device).unsqueeze(0)
         pe = self.embedding(positions)
         if x.ndim == 4:
@@ -520,7 +519,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
         with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
-            logger.info(f"Calling backbone with context_length = {context_length}")
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
