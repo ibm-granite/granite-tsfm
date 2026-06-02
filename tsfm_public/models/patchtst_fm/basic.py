@@ -110,7 +110,9 @@ class Attention(nn.Module):
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
         if x.ndim == 3:
             B, N, C = x.shape
-            qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            qkv = (
+                self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            )  # 3 x B x num_heads x N (num_patches) x head_dim
             q, k, v = qkv.unbind(0)  # (B, num_heads, N, head_dim)
             q, k = self.q_norm(q), self.k_norm(k)
             x = F.scaled_dot_product_attention(
@@ -119,7 +121,7 @@ class Attention(nn.Module):
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 attn_mask=attn_mask,
-            )
+            )  # (B, num_heads, N, head_dim)
             x = x.transpose(1, 2).reshape(B, N, C)
         elif x.ndim == 4:
             B, M, N, C = x.shape

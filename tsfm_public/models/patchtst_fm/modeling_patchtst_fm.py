@@ -156,7 +156,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         mask_patch = ts_mask.reshape(B, self.config.n_patch, self.config.d_patch)
         pad_patch_mask = pad_mask.reshape(B, self.config.n_patch, self.config.d_patch).float().mean(dim=-1).gt(0.9)
 
-        q_pred, q_raw = self.decode(x=x_patch, mask=mask_patch.float(), t_pad_mask=pad_patch_mask)
+        q_pred, q_raw = self.decode(x=x_patch, mask=mask_patch, t_pad_mask=pad_patch_mask)
         q_pred = q_pred.permute(0, 2, 3, 1)
 
         B, N, D, Q = q_pred.shape
@@ -178,17 +178,34 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
     def decode(self, x, mask, t_pad_mask=None):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
-        x = self.in_layer(torch.cat([x, 1 - mask], dim=-1))
+        x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
         pad_attn_mask = make_attn_mask(t_pad_mask, t_pad_mask).unsqueeze(1)
 
-        x = self.pos_embed(x)
+        # x: bs x num_patches x 2*seq_len
+        x = self.pos_embed(x)  # bs x num_patches x 2*seq_len
+
+        # determine the ealiest index where the padding ends
+        hard_cutoff = True
+        if hard_cutoff:
+            idx = t_pad_mask.to(torch.float16).argmin(dim=1).min()
+            x = x[:, idx:]
+        else:
+            idx = 0
+
         for block in self.blocks:
-            x = block(x, pad_attn_mask)
+            x = block(x, pad_attn_mask[:, :, idx:, idx:])
+        Np = x.shape[1]
+
         x = self.out_layer(x)
-        q_raw = x.reshape(B, N, self.config.num_quantile + 1, self.config.d_patch).permute(0, 2, 1, 3)
+        q_raw = x.reshape(B, Np, self.config.num_quantile + 1, self.config.d_patch).permute(0, 2, 1, 3)
         q = q_raw[:, 0, :, :].unsqueeze(1) + torch.cumsum(
             F.softplus(q_raw[:, 1:, :, :]) / self.config.num_quantile, dim=1
         )
+
+        # pad to get back to expected shape
+        if hard_cutoff:
+            q = F.pad(q, (0, 0, idx, 0), mode="constant", value=0.0)
+
         return q, q_raw
 
 
