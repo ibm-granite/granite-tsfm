@@ -158,7 +158,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         pad_patch_mask = pad_mask.reshape(B, self.config.n_patch, self.config.d_patch).float().mean(dim=-1).gt(0.9)
 
         # determine the ealiest index where the padding ends
-        if context_length is not None:
+        if context_length is not None and self.config.use_pruning:
             idx = (self.config.context_length - context_length) // self.config.d_patch
             x_patch = x_patch[:, idx:]
             mask_patch = mask_patch[:, idx:]
@@ -173,7 +173,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         q_pred = q_pred.reshape(B, N * D, Q)
 
         # pad back to the original length
-        if context_length is not None:
+        if context_length is not None and self.config.use_pruning:
             q_pred = F.pad(q_pred, (0, 0, idx * D, 0), value=0.0)
 
         if output_hidden_states:
