@@ -63,6 +63,7 @@ class PatchTSTFMConfig(PretrainedConfig):
         self.pretrain_mask_ratio = pretrain_mask_ratio
         self.pretrain_mask_cont = pretrain_mask_cont
         self.num_quantile = num_quantile
+        self.use_pruning = use_pruning
 
         if num_quantile % 9 == 0:
             quantiles = [i / (self.num_quantile + 1) for i in range(1, self.num_quantile + 1)]
