@@ -75,6 +75,14 @@ class SKLearnFeatureExtractionBase:
         """ """
 
         t = cls()
+        # Scikit-learn >= 1.8.0 requires scaler attributes to be numpy arrays (using .astype())
+        # which deserializing from JSON natively parses as Python lists. Let's remap them.
+        import numpy as np
+
+        for k, v in feature_extractor_dict.items():
+            if isinstance(v, list) and k in ["mean_", "scale_", "var_", "data_min_", "data_max_", "data_range_"]:
+                feature_extractor_dict[k] = np.array(v)
+
         t.__setstate__(feature_extractor_dict)
 
         return t
