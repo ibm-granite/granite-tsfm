@@ -1031,7 +1031,7 @@ requires-dist = [
     { name = "tensorboard", marker = "extra == 'notebooks'" },
     { name = "toml", marker = "extra == 'demos'" },
     { name = "torch", specifier = ">=2.10,<2.11" },
-    { name = "transformers", extras = ["torch"], git = "https://github.com/huggingface/transformers?branch=main" },
+    { name = "transformers", extras = ["torch"], specifier = ">=4.57.6,<6" },
     { name = "urllib3", specifier = ">=1.26.19" },
 ]
 provides-extras = ["all", "notebooks", "testing", "dev", "ogv", "demos"]
@@ -3880,8 +3880,8 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.3.0.dev0"
-source = { git = "https://github.com/huggingface/transformers?branch=main#5c1c72be5f864d10d0efe8ece0768d9ed6ee4fdd" }
+version = "5.12.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -3893,6 +3893,10 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
     { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0c/f9/4552e2ba55db1c943aea0d4c09a32e9cbe5445b9eabe9856900de503dc8f/transformers-5.12.0.tar.gz", hash = "sha256:f0cf42ae1464c2eb41e7e0e66d7fd4b66145f48af17093b4cc0b2e9781faa7f4", size = 8923020, upload-time = "2026-06-12T14:39:20.43Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/1f/d385913c38e900d23b728a4188fee625f2fccb306aeebc59be9d91404a5a/transformers-5.12.0-py3-none-any.whl", hash = "sha256:500be9eb644ede81c3103eee7687fc36d05dd75d1c76686c3820b26396fe7c7c", size = 11150246, upload-time = "2026-06-12T14:39:17.009Z" },
 ]
 
 [package.optional-dependencies]
