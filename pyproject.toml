@@ -25,12 +25,9 @@ dependencies = [
     "torch>=2.10,<2.11",
     "scikit-learn<1.8",
     "pandas>=2.3.3,<4",
-    "filelock>=3.20.3"
+    "filelock>=3.20.3",
+    "einops>=0.7",
 ]
-
-# temporary until PR for HF is approved
-[tool.uv.sources]
-transformers = { git = "https://github.com/huggingface/transformers", branch = "main" }
 
 # test commit
 [tool.setuptools]
