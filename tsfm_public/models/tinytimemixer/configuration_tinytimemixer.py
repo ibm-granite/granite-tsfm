@@ -216,6 +216,45 @@ class TinyTimeMixerConfig(PretrainedConfig):
         huber_delta: float = 1,
         # masked prediction,
         mask_value: int = 0,
+        # r3 params
+        multi_scale: bool = False,
+        register_tokens: int = 0,
+        fft_length: int = 0,
+        use_fft_embedding: bool = True,
+        multi_quantile_head: bool = False,
+        point_extra_weight: Optional[int] = 0,
+        residual_context_length: int = None,
+        trend_patch_length: int = None,
+        trend_patch_stride: int = None,
+        trend_d_model: int = None,
+        trend_decoder_d_model: int = None,
+        trend_num_layers: int = None,
+        trend_decoder_num_layers: int = None,
+        trend_register_tokens: int = None,
+        trend_fft_length: int = None,
+        trend_multi_scale: bool = None,
+        trend_adaptive_patching_levels: int = None,
+        trend_head_d_model: Optional[int] = None,
+        trend_loss_weight: Optional[float] = 1,
+        residual_loss_weight: Optional[float] = 1,
+        joint_loss_weight: Optional[float] = 1,
+        forecast_loss_type: Optional[str] = "joint",
+        decompose: bool = False,
+        light_mode: bool = False,
+        mq_hidden: int = 8,
+        mq_kernel_size: int = 3,
+        mq_eps: float = 1e-6,
+        mq_use_decoder_pool: bool = False,
+        mq_q50_type: str = "median",
+        mq_cond_path: str = "pool",
+        mq_cond_mode: str = "add",
+        mq_decoder_d_model: int = 8,
+        mq_use_positional: bool = False,
+        combine_quantiles_via_variance: bool = False,
+        quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        penalize_large_width_ratio: float = 0.0,
+        width_penalty_mode: str = "boundary",
+        enable_base_norm_always: bool = False,
         **kwargs,
     ):
         self.num_input_channels = num_input_channels
@@ -275,19 +314,108 @@ class TinyTimeMixerConfig(PretrainedConfig):
         self.mask_value = mask_value
         self.masked_context_length = None
 
+        # r3 params
+        self.multi_scale = multi_scale
+        self.register_tokens = register_tokens
+        self.fft_length = fft_length
+        self.use_fft_embedding = use_fft_embedding
+        self.multi_quantile_head = multi_quantile_head
+        self.point_extra_weight = point_extra_weight
+        self.residual_context_length = residual_context_length
+        self.trend_patch_length = trend_patch_length
+        self.trend_patch_stride = trend_patch_stride
+        self.trend_d_model = trend_d_model
+        self.trend_decoder_d_model = trend_decoder_d_model
+        self.trend_num_layers = trend_num_layers
+        self.trend_decoder_num_layers = trend_decoder_num_layers
+        self.trend_register_tokens = trend_register_tokens
+        self.trend_fft_length = trend_fft_length
+        self.trend_loss_weight = trend_loss_weight
+        self.trend_multi_scale = trend_multi_scale
+        self.trend_adaptive_patching_levels = trend_adaptive_patching_levels
+        self.residual_loss_weight = residual_loss_weight
+        self.joint_loss_weight = joint_loss_weight
+        self.forecast_loss_type = forecast_loss_type
+        self.trend_head_d_model = trend_head_d_model
+        self.decompose = decompose
+        self.light_mode = light_mode
+
+        self.mq_hidden = int(mq_hidden)
+        self.mq_kernel_size = int(mq_kernel_size)
+        self.mq_eps = float(mq_eps)
+        self.mq_use_decoder_pool = mq_use_decoder_pool
+        self.mq_q50_type = mq_q50_type
+        self.mq_cond_path = mq_cond_path
+        self.mq_cond_mode = mq_cond_mode
+        self.mq_decoder_d_model = mq_decoder_d_model
+        self.mq_use_positional = mq_use_positional
+        self.combine_quantiles_via_variance = combine_quantiles_via_variance
+        self.quantile_levels = quantile_levels
+
+        self.penalize_large_width_ratio = penalize_large_width_ratio
+        self.width_penalty_mode = width_penalty_mode
+        self.enable_base_norm_always = enable_base_norm_always
         super().__init__(**kwargs)
+
+    def compute_total_num_patches_multiscale(self) -> int:
+        """
+        Compute total number of patches across all valid downsampled scales (2^i),
+        where each scale has enough length to be split into full patches.
+
+        Args:
+            sequence_length (int): original sequence length
+            patch_length (int): patch length used at each scale
+
+        Returns:
+            int: total number of patches across all scales
+        """
+        sequence_length = self.context_length
+        patch_length = self.patch_length
+        total_patches = 0
+        i = 0
+
+        while True:
+            factor = 2**i
+            downsampled_len = sequence_length // factor
+            if downsampled_len < patch_length:
+                break
+            num_patches = downsampled_len // patch_length
+            total_patches += num_patches
+            i += 1
+
+        return total_patches
 
     def check_and_init_preprocessing(self):
         self.init_processing = True
 
-        if not hasattr(self, "num_patches"):
-            context_length = (
-                self.masked_context_length if self.masked_context_length is not None else self.context_length
-            )
-            self.num_patches = (max(context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        if self.patch_length != self.patch_stride:
+            raise Exception("patch_length should be same as patch_stride")
+
+        if not hasattr(self, "num_patches") or self.num_patches is None:
+            if self.multi_scale:
+                if self.masked_context_length is not None:
+                    raise Exception("masked_context_length should be disabled when multi_scale is on")
+                self.num_patches = self.compute_total_num_patches_multiscale()
+
+            else:
+                context_length = (
+                    self.masked_context_length if self.masked_context_length is not None else self.context_length
+                )
+                self.num_patches = (
+                    max(context_length, self.patch_length) - self.patch_length
+                ) // self.patch_stride + 1
 
             if self.resolution_prefix_tuning:
                 self.num_patches += 1
+
+            if self.register_tokens > 0:
+                self.num_patches += self.register_tokens
+
+            if self.fft_length > 0:
+                if getattr(self, "get_one_freq_emb", False):
+                    self.num_patches += 1
+                else:
+                    self.num_patches += self.fft_length
 
         if self.prediction_filter_length is not None:
             if self.prediction_filter_length > self.prediction_length or self.prediction_filter_length <= 0:

@@ -79,12 +79,15 @@
 #                                                               #
 #                                                               #
 #################################################################
+# Canonical source: services/boilerplate/service_handler.py
+# — regenerate with 'make boilerplate'
 
 """Base serivce handler"""
 
 import enum
 import importlib
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -99,6 +102,69 @@ from .inference_payloads import (
 
 
 LOGGER = logging.getLogger(__file__)
+
+# Security: Base allowlist of trusted module prefixes for handler loading
+_BASE_ALLOWED_HANDLER_MODULE_PREFIXES = (
+    "tsfm_public.",
+    "tsfminference.",
+    "tsfmfinetuning.",
+)
+
+# Security: Allow additional trusted module prefixes via environment variable
+# Format: comma-separated list of module prefixes, e.g., "mycompany.models.,custom.handlers."
+# Each prefix MUST end with a dot to ensure exact module path matching
+_ADDITIONAL_ALLOWED_PREFIXES = os.getenv("TSFM_ADDITIONAL_HANDLER_MODULES", "")
+
+
+def _validate_and_parse_additional_prefixes(prefixes_str: str) -> tuple:
+    """Parse and validate additional module prefixes from environment variable.
+
+    Security: Enforces that each prefix ends with a dot to prevent overly broad matches.
+    For example, "mycompany." is safe, but "mycompany" would match "mycompany_evil".
+
+    Args:
+        prefixes_str: Comma-separated string of module prefixes
+
+    Returns:
+        Tuple of validated prefixes
+
+    Raises:
+        ValueError: If any prefix doesn't end with a dot
+    """
+    if not prefixes_str.strip():
+        return ()
+
+    prefixes = []
+    for prefix in prefixes_str.split(","):
+        prefix = prefix.strip()
+        if not prefix:
+            continue
+
+        if not prefix.endswith("."):
+            raise ValueError(
+                f"Security: Additional handler module prefix '{prefix}' must end with a dot ('.'). "
+                f"This ensures exact module path matching and prevents overly broad allowlists. "
+                f"Example: use 'mycompany.models.' instead of 'mycompany.models'"
+            )
+
+        prefixes.append(prefix)
+
+    return tuple(prefixes)
+
+
+_additional_prefixes = _validate_and_parse_additional_prefixes(_ADDITIONAL_ALLOWED_PREFIXES)
+
+# Combine base and additional prefixes
+ALLOWED_HANDLER_MODULE_PREFIXES = _BASE_ALLOWED_HANDLER_MODULE_PREFIXES + _additional_prefixes
+
+if _additional_prefixes:
+    LOGGER.info(
+        f"Additional handler module prefixes enabled: {_additional_prefixes}. "
+        f"Ensure these modules are from trusted sources."
+    )
+
+# Security: Environment variable to explicitly trust remote code
+TSFM_TRUST_REMOTE_CODE = int(os.getenv("TSFM_TRUST_REMOTE_CODE", "0")) == 1
 
 
 class HandlerFunction(enum.Enum):
@@ -207,6 +273,52 @@ class ServiceHandler:
             return None
 
 
+def _validate_handler_module_path(module_path: str) -> None:
+    """Validate that the handler module path is from a trusted source.
+
+    Security: This function prevents arbitrary code execution by ensuring that
+    only modules from allowlisted prefixes can be loaded. This protects against
+    attacks where an attacker publishes a malicious HuggingFace repo with a
+    crafted tsfm_config.json that attempts to load arbitrary Python modules.
+
+    Args:
+        module_path: The module path to validate
+
+    Raises:
+        ValueError: If the module path is not from an allowed prefix
+    """
+    if not any(module_path.startswith(prefix) for prefix in ALLOWED_HANDLER_MODULE_PREFIXES):
+        raise ValueError(
+            f"Security: Handler module path '{module_path}' is not allowed. "
+            f"Only modules with the following prefixes are permitted: {ALLOWED_HANDLER_MODULE_PREFIXES}. "
+            f"Contact your security team before enabling TSFM_TRUST_REMOTE_CODE in production."
+        )
+
+
+def _validate_handler_class_name(class_name: str) -> None:
+    """Validate that the handler class name follows expected naming conventions.
+
+    Security: This function provides defense-in-depth by ensuring that class names
+    match expected handler naming patterns. This prevents attacks where an allowlisted
+    module might re-export dangerous objects (like subprocess or os) at module level,
+    which could be accessed via the class_name field in tsfm_config.json.
+
+    Args:
+        class_name: The class name to validate
+
+    Raises:
+        ValueError: If the class name does not match allowed patterns
+    """
+    # Enforce that class names match expected handler naming convention
+    allowed_suffixes = ("Handler", "ServiceHandler")
+    if not any(class_name.endswith(suffix) for suffix in allowed_suffixes):
+        raise ValueError(
+            f"Security: Handler class name '{class_name}' does not match allowed pattern. "
+            f"Class names must end with one of: {allowed_suffixes}. "
+            f"Contact your security team before enabling TSFM_TRUST_REMOTE_CODE in production."
+        )
+
+
 def get_service_handler_class(
     config: TSFMConfig, handler_function: str = HandlerFunction.INFERENCE.value
 ) -> "ServiceHandler":
@@ -220,8 +332,22 @@ def get_service_handler_class(
         raise ValueError(f"Unknown handler_function `{handler_function}`")
 
     if getattr(config, handler_module_path_identifier, None) and getattr(config, handler_class_name_identifier, None):
-        module = importlib.import_module(getattr(config, handler_module_path_identifier))
-        my_class = getattr(module, getattr(config, handler_class_name_identifier))
+        module_path = getattr(config, handler_module_path_identifier)
+        class_name = getattr(config, handler_class_name_identifier)
+
+        # Security: Validate module path and class name before loading
+        if not TSFM_TRUST_REMOTE_CODE:
+            _validate_handler_module_path(module_path)
+            _validate_handler_class_name(class_name)
+        else:
+            LOGGER.warning(
+                f"TSFM_TRUST_REMOTE_CODE is enabled. Loading handler module '{module_path}' "
+                f"and class '{class_name}' without validation. "
+                f"This may pose a security risk if loading from untrusted sources."
+            )
+
+        module = importlib.import_module(module_path)
+        my_class = getattr(module, class_name)
 
     elif handler_function == HandlerFunction.INFERENCE.value:
         # Default to forecasting task, inference

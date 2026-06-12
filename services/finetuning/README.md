@@ -25,6 +25,18 @@ a finetuneing job on a kubernetes-based system.
 uv sync --locked  --extra dev --editable
 ```
 
+## Security configuration
+
+When using `file://` inputs for finetuning data, you must set `ALLOWED_DATA_DIR` to a directory that contains all permitted training datasets. The service resolves each `file://` URI and rejects any path that falls outside this directory.
+
+Example:
+
+```sh
+export ALLOWED_DATA_DIR=/data
+```
+
+Only files and directories under `ALLOWED_DATA_DIR` should be mounted into the runtime for finetuning jobs.
+
 ### Testing locally
 
 This will run basic unit tests. You should run them and confirm they pass before
@@ -72,7 +84,7 @@ and monitor an ayschronous finetuning job.
 First:
 
 - [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Install helm](https://helm.sh/docs/intro/install/)
+  
 - If you are using podman, you will need to enable the use of an insecure (using http instead of https)
   local container registry by creating a file called `/etc/containers/registries.conf.d/localhost.conf`
   with the following content:

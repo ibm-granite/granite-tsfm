@@ -20,6 +20,7 @@ class FlowState_Gift_Wrapper:
         cfg = cfg.to_dict()
 
         self.pred_dist = cfg["decoder_patch_len"]
+        self.enforce_only_positive = True
 
         self.model.eval()
         self.no_daily = no_daily
@@ -29,7 +30,8 @@ class FlowState_Gift_Wrapper:
         self.pretrain_context = cfg["context_length"]
         self.quantiles = cfg["quantiles"]
 
-        self.replace_nan = False
+        self.replace_nan = False  # not necessary, mask as missing values takes care of this
+        self.dynamic_batch_size = True
         self.n_ch = n_ch
         self.batch_size = batch_size
         self.domain = domain
@@ -83,9 +85,13 @@ class FlowState_Gift_Wrapper:
         indeces = [dl[2] for dl in datalist]
         prev_cl = -1
         for cl, seq, _ in datalist:
+            if self.dynamic_batch_size:
+                batch_size = int(self.batch_size * self.pretrain_context / cl)
+            else:
+                batch_size: int = self.batch_size
             if torch.isnan(seq).sum() > 0:
                 seq = torch.tensor(self.fill_nan(seq.numpy()))
-            if cl != prev_cl or batched[-1].shape[1] + self.n_ch > self.batch_size:
+            if cl != prev_cl or batched[-1].shape[1] + self.n_ch > batch_size:
                 batched.append(seq)
             else:
                 batched[-1] = torch.cat((batched[-1], seq), dim=1)
@@ -105,10 +111,18 @@ class FlowState_Gift_Wrapper:
             self.scale_factor /= 7  # seasonality correction for datasets without daily, but only weekly season
 
     def predict(self, test_data):
+        """
+        Make predictions on test data using FlowState.
+        Args:
+            test_data: Test dataset containing time series to predict
+
+        Returns:
+            list: List of Gift_Forecast objects with predictions
+        """
         self.model.eval()
         preds = []
-        batched_data, indeces = self.get_batched(test_data)
         self.set_freq()
+        batched_data, indeces = self.get_batched(test_data)
 
         for idx, batch in enumerate(batched_data):
             pred = self.model(
@@ -118,8 +132,17 @@ class FlowState_Gift_Wrapper:
                 batch_first=False,
             ).quantile_outputs
             pred = pred.squeeze(-1).transpose(-1, -2)  # pred has shape: batch, forecast_len, quantiles
+            if self.enforce_only_positive:
+                # in some domains values have to be strictly positive (sales, nr of clicks on a website, nr of vehicles passing a sensor etc.).
+                # This option checks whether a time series could be such a case and enforces that predictions are also positive
+                strict_positive = torch.all(
+                    torch.nan_to_num(batch.squeeze(-1), 1) >= 0, dim=0
+                )  # for each series separately (not to use information accross series)
+                for ix, make_pos in enumerate(strict_positive):
+                    if make_pos:
+                        pred[ix] = torch.clamp(pred[ix], min=0.0)
             preds.extend(self.forecasts_from_batch(pred[:, : self.prediction_length].cpu()))
-        # reorder back to original order
+        # Reorder predictions back to original order
         preds_ = len(preds) * [None]
         for i, i_ in enumerate(indeces):
             preds_[i_] = preds[i]

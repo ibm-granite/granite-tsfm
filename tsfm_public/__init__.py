@@ -46,9 +46,16 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "models": [],
-    "models.tinytimemixer": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyTimeMixerConfig"],
+    "models.tinytimemixer": [
+        "TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TinyTimeMixerConfig",
+    ],
     "models.tspulse": ["TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TSPulseConfig"],
     "models.flowstate": ["FLOWSTATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlowStateConfig"],
+    "models.patchtst_fm": [
+        "PATCHTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PatchTSTFMConfig",
+    ],
     "toolkit": [
         "TimeSeriesPreprocessor",
         "TimeSeriesForecastingPipeline",
@@ -81,6 +88,7 @@ _import_structure["models.tinytimemixer"].extend(
         "TinyTimeMixerModel",
         "TinyTimeMixerForMaskedPrediction",
         "TinyTimeMixerForPrediction",
+        "TinyTimeMixerForDecomposedPrediction",
     ]
 )
 _import_structure["models.tspulse"].extend(
@@ -100,6 +108,14 @@ _import_structure["models.flowstate"].extend(
         "FlowStateForPrediction",
     ]
 )
+_import_structure["models.patchtst_fm"].extend(
+    [
+        "PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PatchTSTFMPretrainedModel",
+        "PatchTSTFMModel",
+        "PatchTSTFMForPrediction",
+    ]
+)
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -111,10 +127,19 @@ if TYPE_CHECKING:
         FlowStateModel,
         FlowStatePreTrainedModel,
     )
+    from .models.patchtst_fm import (
+        PATCHTSTFM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PATCHTSTFM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        PatchTSTFMConfig,
+        PatchTSTFMForPrediction,
+        PatchTSTFMModel,
+        PatchTSTFMPreTrainedModel,
+    )
     from .models.tinytimemixer import (
         TINYTIMEMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TINYTIMEMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TinyTimeMixerConfig,
+        TinyTimeMixerForDecomposedPrediction,
         TinyTimeMixerForMaskedPrediction,
         TinyTimeMixerForPrediction,
         TinyTimeMixerModel,
@@ -160,5 +185,13 @@ else:
 
 
 # register local models now
-register_config(model_type="tinytimemixer", model_config_name="TinyTimeMixerConfig", module_path="tsfm_public")
-register_config(model_type="tspulse", model_config_name="TSPulseConfig", module_path="tsfm_public")
+register_config(
+    model_type="tinytimemixer",
+    model_config_name="TinyTimeMixerConfig",
+    module_path="tsfm_public.models.tinytimemixer",
+)
+register_config(
+    model_type="tspulse",
+    model_config_name="TSPulseConfig",
+    module_path="tsfm_public.models.tspulse",
+)

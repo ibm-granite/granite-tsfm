@@ -64,6 +64,7 @@ class SKLearnFeatureExtractionBase:
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary of parameters from which we can reconstruct"""
+
         return self.__getstate__()
 
     def to_json(self) -> str:
@@ -74,6 +75,14 @@ class SKLearnFeatureExtractionBase:
         """ """
 
         t = cls()
+        # Scikit-learn >= 1.8.0 requires scaler attributes to be numpy arrays (using .astype())
+        # which deserializing from JSON natively parses as Python lists. Let's remap them.
+        import numpy as np
+
+        for k, v in feature_extractor_dict.items():
+            if isinstance(v, list) and k in ["mean_", "scale_", "var_", "data_min_", "data_max_", "data_range_"]:
+                feature_extractor_dict[k] = np.array(v)
+
         t.__setstate__(feature_extractor_dict)
 
         return t
@@ -95,6 +104,34 @@ class PowerTransformer(PowerTransformer_, SKLearnFeatureExtractionBase):
     """Simple wrapper class to adapt min/max scaler to work with the HF
     serialization approach.
     """
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary of parameters from which we can reconstruct
+
+        Special case of PowerTransformer since it can contain a standard scaler
+        """
+
+        state = super().to_dict()
+
+        if "_scaler" in state:
+            state["_scaler"] = state["_scaler"].__getstate__()
+
+        return state
+
+    @classmethod
+    def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> "SKLearnFeatureExtractionBase":
+        """
+        Handle special case for PowerTransformer which can contain a standard scaler that needs to be restored.
+        """
+
+        if "_scaler" in feature_extractor_dict:
+            state = feature_extractor_dict["_scaler"]
+            feature_extractor_dict["_scaler"] = StandardScaler().__setstate__(state)
+
+        t = cls()
+        t.__setstate__(feature_extractor_dict)
+
+        return t
 
 
 class OrdinalEncoder(OrdinalEncoder_, SKLearnFeatureExtractionBase):
