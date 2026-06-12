@@ -221,7 +221,6 @@ def test_time_series_preprocessor_power_inv_scales_lists(ts_data):
     out_inv = tsp.inverse_scale_targets(out)
     out_inv = tsp.inverse_scale_targets(out_inv, suffix="_prediction")
 
-    # Use assert_allclose instead of == for floating-point comparisons
     np.testing.assert_allclose(out_inv["value1"].mean()[0], df["value1"].mean())
     np.testing.assert_allclose(out_inv["value2"].mean()[0], df["value2"].mean())
 
