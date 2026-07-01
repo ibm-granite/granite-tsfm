@@ -8,16 +8,28 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from transformers import PatchTSTConfig, PatchTSTForPrediction
 
-from tsfm_public import PatchTSTFMForPrediction, TinyTimeMixerConfig, TinyTimeMixerForPrediction
+from tsfm_public import (
+    PatchTSTFMForPrediction,
+    TinyTimeMixerConfig,
+    TinyTimeMixerForDecomposedPrediction,
+    TinyTimeMixerForPrediction,
+)
 from tsfm_public.models.flowstate import FlowStateConfig, FlowStateForPrediction
 from tsfm_public.models.patchtst_fm import PatchTSTFMConfig
-from tsfm_public.toolkit.conformal import PostHocProbabilisticMethod, PostHocProbabilisticProcessor
+from tsfm_public.toolkit.conformal import (
+    PostHocProbabilisticMethod,
+    PostHocProbabilisticProcessor,
+)
 from tsfm_public.toolkit.time_series_forecasting_pipeline import (
     TimeSeriesForecastingPipeline,
 )
-from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING, TimeSeriesPreprocessor
+from tsfm_public.toolkit.time_series_preprocessor import (
+    DEFAULT_FREQUENCY_MAPPING,
+    TimeSeriesPreprocessor,
+)
 from tsfm_public.toolkit.util import select_by_index
 
 
@@ -27,6 +39,17 @@ def ttm_dummy_model(conf=None):
 
     if conf is None:
         conf = TinyTimeMixerConfig()
+    model = TinyTimeMixerForPrediction(conf)
+
+    return model
+
+
+@pytest.fixture(scope="module")
+def ttm_probabilistic_dummy_model(conf=None):
+    # model_path = "ibm-granite/granite-timeseries-ttm-v1"
+
+    if conf is None:
+        conf = TinyTimeMixerConfig(multi_quantile_head=True)
     model = TinyTimeMixerForPrediction(conf)
 
     return model
@@ -267,6 +290,90 @@ def test_forecasting_pipeline_forecasts(patchtst_base_model, etth_data_base):
     assert forecasts.shape == (10, 2 * len(target_columns) + 1)
 
 
+def test_ttm_native_probabilistc_forecasting_pipeline(etth_data_base):
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl, multi_quantile_head=True)
+    model = TinyTimeMixerForPrediction(config=conf)
+    quantile_levels = conf.quantile_levels
+    timestamp_column = "date"
+    id_columns = []
+    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+
+    context_length = model.config.context_length
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        batch_size=10,
+    )
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length - 9
+
+    data = etth_data_base.copy()
+
+    test_data = select_by_index(
+        data,
+        id_columns=id_columns,
+        start_index=test_start_index,
+        end_index=test_end_index,
+    )
+    forecasts = forecast_pipeline(test_data)
+
+    print(forecasts.keys())
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    for i in quantile_levels:
+        assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
+
+
+def test_ttm_decomposed_native_probabilistc_forecasting_pipeline(etth_data_base):
+    pfl = 10
+    conf = TinyTimeMixerConfig(prediction_filter_length=pfl, multi_quantile_head=True)
+    model = TinyTimeMixerForDecomposedPrediction(config=conf)
+    quantile_levels = conf.quantile_levels
+    timestamp_column = "date"
+    id_columns = []
+    target_columns = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+
+    context_length = model.config.context_length
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length
+
+    forecast_pipeline = TimeSeriesForecastingPipeline(
+        model=model,
+        timestamp_column=timestamp_column,
+        id_columns=id_columns,
+        target_columns=target_columns,
+        freq="1h",
+        batch_size=10,
+    )
+
+    test_end_index = 12 * 30 * 24 + 8 * 30 * 24
+    test_start_index = test_end_index - context_length - 9
+
+    data = etth_data_base.copy()
+
+    test_data = select_by_index(
+        data,
+        id_columns=id_columns,
+        start_index=test_start_index,
+        end_index=test_end_index,
+    )
+    forecasts = forecast_pipeline(test_data)
+
+    print(forecasts.keys())
+    assert len(forecasts[f"{target_columns[0]}"]) == pfl
+    for i in quantile_levels:
+        assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
+
+
 def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_base_model, etth_data_base):
     timestamp_column = "date"
     id_columns = []
@@ -417,7 +524,11 @@ def test_prediction_filter_length(etth_data):
     assert model.config.prediction_filter_length == pfl
 
     forecast_pipeline = TimeSeriesForecastingPipeline(
-        model=model, feature_extractor=tsp, explode_forecasts=False, inverse_scale_outputs=True, device="cpu"
+        model=model,
+        feature_extractor=tsp,
+        explode_forecasts=False,
+        inverse_scale_outputs=True,
+        device="cpu",
     )
     forecasts = forecast_pipeline(train_data.iloc[:200])
 
@@ -462,7 +573,9 @@ def test_probabilistic_forecasts(etth_data):
     forecasts_cal = forecast_pipeline(train_data.iloc[-200:])
 
     conformal = PostHocProbabilisticProcessor(
-        window=100, quantiles=[0.1, 0.9], method=PostHocProbabilisticMethod.CONFORMAL.value
+        window=100,
+        quantiles=[0.1, 0.9],
+        method=PostHocProbabilisticMethod.CONFORMAL.value,
     )
 
     # prepare calibration data
@@ -510,3 +623,87 @@ def test_probabilistic_forecasts(etth_data):
     assert len(forecasts[f"{target_columns[0]}"]) == pfl
     assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[0]}"]) == pfl
     assert len(forecasts[f"{target_columns[0]}_q{conformal.quantiles[1]}"]) == pfl
+
+
+def test_expanding_context(patchtst_fm_dummy_model):
+    model = patchtst_fm_dummy_model.to("cpu")
+    pred_len = 24
+    # Generate sine wave data
+    t = np.linspace(0, 4 * np.pi, 200)
+    sine_wave = np.sin(t)
+
+    # Initialize PatchTST Model
+    quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    model.eval()
+
+    ## Call PatchTST with model
+    series = np.expand_dims(sine_wave, axis=0)
+    series = torch.from_numpy(series).float()
+    with torch.no_grad():
+        model_outputs = model(
+            past_values=series,
+            prediction_length=pred_len,
+            quantile_levels=quantile_levels,
+        )
+    pred_quantiles_forward_model = model_outputs.quantile_outputs.detach().cpu().numpy()
+    pred_quantiles_forward_model = pred_quantiles_forward_model.squeeze()
+
+    ## Call PatchTST with model (pass a list of tensor)
+    with torch.no_grad():
+        model_outputs = model(
+            past_values=[series.reshape(-1)],
+            prediction_length=pred_len,
+            quantile_levels=quantile_levels,
+        )
+    pred_quantiles_forward_model_2 = model_outputs.quantile_outputs[0].detach().cpu().numpy()
+    pred_quantiles_forward_model_2 = pred_quantiles_forward_model_2.squeeze()
+
+    ## Call PatchTST with TimeSeriesForecastingPipeline
+    data = pd.DataFrame(
+        {
+            "timestamp": pd.date_range(start="2020-01-01", periods=len(sine_wave), freq="h"),
+            "target": sine_wave,
+        }
+    )
+    # Create forecasting pipeline
+    context_length = len(data)
+    fpipe = TimeSeriesForecastingPipeline(
+        model=model,
+        id_columns=[],
+        timestamp_column="timestamp",
+        target_columns=["target"],
+        max_context_length=model.config.context_length,
+        context_length=context_length,
+        prediction_length=pred_len,
+        batch_size=16,
+        impute_method=None,
+        # device=device,
+        quantile_levels=quantile_levels,
+        device="cpu",
+    )
+
+    # Generate forecasts
+    forecast = fpipe(data)
+    assert len(forecast) == 1, "No more than one row should be returned, context_length = len(data)"
+
+    target_quantiles = []
+    for q in quantile_levels:
+        q_col = f"target_prediction_q{q}"
+        q_array = np.array([np.stack(z) for z in forecast[q_col].values])  # n_samples x prediction_lenght
+        target_quantiles.append(q_array)  # (n_samples, prediction_length)
+    pred_quantiles_pipeline = np.stack(target_quantiles, axis=-1)
+    pred_quantiles_pipeline = np.transpose(pred_quantiles_pipeline, (0, 2, 1))
+    pred_quantiles_pipeline = pred_quantiles_pipeline[-1, ...].squeeze()
+
+    for ix_q, q in enumerate(quantile_levels):
+        np.testing.assert_allclose(
+            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model[ix_q, :])),
+            0,
+            err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct tensor).",
+        )
+
+        np.testing.assert_allclose(
+            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model_2[ix_q, :])),
+            0,
+            err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct list).",
+        )

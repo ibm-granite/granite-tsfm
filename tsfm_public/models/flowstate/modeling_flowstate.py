@@ -819,6 +819,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         future_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
+        pad_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
@@ -839,6 +840,9 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             currently not used.
         future_observed_mask: (`torch.FloatTensor`, *optional*):
             currently not used.
+        pad_mask: (`toch.Tensor`, *optional*):
+            A mask that indicates the leading padding done on the past_values tensor. A value of True indicates that
+            a position was padded.
         output_hidden_states: (`bool`, *optional*):
             currently not used.
         return_loss: (`bool`, *optional*):
@@ -892,6 +896,14 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         max_context = min(16 * 1024, int(self.config.context_length / scale_factor)) - mask_n
         if not batch_first:
             past_values = past_values.transpose(0, 1)
+            if pad_mask is not None:
+                pad_mask = pad_mask.transpose(0, 1)
+
+        if pad_mask is not None:
+            # if pad_mask is not uniform, we take the minimum index
+            start_idx = pad_mask.to(torch.int).argmin(dim=1).min()
+            past_values = past_values[:, start_idx:, ...]
+
         past_values = past_values[:, -max_context:]
         if mask_n > 0:
             self.model.config.min_context = past_values.shape[1]  # min context from which to start predicting

@@ -267,22 +267,65 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         self,
         past_values: List[torch.Tensor] | torch.Tensor,
         past_observed_mask: Optional[List[torch.Tensor] | torch.Tensor] = None,
+        pad_mask: Optional[List[torch.Tensor] | torch.Tensor] = None,
         # future_values: Optional[torch.Tensor] = None,  # future use
         # future_observed_mask: Optional[torch.Tensor] = None,  # future use
         prediction_length: Optional[int] = None,
         quantile_levels: Optional[List[float]] = None,
         output_hidden_states: Optional[bool] = False,
-        return_loss: bool = True,
+        return_loss: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> PatchTSTFMPredictionOutput:
+    ) -> PatchTSTFMPredictionOutput | Tuple:
+        """Forward pass for time series forecasting with PatchTST-FM model.
+
+        This method performs forecasting on time series data, supporting both single tensor and list of tensors
+        as input. It handles variable-length sequences, missing values, and padding, and produces both point
+        forecasts and quantile predictions.
+
+        Args:
+            past_values (List[torch.Tensor] | torch.Tensor): Historical time series values. Can be either:
+                - A single tensor of shape (batch_size, context_length, num_features)
+                - A list of tensors with potentially different lengths for each sample
+            past_observed_mask (Optional[List[torch.Tensor] | torch.Tensor], optional): Boolean mask indicating
+                which values in past_values are observed (True). If None, automatically
+                computed from NaN values in past_values. Defaults to None. Note that missing values are considered
+                to be the values that are not observed (False values in past_observed_mask) and not part of the
+                padded values indicated by pad_mask.
+            pad_mask (Optional[List[torch.Tensor] | torch.Tensor], optional): Boolean mask indicating padded
+                positions in the input sequences. Used when sequences have different lengths. Defaults to None.
+            prediction_length (Optional[int], optional): Number of time steps to forecast into the future.
+                If None, uses the model's configured prediction_length. Defaults to None.
+            quantile_levels (Optional[List[float]], optional): Specific quantile levels to return from the
+                model's predictions. Must be a subset of the model's configured quantile_levels. If None,
+                returns all configured quantiles. Defaults to None.
+            output_hidden_states (Optional[bool], optional): Whether to return the hidden states from the
+                transformer backbone. Defaults to False.
+            return_loss (bool, optional): Whether to compute and return loss (currently unused in prediction).
+                Defaults to False.
+            return_dict (Optional[bool], optional): Whether to return a ModelOutput object. If None, uses
+                model's default behavior. Defaults to None.
+
+        Raises:
+            ValueError: If both past_values and past_observed_mask are not torch.Tensor when list_input is False.
+            ValueError: If requested quantile_levels are not found in the model's configured quantile levels.
+
+        Returns:
+            PatchTSTFMPredictionOutput: A dataclass containing:
+                - prediction_outputs: Point forecast (mean estimate) of shape (batch_size, num_features, prediction_length)
+                  or list of tensors for variable-length inputs
+                - quantile_outputs: Quantile predictions of shape (batch_size, num_quantiles, prediction_length, num_features)
+                  or list of tensors for variable-length inputs
+                - hidden_states: Optional transformer hidden states if output_hidden_states=True
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         forecast_len = prediction_length if prediction_length else self.config.prediction_length
         list_input = isinstance(past_values, list)
 
         cl = self.config.context_length
         ul = -1
-        logger.info(
-            f"Context Len: {cl} | Forecast Len: {forecast_len} | Input is tensor: {not list_input}",
-        )
+        # logger.info(
+        #     f"Context Len: {cl} | Forecast Len: {forecast_len} | Input is tensor: {not list_input}",
+        # )
 
         if past_observed_mask is None:
             if list_input:
@@ -303,6 +346,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 past_values,
                 forecast_length=fl,
                 observed_inputs_mask=past_observed_mask,
+                input_pad_mask=pad_mask,
                 context_length=cl,
                 output_hidden_states=output_hidden_states,
             )
@@ -315,21 +359,38 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 past_values,
                 forecast_length=fl,
                 observed_inputs_mask=past_observed_mask,
+                input_pad_mask=pad_mask,
                 context_length=cl,
                 output_hidden_states=output_hidden_states,
             )
             forecast_samples = forecast_samples[:, :, :forecast_len]
 
-        # use internal quantile_levels to compute estimate of mean
-        quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
-        quant_prob /= quant_prob.sum()  # normalize quantile weights
+        # forecast_samples: (batch x num quantiles x forecast length)
 
-        if not list_input:
-            quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
-            point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
-        else:
-            quant_prob = quant_prob.view(-1, 1, 1).to(self.device)
-            point_forecast: List[torch.Tensor] = [(sample * quant_prob).sum(dim=0) for sample in forecast_samples]
+        # Integrate quantile function to estimate mean
+        # Q(p) = F^{-1}(p) = x
+        # F(Q(p)) = p
+        # f(Q(p)) Q'(p) = 1
+        # f(Q(p)) = 1/Q'(p)
+        # mu = \int x f(x) dx = \int Q(p) dp
+
+        # Old approach
+        # quant_prob = 0.5 - (0.5 - torch.tensor(self.config.quantile_levels)).abs()
+        # quant_prob /= quant_prob.sum()  # normalize quantile weights
+        # quant_prob = quant_prob.view(1, -1, 1, 1).to(self.device)
+        # point_forecast: torch.Tensor = (forecast_samples * quant_prob).sum(dim=1)
+
+        q_levels = torch.tensor(self.config.quantile_levels, device=forecast_samples[0].device)
+        with torch.no_grad():
+            if not list_input:
+                point_forecast: torch.Tensor = torch.trapz(forecast_samples, q_levels, dim=1)
+                # extend tails
+                point_forecast += forecast_samples[:, 0] * q_levels[0] + forecast_samples[:, -1] * (1 - q_levels[-1])
+            else:
+                point_forecast: List[torch.Tensor] = [
+                    torch.trapz(sample, q_levels, dim=0) + sample[0] * q_levels[0] + sample[-1] * (1 - q_levels[-1])
+                    for sample in forecast_samples
+                ]
 
         if quantile_levels is not None:
             try:
@@ -343,51 +404,64 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else:
                 forecast_samples = forecast_samples[:, quantile_indices, :]
 
-        return PatchTSTFMPredictionOutput(
-            prediction_outputs=point_forecast, quantile_outputs=forecast_samples, hidden_states=hidden_states
-        )
+        if not return_dict:
+            return (point_forecast, forecast_samples, hidden_states)
+        else:
+            return PatchTSTFMPredictionOutput(
+                prediction_outputs=point_forecast, quantile_outputs=forecast_samples, hidden_states=hidden_states
+            )
 
     def forecast_single_step_fast(
         self,
         x: torch.Tensor,
-        observed_inputs_mask: torch.Tensor,
+        observed_inputs_mask: torch.BoolTensor,
         forecast_length: int,
         context_length: int,
+        input_pad_mask: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Any]:
         # x: batch size x context x features
         # observed_inputs_mask: batch size x context x features
+        # input_pad_mask: batch size x context x features
         # forecast_len: list of forecast lengths
         # context_len: list of context lengths
         # output_hidden_states: whether to return hidden states
 
-        miss_mask = ~observed_inputs_mask
         device = x.device
-
-        # x and observed_inputs_mask should be 2d or 3d
-
-        x = x.unsqueeze(-1) if x.ndim == 2 else x
-        miss_mask = miss_mask.unsqueeze(-1) if miss_mask.ndim == 2 else miss_mask
-        x_mean = x.nanmean(dim=1)  # mean across context dimension
-
         context_provided = x.shape[1]
-
         context = min(context_provided + forecast_length, context_length)
         s = context - forecast_length  # part of the context that was provided
+
+        # x and observed_inputs_mask should be 2d or 3d
+        x = x.unsqueeze(-1) if x.ndim == 2 else x
+        x_mean = x.nanmean(dim=1, keepdim=True)  # mean across context dimension
         x_in = x[:, -s:, ...]
+
+        miss_mask = (
+            ~observed_inputs_mask.bool() & ~input_pad_mask.bool()
+            if input_pad_mask is not None
+            else ~observed_inputs_mask.bool()
+        )
+        miss_mask = miss_mask.unsqueeze(-1) if miss_mask.ndim == 2 else miss_mask
         miss_mask = miss_mask[:, -s:, ...]
-        pad_mask = torch.zeros_like(x_in)
+        if input_pad_mask is None:
+            pad_mask = torch.zeros_like(x_in, dtype=torch.bool)
+        else:
+            pad_mask = input_pad_mask[:, -s:, ...].type_as(miss_mask)
 
         nan_mask = torch.isnan(x_in)
-        x_in = torch.where(nan_mask, x_mean.unsqueeze(1).expand_as(x_in), x_in)
+        x_in = torch.where(nan_mask, x_mean.expand_as(x_in), x_in)
 
         batch_size, _, n_dim = x_in.shape
         forecast_shape = (batch_size, forecast_length, n_dim)
 
-        pred_mask = torch.cat([torch.zeros_like(x_in), torch.ones(forecast_shape, device=device)], dim=1)
-        miss_mask = torch.cat([miss_mask, torch.zeros(forecast_shape, device=device)], dim=1)
-        pad_mask = torch.cat([pad_mask, torch.zeros(forecast_shape, device=device)], dim=1)
-        x_in = torch.cat([x_in, x_mean.unsqueeze(1).repeat((1, forecast_length, 1))], dim=1)
+        pred_mask = torch.cat(
+            [torch.zeros_like(x_in, dtype=torch.bool), torch.ones(forecast_shape, device=device, dtype=torch.bool)],
+            dim=1,
+        )
+        miss_mask = torch.cat([miss_mask, torch.zeros(forecast_shape, device=device, dtype=torch.bool)], dim=1)
+        pad_mask = torch.cat([pad_mask, torch.zeros(forecast_shape, device=device, dtype=torch.bool)], dim=1)
+        x_in = torch.cat([x_in, x_mean.repeat((1, forecast_length, 1))], dim=1)
 
         sample_len = s + forecast_length  # x_in.shape[1]
 
@@ -405,16 +479,15 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         elif sample_len < self.config.context_length:
             left_pad = self.config.context_length - sample_len
 
-            pad = x_mean.unsqueeze(dim=1).repeat((1, left_pad, 1))
+            pad = x_mean.repeat((1, left_pad, 1))
             inputs = torch.cat((pad, x_in), dim=1)  # append left_pad + sample_len = context_len, num_channels
 
-            pred_mask = F.pad(pred_mask, (0, 0, left_pad, 0), mode="constant", value=0.0)
-            pad_mask = F.pad(pad_mask, (0, 0, left_pad, 0), mode="constant", value=1.0)
-            miss_mask = F.pad(miss_mask, (0, 0, left_pad, 0), mode="constant", value=0.0)
+            pred_mask = F.pad(pred_mask, (0, 0, left_pad, 0), mode="constant", value=False)
+            pad_mask = F.pad(pad_mask, (0, 0, left_pad, 0), mode="constant", value=True)
+            miss_mask = F.pad(miss_mask, (0, 0, left_pad, 0), mode="constant", value=False)
             # time_index = F.pad(time_index, (left_pad, 0), mode="constant", value=-1)
 
             ts_ends = (left_pad, left_pad + sample_len)
-            # pad
         else:  # sample_len > self.config.context_length
             # not supported for now
             raise ValueError(
@@ -456,6 +529,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         observed_inputs_mask: List[torch.Tensor] | torch.Tensor,
         forecast_length: List[int],
         context_length: List[int],
+        input_pad_mask: List[torch.Tensor] | torch.Tensor | None = None,
         output_hidden_states: Optional[bool] = False,
     ) -> tuple[list[torch.Tensor], Any]:
         """
@@ -477,14 +551,20 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # x_i: time x num_channels
         # context is full window of input to backbone
         # old_context + forecast = context
-        for x_i, observed_inputs_mask_i, c_i, f_i in zip(x, observed_inputs_mask, context_length, forecast_length):
+        for i, (x_i, observed_inputs_mask_i, c_i, f_i) in enumerate(
+            zip(x, observed_inputs_mask, context_length, forecast_length)
+        ):
             c_i = min(x_i.shape[0] + f_i, c_i)
             s_i = c_i - f_i  # part of the context that was provided
             x_in = x_i[-s_i:]
             x_in = x_in.unsqueeze(-1) if x_in.ndim == 1 else x_in
-            miss_mask_i = ~observed_inputs_mask_i[-s_i:]
+            miss_mask_i = ~observed_inputs_mask_i[-s_i:].bool()
             miss_mask_i = miss_mask_i.unsqueeze(-1) if miss_mask_i.ndim == 1 else miss_mask_i
-            pad_mask_i = torch.zeros_like(x_in)
+            if input_pad_mask is None:
+                pad_mask_i = torch.zeros_like(x_in, dtype=torch.bool)
+            else:
+                pad_mask_i = input_pad_mask[i][-s_i:].bool()
+                miss_mask_i = miss_mask_i & ~pad_mask_i
             x_in_mean = x_in.nanmean(dim=0)
 
             # Fill NaNs in x_in with corresponding values from x_in_mean for each dimension
@@ -493,9 +573,12 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
             f_i_shape = (f_i,) + x_in.shape[1:]
 
-            pred_mask_i = torch.cat([torch.zeros_like(x_in), torch.ones(f_i_shape, device=device)], dim=0)
-            miss_mask_i = torch.cat([miss_mask_i, torch.zeros(f_i_shape, device=device)], dim=0)
-            pad_mask_i = torch.cat([pad_mask_i, torch.zeros(f_i_shape, device=device)], dim=0)
+            pred_mask_i = torch.cat(
+                [torch.zeros_like(x_in, dtype=torch.bool), torch.ones(f_i_shape, device=device, dtype=torch.bool)],
+                dim=0,
+            )
+            miss_mask_i = torch.cat([miss_mask_i, torch.zeros(f_i_shape, device=device, dtype=torch.bool)], dim=0)
+            pad_mask_i = torch.cat([pad_mask_i, torch.zeros(f_i_shape, device=device, dtype=torch.bool)], dim=0)
             x_in = torch.cat([x_in, torch.ones(f_i_shape, device=device) * x_in_mean], dim=0)
             sample_len = x_in.shape[0]
             time_index_i = (
@@ -511,7 +594,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 pad_mask.append(pad_mask_i)
                 miss_mask.append(miss_mask_i)
                 time_index.append(time_index_i)
-                ts_ends.append(torch.tensor([0, sample_len], dtype=torch.int))
+                ts_ends.append(torch.tensor([0, sample_len], dtype=torch.int, device=device))
                 sample_lengths.append(sample_len)
             elif sample_len < self.config.context_length:  # padding
                 left_pad = self.config.context_length - sample_len
@@ -528,9 +611,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 #         value=x_in.nanmean(dim=0).item(),
                 #     )
                 # )
-                pred_mask.append(F.pad(pred_mask_i, (0, 0, left_pad, 0), mode="constant", value=0.0))
-                pad_mask.append(F.pad(pad_mask_i, (0, 0, left_pad, 0), mode="constant", value=1.0))
-                miss_mask.append(F.pad(miss_mask_i, (0, 0, left_pad, 0), mode="constant", value=0.0))
+                pred_mask.append(F.pad(pred_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
+                pad_mask.append(F.pad(pad_mask_i, (0, 0, left_pad, 0), mode="constant", value=True))
+                miss_mask.append(F.pad(miss_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
                 time_index.append(F.pad(time_index_i, (left_pad, 0), mode="constant", value=-1))
                 ts_ends.append(torch.tensor([left_pad, left_pad + sample_len], dtype=torch.int))
                 sample_lengths.append(sample_len)
@@ -544,24 +627,30 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 )
                 pred_mask.append(
                     F.interpolate(
-                        pred_mask_i.view(1, 1, -1),
+                        pred_mask_i.view(1, 1, -1).float(),
                         size=self.config.context_length,
                         mode="nearest",
-                    ).squeeze()
+                    )
+                    .squeeze()
+                    .bool()
                 )
                 pad_mask.append(
                     F.interpolate(
-                        pad_mask_i.view(1, 1, -1),
+                        pad_mask_i.view(1, 1, -1).float(),
                         size=self.config.context_length,
                         mode="nearest",
-                    ).squeeze()
+                    )
+                    .squeeze()
+                    .bool()
                 )
                 miss_mask.append(
                     F.interpolate(
-                        miss_mask_i.view(1, 1, -1),
+                        miss_mask_i.view(1, 1, -1).float(),
                         size=self.config.context_length,
                         mode="nearest",
-                    ).squeeze()
+                    )
+                    .squeeze()
+                    .bool()
                 )
                 time_index.append(
                     F.interpolate(

@@ -91,7 +91,11 @@ class TimeSeriesPipeline(Pipeline):
             model_name=None,
         )
         dataloader = DataLoader(
-            dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=remove_columns_collator, shuffle=False
+            dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            collate_fn=remove_columns_collator,
+            shuffle=False,
         )
 
         # iterate over dataloader
@@ -107,7 +111,10 @@ class TimeSeriesPipeline(Pipeline):
                 )
 
             accumulator[self.__class__.prediction_output_key].append(item[model_output_key])
-            if self.__class__.quantile_output_key in item.keys():
+            if (
+                self.__class__.quantile_output_key in item.keys()
+                and item[self.__class__.quantile_output_key] is not None
+            ):
                 accumulator[self.__class__.quantile_output_key].append(item[self.__class__.quantile_output_key])
 
         if copy_dataset_keys:
@@ -127,7 +134,10 @@ class TimeSeriesPipeline(Pipeline):
             model_outputs[self.__class__.prediction_output_key] = torch.cat(
                 accumulator[self.__class__.prediction_output_key], axis=0
             )
-            if self.__class__.quantile_output_key in accumulator.keys():
+            if (
+                self.__class__.quantile_output_key in accumulator.keys()
+                and accumulator[self.__class__.quantile_output_key] is not None
+            ):
                 model_outputs[self.__class__.quantile_output_key] = torch.cat(
                     accumulator[self.__class__.quantile_output_key], axis=0
                 )
@@ -522,7 +532,7 @@ class TimeSeriesForecastingPipeline(TimeSeriesPipeline):
                     quantile_cols.append(col)
                     # out[f"{c}_q{q}"] = predictions_conformal[..., i, j].tolist()
             out = pd.concat([out, pd.DataFrame(prob_data, columns=quantile_cols)], axis=1)
-        elif quantile_output_key in input.keys():
+        elif quantile_output_key in input.keys() and input[quantile_output_key] is not None:
             # model has native support for quantiles
             # first we check if the model enables passing at runtime, and the user passed quantile_levels
             output_quantile_levels = (

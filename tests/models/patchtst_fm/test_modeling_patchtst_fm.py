@@ -8,15 +8,13 @@ import unittest
 
 import torch
 from einops import rearrange
+from parameterized import parameterized
 from transformers.trainer_utils import set_seed
 
 from tsfm_public.models.patchtst_fm import (
     PatchTSTFMConfig,
     PatchTSTFMForPrediction,
 )
-
-
-set_seed(42)
 
 
 class PatchTSTFMFunctionalTests(unittest.TestCase):
@@ -37,17 +35,17 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             num_quantile=99,
         )
 
-    def test_forecast_single_vs_list(self):
+    @parameterized.expand([128, 512, 640])
+    def test_forecast_single_vs_list(self, data_length):
         """Test that forecasting with a single tensor and list of tensors produces equal results."""
         # Test parameters
         batch_size = 8
-        context_length = 128
         forecast_length = 64
         num_channels = 2
 
         # Create random input data
         set_seed(42)
-        input_data = torch.randn(batch_size, context_length, num_channels)
+        input_data = torch.randn(batch_size, data_length, num_channels)
 
         # Create a smaller config for faster testing
         test_config = PatchTSTFMConfig(
