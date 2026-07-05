@@ -1,8 +1,7 @@
-## 🚀 Setup Guide for TTM-R3 GIFT Result Reproducibility
+## 🚀 Setup Guide for TTM-R3 GIFT Result Reproducibility  
 
-Follow the steps below to set up the environment and reproduce results.
-Install `uv` package manager: https://docs.astral.sh/uv/getting-started/installation/ 
----
+Follow the steps below to set up the environment and reproduce results.  
+The following steps use `uv` package manager: https://docs.astral.sh/uv/getting-started/installation/ 
 
 ## 🧠 1. Clone Granite TSFM and Checkout TTM-R3 Branch
 
