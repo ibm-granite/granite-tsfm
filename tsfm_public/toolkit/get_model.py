@@ -68,7 +68,9 @@ def check_ttm_model_path(model_path):
         return 2
     elif model_path.startswith("ibm-research/ttm-research-r2"):
         return 3
-    elif model_path.startswith("ibm-research/ttm-r3") or model_path.startswith("ibm-granite/granite-timeseries-ttm-r3"):
+    elif model_path.startswith("ibm-research/ttm-r3") or model_path.startswith(
+        "ibm-granite/granite-timeseries-ttm-r3"
+    ):
         return 4
     else:
         return 0
