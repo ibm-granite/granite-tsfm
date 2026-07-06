@@ -450,14 +450,12 @@ class FlowStatePreTrainedModel(PreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        # Initialize the all_tied_weights_keys attribute required by transformers 5.x
-        if not hasattr(self, "all_tied_weights_keys"):
-            self.all_tied_weights_keys = {}
+        self.post_init()
 
     def _init_weights(self, module):
         """Initialize weights"""
-
-        print("Should not reach here, all parameters should have been initialized!")
+        pass
+        # print("Should not reach here, all parameters should have been initialized!")
         # For training, here would be place to initialize the parameters of FlowState
 
 
@@ -484,6 +482,8 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
                 for i in range(config.encoder_num_layers)
             ]
         )
+
+        self.post_init()
 
     @replace_return_docstrings(output_type=FlowStateEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -548,6 +548,8 @@ class FlowStateFunctionalBasisDecoder(FlowStatePreTrainedModel):
         n = config.embedding_feature_dim
         self.config = config
         self.lin = nn.Linear(n, n_lin)
+
+        self.post_init()
 
     def get_t(self, scale, pred_dim, device):
         dt = scale * (self.range[1] - self.range[0]) / self.pred_dist
@@ -636,6 +638,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
         logger.info(
             f"Number of decoder parameters: {decoder_paras * 1e-3}k ({100 * decoder_paras / trainable_paras:.2f}%)"
         )
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(FLOWSTATE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlowStateModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -789,6 +792,8 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
         self.config = config
 
         self.model = FlowStateModel(config)
+
+        self.post_init()
 
     def _combine_cpm_predictions(self, pred, pred_len) -> torch.Tensor:
         n_preds, batch, quants, fl, n_ch = pred.shape
