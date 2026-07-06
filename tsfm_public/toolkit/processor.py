@@ -8,10 +8,8 @@ Adapted from HF FeatureExtractionMixin, but allows customization of the serializ
 import json
 import logging
 import os
-import tempfile
 import warnings
 from typing import Any, Union
-from urllib.request import urlretrieve
 
 import numpy as np
 from transformers.dynamic_module_utils import custom_object_save
@@ -20,29 +18,10 @@ from transformers.feature_extraction_utils import (
 )
 from transformers.utils.hub import cached_file
 
+from .tsfm_config import _download_url, _is_remote_url
+
 
 LOGGER = logging.getLogger(__file__)
-
-
-def _is_remote_url(url_or_filename):
-    """Check if the input is a remote URL."""
-    if isinstance(url_or_filename, str):
-        return url_or_filename.startswith("http://") or url_or_filename.startswith("https://")
-    return False
-
-
-def _download_url(url):
-    """Download a file from a URL to a temporary location."""
-    try:
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.basename(url)) as tmp_file:
-            tmp_path = tmp_file.name
-        # Download the file
-        urlretrieve(url, tmp_path)
-        return tmp_path
-    except Exception as e:
-        LOGGER.error(f"Failed to download {url}: {e}")
-        raise
 
 
 TYPE_TO_STRING = {
