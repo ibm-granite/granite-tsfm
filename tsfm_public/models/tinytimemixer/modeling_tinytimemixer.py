@@ -12,6 +12,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import transformers
 from transformers.modeling_utils import PreTrainedModel
 from transformers.time_series_utils import (
     NegativeBinomialOutput,
@@ -27,6 +28,13 @@ from transformers.utils import (
 )
 
 from .configuration_tinytimemixer import TinyTimeMixerConfig
+
+
+major = int(transformers.__version__.split(".")[0])
+if major >= 5:
+    import transformers.initialization as init
+else:
+    import torch.nn.init as init
 
 
 logger = logging.get_logger(__name__)
@@ -1760,11 +1768,16 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         # Initialize the all_tied_weights_keys attribute required by transformers 5.x
-        if not hasattr(self, "all_tied_weights_keys"):
-            self.all_tied_weights_keys = {}
+        # if not hasattr(self, "all_tied_weights_keys"):
+        #     self.all_tied_weights_keys = {}
+        self.post_init()
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
+
+        if not self.config.post_init:
+            return
 
         # if isinstance(module, MultiQuantileHead):
         #     # Initialize MQ temperature parameter if enabled.
@@ -1784,41 +1797,65 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
         if isinstance(module, TinyTimeMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                # nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                init.normal_(module.position_enc, mean=0.0, std=0.1)
+        # elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+        #     # module.bias.data.zero_()
+        #     # init.zeros_(module.bias.data)
+        #     # module.weight.data.fill_(1.0)
+        #     # init.constant_(module.weight.data, 1.0)
+        #     pass
+        elif isinstance(module, TinyTimeMixerNormLayer):
+            # if getattr(module.norm, "weight", None) is not None:
+            init.ones_(module.norm.weight)
+            # if getattr(module.norm, "bias", None) is not None:
+            init.zeros_(module.norm.bias)
         elif isinstance(module, TinyTimeMixerBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            # module.batchnorm.bias.data.zero_()
+            init.zeros_(module.batchnorm.bias.data)
+            # module.batchnorm.weight.data.fill_(1.0)
+            init.ones_(module.batchnorm.weight.data)
         elif isinstance(module, nn.Linear):
             # print(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
-                module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+                # module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+                init.normal_(module.weight.data, mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias.data)
             elif self.config.init_linear == "uniform":
-                nn.init.uniform_(module.weight)
+                # nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias.data)
             elif self.config.init_linear == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                # nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias.data)
             else:
-                module.reset_parameters()
+                if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
+                    module.bias, "_is_hf_initialized", False
+                ):
+                    module.reset_parameters()
         elif isinstance(module, nn.Embedding):
             # print(f"Initializing Embedding layers with method: {self.config.init_embed}")
             if self.config.init_embed == "normal":
-                nn.init.normal_(module.weight)
+                # nn.init.normal_(module.weight)
+                init.normal_(module.weight)
             elif self.config.init_embed == "uniform":
-                nn.init.uniform_(module.weight)
+                # nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
             elif self.config.init_embed == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                # nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
             else:
                 module.reset_parameters()
         elif isinstance(module, nn.Conv1d):
-            nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
+            # nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
+            init.constant_(module.weight, 1.0 / module.kernel_size[0])
 
 
 class TinyTimeMixerPatchify(nn.Module):
@@ -3293,8 +3330,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             self.multi_quantile_head_block = MultiQuantileHead(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        #     self.post_init()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -3900,8 +3938,9 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         self.joint_loss_weight = config.joint_loss_weight
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        #     self.post_init()
+        self.post_init()
 
     def forward(
         self,
