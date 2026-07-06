@@ -44,6 +44,7 @@ def test_lr_finder(ttm_base_model, etth_data_base):
         context_length=context_length,
     )
 
+    set_seed(42)
     learning_rate, finetune_forecast_model = optimal_lr_finder(
         model, train_dataset, device="cpu", batch_size=32, num_iter=10
     )
