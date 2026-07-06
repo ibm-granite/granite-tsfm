@@ -112,6 +112,8 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
 
         self.norm_fn = RevIN(dim=-1, std_min=1e-5, use_sinh=True)
 
+        self.post_init()
+
     def model_summary(self):
         s = ""
         model_name = "PatchTST-FM"
@@ -201,6 +203,8 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
 
         # move all out_layer items here
 
+        self.post_init()
+
     def forward(
         self,
         inputs: torch.Tensor,
@@ -259,6 +263,8 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             else torch.float16
         )
         self._device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
+
+        self.post_init()
 
     def model_summary(self) -> str:
         return self.backbone.model_summary()
