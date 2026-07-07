@@ -910,7 +910,8 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             elif self.config.init_embed == "xavier_uniform":
                 init.xavier_uniform_(module.weight)
             else:
-                module.reset_parameters()
+                if not getattr(module.weight, "_is_hf_initialized", False):
+                    module.reset_parameters()
         # elif isinstance(module, nn.Linear):
         #     module.weight.data.normal_(mean=0.0, std=self.config.init_std)
         #     if module.bias is not None:

@@ -1849,7 +1849,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 # nn.init.xavier_uniform_(module.weight)
                 init.xavier_uniform_(module.weight)
             else:
-                module.reset_parameters()
+                if not getattr(module.weight, "_is_hf_initialized", False):
+                    module.reset_parameters()
         elif isinstance(module, nn.Conv1d):
             # nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
             init.constant_(module.weight, 1.0 / module.kernel_size[0])
