@@ -81,7 +81,7 @@ def test_tspulse_from_pretrained(task, post_init):
         model = model_cls(conf)
         return model
 
-    if True and TRANSFORMERS_MAJOR_VERSION < 5:
+    if False and TRANSFORMERS_MAJOR_VERSION < 5:
         # In Transformers 4.x, models were saved with:
         m = tspulse_dummy_model()
         m.save_pretrained(path / f"init_stability_test/tspulse/{task}/{post_init_dir}")
