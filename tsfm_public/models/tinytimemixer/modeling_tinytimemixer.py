@@ -1767,9 +1767,7 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        # Initialize the all_tied_weights_keys attribute required by transformers 5.x
-        # if not hasattr(self, "all_tied_weights_keys"):
-        #     self.all_tied_weights_keys = {}
+        # Transformers 5.x indicates that post_init should be called
         self.post_init()
 
     @torch.no_grad()

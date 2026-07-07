@@ -1,10 +1,31 @@
 from pathlib import Path
 
+import pytest
 import torch
+import transformers
 from safetensors.torch import load_file
 from transformers import set_seed
 
-from tsfm_public import TinyTimeMixerConfig, TinyTimeMixerForPrediction, TSPulseConfig, TSPulseForReconstruction
+from tsfm_public import (
+    TinyTimeMixerConfig,
+    TinyTimeMixerForPrediction,
+    TSPulseConfig,
+    TSPulseForClassification,
+    TSPulseForReconstruction,
+)
+
+
+TRANSFORMERS_MAJOR_VERSION = int(transformers.__version__.split(".")[0])
+
+TSPULSE_TASK_MODEL_MAP = {
+    "reconstruction": TSPulseForReconstruction,
+    "classification": TSPulseForClassification,
+}
+
+TSPULSE_TASK_CONF_OVERRIDES = {
+    "reconstruction": {},
+    "classification": {"loss": "cross_entropy"},
+}
 
 
 def assert_models_equal(model_a_from_pretrained, model_b_safetensors, msg=None):
@@ -22,57 +43,51 @@ def assert_models_equal(model_a_from_pretrained, model_b_safetensors, msg=None):
         )
 
 
-def test_ttm_from_pretrained():
+@pytest.mark.parametrize("post_init", [False, True])
+def test_ttm_from_pretrained(post_init):
     path = Path(__file__).parent
+    post_init_dir = "post_init" if post_init else "no_post_init"
 
-    def ttm_dummy_model(conf_options={}, seed=42):
+    def ttm_dummy_model(seed=42):
         set_seed(seed)
-        conf = TinyTimeMixerConfig(**conf_options)
+        conf = TinyTimeMixerConfig(post_init=post_init)
         model = TinyTimeMixerForPrediction(conf)
         return model
 
-    m = ttm_dummy_model({"post_init": False})
-    m_4 = load_file(path / "init_stability_test" / "ttm" / "no_post_init" / "model.safetensors")
-
-    assert_models_equal(m, m_4, "no post init")
-
-    m_post_init = ttm_dummy_model({"post_init": True})
-    m_4_post_init = load_file(path / "init_stability_test" / "ttm" / "post_init" / "model.safetensors")
-
-    assert_models_equal(m_post_init, m_4_post_init, "with post init")
-
-    # In Transformers 4.x, models were saved with:
-
-    # m = ttm_dummy_model({"post_init": False})
-    # m.save_pretrained(path / "init_stability_test/ttm/no_post_init")
-    # m_with_init = ttm_dummy_model({"post_init": True})
-    # m_with_init.save_pretrained(path / "init_stability_test/ttm/post_init")
-
-
-def test_tspulse_from_pretrained():
-    path = Path(__file__).parent
-
-    def tspulse_dummy_model(conf_options={}, seed=42):
-        set_seed(seed)
-        conf = TSPulseConfig(**conf_options)
-        model = TSPulseForReconstruction(conf)
-        return model
-
-    if True:
+    if False and TRANSFORMERS_MAJOR_VERSION < 5:
         # In Transformers 4.x, models were saved with:
 
-        m = tspulse_dummy_model({"post_init": False})
-        m.save_pretrained(path / "init_stability_test/tspulse/no_post_init")
-        m_with_init = tspulse_dummy_model({"post_init": True})
-        m_with_init.save_pretrained(path / "init_stability_test/tspulse/post_init")
+        m = ttm_dummy_model()
+        m.save_pretrained(path / f"init_stability_test/ttm/{post_init_dir}")
         return
 
-    m = tspulse_dummy_model({"post_init": False})
-    m_4 = load_file(path / "init_stability_test" / "tspulse" / "no_post_init" / "model.safetensors")
+    m = ttm_dummy_model()
+    m_saved = load_file(path / "init_stability_test" / "ttm" / post_init_dir / "model.safetensors")
 
-    assert_models_equal(m, m_4, "no post init")
+    assert_models_equal(m, m_saved, f"{post_init_dir}")
 
-    m_post_init = tspulse_dummy_model({"post_init": True})
-    m_4_post_init = load_file(path / "init_stability_test" / "tspulse" / "post_init" / "model.safetensors")
 
-    assert_models_equal(m_post_init, m_4_post_init, "with post init")
+@pytest.mark.parametrize("post_init", [False, True])
+@pytest.mark.parametrize("task", ["reconstruction", "classification"])
+def test_tspulse_from_pretrained(task, post_init):
+    path = Path(__file__).parent
+    model_cls = TSPULSE_TASK_MODEL_MAP[task]
+    conf_overrides = TSPULSE_TASK_CONF_OVERRIDES[task]
+    post_init_dir = "post_init" if post_init else "no_post_init"
+
+    def tspulse_dummy_model(seed=42):
+        set_seed(seed)
+        conf = TSPulseConfig(**conf_overrides, post_init=post_init)
+        model = model_cls(conf)
+        return model
+
+    if True and TRANSFORMERS_MAJOR_VERSION < 5:
+        # In Transformers 4.x, models were saved with:
+        m = tspulse_dummy_model()
+        m.save_pretrained(path / f"init_stability_test/tspulse/{task}/{post_init_dir}")
+        return
+
+    m = tspulse_dummy_model()
+    m_saved = load_file(path / "init_stability_test" / "tspulse" / task / post_init_dir / "model.safetensors")
+
+    assert_models_equal(m, m_saved, f"{task} / {post_init_dir}")

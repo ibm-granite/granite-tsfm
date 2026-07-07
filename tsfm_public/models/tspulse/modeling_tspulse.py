@@ -852,9 +852,7 @@ class TSPulsePreTrainedModel(PreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        # Initialize the all_tied_weights_keys attribute required by transformers 5.x
-        # if not hasattr(self, "all_tied_weights_keys"):
-        #     self.all_tied_weights_keys = {}
+        # Transformers 5.x indicates that post_init should be called
         self.post_init()
 
     def _init_weights(self, module):
@@ -869,7 +867,7 @@ class TSPulsePreTrainedModel(PreTrainedModel):
                 init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
-            init.ones(module.weight)
+            init.ones_(module.weight)
 
         elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
             logger.info(f"Identity Init in Module: , {module.__class__.__name__}")
