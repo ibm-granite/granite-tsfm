@@ -1799,17 +1799,16 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
             if self.config.positional_encoding_type == "random":
                 # nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
                 init.normal_(module.position_enc, mean=0.0, std=0.1)
-        # elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-        #     # module.bias.data.zero_()
-        #     # init.zeros_(module.bias.data)
-        #     # module.weight.data.fill_(1.0)
-        #     # init.constant_(module.weight.data, 1.0)
-        #     pass
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            # module.bias.data.zero_()
+            init.zeros_(module.bias.data)
+            # module.weight.data.fill_(1.0)
+            init.ones_(module.weight.data)
         elif isinstance(module, TinyTimeMixerNormLayer):
-            # if getattr(module.norm, "weight", None) is not None:
-            init.ones_(module.norm.weight)
             # if getattr(module.norm, "bias", None) is not None:
             init.zeros_(module.norm.bias)
+            # if getattr(module.norm, "weight", None) is not None:
+            init.ones_(module.norm.weight)
         elif isinstance(module, TinyTimeMixerBatchNorm):
             # module.batchnorm.bias.data.zero_()
             init.zeros_(module.batchnorm.bias.data)

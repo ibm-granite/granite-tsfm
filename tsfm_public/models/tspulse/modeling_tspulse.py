@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
+import transformers
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
     ModelOutput,
@@ -24,6 +25,12 @@ from transformers.utils import (
 
 from .configuration_tspulse import TSPulseConfig
 
+
+major = int(transformers.__version__.split(".")[0])
+if major >= 5:
+    import transformers.initialization as init
+else:
+    import torch.nn.init as init
 
 logger = logging.get_logger(__name__)
 
@@ -846,26 +853,31 @@ class TSPulsePreTrainedModel(PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         # Initialize the all_tied_weights_keys attribute required by transformers 5.x
-        if not hasattr(self, "all_tied_weights_keys"):
-            self.all_tied_weights_keys = {}
+        # if not hasattr(self, "all_tied_weights_keys"):
+        #     self.all_tied_weights_keys = {}
+        self.post_init()
 
     def _init_weights(self, module):
         """Initialize weights"""
+
+        if not self.config.post_init:
+            return
+
         if isinstance(module, TSPulsePositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones(module.weight)
 
         elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
             logger.info(f"Identity Init in Module: , {module.__class__.__name__}")
             module._init_identity_weights()
 
         elif isinstance(module, TSPulseBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            init.zeros_(module.batchnorm.bias)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Conv1d):
             init.xavier_uniform_(module.weight)  # Xavier uniform initialization for weights
             # Initialize biases if they exist
@@ -875,27 +887,30 @@ class TSPulsePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Linear):
             logger.info(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
-                module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "uniform":
-                nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    init.zeros_(module.bias)
             else:
-                module.reset_parameters()
+                if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
+                    module.bias, "_is_hf_initialized", False
+                ):
+                    module.reset_parameters()
         elif isinstance(module, nn.Embedding):
             logger.info(f"Initializing Embedding layers with method: {self.config.init_embed}")
             if self.config.init_embed == "normal":
-                nn.init.normal_(module.weight)
+                init.normal_(module.weight)
             elif self.config.init_embed == "uniform":
-                nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
             elif self.config.init_embed == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
             else:
                 module.reset_parameters()
         # elif isinstance(module, nn.Linear):
@@ -1355,8 +1370,8 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
 
         self.d_model = config.d_model
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        self.post_init()
 
     @replace_return_docstrings(output_type=TSPulseEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1567,8 +1582,8 @@ class TSPulseModel(TSPulsePreTrainedModel):
 
         self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
 
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        self.post_init()
 
     def normalize_fft(self, tensor):
         min_val = tensor.min(dim=1, keepdim=True).values
@@ -2080,8 +2095,8 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         self.ces_loss = CrossEntropySoftmaxLoss()
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
@@ -2777,8 +2792,8 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         self.decoder_with_head = TSPulseDecoderWithClassificationHead(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        self.post_init()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
