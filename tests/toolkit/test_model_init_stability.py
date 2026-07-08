@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,8 @@ from tsfm_public import (
     TSPulseForReconstruction,
 )
 
+
+SAVE_MODELS = True
 
 TRANSFORMERS_MAJOR_VERSION = int(transformers.__version__.split(".")[0])
 
@@ -43,8 +46,13 @@ def assert_models_equal(model_a_from_pretrained, model_b_safetensors, msg=None):
         )
 
 
+@pytest.mark.parametrize("decoder_mode", ["common_channel", "mix_channel"])
 @pytest.mark.parametrize("post_init", [False, True])
-def test_ttm_from_pretrained(post_init):
+def test_ttm_from_pretrained(post_init, decoder_mode):
+    if decoder_mode == "mix_channel" and post_init:
+        # do not test this case
+        return
+
     path = Path(__file__).parent
     post_init_dir = "post_init" if post_init else "no_post_init"
 
@@ -54,17 +62,39 @@ def test_ttm_from_pretrained(post_init):
         model = TinyTimeMixerForPrediction(conf)
         return model
 
-    if False and TRANSFORMERS_MAJOR_VERSION < 5:
+    if SAVE_MODELS and TRANSFORMERS_MAJOR_VERSION < 5:
         # In Transformers 4.x, models were saved with:
 
-        m = ttm_dummy_model()
-        m.save_pretrained(path / f"init_stability_test/ttm/{post_init_dir}")
+        if decoder_mode == "common_channel":
+            m = ttm_dummy_model()
+            m.save_pretrained(path / f"init_stability_test/ttm/{decoder_mode}/{post_init_dir}")
+        elif decoder_mode == "mix_channel" and not post_init:
+            with tempfile.TemporaryDirectory() as base_tmp:
+                m = ttm_dummy_model()
+                m.save_pretrained(base_tmp)
+                del m
+
+                set_seed(999)
+                m = TinyTimeMixerForPrediction.from_pretrained(base_tmp, decoder_mode=decoder_mode)
+                m.save_pretrained(path / f"init_stability_test/ttm/{decoder_mode}/{post_init_dir}")
+        else:
+            raise ValueError("Unknown decoder mode")
         return
 
     m = ttm_dummy_model()
-    m_saved = load_file(path / "init_stability_test" / "ttm" / post_init_dir / "model.safetensors")
 
-    assert_models_equal(m, m_saved, f"{post_init_dir}")
+    if decoder_mode == "mix_channel" and not post_init:
+        with tempfile.TemporaryDirectory() as base_tmp:
+            m = ttm_dummy_model()
+            m.save_pretrained(base_tmp)
+            del m
+
+            set_seed(999)
+            m = TinyTimeMixerForPrediction.from_pretrained(base_tmp, decoder_mode=decoder_mode)
+
+    m_saved = load_file(path / "init_stability_test" / "ttm" / decoder_mode / post_init_dir / "model.safetensors")
+
+    assert_models_equal(m, m_saved, f"{decoder_mode}/{post_init_dir}")
 
 
 @pytest.mark.parametrize("post_init", [False, True])
@@ -81,7 +111,7 @@ def test_tspulse_from_pretrained(task, post_init):
         model = model_cls(conf)
         return model
 
-    if False and TRANSFORMERS_MAJOR_VERSION < 5:
+    if SAVE_MODELS and TRANSFORMERS_MAJOR_VERSION < 5:
         # In Transformers 4.x, models were saved with:
         m = tspulse_dummy_model()
         m.save_pretrained(path / f"init_stability_test/tspulse/{task}/{post_init_dir}")
