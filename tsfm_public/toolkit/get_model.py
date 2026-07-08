@@ -68,7 +68,9 @@ def check_ttm_model_path(model_path):
         return 2
     elif model_path.startswith("ibm-research/ttm-research-r2"):
         return 3
-    elif model_path.startswith("ibm-research/ttm-r3"):
+    elif model_path.startswith("ibm-research/ttm-r3") or model_path.startswith(
+        "ibm-granite/granite-timeseries-ttm-r3"
+    ):
         return 4
     else:
         return 0
@@ -552,8 +554,7 @@ def get_model(
 
         # if (model_path_type == 0 and Path(model_path).is_dir()) or model_path_type != 0:
         # Load model
-
-        if "-dec-" in ttm_model_revision and model_path_type == 4:
+        if "-dec-" in ttm_model_revision and model_path_type in [0, 4]:
             model = TinyTimeMixerForDecomposedPrediction.from_pretrained(
                 model_path,
                 revision=ttm_model_revision,
