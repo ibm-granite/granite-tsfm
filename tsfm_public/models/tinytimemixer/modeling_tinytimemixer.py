@@ -1777,6 +1777,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
         if not self.config.post_init:
             return
 
+        logger.info(f"_init_weights {module.__class__.__name__} {self.__class__.__name__}")
+
         # if isinstance(module, MultiQuantileHead):
         #     # Initialize MQ temperature parameter if enabled.
         #     # This avoids doing init inside the head and keeps HF-style init central.
@@ -1799,9 +1801,9 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             # module.bias.data.zero_()
-            init.zeros_(module.bias.data)
+            init.zeros_(module.bias)
             # module.weight.data.fill_(1.0)
-            init.ones_(module.weight.data)
+            init.ones_(module.weight)
         elif isinstance(module, TinyTimeMixerNormLayer):
             # if getattr(module.norm, "bias", None) is not None:
             init.zeros_(module.norm.bias)
@@ -1809,29 +1811,29 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
             init.ones_(module.norm.weight)
         elif isinstance(module, TinyTimeMixerBatchNorm):
             # module.batchnorm.bias.data.zero_()
-            init.zeros_(module.batchnorm.bias.data)
+            init.zeros_(module.batchnorm.bias)
             # module.batchnorm.weight.data.fill_(1.0)
-            init.ones_(module.batchnorm.weight.data)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
             # print(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
                 # module.weight.data.normal_(mean=0.0, std=self.config.init_std)
-                init.normal_(module.weight.data, mean=0.0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
                     # module.bias.data.zero_()
-                    init.zeros_(module.bias.data)
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "uniform":
                 # nn.init.uniform_(module.weight)
                 init.uniform_(module.weight)
                 if module.bias is not None:
                     # module.bias.data.zero_()
-                    init.zeros_(module.bias.data)
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "xavier_uniform":
                 # nn.init.xavier_uniform_(module.weight)
                 init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     # module.bias.data.zero_()
-                    init.zeros_(module.bias.data)
+                    init.zeros_(module.bias)
             else:
                 if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
                     module.bias, "_is_hf_initialized", False
