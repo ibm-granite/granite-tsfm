@@ -21,15 +21,15 @@ datasets
 
 ## Prepare the environment 
 
-Create a `seperate virtual environment` and pip install the `granite-tsfm` library using the following code snippet. Now pip install `specific versions` of the `torch` and `transformers` libraries as mentioned in the `../tspulse_repro_libs.txt`.
-
+Create a separate virtual environment and pip install the `granite-tsfm` library using the following code snippet.
 ```bash
-pip install git+https://github.com/ibm-granite/granite-tsfm.git@v0.2.28
-pip install -r ../tspulse_repro_libs.txt
+$ pip install "torch==2.4.0" "transformers>=4.44.0,<4.51.0" "tensorboardX==2.6.2.2" "granite-tsfm[testing]==0.2.28" statsmodels
 ```
+Note that you **should not** use these package versions in production environments since they have been updated due to reported CVEs.
+
 📌 **Note on Versioning for Reproducibility**
 >
-> To ensure reproducibility of the reported results, we have **fixed the versions** of `torch` and `transformers` libraries. Please use the specified versions in the `../tspulse_repro_libs.txt`, as different versions may lead to variations in numbers.
+> To ensure reproducibility of the reported results, we have **fixed the versions** of `torch` and `transformers` libraries. Please use the specified versions above, as different versions may lead to variations in numbers.
 
 ## Run classification benchmarking
 Run the bash script `full_benchmarking_script.sh`. 
