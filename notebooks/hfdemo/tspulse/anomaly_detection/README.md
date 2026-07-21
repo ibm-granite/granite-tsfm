@@ -4,9 +4,17 @@
 Download the TSB UAD Benchmark Datasets (please refer [TSB-AD Github](https://github.com/TheDatumOrg/TSB-AD), and the [evaluation file list](https://github.com/TheDatumOrg/TSB-AD/tree/main/Datasets) . 
 
 ## Recommended setup
-The base environment should contain python >= 3.11. The dependent packages can be installed via pip utility using the `granite-tsfm/notebooks/hfdemo/tspulse/tspulse_repro_libs.txt` file provided.
+The base environment should contain python >= 3.11. If you want to reproduce the benchmark results, we run all using the following library versions:
+```
+torch==2.4.0
+transformers>=4.44.0,<4.51.0
+tensorboardX==2.6.2.2
+granite-tsfm[testing]==0.3.1
+statsmodels
+```
+Note that you **should not** use these package versions in production environments since they have been updated due to reported CVEs. The dependent packages can be installed via pip:
 ```bash
-$ pip install -r granite-tsfm/notebooks/hfdemo/tspulse/tspulse_repro_libs.txt
+$ pip install "torch==2.4.0" "transformers>=4.44.0,<4.51.0" "tensorboardX==2.6.2.2" "granite-tsfm[testing]==0.3.1" statsmodels
 ```
 
 The script expects the datasets and resource files from [TSB-AD Github](https://github.com/TheDatumOrg/TSB-AD)) to be placed in specific directory architecture, as. specified below. 
