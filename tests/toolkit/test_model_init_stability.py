@@ -39,11 +39,20 @@ def assert_models_equal(model_a_from_pretrained, model_b_safetensors, msg=None):
     assert set(state_a.keys()) == set(state_b.keys()), f"{msg_}Models have different state_dict keys"
 
     for key in state_a:
-        torch.testing.assert_close(
-            state_a[key],
-            state_b[key],
-            msg=f"[{msg}] Mismatch at: {key}",
-        )
+        try:
+            torch.testing.assert_close(
+                state_a[key],
+                state_b[key],
+                msg=f"[{msg}] Mismatch at: {key}",
+            )
+        except Exception as e:
+            error_keys.append(key)
+            last_error = e
+
+    if last_error:
+        print("*** Error keys ***")
+        print(error_keys)
+        raise last_error
 
 
 @pytest.mark.parametrize("decoder_mode", ["common_channel", "mix_channel"])
