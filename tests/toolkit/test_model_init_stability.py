@@ -38,6 +38,8 @@ def assert_models_equal(model_a_from_pretrained, model_b_safetensors, msg=None):
     msg_ = f"[{msg}] " if msg else ""
     assert set(state_a.keys()) == set(state_b.keys()), f"{msg_}Models have different state_dict keys"
 
+    error_keys = []
+    last_error = None
     for key in state_a:
         try:
             torch.testing.assert_close(
