@@ -1765,38 +1765,30 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        # Transformers 5.x indicates that post_init should be called
-        self.post_init()
+    def post_init(self):
+        """
+        Run the Transformers 5 post-initialization bookkeeping without
+        reinitializing TTM weights.
+
+        TTM historically uses config.post_init=False and relies on PyTorch
+        constructor initialization. Missing checkpoint weights are initialized
+        later by from_pretrained() through _init_weights().
+        """
+        if major >= 5:
+            with init.no_init_weights():
+                super().post_init()
+
+    # def __init__(self, config, *inputs, **kwargs):
+    #     super().__init__(config, *inputs, **kwargs)
+    #     # Transformers 5.x indicates that post_init should be called
+    #     self.post_init()
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
 
-        if not self.config.post_init:
-            return
-        if not self.config.post_init and not getattr(module, "_is_hf_initialized", False):
-            if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-                # module.bias.data.zero_()
-                init.zeros_(module.bias)
-                # module.weight.data.fill_(1.0)
-                init.ones_(module.weight)
-            elif isinstance(module, TinyTimeMixerNormLayer):
-                # if getattr(module.norm, "bias", None) is not None:
-                init.zeros_(module.norm.bias)
-                # if getattr(module.norm, "weight", None) is not None:
-                init.ones_(module.norm.weight)
-            elif isinstance(module, TinyTimeMixerBatchNorm):
-                # module.batchnorm.bias.data.zero_()
-                init.zeros_(module.batchnorm.bias)
-                # module.batchnorm.weight.data.fill_(1.0)
-                init.ones_(module.batchnorm.weight)
-            elif isinstance(module, nn.Linear) and getattr(module.weight, "_is_hf_initialized", False):
-                print(self.__class__.__name__, module)
-                #  and not getattr(module, "_is_hf_initialized", False):
-            #     module.reset_parameters()
-            return
+        # if not self.config.post_init:
+        #     return
 
         # logger.info(f"_init_weights {module.__class__.__name__} {self.__class__.__name__}")
 
@@ -1821,20 +1813,33 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 # nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
                 init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            # module.bias.data.zero_()
-            init.zeros_(module.bias)
-            # module.weight.data.fill_(1.0)
-            init.ones_(module.weight)
-        elif isinstance(module, TinyTimeMixerNormLayer):
-            # if getattr(module.norm, "bias", None) is not None:
-            init.zeros_(module.norm.bias)
-            # if getattr(module.norm, "weight", None) is not None:
-            init.ones_(module.norm.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+
+            if module.weight is not None:
+                init.ones_(module.weight)
+
         elif isinstance(module, TinyTimeMixerBatchNorm):
-            # module.batchnorm.bias.data.zero_()
-            init.zeros_(module.batchnorm.bias)
-            # module.batchnorm.weight.data.fill_(1.0)
-            init.ones_(module.batchnorm.weight)
+            if module.batchnorm.bias is not None:
+                init.zeros_(module.batchnorm.bias)
+
+            if module.batchnorm.weight is not None:
+                init.ones_(module.batchnorm.weight)
+        # elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+        #     # module.bias.data.zero_()
+        #     init.zeros_(module.bias)
+        #     # module.weight.data.fill_(1.0)
+        #     init.ones_(module.weight)
+        # elif isinstance(module, TinyTimeMixerNormLayer):
+        #     # if getattr(module.norm, "bias", None) is not None:
+        #     init.zeros_(module.norm.bias)
+        #     # if getattr(module.norm, "weight", None) is not None:
+        #     init.ones_(module.norm.weight)
+        # elif isinstance(module, TinyTimeMixerBatchNorm):
+        #     # module.batchnorm.bias.data.zero_()
+        #     init.zeros_(module.batchnorm.bias)
+        #     # module.batchnorm.weight.data.fill_(1.0)
+        #     init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
             # print(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
@@ -1855,11 +1860,12 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 if module.bias is not None:
                     # module.bias.data.zero_()
                     init.zeros_(module.bias)
+            # else:
+            #     if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
+            #         module.bias, "_is_hf_initialized", False
+            #     ):
             else:
-                if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
-                    module.bias, "_is_hf_initialized", False
-                ):
-                    module.reset_parameters()
+                module.reset_parameters()
         elif isinstance(module, nn.Embedding):
             # print(f"Initializing Embedding layers with method: {self.config.init_embed}")
             if self.config.init_embed == "normal":
@@ -1872,8 +1878,8 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 # nn.init.xavier_uniform_(module.weight)
                 init.xavier_uniform_(module.weight)
             else:
-                if not getattr(module.weight, "_is_hf_initialized", False):
-                    module.reset_parameters()
+                # if not getattr(module.weight, "_is_hf_initialized", False):
+                module.reset_parameters()
         elif isinstance(module, nn.Conv1d):
             # nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
             init.constant_(module.weight, 1.0 / module.kernel_size[0])
@@ -2991,6 +2997,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         if self.config.multi_scale or self.config.enable_base_norm_always:
             self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
 
+        self.post_init()
         # # Initialize weights and apply final processing
         # if config.post_init:
         #     self.post_init()
@@ -3126,6 +3133,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         # # Initialize weights and apply final processing
         # if config.post_init:
         #     self.post_init()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TinyTimeMixerModelOutput, config_class=_CONFIG_FOR_DOC)
