@@ -1787,14 +1787,26 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
 
-        # post_init=False:
-        # use native PyTorch defaults for missing/new modules.
-        if not self.config.post_init:
-            reset_parameters = getattr(module, "reset_parameters", None)
-
-            if callable(reset_parameters):
-                reset_parameters()
-
+        if not self.config.post_init and not getattr(module, "_is_hf_initialized", False):
+            if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+                # module.bias.data.zero_()
+                init.zeros_(module.bias)
+                # module.weight.data.fill_(1.0)
+                init.ones_(module.weight)
+            elif isinstance(module, TinyTimeMixerNormLayer):
+                # if getattr(module.norm, "bias", None) is not None:
+                init.zeros_(module.norm.bias)
+                # if getattr(module.norm, "weight", None) is not None:
+                init.ones_(module.norm.weight)
+            elif isinstance(module, TinyTimeMixerBatchNorm):
+                # module.batchnorm.bias.data.zero_()
+                init.zeros_(module.batchnorm.bias)
+                # module.batchnorm.weight.data.fill_(1.0)
+                init.ones_(module.batchnorm.weight)
+            elif isinstance(module, nn.Linear) and not getattr(module.weight, "_is_hf_initialized", False):
+                print(self.__class__.__name__, module)
+                #  and not getattr(module, "_is_hf_initialized", False):
+            #     module.reset_parameters()
             return
 
         if isinstance(module, TinyTimeMixerPositionalEncoding):
