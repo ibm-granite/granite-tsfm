@@ -1774,8 +1774,6 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
 
-        if not self.config.post_init:
-            return
         if not self.config.post_init and not getattr(module, "_is_hf_initialized", False):
             if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
                 # module.bias.data.zero_()
@@ -1792,7 +1790,7 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.batchnorm.bias)
                 # module.batchnorm.weight.data.fill_(1.0)
                 init.ones_(module.batchnorm.weight)
-            elif isinstance(module, nn.Linear) and getattr(module.weight, "_is_hf_initialized", False):
+            elif isinstance(module, nn.Linear) and not getattr(module.weight, "_is_hf_initialized", False):
                 print(self.__class__.__name__, module)
                 #  and not getattr(module, "_is_hf_initialized", False):
             #     module.reset_parameters()
