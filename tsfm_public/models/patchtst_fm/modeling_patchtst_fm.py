@@ -157,8 +157,10 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         mask_patch = ts_mask.reshape(B, self.config.n_patch, self.config.d_patch)
         pad_patch_mask = pad_mask.reshape(B, self.config.n_patch, self.config.d_patch).float().mean(dim=-1).gt(0.9)
 
-        # determine the ealiest index where the padding ends
-        if context_length is not None and self.config.use_pruning:
+        # determine the earliest index where the padding ends
+        if context_length == self.config.context_length:
+            idx = 0
+        elif context_length is not None and self.config.use_pruning:
             idx = (self.config.context_length - context_length) // self.config.d_patch
             x_patch = x_patch[:, idx:]
             mask_patch = mask_patch[:, idx:]
