@@ -656,7 +656,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 pad_mask.append(F.pad(pad_mask_i, (0, 0, left_pad, 0), mode="constant", value=True))
                 miss_mask.append(F.pad(miss_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
                 time_index.append(F.pad(time_index_i, (left_pad, 0), mode="constant", value=-1))
-                ts_ends.append(torch.tensor([left_pad, left_pad + sample_len], dtype=torch.int))
+                ts_ends.append(torch.tensor([left_pad, left_pad + sample_len], dtype=torch.int, device=device))
                 sample_lengths.append(sample_len)
             else:  # subsample
                 inputs.append(
@@ -700,7 +700,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                         mode="nearest",
                     ).squeeze()
                 )
-                ts_ends.append(torch.tensor([0, self.config.context_length], dtype=torch.int))
+                ts_ends.append(torch.tensor([0, self.config.context_length], dtype=torch.int, device=device))
                 sample_lengths.append(sample_len)
 
         inputs = torch.stack(inputs, dim=0)
