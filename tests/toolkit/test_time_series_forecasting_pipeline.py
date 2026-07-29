@@ -85,7 +85,7 @@ def patchtst_fm_dummy_model(conf=None):
         PatchTSTFMForPrediction: A PatchTST-FM model instance for testing.
     """
     if conf is None:
-        conf = PatchTSTFMConfig()
+        conf = PatchTSTFMConfig(use_pruning=False)
     model = PatchTSTFMForPrediction(conf)
 
     return model
