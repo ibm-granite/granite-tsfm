@@ -270,7 +270,7 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
 
         ## Call PatchTST with model
         series = np.expand_dims(sine_wave, axis=0)
-        series = torch.from_numpy(series).float().to("mps")
+        series = torch.from_numpy(series).float().to("cpu")
         with torch.no_grad():
             model_outputs = model(
                 past_values=series,
@@ -286,13 +286,13 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
         set_seed(seed)
 
         conf = PatchTSTFMConfig(use_pruning=True)
-        model = PatchTSTFMForPrediction(conf).to("mps")
+        model = PatchTSTFMForPrediction(conf).to("cpu")
         set_seed(seed)
         pred_quantiles_forward_model_prune = self._simple_forecast(model)
 
         set_seed(seed)
         conf = PatchTSTFMConfig(use_pruning=False)
-        model = PatchTSTFMForPrediction(conf).to("mps")
+        model = PatchTSTFMForPrediction(conf).to("cpu")
         print(model.device)
         set_seed(seed)
         pred_quantiles_forward_model_no_prune = self._simple_forecast(model)
