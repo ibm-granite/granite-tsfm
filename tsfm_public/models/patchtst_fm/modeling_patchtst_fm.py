@@ -540,17 +540,17 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
-            model_output = self.backbone(
-                inputs=inputs,
-                pred_mask=pred_mask,
-                miss_mask=miss_mask,
-                pad_mask=pad_mask,
-                return_loss=False,
-                output_hidden_states=output_hidden_states,
-                context_length=context,
-            )
-            outputs = model_output.quantile_outputs
+        # with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
+        model_output = self.backbone(
+            inputs=inputs,
+            pred_mask=pred_mask,
+            miss_mask=miss_mask,
+            pad_mask=pad_mask,
+            return_loss=False,
+            output_hidden_states=output_hidden_states,
+            context_length=context,
+        )
+        outputs = model_output.quantile_outputs
 
         outputs = outputs.permute(0, 2, 1)
         outputs = self.backbone.norm_fn.inverse_transform(outputs)
@@ -716,16 +716,16 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
-            model_output = self.backbone(
-                inputs=inputs,
-                pred_mask=pred_mask,
-                miss_mask=miss_mask,
-                pad_mask=pad_mask,
-                return_loss=False,
-                output_hidden_states=output_hidden_states,
-            )
-            outputs = model_output.quantile_outputs
+        # with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
+        model_output = self.backbone(
+            inputs=inputs,
+            pred_mask=pred_mask,
+            miss_mask=miss_mask,
+            pad_mask=pad_mask,
+            return_loss=False,
+            output_hidden_states=output_hidden_states,
+        )
+        outputs = model_output.quantile_outputs
 
         outputs = outputs.permute(0, 2, 1)
         outputs = self.backbone.norm_fn.inverse_transform(outputs)
