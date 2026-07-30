@@ -195,35 +195,13 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
         x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
-        # if offset != 0:  # comparison 0
-        #     torch.save(x, "x_in_layer.out")
-        # else:
-        #     z = torch.load("x_in_layer.out")
-        #     print("1: ", torch.sum(torch.abs(x[..., -21:, :] - z)))
         pad_attn_mask = make_attn_mask(t_pad_mask, t_pad_mask).unsqueeze(1)
-        # if offset != 0:
-        #     torch.save(pad_attn_mask, "pad_attn_mask.out")
-        # else:
-        #     z = torch.load("pad_attn_mask.out")
-        #     print("2: ", torch.sum(torch.abs(pad_attn_mask[..., -21:, -21:] - z)))
-        # x: bs x num_patches x 2*seq_len
         x = self.pos_embed(x, offset=offset)  # bs x num_patches x 2*seq_len
-        # if offset != 0:
-        #     torch.save(x, "x_pos_embed.out")
-        # else:
-        #     z = torch.load("x_pos_embed.out")
-        #     print("3: ", torch.sum(torch.abs(x[..., -21:, :] - z)))
 
         for i, block in enumerate(self.blocks):
-            # x = torch.where(t_pad_mask.unsqueeze(-1).expand_as(x), torch.zeros_like(x), x)
-            x = block(x, pad_attn_mask, pruning_flag=offset != 0, i=i)
+            x = block(x, pad_attn_mask)
 
         x = self.out_layer(x)
-        # if offset != 0:
-        #     torch.save(x, "x_out_layer.out")
-        # else:
-        #     z = torch.load("x_out_layer.out")
-        #     print("4: ", torch.sum(torch.abs(x[..., -21:, :] - z)))
         q_raw = x.reshape(B, N, self.config.num_quantile + 1, self.config.d_patch).permute(0, 2, 1, 3)
         q = q_raw[:, 0, :, :].unsqueeze(1) + torch.cumsum(
             F.softplus(q_raw[:, 1:, :, :]) / self.config.num_quantile, dim=1

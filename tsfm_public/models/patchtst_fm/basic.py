@@ -253,22 +253,12 @@ class TransformerBlock(nn.Module):
             raise ValueError(f"Unsupported MLP type: {mlp_type}")
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, attn_mask=None, pruning_flag=False, i=0):
+    def forward(self, x, attn_mask=None):
         if self.norm_first:
             x_norm1 = self.norm1(x)
-            # if pruning_flag:
-            #     torch.save(x_norm1, f"x_norm1_{i}.out")
-            # else:
-            #     z = torch.load(f"x_norm1_{i}.out")
-            #     print(f"Tx norm1 {i}", torch.sum(torch.abs(x_norm1[:, -21:, :] - z)))
             x_self_attn = self.attn(x_norm1, attn_mask)
-            # if pruning_flag:
-            #     torch.save(x_self_attn, f"x_self_attn_{i}.out")
-            # else:
-            #     z = torch.load(f"x_self_attn_{i}.out")
-            #     print(f"Tx self_attn {i}", torch.sum(torch.abs(x_self_attn[:, -21:, :] - z)))
 
-            x = x + x_self_attn  # x + self.attn(x_norm1, attn_mask)
+            x = x + x_self_attn
             x = x + self.dropout(self.mlp(self.norm2(x)))
         else:
             x = self.norm1(x + self.attn(x, attn_mask))
