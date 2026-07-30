@@ -9,7 +9,7 @@
   "d_model": 16,
   "decoder_adaptive_patching_levels": 0,
   "decoder_d_model": 8,
-  "decoder_mode": "common_channel",
+  "decoder_mode": "mix_channel",
   "decoder_num_layers": 8,
   "decoder_raw_residual": false,
   "decompose": false,
