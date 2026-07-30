@@ -13,7 +13,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
 import transformers
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
@@ -90,10 +89,17 @@ class TSPulseGatedAttention(nn.Module):
         elif attention_activation == "sigmoid":
             self.attn_activation_layer = nn.Sigmoid()
 
+    @torch.no_grad()
     def _init_identity_weights(self):
         logger.info("Try identity init in Gated Attention.")
-        nn.init.zeros_(self.attn_layer.weight)  # Zero weights to start with no influence
-        nn.init.constant_(self.attn_layer.bias, 0)  # Bias to zero for neutral effect
+
+        init.zeros_(self.attn_layer.weight)
+        init.constant_(self.attn_layer.bias, 0)
+
+    # def _init_identity_weights(self):
+    #     logger.info("Try identity init in Gated Attention.")
+    #     nn.init.zeros_(self.attn_layer.weight)  # Zero weights to start with no influence
+    #     nn.init.constant_(self.attn_layer.bias, 0)  # Bias to zero for neutral effect
 
     def forward(self, inputs):
         attn_weight = self.attn_activation_layer(self.attn_layer(inputs))
@@ -226,31 +232,70 @@ class TSPulseMLP(nn.Module):
 
         self.config = config
 
+    @torch.no_grad()
     def _init_identity_weights(self):
-        # recursive_init_identity_modules(self)
-
         if self.config.channel_mix_init == "zero":
-            nn.init.zeros_(self.fc1.weight)
-            nn.init.zeros_(self.fc1.bias)
-            nn.init.zeros_(self.fc2.weight)
-            nn.init.zeros_(self.fc2.bias)
+            init.zeros_(self.fc1.weight)
+            init.zeros_(self.fc1.bias)
+            init.zeros_(self.fc2.weight)
+            init.zeros_(self.fc2.bias)
+
         else:
-            # print("Try identity init in TSPulseMLP")
             if self.in_features == self.num_hidden:
-                nn.init.eye_(self.fc1.weight)  # Identity matrix for weights
+                init.eye_(self.fc1.weight)
             else:
-                nn.init.kaiming_uniform_(self.fc1.weight)  # Use a reasonable default for non-square matrices
-            nn.init.zeros_(self.fc1.bias)  # Zero biases
+                init.kaiming_uniform_(self.fc1.weight)
 
-            # Initialize fc2 to be identity (or as close as possible)
+            init.zeros_(self.fc1.bias)
+
             if self.num_hidden == self.out_features:
-                nn.init.eye_(self.fc2.weight)
+                init.eye_(self.fc2.weight)
             else:
-                nn.init.kaiming_uniform_(self.fc2.weight)
-            nn.init.zeros_(self.fc2.bias)
+                init.kaiming_uniform_(self.fc2.weight)
 
-            self.fc1.weight.data *= 0.5
-            self.fc2.weight.data *= 0.5
+            init.zeros_(self.fc2.bias)
+
+            # Preserve the historical 0.5 scaling without using .data.
+            # Skip parameters already loaded from the checkpoint.
+            if not getattr(
+                self.fc1.weight,
+                "_is_hf_initialized",
+                False,
+            ):
+                self.fc1.weight.mul_(0.5)
+
+            if not getattr(
+                self.fc2.weight,
+                "_is_hf_initialized",
+                False,
+            ):
+                self.fc2.weight.mul_(0.5)
+
+    # def _init_identity_weights(self):
+    #     # recursive_init_identity_modules(self)
+
+    #     if self.config.channel_mix_init == "zero":
+    #         nn.init.zeros_(self.fc1.weight)
+    #         nn.init.zeros_(self.fc1.bias)
+    #         nn.init.zeros_(self.fc2.weight)
+    #         nn.init.zeros_(self.fc2.bias)
+    #     else:
+    #         # print("Try identity init in TSPulseMLP")
+    #         if self.in_features == self.num_hidden:
+    #             nn.init.eye_(self.fc1.weight)  # Identity matrix for weights
+    #         else:
+    #             nn.init.kaiming_uniform_(self.fc1.weight)  # Use a reasonable default for non-square matrices
+    #         nn.init.zeros_(self.fc1.bias)  # Zero biases
+
+    #         # Initialize fc2 to be identity (or as close as possible)
+    #         if self.num_hidden == self.out_features:
+    #             nn.init.eye_(self.fc2.weight)
+    #         else:
+    #             nn.init.kaiming_uniform_(self.fc2.weight)
+    #         nn.init.zeros_(self.fc2.bias)
+
+    #         self.fc1.weight.data *= 0.5
+    #         self.fc2.weight.data *= 0.5
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -298,6 +343,9 @@ class TSPulseChannelFeatureMixerBlock(nn.Module):
                 out_size=config.num_input_channels,
                 attention_activation=config.gated_attention_activation,
             )
+
+        if config.free_channel_flow:
+            self._init_identity_weights()
 
     def _init_identity_weights(self):
         logger.info("Init identity weights for channel mixing")
@@ -850,72 +898,196 @@ class TSPulsePreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        # Transformers 5.x indicates that post_init should be called
-        self.post_init()
-
+    @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize weights"""
+        """Initialize weights using the policy selected by config.post_init."""
 
-        if not self.config.post_init:
+        # Highest priority: architecture-specific initialization.
+        if isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
+            logger.info(
+                "Identity Init in Module: %s",
+                module.__class__.__name__,
+            )
+            module._init_identity_weights()
             return
 
-        if isinstance(module, TSPulsePositionalEncoding):
-            # initialize positional encoding
-            if self.config.positional_encoding_type == "random":
-                init.normal_(module.position_enc, mean=0.0, std=0.1)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+        # post_init=False:
+        # Use native PyTorch defaults for missing/new modules.
+        if not self.config.post_init:
+            reset_parameters = getattr(
+                module,
+                "reset_parameters",
+                None,
+            )
 
-        elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
-            logger.info(f"Identity Init in Module: , {module.__class__.__name__}")
-            module._init_identity_weights()
+            if callable(reset_parameters):
+                reset_parameters()
+
+            return
+
+        # post_init=True:
+        # Use the existing TSPulse custom initialization.
+        if isinstance(module, TSPulsePositionalEncoding):
+            if self.config.positional_encoding_type == "random":
+                init.normal_(
+                    module.position_enc,
+                    mean=0.0,
+                    std=0.1,
+                )
+
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            if module.bias is not None:
+                init.zeros_(module.bias)
+
+            if module.weight is not None:
+                init.ones_(module.weight)
+
+        # elif (
+        #     isinstance(module, TSPulseChannelFeatureMixerBlock)
+        #     and self.config.free_channel_flow
+        # ):
+        #     logger.info(
+        #         "Identity Init in Module: %s",
+        #         module.__class__.__name__,
+        #     )
+        #     module._init_identity_weights()
 
         elif isinstance(module, TSPulseBatchNorm):
-            init.zeros_(module.batchnorm.bias)
-            init.ones_(module.batchnorm.weight)
+            if module.batchnorm.bias is not None:
+                init.zeros_(module.batchnorm.bias)
+
+            if module.batchnorm.weight is not None:
+                init.ones_(module.batchnorm.weight)
+
         elif isinstance(module, nn.Conv1d):
-            init.xavier_uniform_(module.weight)  # Xavier uniform initialization for weights
-            # Initialize biases if they exist
+            init.xavier_uniform_(module.weight)
+
             if module.bias is not None:
-                init.zeros_(module.bias)  # Zero initialization for biases
+                init.zeros_(module.bias)
 
         elif isinstance(module, nn.Linear):
-            logger.info(f"Initializing Linear layers with method: {self.config.init_linear}")
+            logger.info(
+                "Initializing Linear layers with method: %s",
+                self.config.init_linear,
+            )
+
             if self.config.init_linear == "normal":
-                init.normal_(module.weight, mean=0.0, std=self.config.init_std)
+                init.normal_(
+                    module.weight,
+                    mean=0.0,
+                    std=self.config.init_std,
+                )
+
                 if module.bias is not None:
                     init.zeros_(module.bias)
+
             elif self.config.init_linear == "uniform":
                 init.uniform_(module.weight)
+
                 if module.bias is not None:
                     init.zeros_(module.bias)
+
             elif self.config.init_linear == "xavier_uniform":
                 init.xavier_uniform_(module.weight)
+
                 if module.bias is not None:
                     init.zeros_(module.bias)
+
             else:
-                if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
-                    module.bias, "_is_hf_initialized", False
-                ):
-                    module.reset_parameters()
+                module.reset_parameters()
+
         elif isinstance(module, nn.Embedding):
-            logger.info(f"Initializing Embedding layers with method: {self.config.init_embed}")
+            logger.info(
+                "Initializing Embedding layers with method: %s",
+                self.config.init_embed,
+            )
+
             if self.config.init_embed == "normal":
                 init.normal_(module.weight)
+
             elif self.config.init_embed == "uniform":
                 init.uniform_(module.weight)
+
             elif self.config.init_embed == "xavier_uniform":
                 init.xavier_uniform_(module.weight)
+
             else:
-                if not getattr(module.weight, "_is_hf_initialized", False):
-                    module.reset_parameters()
-        # elif isinstance(module, nn.Linear):
-        #     module.weight.data.normal_(mean=0.0, std=self.config.init_std)
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
+                module.reset_parameters()
+
+
+# class TSPulsePreTrainedModel(PreTrainedModel):
+#     # Weight initialization
+#     config_class = TSPulseConfig
+#     base_model_prefix = "model"
+#     main_input_name = "past_values"
+#     supports_gradient_checkpointing = False
+
+#     # def __init__(self, config, *inputs, **kwargs):
+#     #     super().__init__(config, *inputs, **kwargs)
+#     #     # Transformers 5.x indicates that post_init should be called
+#     #     self.post_init()
+
+#     def _init_weights(self, module):
+#         """Initialize weights"""
+
+#         if not self.config.post_init:
+#             return
+
+#         if isinstance(module, TSPulsePositionalEncoding):
+#             # initialize positional encoding
+#             if self.config.positional_encoding_type == "random":
+#                 init.normal_(module.position_enc, mean=0.0, std=0.1)
+#         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+#             init.zeros_(module.bias)
+#             init.ones_(module.weight)
+
+#         elif isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
+#             logger.info(f"Identity Init in Module: , {module.__class__.__name__}")
+#             module._init_identity_weights()
+
+#         elif isinstance(module, TSPulseBatchNorm):
+#             init.zeros_(module.batchnorm.bias)
+#             init.ones_(module.batchnorm.weight)
+#         elif isinstance(module, nn.Conv1d):
+#             init.xavier_uniform_(module.weight)  # Xavier uniform initialization for weights
+#             # Initialize biases if they exist
+#             if module.bias is not None:
+#                 init.zeros_(module.bias)  # Zero initialization for biases
+
+#         elif isinstance(module, nn.Linear):
+#             logger.info(f"Initializing Linear layers with method: {self.config.init_linear}")
+#             if self.config.init_linear == "normal":
+#                 init.normal_(module.weight, mean=0.0, std=self.config.init_std)
+#                 if module.bias is not None:
+#                     init.zeros_(module.bias)
+#             elif self.config.init_linear == "uniform":
+#                 init.uniform_(module.weight)
+#                 if module.bias is not None:
+#                     init.zeros_(module.bias)
+#             elif self.config.init_linear == "xavier_uniform":
+#                 init.xavier_uniform_(module.weight)
+#                 if module.bias is not None:
+#                     init.zeros_(module.bias)
+#             else:
+#                 if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
+#                     module.bias, "_is_hf_initialized", False
+#                 ):
+#                     module.reset_parameters()
+#         elif isinstance(module, nn.Embedding):
+#             logger.info(f"Initializing Embedding layers with method: {self.config.init_embed}")
+#             if self.config.init_embed == "normal":
+#                 init.normal_(module.weight)
+#             elif self.config.init_embed == "uniform":
+#                 init.uniform_(module.weight)
+#             elif self.config.init_embed == "xavier_uniform":
+#                 init.xavier_uniform_(module.weight)
+#             else:
+#                 if not getattr(module.weight, "_is_hf_initialized", False):
+#                     module.reset_parameters()
+#         # elif isinstance(module, nn.Linear):
+#         #     module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+#         #     if module.bias is not None:
+#         #         module.bias.data.zero_()
 
 
 class TSPulsePatchify(nn.Module):
@@ -1369,8 +1541,8 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
 
         self.d_model = config.d_model
         # Initialize weights and apply final processing
-        # if config.post_init:
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     @replace_return_docstrings(output_type=TSPulseEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1581,8 +1753,8 @@ class TSPulseModel(TSPulsePreTrainedModel):
 
         self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
 
-        # if config.post_init:
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def normalize_fft(self, tensor):
         min_val = tensor.min(dim=1, keepdim=True).values
@@ -2094,8 +2266,8 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         self.ces_loss = CrossEntropySoftmaxLoss()
 
         # Initialize weights and apply final processing
-        # if config.post_init:
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
@@ -2791,8 +2963,8 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         self.decoder_with_head = TSPulseDecoderWithClassificationHead(config)
 
         # Initialize weights and apply final processing
-        # if config.post_init:
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
