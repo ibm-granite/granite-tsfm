@@ -6,6 +6,7 @@
 
 import unittest
 
+import numpy as np
 import torch
 from einops import rearrange
 from parameterized import parameterized
@@ -59,6 +60,7 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             pretrain_mask_ratio=0.4,
             pretrain_mask_cont=8,
             num_quantile=99,
+            use_pruning=False,
         )
 
         # Initialize model
@@ -215,6 +217,7 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             pretrain_mask_ratio=0.4,
             pretrain_mask_cont=8,
             num_quantile=99,
+            use_pruning=False,
         )
 
         # Initialize model
@@ -253,6 +256,49 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             stacked_output.shape,
             expected_stacked_shape,
             f"Stacked output has incorrect shape. Expected {expected_stacked_shape}, got {stacked_output.shape}",
+        )
+
+    def _simple_forecast(self, model):
+        pred_len = 24
+        # Generate sine wave data
+        t = np.linspace(0, 4 * np.pi, 200)
+        sine_wave = np.sin(t)
+
+        # Initialize PatchTST Model
+        quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        model.eval()
+
+        ## Call PatchTST with model
+        series = np.expand_dims(sine_wave, axis=0)
+        series = torch.from_numpy(series).float().to("cpu")
+        with torch.no_grad():
+            model_outputs = model(
+                past_values=series,
+                prediction_length=pred_len,
+                quantile_levels=quantile_levels,
+            )
+        return model_outputs.quantile_outputs.detach().cpu().numpy()
+
+    def test_pruning(
+        self,
+    ):
+        seed = 42
+        set_seed(seed)
+
+        conf = PatchTSTFMConfig(use_pruning=True)
+        model = PatchTSTFMForPrediction(conf).to("cpu")
+        set_seed(seed)
+        pred_quantiles_forward_model_prune = self._simple_forecast(model)
+
+        set_seed(seed)
+        conf = PatchTSTFMConfig(use_pruning=False)
+        model = PatchTSTFMForPrediction(conf).to("cpu")
+        print(model.device)
+        set_seed(seed)
+        pred_quantiles_forward_model_no_prune = self._simple_forecast(model)
+
+        np.testing.assert_allclose(
+            pred_quantiles_forward_model_prune, pred_quantiles_forward_model_no_prune, rtol=1e-3, atol=1e-3
         )
 
 

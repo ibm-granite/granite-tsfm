@@ -110,16 +110,19 @@ class Attention(nn.Module):
     def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
         if x.ndim == 3:
             B, N, C = x.shape
-            qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            qkv = (
+                self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+            )  # 3 x B x num_heads x N (num_patches) x head_dim
             q, k, v = qkv.unbind(0)  # (B, num_heads, N, head_dim)
             q, k = self.q_norm(q), self.k_norm(k)
+            # with sdpa_kernel(SDPBackend.MATH):
             x = F.scaled_dot_product_attention(
                 q,
                 k,
                 v,
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 attn_mask=attn_mask,
-            )
+            )  # (B, num_heads, N, head_dim)
             x = x.transpose(1, 2).reshape(B, N, C)
         elif x.ndim == 4:
             B, M, N, C = x.shape
@@ -127,6 +130,7 @@ class Attention(nn.Module):
             q, k, v = qkv.unbind(0)  # (B, num_heads, M, N, head_dim)
             q, k = self.q_norm(q), self.k_norm(k)
             # print('q', q.shape, 'k', k.shape, 'v', v.shape, 'attn_mask', attn_mask.shape if attn_mask is not None else "None")
+            # with sdpa_kernel(SDPBackend.MATH):
             x = F.scaled_dot_product_attention(
                 q,
                 k,
@@ -251,7 +255,10 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x, attn_mask=None):
         if self.norm_first:
-            x = x + self.attn(self.norm1(x), attn_mask)
+            x_norm1 = self.norm1(x)
+            x_self_attn = self.attn(x_norm1, attn_mask)
+
+            x = x + x_self_attn
             x = x + self.dropout(self.mlp(self.norm2(x)))
         else:
             x = self.norm1(x + self.attn(x, attn_mask))

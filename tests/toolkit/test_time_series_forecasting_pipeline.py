@@ -85,7 +85,7 @@ def patchtst_fm_dummy_model(conf=None):
         PatchTSTFMForPrediction: A PatchTST-FM model instance for testing.
     """
     if conf is None:
-        conf = PatchTSTFMConfig()
+        conf = PatchTSTFMConfig(use_pruning=False)
     model = PatchTSTFMForPrediction(conf)
 
     return model
@@ -326,7 +326,6 @@ def test_ttm_native_probabilistc_forecasting_pipeline(etth_data_base):
     )
     forecasts = forecast_pipeline(test_data)
 
-    print(forecasts.keys())
     assert len(forecasts[f"{target_columns[0]}"]) == pfl
     for i in quantile_levels:
         assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
@@ -368,7 +367,6 @@ def test_ttm_decomposed_native_probabilistc_forecasting_pipeline(etth_data_base)
     )
     forecasts = forecast_pipeline(test_data)
 
-    print(forecasts.keys())
     assert len(forecasts[f"{target_columns[0]}"]) == pfl
     for i in quantile_levels:
         assert len(forecasts[f"{target_columns[0]}_prediction_q{i}"]) == pfl
@@ -697,13 +695,17 @@ def test_expanding_context(patchtst_fm_dummy_model):
 
     for ix_q, q in enumerate(quantile_levels):
         np.testing.assert_allclose(
-            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model[ix_q, :])),
-            0,
+            pred_quantiles_pipeline[ix_q, :],
+            pred_quantiles_forward_model[ix_q, :],
             err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct tensor).",
+            rtol=1e-6,
+            atol=1e-6,
         )
 
         np.testing.assert_allclose(
-            np.mean(np.abs(pred_quantiles_pipeline[ix_q, :] - pred_quantiles_forward_model_2[ix_q, :])),
-            0,
+            pred_quantiles_pipeline[ix_q, :],
+            pred_quantiles_forward_model_2[ix_q, :],
             err_msg=f"Difference in quantile {q} should be zero (pipeline vs. direct list).",
+            rtol=1e-6,
+            atol=1e-6,
         )

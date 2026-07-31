@@ -31,8 +31,8 @@ class LearnedPositionalEmbedding(nn.Module):
         self.embedding = nn.Embedding(max_len, d_model)
         self.type = type
 
-    def forward(self, x):
-        positions = torch.arange(x.size(-2), device=x.device).unsqueeze(0)
+    def forward(self, x, offset: Optional[int] = 0):
+        positions = torch.arange(start=offset, end=x.size(-2) + offset, device=x.device).unsqueeze(0)
         pe = self.embedding(positions)
         if x.ndim == 4:
             pe = pe.unsqueeze(1)
@@ -134,6 +134,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
+        context_length: Optional[int] = None,
         # **kwargs,
     ) -> PatchTSTFMModelOutput:
         x = inputs  # .to(self.device)
@@ -149,18 +150,33 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         B, T = x.shape
         ts_mask = pred_mask | pad_mask | miss_mask
 
-        x_target = self.norm_fn.fit_transform(x, mask=pred_mask | pad_mask | miss_mask)
+        x_target = self.norm_fn.fit_transform(x, mask=ts_mask)
         x_input = torch.where(ts_mask, torch.zeros_like(x_target), x_target)
 
         x_patch = x_input.reshape(B, self.config.n_patch, self.config.d_patch)
         mask_patch = ts_mask.reshape(B, self.config.n_patch, self.config.d_patch)
         pad_patch_mask = pad_mask.reshape(B, self.config.n_patch, self.config.d_patch).float().mean(dim=-1).gt(0.9)
 
-        q_pred, q_raw = self.decode(x=x_patch, mask=mask_patch.float(), t_pad_mask=pad_patch_mask)
+        # determine the earliest index where the padding ends
+        if context_length == self.config.context_length:
+            idx = 0
+        elif context_length is not None and self.config.use_pruning:
+            idx = (self.config.context_length - context_length) // self.config.d_patch
+            x_patch = x_patch[:, idx:]
+            mask_patch = mask_patch[:, idx:]
+            pad_patch_mask = pad_patch_mask[:, idx:]
+        else:
+            idx = 0
+
+        q_pred, q_raw = self.decode(x=x_patch, mask=mask_patch, t_pad_mask=pad_patch_mask, offset=idx)
         q_pred = q_pred.permute(0, 2, 3, 1)
 
         B, N, D, Q = q_pred.shape
         q_pred = q_pred.reshape(B, N * D, Q)
+
+        # pad back to the original length
+        if context_length is not None and self.config.use_pruning:
+            q_pred = F.pad(q_pred, (0, 0, idx * D, 0), value=0.0)
 
         if output_hidden_states:
             hidden_states = q_raw.reshape(B, N * D, Q)
@@ -175,20 +191,22 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             hidden_states=hidden_states,
         )
 
-    def decode(self, x, mask, t_pad_mask=None):
+    def decode(self, x, mask, t_pad_mask=None, offset: Optional[int] = 0):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
-        x = self.in_layer(torch.cat([x, 1 - mask], dim=-1))
+        x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
         pad_attn_mask = make_attn_mask(t_pad_mask, t_pad_mask).unsqueeze(1)
+        x = self.pos_embed(x, offset=offset)  # bs x num_patches x 2*seq_len
 
-        x = self.pos_embed(x)
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             x = block(x, pad_attn_mask)
+
         x = self.out_layer(x)
         q_raw = x.reshape(B, N, self.config.num_quantile + 1, self.config.d_patch).permute(0, 2, 1, 3)
         q = q_raw[:, 0, :, :].unsqueeze(1) + torch.cumsum(
             F.softplus(q_raw[:, 1:, :, :]) / self.config.num_quantile, dim=1
         )
+
         return q, q_raw
 
 
@@ -252,6 +270,8 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         self.config = config
         self.backbone = PatchTSTFMModel(config)
+
+        self._autocast = torch.cuda.is_available()
 
         self._precision = (
             torch.bfloat16
@@ -500,7 +520,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
+        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=self._autocast):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
@@ -508,6 +528,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 pad_mask=pad_mask,
                 return_loss=False,
                 output_hidden_states=output_hidden_states,
+                context_length=context,
             )
             outputs = model_output.quantile_outputs
 
@@ -615,7 +636,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 pad_mask.append(F.pad(pad_mask_i, (0, 0, left_pad, 0), mode="constant", value=True))
                 miss_mask.append(F.pad(miss_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
                 time_index.append(F.pad(time_index_i, (left_pad, 0), mode="constant", value=-1))
-                ts_ends.append(torch.tensor([left_pad, left_pad + sample_len], dtype=torch.int))
+                ts_ends.append(torch.tensor([left_pad, left_pad + sample_len], dtype=torch.int, device=device))
                 sample_lengths.append(sample_len)
             else:  # subsample
                 inputs.append(
@@ -659,7 +680,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                         mode="nearest",
                     ).squeeze()
                 )
-                ts_ends.append(torch.tensor([0, self.config.context_length], dtype=torch.int))
+                ts_ends.append(torch.tensor([0, self.config.context_length], dtype=torch.int, device=device))
                 sample_lengths.append(sample_len)
 
         inputs = torch.stack(inputs, dim=0)
@@ -675,7 +696,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=True):
+        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=self._autocast):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
