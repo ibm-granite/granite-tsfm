@@ -17,6 +17,30 @@ SAVE_MODELS = True
 
 TRANSFORMERS_MAJOR_VERSION = int(transformers.__version__.split(".")[0])
 
+"""
+LOGIC:
+Fresh model, post_init=False
+    constructor initializes once
+    post_init lifecycle runs
+    _init_weights skips reset
+    exact old PyTorch-default values preserved
+
+Fresh model, post_init=True
+    constructor initializes
+    post_init applies TTM/TSPulse custom initialization
+
+Missing modules, post_init=False
+    from_pretrained allocates missing tensors
+    temporary skip flag is no longer active
+    reset_parameters gives PyTorch defaults
+
+Missing modules, post_init=True
+    custom initialization is applied
+
+Loaded checkpoint tensors
+    preserved
+"""
+
 
 def assert_models_equal(model, reference_state, msg=None):
     """Compare a model state_dict with a safetensors state dictionary."""

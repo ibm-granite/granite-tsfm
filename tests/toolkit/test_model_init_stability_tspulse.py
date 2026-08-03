@@ -558,10 +558,108 @@ def test_tspulse_missing_module_init_stability(
         model.save_pretrained(reference_dir)
         return
 
+    # reference_state = load_file(reference_dir / "model.safetensors")
+
+    # assert_models_equal(
+    #     model,
+    #     reference_state,
+    #     (f"missing_modules/{task}/" f"post_init={post_init}/" f"free_channel_flow={free_channel_flow}"),
+    # )
+
     reference_state = load_file(reference_dir / "model.safetensors")
 
-    assert_models_equal(
-        model,
-        reference_state,
-        (f"missing_modules/{task}/" f"post_init={post_init}/" f"free_channel_flow={free_channel_flow}"),
+    message = f"missing_modules/{task}/" f"post_init={post_init}/" f"free_channel_flow={free_channel_flow}"
+
+    if free_channel_flow:
+        # Identity/zero initialization is deterministic and should be
+        # bitwise identical between Transformers versions.
+        assert_models_equal(
+            model,
+            reference_state,
+            message,
+        )
+    else:
+        # Random missing Linear initialization can happen in a different
+        # traversal order in Transformers 4 and 5. Its policy is checked
+        # separately by assert_channel_mixer_policy().
+        random_missing_keys = {
+            key
+            for key in new_keys
+            if (
+                ".channel_feature_mixer.mlp.fc1." in key
+                or ".channel_feature_mixer.mlp.fc2." in key
+                or ".channel_feature_mixer.gating_block.attn_layer." in key
+            )
+        }
+
+        assert random_missing_keys, "Expected randomly initialized missing channel-mixer parameters"
+        assert_random_missing_parameters_valid(
+            model,
+            random_missing_keys,
+        )
+        assert_models_equal_except(
+            model,
+            reference_state,
+            excluded_keys=random_missing_keys,
+            msg=message,
+        )
+
+
+def assert_models_equal_except(
+    model,
+    reference_state,
+    excluded_keys,
+    msg=None,
+):
+    """
+    Compare all tensors except keys whose initialization is intentionally
+    random and may be visited in a different order across Transformers
+    versions.
+    """
+    model_state = model.state_dict()
+    msg_prefix = f"[{msg}] " if msg else ""
+
+    model_keys = set(model_state)
+    reference_keys = set(reference_state)
+
+    assert model_keys == reference_keys, (
+        f"{msg_prefix}Models have different state_dict keys. "
+        f"Only in model: {sorted(model_keys - reference_keys)}. "
+        f"Only in reference: {sorted(reference_keys - model_keys)}."
     )
+
+    error_keys = []
+    last_error = None
+
+    for key in model_state:
+        if key in excluded_keys:
+            continue
+
+        try:
+            torch.testing.assert_close(
+                model_state[key],
+                reference_state[key],
+                msg=f"{msg_prefix}Mismatch at: {key}",
+            )
+        except Exception as error:
+            error_keys.append(key)
+            last_error = error
+
+    if last_error is not None:
+        print("*** Error keys ***")
+        print(error_keys)
+        raise last_error
+
+
+def assert_random_missing_parameters_valid(
+    model,
+    random_missing_keys,
+):
+    model_state = model.state_dict()
+
+    for key in random_missing_keys:
+        tensor = model_state[key]
+
+        assert torch.isfinite(tensor).all(), f"{key} contains NaN or Inf"
+
+        assert tensor.numel() > 0, f"{key} is empty"
