@@ -255,21 +255,23 @@ class TSPulseMLP(nn.Module):
 
             init.zeros_(self.fc2.bias)
 
-            # Preserve the historical 0.5 scaling without using .data.
-            # Skip parameters already loaded from the checkpoint.
-            if not getattr(
-                self.fc1.weight,
-                "_is_hf_initialized",
-                False,
-            ):
-                self.fc1.weight.mul_(0.5)
+            self.fc1.weight.mul_(0.5)
+            self.fc2.weight.mul_(0.5)
+            # # Preserve the historical 0.5 scaling without using .data.
+            # # Skip parameters already loaded from the checkpoint.
+            # if not getattr(
+            #     self.fc1.weight,
+            #     "_is_hf_initialized",
+            #     False,
+            # ):
+            #     self.fc1.weight.mul_(0.5)
 
-            if not getattr(
-                self.fc2.weight,
-                "_is_hf_initialized",
-                False,
-            ):
-                self.fc2.weight.mul_(0.5)
+            # if not getattr(
+            #     self.fc2.weight,
+            #     "_is_hf_initialized",
+            #     False,
+            # ):
+            #     self.fc2.weight.mul_(0.5)
 
     # def _init_identity_weights(self):
     #     # recursive_init_identity_modules(self)
@@ -345,7 +347,20 @@ class TSPulseChannelFeatureMixerBlock(nn.Module):
             )
 
         if config.free_channel_flow:
-            self._init_identity_weights()
+            if self.config.channel_mix_init == "zero":
+                mlp_init_role = "zero"
+            else:
+                mlp_init_role = "half_identity"
+
+            self.mlp.fc1._tspulse_init_role = mlp_init_role
+            self.mlp.fc2._tspulse_init_role = mlp_init_role
+
+            if self.gated_attn:
+                self.gating_block.attn_layer._tspulse_init_role = "zero"
+
+        # if config.free_channel_flow:
+        #     self._init_identity_weights()
+        #     self._mark_free_channel_flow_initialized()
 
     def _init_identity_weights(self):
         logger.info("Init identity weights for channel mixing")
@@ -898,22 +913,110 @@ class TSPulsePreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
+    _SKIP_DEFAULT_REINIT_ATTR = "_skip_default_reinit_during_constructor_post_init"
+
+    def _post_init_with_init_policy(self):
+        flagged_submodels = []
+
+        if not self.config.post_init:
+            for submodel in self.modules():
+                if isinstance(
+                    submodel,
+                    TSPulsePreTrainedModel,
+                ):
+                    setattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                        True,
+                    )
+                    flagged_submodels.append(submodel)
+
+        try:
+            self.post_init()
+        finally:
+            for submodel in flagged_submodels:
+                if hasattr(
+                    submodel,
+                    self._SKIP_DEFAULT_REINIT_ATTR,
+                ):
+                    delattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                    )
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights using the policy selected by config.post_init."""
 
-        # Highest priority: architecture-specific initialization.
-        if isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
-            logger.info(
-                "Identity Init in Module: %s",
-                module.__class__.__name__,
-            )
-            module._init_identity_weights()
-            return
+        # # Highest priority: architecture-specific initialization.
+        # if isinstance(module, TSPulseChannelFeatureMixerBlock) and self.config.free_channel_flow:
+        #     logger.info(
+        #         "Identity Init in Module: %s",
+        #         module.__class__.__name__,
+        #     )
+        #     module._init_identity_weights()
+        #     return
 
         # post_init=False:
         # Use native PyTorch defaults for missing/new modules.
+
+        """Initialize weights using the selected TSPulse policy."""
+
+        tspulse_init_role = getattr(
+            module,
+            "_tspulse_init_role",
+            None,
+        )
+
+        # Architecture-specific free-channel-flow initialization has
+        # priority over the general post_init policy.
+        if tspulse_init_role == "half_identity":
+            if module.weight is not None and not getattr(
+                module.weight,
+                "_is_hf_initialized",
+                False,
+            ):
+                if module.weight.shape[0] == module.weight.shape[1]:
+                    init.eye_(module.weight)
+                else:
+                    init.kaiming_uniform_(module.weight)
+
+                module.weight.mul_(0.5)
+
+            if module.bias is not None and not getattr(
+                module.bias,
+                "_is_hf_initialized",
+                False,
+            ):
+                init.zeros_(module.bias)
+
+            return
+
+        if tspulse_init_role == "zero":
+            if module.weight is not None and not getattr(
+                module.weight,
+                "_is_hf_initialized",
+                False,
+            ):
+                init.zeros_(module.weight)
+
+            if module.bias is not None and not getattr(
+                module.bias,
+                "_is_hf_initialized",
+                False,
+            ):
+                init.zeros_(module.bias)
+
+            return
+
         if not self.config.post_init:
+            if getattr(
+                self,
+                self._SKIP_DEFAULT_REINIT_ATTR,
+                False,
+            ):
+                return
+
             reset_parameters = getattr(
                 module,
                 "reset_parameters",
@@ -924,6 +1027,17 @@ class TSPulsePreTrainedModel(PreTrainedModel):
                 reset_parameters()
 
             return
+        # if not self.config.post_init:
+        #     reset_parameters = getattr(
+        #         module,
+        #         "reset_parameters",
+        #         None,
+        #     )
+
+        #     if callable(reset_parameters):
+        #         reset_parameters()
+
+        #     return
 
         # post_init=True:
         # Use the existing TSPulse custom initialization.
@@ -1541,8 +1655,9 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
 
         self.d_model = config.d_model
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        #     self.post_init()
+        self._post_init_with_init_policy()
 
     @replace_return_docstrings(output_type=TSPulseEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1753,8 +1868,9 @@ class TSPulseModel(TSPulsePreTrainedModel):
 
         self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
 
-        if config.post_init:
-            self.post_init()
+        self._post_init_with_init_policy()
+        # if config.post_init:
+        #     self.post_init()
 
     def normalize_fft(self, tensor):
         min_val = tensor.min(dim=1, keepdim=True).values
@@ -2266,8 +2382,9 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         self.ces_loss = CrossEntropySoftmaxLoss()
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        #     self.post_init()
+        self._post_init_with_init_policy()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(
@@ -2963,8 +3080,9 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
         self.decoder_with_head = TSPulseDecoderWithClassificationHead(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        #     self.post_init()
+        self._post_init_with_init_policy()
 
     # @add_start_docstrings_to_model_forward(TSPULSE_INPUTS_DOCSTRING)
     # @replace_return_docstrings(

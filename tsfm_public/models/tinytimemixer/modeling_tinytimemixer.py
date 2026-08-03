@@ -1765,23 +1765,43 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
-    # def post_init(self):
-    #     """
-    #     Run the Transformers 5 post-initialization bookkeeping without
-    #     reinitializing TTM weights.
+    _SKIP_DEFAULT_REINIT_ATTR = "_skip_default_reinit_during_constructor_post_init"
 
-    #     TTM historically uses config.post_init=False and relies on PyTorch
-    #     constructor initialization. Missing checkpoint weights are initialized
-    #     later by from_pretrained() through _init_weights().
-    #     """
-    #     if major >= 5:
-    #         with init.no_init_weights():
-    #             super().post_init()
+    def _post_init_with_init_policy(self):
+        """
+        Always execute the Hugging Face post_init lifecycle, but preserve the
+        original PyTorch constructor values when config.post_init=False.
 
-    # def __init__(self, config, *inputs, **kwargs):
-    #     super().__init__(config, *inputs, **kwargs)
-    #     # Transformers 5.x indicates that post_init should be called
-    #     self.post_init()
+        During from_pretrained(), missing-weight initialization occurs later,
+        after this temporary flag has been removed.
+        """
+        flagged_submodels = []
+
+        if not self.config.post_init:
+            for submodel in self.modules():
+                if isinstance(
+                    submodel,
+                    TinyTimeMixerPreTrainedModel,
+                ):
+                    setattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                        True,
+                    )
+                    flagged_submodels.append(submodel)
+
+        try:
+            self.post_init()
+        finally:
+            for submodel in flagged_submodels:
+                if hasattr(
+                    submodel,
+                    self._SKIP_DEFAULT_REINIT_ATTR,
+                ):
+                    delattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                    )
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1789,13 +1809,38 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
 
         # post_init=False:
         # use native PyTorch defaults for missing/new modules.
+
         if not self.config.post_init:
-            reset_parameters = getattr(module, "reset_parameters", None)
+            # Fresh Model(config):
+            # PyTorch constructors have already initialized the parameters.
+            # Do not initialize them a second time.
+            if getattr(
+                self,
+                self._SKIP_DEFAULT_REINIT_ATTR,
+                False,
+            ):
+                return
+
+            # from_pretrained() missing-weight phase:
+            # Missing tensors have been allocated but need PyTorch defaults.
+            reset_parameters = getattr(
+                module,
+                "reset_parameters",
+                None,
+            )
 
             if callable(reset_parameters):
                 reset_parameters()
 
             return
+
+        # if not self.config.post_init:
+        #     reset_parameters = getattr(module, "reset_parameters", None)
+
+        #     if callable(reset_parameters):
+        #         reset_parameters()
+
+        #     return
 
         if isinstance(module, TinyTimeMixerPositionalEncoding):
             # initialize positional encoding
@@ -3349,8 +3394,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             self.multi_quantile_head_block = MultiQuantileHead(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        # self.post_init()
+        self._post_init_with_init_policy()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -3956,8 +4002,9 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         self.joint_loss_weight = config.joint_loss_weight
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        # self.post_init()
+        self._post_init_with_init_policy()
         # self.post_init()
 
     def forward(
