@@ -163,8 +163,7 @@ class TimeSeriesAnomalyDetectionPipeline(TimeSeriesPipeline):
         self.aggr_function = aggr_function_
         self.select_function = select_function_
 
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
+        # Note: This pipeline only supports PyTorch models
 
     @property
     def model_type(self) -> str:

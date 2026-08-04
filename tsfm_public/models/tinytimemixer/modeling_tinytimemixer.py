@@ -12,6 +12,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import transformers
 from transformers.modeling_utils import PreTrainedModel
 from transformers.time_series_utils import (
     NegativeBinomialOutput,
@@ -27,6 +28,13 @@ from transformers.utils import (
 )
 
 from .configuration_tinytimemixer import TinyTimeMixerConfig
+
+
+major = int(transformers.__version__.split(".")[0])
+if major >= 5:
+    import transformers.initialization as init
+else:
+    import torch.nn.init as init
 
 
 logger = logging.get_logger(__name__)
@@ -1757,62 +1765,159 @@ class TinyTimeMixerPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
 
+    _SKIP_DEFAULT_REINIT_ATTR = "_skip_default_reinit_during_constructor_post_init"
+
+    def _post_init_with_init_policy(self):
+        """
+        Always execute the Hugging Face post_init lifecycle, but preserve the
+        original PyTorch constructor values when config.post_init=False.
+
+        During from_pretrained(), missing-weight initialization occurs later,
+        after this temporary flag has been removed.
+        """
+        flagged_submodels = []
+
+        if not self.config.post_init:
+            for submodel in self.modules():
+                if isinstance(
+                    submodel,
+                    TinyTimeMixerPreTrainedModel,
+                ):
+                    setattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                        True,
+                    )
+                    flagged_submodels.append(submodel)
+
+        try:
+            self.post_init()
+        finally:
+            for submodel in flagged_submodels:
+                if hasattr(
+                    submodel,
+                    self._SKIP_DEFAULT_REINIT_ATTR,
+                ):
+                    delattr(
+                        submodel,
+                        self._SKIP_DEFAULT_REINIT_ATTR,
+                    )
+
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
 
-        # if isinstance(module, MultiQuantileHead):
-        #     # Initialize MQ temperature parameter if enabled.
-        #     # This avoids doing init inside the head and keeps HF-style init central.
-        #     if (
-        #         getattr(module, "enable_delta_temperature", False)
-        #         and module._temp_u is not None
-        #     ):
-        #         init_temp = float(getattr(self.config, "mq_temperature_init", 1.0))
-        #         init_temp = max(init_temp, 1e-8)
+        # post_init=False:
+        # use native PyTorch defaults for missing/new modules.
 
-        #         # softplus^{-1}(x) = log(exp(x) - 1)
-        #         init_u = torch.log(torch.expm1(torch.tensor(init_temp)))
+        if not self.config.post_init:
+            # Fresh Model(config):
+            # PyTorch constructors have already initialized the parameters.
+            # Do not initialize them a second time.
+            if getattr(
+                self,
+                self._SKIP_DEFAULT_REINIT_ATTR,
+                False,
+            ):
+                return
 
-        #         with torch.no_grad():
-        #             module._temp_u.data.fill_(init_u)
+            # from_pretrained() missing-weight phase:
+            # Missing tensors have been allocated but need PyTorch defaults.
+            reset_parameters = getattr(
+                module,
+                "reset_parameters",
+                None,
+            )
+
+            if callable(reset_parameters):
+                reset_parameters()
+
+            return
+
+        # if not self.config.post_init:
+        #     reset_parameters = getattr(module, "reset_parameters", None)
+
+        #     if callable(reset_parameters):
+        #         reset_parameters()
+
+        #     return
+
         if isinstance(module, TinyTimeMixerPositionalEncoding):
             # initialize positional encoding
             if self.config.positional_encoding_type == "random":
-                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                # nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+                init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+
+            if module.weight is not None:
+                init.ones_(module.weight)
+
         elif isinstance(module, TinyTimeMixerBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            if module.batchnorm.bias is not None:
+                init.zeros_(module.batchnorm.bias)
+
+            if module.batchnorm.weight is not None:
+                init.ones_(module.batchnorm.weight)
+        # elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+        #     # module.bias.data.zero_()
+        #     init.zeros_(module.bias)
+        #     # module.weight.data.fill_(1.0)
+        #     init.ones_(module.weight)
+        # elif isinstance(module, TinyTimeMixerNormLayer):
+        #     # if getattr(module.norm, "bias", None) is not None:
+        #     init.zeros_(module.norm.bias)
+        #     # if getattr(module.norm, "weight", None) is not None:
+        #     init.ones_(module.norm.weight)
+        # elif isinstance(module, TinyTimeMixerBatchNorm):
+        #     # module.batchnorm.bias.data.zero_()
+        #     init.zeros_(module.batchnorm.bias)
+        #     # module.batchnorm.weight.data.fill_(1.0)
+        #     init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
             # print(f"Initializing Linear layers with method: {self.config.init_linear}")
             if self.config.init_linear == "normal":
-                module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+                # module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0.0, std=self.config.init_std)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "uniform":
-                nn.init.uniform_(module.weight)
+                # nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias)
             elif self.config.init_linear == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                # nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
                 if module.bias is not None:
-                    module.bias.data.zero_()
+                    # module.bias.data.zero_()
+                    init.zeros_(module.bias)
+            # else:
+            #     if not getattr(module.weight, "_is_hf_initialized", False) or not getattr(
+            #         module.bias, "_is_hf_initialized", False
+            #     ):
             else:
                 module.reset_parameters()
         elif isinstance(module, nn.Embedding):
             # print(f"Initializing Embedding layers with method: {self.config.init_embed}")
             if self.config.init_embed == "normal":
-                nn.init.normal_(module.weight)
+                # nn.init.normal_(module.weight)
+                init.normal_(module.weight)
             elif self.config.init_embed == "uniform":
-                nn.init.uniform_(module.weight)
+                # nn.init.uniform_(module.weight)
+                init.uniform_(module.weight)
             elif self.config.init_embed == "xavier_uniform":
-                nn.init.xavier_uniform_(module.weight)
+                # nn.init.xavier_uniform_(module.weight)
+                init.xavier_uniform_(module.weight)
             else:
+                # if not getattr(module.weight, "_is_hf_initialized", False):
                 module.reset_parameters()
         elif isinstance(module, nn.Conv1d):
-            nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
+            # nn.init.constant_(module.weight, 1.0 / module.kernel_size[0])
+            init.constant_(module.weight, 1.0 / module.kernel_size[0])
 
 
 class TinyTimeMixerPatchify(nn.Module):
@@ -2890,7 +2995,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
 
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         if config.multi_scale:
             self.patcher = MultiScaleFromPatchedSequence(config)
@@ -2927,6 +3032,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
         if self.config.multi_scale or self.config.enable_base_norm_always:
             self.base_norm = nn.LayerNorm(self.config.num_patches * self.config.d_model, eps=config.norm_eps)
 
+        # self.post_init()
         # # Initialize weights and apply final processing
         # if config.post_init:
         #     self.post_init()
@@ -2957,7 +3063,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
@@ -3046,7 +3152,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
 
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.encoder = TinyTimeMixerEncoder(config)
         self.patching = TinyTimeMixerPatchify(config)
 
@@ -3062,6 +3168,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         # # Initialize weights and apply final processing
         # if config.post_init:
         #     self.post_init()
+        # self.post_init()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TinyTimeMixerModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -3083,7 +3190,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
@@ -3242,7 +3349,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.loss = config.loss
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.prediction_channel_indices = config.prediction_channel_indices
         self.num_parallel_samples = config.num_parallel_samples
@@ -3287,8 +3394,9 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
             self.multi_quantile_head_block = MultiQuantileHead(config)
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        # self.post_init()
+        self._post_init_with_init_policy()
 
     @add_start_docstrings_to_model_forward(TINYTIMEMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TinyTimeMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC)
@@ -3405,7 +3513,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         else:
             raise ValueError("Invalid loss function: Allowed values: mse, mae and nll")
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.backbone(
@@ -3865,7 +3973,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
 
         residual_config.scaling = None  # "std"
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         if config.scaling == "mean":
             self.scaler = TinyTimeMixerMeanScaler(config)
@@ -3894,8 +4002,10 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         self.joint_loss_weight = config.joint_loss_weight
 
         # Initialize weights and apply final processing
-        if config.post_init:
-            self.post_init()
+        # if config.post_init:
+        # self.post_init()
+        self._post_init_with_init_policy()
+        # self.post_init()
 
     def forward(
         self,
@@ -3910,7 +4020,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerForDecomposedPredictionOutput:
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         return self._forward_decomposed(
             past_values=past_values,

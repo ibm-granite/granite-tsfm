@@ -202,7 +202,7 @@ def trainable_params(model: nn.Module):
 def make_training_arguments(args: RuntimeConfig, save_suffix: str, num_epochs: int) -> TrainingArguments:
     kwargs = {
         "output_dir": os.path.join(args.save_dir, f"checkpoint_{save_suffix}"),
-        "overwrite_output_dir": True,
+        # "overwrite_output_dir": True,
         "learning_rate": args.learning_rate,
         "weight_decay": args.weight_decay,
         "num_train_epochs": num_epochs,
@@ -224,12 +224,13 @@ def make_training_arguments(args: RuntimeConfig, save_suffix: str, num_epochs: i
         "bf16_full_eval": args.bf16,
     }
 
-    try:
-        return TrainingArguments(**kwargs)
-    except TypeError:
-        # Compatibility with older transformers versions.
-        kwargs["evaluation_strategy"] = kwargs.pop("eval_strategy")
-        return TrainingArguments(**kwargs)
+    return TrainingArguments(**kwargs)
+    # try:
+    #     return TrainingArguments(**kwargs)
+    # except TypeError:
+    #     # Compatibility with older transformers versions.
+    #     kwargs["evaluation_strategy"] = kwargs.pop("eval_strategy")
+    #     return TrainingArguments(**kwargs)
 
 
 def make_trainer(

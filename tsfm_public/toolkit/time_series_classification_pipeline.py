@@ -80,9 +80,7 @@ class TimeSeriesClassificationPipeline(TimeSeriesPipeline):
 
         self.__context_memory = {}
 
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
+        # Note: This pipeline only supports PyTorch models
         # self.check_model_type(MODEL_FOR_TIME_SERIES_FORECASTING_MAPPING)
 
     def _sanitize_parameters(

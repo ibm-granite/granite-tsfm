@@ -16,15 +16,13 @@ from transformers.dynamic_module_utils import custom_object_save
 from transformers.feature_extraction_utils import (
     FeatureExtractionMixin,
 )
-from transformers.utils import (
-    cached_file,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
-)
+from transformers.utils.hub import cached_file
+
+from .tsfm_config import _download_url, _is_remote_url
 
 
 LOGGER = logging.getLogger(__file__)
+
 
 TYPE_TO_STRING = {
     int: "int",
@@ -144,10 +142,6 @@ class BaseProcessor(FeatureExtractionMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if is_offline_mode() and not local_files_only:
-            LOGGER.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
@@ -155,9 +149,9 @@ class BaseProcessor(FeatureExtractionMixin):
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_feature_extractor_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
+        elif _is_remote_url(pretrained_model_name_or_path):
             feature_extractor_file = pretrained_model_name_or_path
-            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
+            resolved_feature_extractor_file = _download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = cls.PROCESSOR_NAME
             try:
