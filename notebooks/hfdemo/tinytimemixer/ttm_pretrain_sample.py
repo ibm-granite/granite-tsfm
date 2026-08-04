@@ -129,10 +129,11 @@ def make_training_arguments(**kwargs) -> TrainingArguments:
     transformers renamed evaluation_strategy -> eval_strategy in newer versions.
     Try the newer name first and fall back for older environments.
     """
-    try:
-        return TrainingArguments(eval_strategy="epoch", **kwargs)
-    except TypeError:
-        return TrainingArguments(evaluation_strategy="epoch", **kwargs)
+    return TrainingArguments(eval_strategy="epoch", **kwargs)
+    # try:
+    #     return TrainingArguments(eval_strategy="epoch", **kwargs)
+    # except TypeError:
+    #     return TrainingArguments(evaluation_strategy="epoch", **kwargs)
 
 
 # ---------------------------------------------------------------------
@@ -211,7 +212,7 @@ def pretrain(args, model, dset_train, dset_val):
 
     trainer_args_kwargs = {
         "output_dir": os.path.join(args.save_dir, "checkpoint"),
-        "overwrite_output_dir": True,
+        # "overwrite_output_dir": True,
         "learning_rate": learning_rate,
         "num_train_epochs": args.num_epochs,
         "seed": args.random_seed,

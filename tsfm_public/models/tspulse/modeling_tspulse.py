@@ -971,6 +971,10 @@ class TSPulsePreTrainedModel(PreTrainedModel):
         # Architecture-specific free-channel-flow initialization has
         # priority over the general post_init policy.
         if tspulse_init_role == "half_identity":
+            logger.info(
+                "Init half-identity weights for free-channel-flow Linear: %s",
+                module.__class__.__name__,
+            )
             if module.weight is not None and not getattr(
                 module.weight,
                 "_is_hf_initialized",
@@ -993,6 +997,10 @@ class TSPulsePreTrainedModel(PreTrainedModel):
             return
 
         if tspulse_init_role == "zero":
+            logger.info(
+                "Init zero weights for free-channel-flow Linear: %s",
+                module.__class__.__name__,
+            )
             if module.weight is not None and not getattr(
                 module.weight,
                 "_is_hf_initialized",
@@ -1644,7 +1652,7 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
 
     def __init__(self, config: TSPulseConfig):
         super().__init__(config)
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.patcher = nn.Linear(config.patch_length, config.d_model)
         if config.use_positional_encoding:
@@ -1683,7 +1691,7 @@ class TSPulseEncoder(TSPulsePreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
@@ -1813,7 +1821,7 @@ class TSPulseModel(TSPulsePreTrainedModel):
             config.check_and_init_preprocessing()
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.encoder_block = TSPulseBlock(config)
 
@@ -1912,7 +1920,7 @@ class TSPulseModel(TSPulsePreTrainedModel):
         Returns: `TSPulseModelOutput` or `tuple`
 
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         original_past_values = past_values
 
@@ -2357,7 +2365,7 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
         else:
             raise ValueError("Invalid loss function: Allowed values: mse, mae")
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         config = register_token_config_update(config)
 
@@ -2422,7 +2430,7 @@ class TSPulseForReconstruction(TSPulsePreTrainedModel):
 
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
         backbone_input = past_values
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.backbone(
@@ -3071,7 +3079,7 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
 
         # config.mask_ratio = None
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         config = register_token_config_update(config)
 
@@ -3129,7 +3137,7 @@ class TSPulseForClassification(TSPulsePreTrainedModel):
             self.loss = nn.CrossEntropyLoss(weight=class_weights[0])
 
         # loss = torch.nn.CrossEntropyLoss()
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         enable_masking = True
         if self.config.disable_mask_in_classification_eval:
@@ -3380,7 +3388,7 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         if not config.init_processing:
             config.check_and_init_preprocessing()
         super().__init__(config)
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.config = config
 
@@ -3571,7 +3579,7 @@ class TSPulseDecoderWithReconstructionHead(TSPulsePreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         decoder_input = decoder_input.reshape(self.reshape_dims)
 
@@ -3701,7 +3709,7 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
         if not config.init_processing:
             config.check_and_init_preprocessing()
         super().__init__(config)
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.config = config
         self.backbone_mode = config.mode
 
@@ -3860,7 +3868,7 @@ class TSPulseDecoderWithClassificationHead(TSPulsePreTrainedModel):
 
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # if self.embed_conversion is not None:
         #     decoder_input = self.embed_conversion(

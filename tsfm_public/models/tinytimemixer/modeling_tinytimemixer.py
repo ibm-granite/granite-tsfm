@@ -2995,7 +2995,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
 
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         if config.multi_scale:
             self.patcher = MultiScaleFromPatchedSequence(config)
@@ -3063,7 +3063,7 @@ class TinyTimeMixerEncoder(TinyTimeMixerPreTrainedModel):
             `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
@@ -3152,7 +3152,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
 
         super().__init__(config)
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
         self.encoder = TinyTimeMixerEncoder(config)
         self.patching = TinyTimeMixerPatchify(config)
 
@@ -3190,7 +3190,7 @@ class TinyTimeMixerModel(TinyTimeMixerPreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
@@ -3349,7 +3349,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
 
         self.loss = config.loss
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         self.prediction_channel_indices = config.prediction_channel_indices
         self.num_parallel_samples = config.num_parallel_samples
@@ -3513,7 +3513,7 @@ class TinyTimeMixerForPrediction(TinyTimeMixerPreTrainedModel):
         else:
             raise ValueError("Invalid loss function: Allowed values: mse, mae and nll")
 
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.backbone(
@@ -3973,7 +3973,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
 
         residual_config.scaling = None  # "std"
 
-        self.use_return_dict = config.use_return_dict
+        self.return_dict = config.return_dict
 
         if config.scaling == "mean":
             self.scaler = TinyTimeMixerMeanScaler(config)
@@ -4020,7 +4020,7 @@ class TinyTimeMixerForDecomposedPrediction(TinyTimeMixerPreTrainedModel):
         static_categorical_values: Optional[torch.Tensor] = None,
         metadata: Optional[torch.Tensor] = None,
     ) -> TinyTimeMixerForDecomposedPredictionOutput:
-        return_dict = return_dict if return_dict is not None else self.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         return self._forward_decomposed(
             past_values=past_values,
