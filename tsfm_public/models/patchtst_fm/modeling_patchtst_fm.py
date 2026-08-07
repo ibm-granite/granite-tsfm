@@ -2,6 +2,7 @@
 #
 """PatchTST-FM model implementation"""
 
+import contextlib
 import math
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
@@ -277,7 +278,8 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
         self._precision = (
             torch.bfloat16
-            if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
+            if (torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8)
+            or torch.backends.mps.is_available()
             else torch.float16
         )
 
@@ -523,7 +525,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type="cuda", dtype=self._precision, enabled=True):
+        with get_autocast_context(inputs.device):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
@@ -699,7 +701,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type="cuda", dtype=self._precision, enabled=True):
+        with get_autocast_context(inputs.device):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
@@ -723,3 +725,14 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 x_pred = F.interpolate(outputs[i].unsqueeze(1), size=sample_lengths[i], mode="linear").squeeze(1)
             x_preds.append(x_pred[:, -forecast_length[i] :])
         return x_preds, model_output.hidden_states
+
+
+def get_autocast_context(device):
+    if device.type in ("cuda", "mps"):
+        return torch.autocast(
+            device_type=device.type,
+            dtype=torch.bfloat16,
+        )
+
+    # cpu: no autocast
+    return contextlib.nullcontext()
