@@ -275,14 +275,11 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         self.config = config
         self.backbone = PatchTSTFMModel(config)
 
-        self._autocast = torch.cuda.is_available()
-
         self._precision = (
             torch.bfloat16
             if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
             else torch.float16
         )
-        self._device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
 
         self.post_init()
 
@@ -526,7 +523,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=self._autocast):
+        with torch.autocast(device_type="cuda", dtype=self._precision, enabled=True):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
@@ -702,7 +699,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         miss_mask = rearrange(miss_mask, "B T N -> (B N) T")
         pad_mask = rearrange(pad_mask, "B T N -> (B N) T")
 
-        with torch.autocast(device_type=self._device, dtype=self._precision, enabled=self._autocast):
+        with torch.autocast(device_type="cuda", dtype=self._precision, enabled=True):
             model_output = self.backbone(
                 inputs=inputs,
                 pred_mask=pred_mask,
