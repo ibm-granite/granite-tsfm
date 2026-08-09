@@ -276,13 +276,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         self.config = config
         self.backbone = PatchTSTFMModel(config)
 
-        self._precision = (
-            torch.bfloat16
-            if (torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8)
-            or torch.backends.mps.is_available()
-            else torch.float16
-        )
-
         self.post_init()
 
     def model_summary(self) -> str:
@@ -729,10 +722,14 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
 
 def get_autocast_context(device):
     if device.type in ("cuda", "mps"):
-        return torch.autocast(
-            device_type=device.type,
-            dtype=torch.bfloat16,
+        precision = (
+            torch.bfloat16
+            if (torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8)
+            or torch.backends.mps.is_available()
+            else torch.float16
         )
+
+        return torch.autocast(device_type=device.type, dtype=precision)
 
     # cpu: no autocast
     return contextlib.nullcontext()
