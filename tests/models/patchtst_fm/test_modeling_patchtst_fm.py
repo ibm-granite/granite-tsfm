@@ -258,7 +258,7 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             f"Stacked output has incorrect shape. Expected {expected_stacked_shape}, got {stacked_output.shape}",
         )
 
-    def _simple_forecast(self, model):
+    def _simple_forecast(self, model, device_type):
         pred_len = 24
         # Generate sine wave data
         t = np.linspace(0, 4 * np.pi, 200)
@@ -270,7 +270,7 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
 
         ## Call PatchTST with model
         series = np.expand_dims(sine_wave, axis=0)
-        series = torch.from_numpy(series).float().to("cpu")
+        series = torch.from_numpy(series).float().to(device_type)
         with torch.no_grad():
             model_outputs = model(
                 past_values=series,
@@ -284,18 +284,17 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
     ):
         seed = 42
         set_seed(seed)
-
+        device_type = "cpu"
         conf = PatchTSTFMConfig(use_pruning=True)
-        model = PatchTSTFMForPrediction(conf).to("cpu")
+        model = PatchTSTFMForPrediction(conf).to(device_type)
         set_seed(seed)
-        pred_quantiles_forward_model_prune = self._simple_forecast(model)
+        pred_quantiles_forward_model_prune = self._simple_forecast(model, device_type=device_type)
 
         set_seed(seed)
         conf = PatchTSTFMConfig(use_pruning=False)
-        model = PatchTSTFMForPrediction(conf).to("cpu")
-        print(model.device)
+        model = PatchTSTFMForPrediction(conf).to(device_type)
         set_seed(seed)
-        pred_quantiles_forward_model_no_prune = self._simple_forecast(model)
+        pred_quantiles_forward_model_no_prune = self._simple_forecast(model, device_type=device_type)
 
         np.testing.assert_allclose(
             pred_quantiles_forward_model_prune, pred_quantiles_forward_model_no_prune, rtol=1e-3, atol=1e-3
