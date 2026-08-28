@@ -258,6 +258,65 @@ class PatchTSTFMFunctionalTests(unittest.TestCase):
             f"Stacked output has incorrect shape. Expected {expected_stacked_shape}, got {stacked_output.shape}",
         )
 
+    def _test_block_type(self, block_type, **cfg_kwds):
+        """
+        Test Conformer/Transformer block instantiation and inference integrity
+        """
+
+        config = PatchTSTFMConfig(
+            context_length=512,
+            prediction_length=96,
+            d_patch=16,
+            d_model=128,
+            n_head=4,
+            n_layer=2,
+            block_type=block_type,
+            conv_kernel_size=3,
+            mlp_type="mlp",
+            **cfg_kwds,
+        )
+
+        # Create model
+        model = PatchTSTFMForPrediction(config)
+        model.eval()
+
+        # Create sample input
+        batch_size = 4
+        context_length = 256
+        num_channels = 3
+
+        past_values = torch.randn(batch_size, context_length, num_channels)
+
+        # Run inference
+        with torch.no_grad():
+            output = model(
+                past_values=past_values,
+                prediction_length=96,
+            )
+
+        # Verify output shapes
+        expected_pred_shape = (batch_size, 96, num_channels)
+        expected_quant_shape = (batch_size, config.num_quantile, 96, num_channels)
+
+        assert (
+            output.prediction_outputs.shape == expected_pred_shape
+        ), f"Expected {expected_pred_shape}, got {output.prediction_outputs.shape}"
+        assert (
+            output.quantile_outputs.shape == expected_quant_shape
+        ), f"Expected {expected_quant_shape}, got {output.quantile_outputs.shape}"
+
+    def test_conformer_block(self):
+        self._test_block_type("conformer")
+
+    def test_transformer_block(self):
+        self._test_block_type("transformer")
+
+    def test_strided_conformer_block(self):
+        self._test_block_type("conformer", patch_stride=8, patch_loss_windowing="hamming")
+
+    def test_strided_transformer_block(self):
+        self._test_block_type("transformer", patch_stride=8, patch_loss_windowing="hamming")
+
     def _simple_forecast(self, model, device_type):
         pred_len = 24
         # Generate sine wave data
