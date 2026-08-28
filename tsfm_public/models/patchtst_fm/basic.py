@@ -163,8 +163,7 @@ class Attention(nn.Module):
 
         # The following is for attention visualization
         assert not self.training, (
-            "output_attentions must not be used during training "
-            "(pass --record_attention only at eval/inference time)"
+            "output_attentions must not be used during training (pass --record_attention only at eval/inference time)"
         )
         with torch.no_grad():
             q_fp32 = q.float()
@@ -335,24 +334,26 @@ class ConformerBlock(nn.Module):
         sublayer_gating=False,
         sublayer_gating_init_value=1e-4,
     ):
-        """ 
+        """
         conv_block_type = {"default", "ssm", "esp" }
         """
         super().__init__()
         self.norm_first = norm_first
         self.conv_block_type = conv_block_type
-        self.is_causal = is_causal   # will make the convo block causal (left padding only), allows for even-numbered size, too
-        self.sublayer_gating = sublayer_gating   # this might get removed in the future
+        self.is_causal = (
+            is_causal  # will make the convo block causal (left padding only), allows for even-numbered size, too
+        )
+        self.sublayer_gating = sublayer_gating  # this might get removed in the future
         self.sublayer_gating_init_value = sublayer_gating_init_value
 
         # residual gate weight
         if self.sublayer_gating:
             if not self.norm_first:
                 raise ValueError("Do not use sublayer_gating=True with norm_first=False.")
-            self.bias_ffn1_gate_alpha  = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
-            self.bias_attn_gate_alpha  = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
-            self.bias_conv_gate_alpha  = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
-            self.bias_ffn2_gate_alpha  = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_ffn1_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_attn_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_conv_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_ffn2_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
 
         # First half-step FFN (expansion factor 0.5)
         self.norm_ffn1 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
@@ -365,26 +366,26 @@ class ConformerBlock(nn.Module):
                 hidden_dim=int(mlp_ratio * d_model // 2),
                 dropout=dropout,
             )
-        
+
         # Multi-head self-attention
         self.norm_attn = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
         self.attn = Attention(d_model, num_heads, qkv_bias=qkv_bias, attn_drop=dropout, proj_drop=dropout)
-        
+
         self.norm_conv = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
         self.conv_block_type == "default"
         # Depthwise convolution
         if not is_causal:
             self.conv = nn.Sequential(
-                #nn.Conv1d(
+                # nn.Conv1d(
                 nn.Conv2d(
-                    d_model, 
-                    d_model, 
-                    #kernel_size=conv_kernel_size,
+                    d_model,
+                    d_model,
+                    # kernel_size=conv_kernel_size,
                     kernel_size=(1, conv_kernel_size),
-                    padding=(0,conv_kernel_size // 2),
-                    dilation=(1,1),
-                    stride=(1,1),
-                    #padding=conv_kernel_size // 2,
+                    padding=(0, conv_kernel_size // 2),
+                    dilation=(1, 1),
+                    stride=(1, 1),
+                    # padding=conv_kernel_size // 2,
                     groups=d_model,  # Depthwise
                 ),
                 nn.GELU(),
@@ -395,8 +396,8 @@ class ConformerBlock(nn.Module):
             self.conv = nn.Sequential(
                 nn.ConstantPad1d((to_be_padded, 0), 0.0),
                 nn.Conv1d(
-                    d_model, 
-                    d_model, 
+                    d_model,
+                    d_model,
                     kernel_size=conv_kernel_size,
                     padding=0,
                     groups=d_model,  # Depthwise
@@ -404,7 +405,7 @@ class ConformerBlock(nn.Module):
                 nn.GELU(),
                 nn.Dropout(dropout),
             )
-        
+
         # Second half-step FFN
         self.norm_ffn2 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
         if mlp_type == "swiglu":
@@ -416,9 +417,8 @@ class ConformerBlock(nn.Module):
                 hidden_dim=int(mlp_ratio * d_model // 2),
                 dropout=dropout,
             )
-        
-        self.dropout = nn.Dropout(dropout)
 
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, attn_mask=None, output_attentions: bool = False):
         # x shape: (B, N, C) where N is sequence length, C is d_model
@@ -443,7 +443,7 @@ class ConformerBlock(nn.Module):
             residual = x
             x = self.norm_conv(x)
             if self.conv_block_type != "default":
-                x = self.conv(x)   # transpose done within corresp. class
+                x = self.conv(x)  # transpose done within corresp. class
             else:
                 # Conv1d expects (B, C, N)
                 x = x.transpose(1, 2).unsqueeze(2)
@@ -483,7 +483,6 @@ class ConformerBlock(nn.Module):
         if output_attentions:
             return x, attn_weights
         return x
-
 
 
 class TransformerBlockCrossAttention(nn.Module):
