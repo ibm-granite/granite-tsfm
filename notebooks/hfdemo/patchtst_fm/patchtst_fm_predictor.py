@@ -9,8 +9,9 @@ import torch
 from gluonts.itertools import batcher
 from gluonts.model import Forecast
 from gluonts.model.forecast import QuantileForecast
-from tqdm.auto import tqdm
 from scipy import interpolate
+from tqdm.auto import tqdm
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -60,7 +61,6 @@ class PatchTSTFMEvalPredictor:
         return target
 
     def fill_nan(self, seq, min_len=65):
-
         # pad when shorter than min_len
         if len(seq) < min_len:
             seq = np.concatenate([np.ones(min_len - len(seq)) * seq[0], seq])
