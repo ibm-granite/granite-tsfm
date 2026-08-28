@@ -9,6 +9,7 @@ import torch
 from gluonts.itertools import batcher
 from gluonts.model import Forecast
 from gluonts.model.forecast import QuantileForecast
+from scipy import interpolate
 from tqdm.auto import tqdm
 
 
@@ -23,6 +24,7 @@ class PatchTSTFMEvalPredictor:
         prediction_length,
         dataset_name,
         quantile_levels=None,
+        use_fill_nan=False,  # backward compatibility with r1
     ):
         self.model = model
         self.model.eval()
@@ -35,6 +37,8 @@ class PatchTSTFMEvalPredictor:
         self.dataset_properties = pd.read_csv(os.path.join(cur_path, "GIFT_EVAL_META.csv"), index_col="dataset")
         self.freq = self.dataset_properties.loc[self.dataset_name, "freq"]
         self.quantile_levels = quantile_levels
+        self.use_fill_nan = use_fill_nan
+
         logging.info(f"{'=' * 10} Dataset Info {'=' * 10}")
         logging.info(f"Dataset name: {self.dataset_name}")
         logging.info(f"Frequency: {self.freq}")
@@ -45,6 +49,8 @@ class PatchTSTFMEvalPredictor:
         target = []
         for entry in raw:
             t = entry["target"]
+            if self.use_fill_nan:
+                t = self.fill_nan(t)
             if any(np.isnan(t)):
                 if all(np.isnan(t)):
                     t = np.zeros_like(t)
@@ -53,6 +59,39 @@ class PatchTSTFMEvalPredictor:
 
             target.append(torch.from_numpy(t).float().to(self.device))
         return target
+
+    def fill_nan(self, seq, min_len=65):
+        # pad when shorter than min_len
+        if len(seq) < min_len:
+            seq = np.concatenate([np.ones(min_len - len(seq)) * seq[0], seq])
+
+        # dealing with nans in sequence
+        # no nan
+        if not np.isnan(seq).any():
+            return seq
+
+        # only nan
+        if not (~np.isnan(seq)).any():
+            return np.zeros_like(seq)
+
+        # remove nan at beginning
+        first_ix = np.isnan(seq).argmin()
+        seq = seq[first_ix:]
+
+        if len(seq) < min_len:
+            seq = np.concatenate([np.ones(min_len - len(seq)) * seq[0], seq])
+
+        # fill nan at the end
+        last_ix = np.flip(np.isnan(seq), axis=0).argmin()
+        if last_ix != 0:
+            seq[-last_ix:] = seq[-(last_ix + 1)]
+
+        # interpolate inf values
+        inds = np.arange(seq.shape[0])
+        good = np.where(np.isfinite(seq))
+        f = interpolate.interp1d(inds[good], seq[good], bounds_error=False)
+        nanfree = np.where(np.isfinite(seq), seq, f(inds))
+        return nanfree
 
     @torch.no_grad()
     def predict(self, test_data_input, batch_size=2048, *args, **kwargs) -> List[Forecast]:
@@ -67,12 +106,13 @@ class PatchTSTFMEvalPredictor:
                         continue
                     target = self.preprocess(raw)
 
-                    # with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.bf16):
-                    model_outputs = self.model(
-                        past_values=target,
-                        prediction_length=self.prediction_length,
-                        quantile_levels=self.quantile_levels,
-                    )
+                    with torch.inference_mode():
+                        model_outputs = self.model(
+                            past_values=target,
+                            prediction_length=self.prediction_length,
+                            quantile_levels=self.quantile_levels,
+                        )
+                        torch.cuda.synchronize()
                     pred_quantiles = [
                         (x.squeeze(-1) if input_ndim == 1 else x).cpu().numpy() for x in model_outputs.quantile_outputs
                     ]

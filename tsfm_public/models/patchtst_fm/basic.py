@@ -107,7 +107,20 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        attn_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns:
+            - x                          when output_attentions=False  (normal path)
+            - (x, attn_weights)          when output_attentions=True
+              attn_weights shape (3-D input): (B, num_heads, N, N)
+              The weights are computed in fp32 via an explicit softmax; the main
+              forward pass always uses the fused SDPA kernel unchanged.
+        """
         if x.ndim == 3:
             B, N, C = x.shape
             qkv = (
@@ -143,7 +156,32 @@ class Attention(nn.Module):
             raise ValueError(f"Unsupported input dimension: {x.ndim}")
         x = self.proj(x)
         x = self.proj_drop(x)
-        return x
+
+        if not output_attentions:
+            return x
+
+        # The following is for attention visualization
+        assert (
+            not self.training
+        ), "output_attentions must not be used during training (pass --record_attention only at eval/inference time)"
+        with torch.no_grad():
+            q_fp32 = q.float()
+            k_fp32 = k.float()
+            if q_fp32.ndim == 5:
+                # 4-D input path: q/k are (B, H, M, N, Hd) — collapse M by mean
+                q_fp32 = q_fp32.mean(dim=2)  # (B, H, N, Hd)
+                k_fp32 = k_fp32.mean(dim=2)
+            # Build score matrix (B, H, N, N)
+            scores = torch.matmul(q_fp32, k_fp32.transpose(-2, -1)) * self.scale
+            if attn_mask is not None:
+                mask_fp32 = attn_mask.float()
+                # Identify rows that are all -inf (i.e. fully padded query rows)
+                # and replace those rows with 0 so softmax gives uniform weights.
+                all_masked_rows = (mask_fp32 <= -1e4).all(dim=-1, keepdim=True)  # (B, 1, N, 1)
+                safe_mask = mask_fp32.masked_fill(all_masked_rows.expand_as(mask_fp32), 0.0)
+                scores = scores + safe_mask
+            attn_weights = torch.softmax(scores, dim=-1)  # (B, H, N, N)
+        return x, attn_weights
 
 
 class CrossAttention(nn.Module):
@@ -234,11 +272,12 @@ class TransformerBlock(nn.Module):
         norm_first=True,
         norm_layer=nn.LayerNorm,
         mlp_type="mlp",
+        qkv_bias=True,
     ):
         super().__init__()
         self.norm_first = norm_first
         self.norm1 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
-        self.attn = Attention(d_model, num_heads, qkv_bias=True, attn_drop=dropout, proj_drop=dropout)
+        self.attn = Attention(d_model, num_heads, qkv_bias=qkv_bias, attn_drop=dropout, proj_drop=dropout)
         self.norm2 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
         if mlp_type == "swiglu":
             self.mlp = SwiGLU(d_model, d_model, hidden_dim=int(mlp_ratio * d_model), dropout=dropout)
@@ -253,16 +292,195 @@ class TransformerBlock(nn.Module):
             raise ValueError(f"Unsupported MLP type: {mlp_type}")
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, attn_mask=None, output_attentions: bool = False):
         if self.norm_first:
-            x_norm1 = self.norm1(x)
-            x_self_attn = self.attn(x_norm1, attn_mask)
-
-            x = x + x_self_attn
+            attn_out = self.attn(self.norm1(x), attn_mask, output_attentions=output_attentions)
+            if output_attentions:
+                attn_out, attn_weights = attn_out
+            x = x + attn_out
             x = x + self.dropout(self.mlp(self.norm2(x)))
         else:
-            x = self.norm1(x + self.attn(x, attn_mask))
+            attn_out = self.attn(x, attn_mask, output_attentions=output_attentions)
+            if output_attentions:
+                attn_out, attn_weights = attn_out
+            x = self.norm1(x + attn_out)
             x = self.norm2(x + self.dropout(self.mlp(x)))
+        if output_attentions:
+            return x, attn_weights
+        return x
+
+
+class ConformerBlock(nn.Module):
+    """
+    Conformer block combining Transformer attention with convolution.
+    Architecture: FFN(half) -> Attention -> Convolution -> FFN(half)
+    """
+
+    def __init__(
+        self,
+        d_model,
+        num_heads,
+        conv_kernel_size=31,
+        is_causal=False,
+        mlp_ratio=4.0,
+        dropout=0.1,
+        norm_first=True,
+        norm_layer=nn.LayerNorm,
+        mlp_type="mlp",
+        conv_block_type="default",
+        ssm_state_dim=16,
+        qkv_bias=True,
+        sublayer_gating=False,
+        sublayer_gating_init_value=1e-4,
+    ):
+        """
+        conv_block_type = {"default", "ssm", "esp" }
+        """
+        super().__init__()
+        self.norm_first = norm_first
+        self.conv_block_type = conv_block_type
+        self.is_causal = (
+            is_causal  # will make the convo block causal (left padding only), allows for even-numbered size, too
+        )
+        self.sublayer_gating = sublayer_gating  # this might get removed in the future
+        self.sublayer_gating_init_value = sublayer_gating_init_value
+
+        # residual gate weight
+        if self.sublayer_gating:
+            if not self.norm_first:
+                raise ValueError("Do not use sublayer_gating=True with norm_first=False.")
+            self.bias_ffn1_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_attn_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_conv_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+            self.bias_ffn2_gate_alpha = nn.Parameter(torch.tensor(self.sublayer_gating_init_value))
+
+        # First half-step FFN (expansion factor 0.5)
+        self.norm_ffn1 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
+        if mlp_type == "swiglu":
+            self.ffn1 = SwiGLU(d_model, d_model, hidden_dim=int(mlp_ratio * d_model // 2), dropout=dropout)
+        else:
+            self.ffn1 = MLP(
+                in_dim=d_model,
+                out_dim=d_model,
+                hidden_dim=int(mlp_ratio * d_model // 2),
+                dropout=dropout,
+            )
+
+        # Multi-head self-attention
+        self.norm_attn = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
+        self.attn = Attention(d_model, num_heads, qkv_bias=qkv_bias, attn_drop=dropout, proj_drop=dropout)
+
+        self.norm_conv = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
+        self.conv_block_type == "default"
+        # Depthwise convolution
+        if not is_causal:
+            self.conv = nn.Sequential(
+                # nn.Conv1d(
+                nn.Conv2d(
+                    d_model,
+                    d_model,
+                    # kernel_size=conv_kernel_size,
+                    kernel_size=(1, conv_kernel_size),
+                    padding=(0, conv_kernel_size // 2),
+                    dilation=(1, 1),
+                    stride=(1, 1),
+                    # padding=conv_kernel_size // 2,
+                    groups=d_model,  # Depthwise
+                ),
+                nn.GELU(),
+                nn.Dropout(dropout),
+            )
+        else:
+            to_be_padded = conv_kernel_size - 1
+            self.conv = nn.Sequential(
+                nn.ConstantPad1d((to_be_padded, 0), 0.0),
+                nn.Conv1d(
+                    d_model,
+                    d_model,
+                    kernel_size=conv_kernel_size,
+                    padding=0,
+                    groups=d_model,  # Depthwise
+                ),
+                nn.GELU(),
+                nn.Dropout(dropout),
+            )
+
+        # Second half-step FFN
+        self.norm_ffn2 = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
+        if mlp_type == "swiglu":
+            self.ffn2 = SwiGLU(d_model, d_model, hidden_dim=int(mlp_ratio * d_model // 2), dropout=dropout)
+        else:
+            self.ffn2 = MLP(
+                in_dim=d_model,
+                out_dim=d_model,
+                hidden_dim=int(mlp_ratio * d_model // 2),
+                dropout=dropout,
+            )
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, attn_mask=None, output_attentions: bool = False):
+        # x shape: (B, N, C) where N is sequence length, C is d_model
+
+        if self.norm_first:
+            # First half-step FFN
+            if not self.sublayer_gating:
+                x = x + 0.5 * self.dropout(self.ffn1(self.norm_ffn1(x)))
+            else:
+                x = x + self.bias_ffn1_gate_alpha * 0.5 * self.dropout(self.ffn1(self.norm_ffn1(x)))
+
+            # Multi-head attention
+            attn_out = self.attn(self.norm_attn(x), attn_mask, output_attentions=output_attentions)
+            if output_attentions:
+                attn_out, attn_weights = attn_out
+            if not self.sublayer_gating:
+                x = x + attn_out
+            else:
+                x = x + self.bias_attn_gate_alpha * attn_out
+
+            # Convolution module
+            residual = x
+            x = self.norm_conv(x)
+            if self.conv_block_type != "default":
+                x = self.conv(x)  # transpose done within corresp. class
+            else:
+                # Conv1d expects (B, C, N)
+                x = x.transpose(1, 2).unsqueeze(2)
+                x = self.conv(x).squeeze(2)
+                x = x.transpose(1, 2)
+            if not self.sublayer_gating:
+                x = residual + self.dropout(x)
+            else:
+                x = residual + self.bias_conv_gate_alpha * self.dropout(x)
+
+            # Second half-step FFN
+            if not self.sublayer_gating:
+                # default
+                x = x + 0.5 * self.dropout(self.ffn2(self.norm_ffn2(x)))
+            else:
+                # weight
+                x = x + self.bias_ffn2_gate_alpha * 0.5 * self.dropout(self.ffn2(self.norm_ffn2(x)))
+        else:
+            # Post-norm variant
+            x = self.norm_ffn1(x + 0.5 * self.dropout(self.ffn1(x)))
+            attn_out = self.attn(x, attn_mask, output_attentions=output_attentions)
+            if output_attentions:
+                attn_out, attn_weights = attn_out
+            x = self.norm_attn(x + attn_out)
+
+            residual = x
+            if self.use_ssm:
+                x = self.conv(x)
+            else:
+                x = x.transpose(1, 2)
+                x = self.conv(x)
+                x = x.transpose(1, 2)
+            x = self.norm_conv(residual + self.dropout(x))
+
+            x = self.norm_ffn2(x + 0.5 * self.dropout(self.ffn2(x)))
+
+        if output_attentions:
+            return x, attn_weights
         return x
 
 
