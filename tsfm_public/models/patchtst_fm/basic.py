@@ -1,5 +1,4 @@
 from typing import Optional, Type
-import math
 
 import torch
 import torch.nn as nn
@@ -162,9 +161,9 @@ class Attention(nn.Module):
             return x
 
         # The following is for attention visualization
-        assert not self.training, (
-            "output_attentions must not be used during training (pass --record_attention only at eval/inference time)"
-        )
+        assert (
+            not self.training
+        ), "output_attentions must not be used during training (pass --record_attention only at eval/inference time)"
         with torch.no_grad():
             q_fp32 = q.float()
             k_fp32 = k.float()
