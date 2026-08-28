@@ -18,7 +18,6 @@ from transformers.utils import ModelOutput, logging
 from .basic import (
     ConformerBlock,
     TransformerBlock,
-    ConformerBlock,
     make_attn_mask,
 )
 from .configuration_patchtst_fm import PatchTSTFMConfig
