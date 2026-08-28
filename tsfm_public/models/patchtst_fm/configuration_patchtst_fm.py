@@ -23,7 +23,7 @@ class PatchTSTFMConfig(PretrainedConfig):
         context_length: int = 8192,
         prediction_length: int = 64,
         d_patch: int = 16,
-        patch_stride: int = None,    # None disables striding and windowing
+        patch_stride: int = None,  # None disables striding and windowing
         patch_loss_windowing: str = None,  # "rectangular", "triangular", "hamming"; must not be None is striding is active
         d_model: int = 384,
         n_head: int = 6,
@@ -50,31 +50,31 @@ class PatchTSTFMConfig(PretrainedConfig):
             prediction_length (int, optional): Number of timesteps in the prediction output. Defaults to 64.
             d_patch (int, optional): Size of patches. Defaults to 16. Context length must be divisible by d_patch.
             patch_stride (int, optional): Stride of patches. Defaults to None, which indicates no striding.
-            patch_loss_windowing (str, optional): Specifies how patches are weighted during loss and combination, used 
+            patch_loss_windowing (str, optional): Specifies how patches are weighted during loss and combination, used
                 when striding. Must be one of "rectangular", "triangular", "hamming" when striding.
             d_model (int, optional): Size of patches after projection before feeding into the transformer layers. Defaults to
                 384.
             n_head (int, optional): Number of attention heads. Defaults to 6.
             n_layer (int, optional): Number of transformer layers. Defaults to 6.
             norm_first (bool, optional): If true, normalization is done first in the transformer layers. Defaults to True.
-            qkv_bias (bool): Indicates if bias should be enabled in linear layers associated with attention qkv calculations. 
+            qkv_bias (bool): Indicates if bias should be enabled in linear layers associated with attention qkv calculations.
                 Defaults to True.
             prehead_norm (bool): Indicates if an additional norm lauer should be addded prior to the quantile head after the
                 backbone layers.
             pretrain_mask_ratio (float, optional): _description_. Defaults to 0.4.
             pretrain_mask_cont (int, optional): Number of contiguous patches to mask during pretraining. Defaults to 8.
-            randomize_cpm (bool): Pretraining flag that indicates when increased randomization of continuous patch masking is 
-                enabled. Defaults to False. 
+            randomize_cpm (bool): Pretraining flag that indicates when increased randomization of continuous patch masking is
+                enabled. Defaults to False.
             num_quantile (int, optional): Number of quantiles to include in the quantile outputs. Defaults to 99.
-            block_type (str, optional): our pipeline supports multiple block types "transformer" and "conformer" 
-            conv_kernel_size: (int | list, optional): specifies kernel size within the conformer convolution sublayer. This can be either 
-                a single int (applies to all blocks uniformly) or a list of integeres, in which case each value applies to 
+            block_type (str, optional): our pipeline supports multiple block types "transformer" and "conformer"
+            conv_kernel_size: (int | list, optional): specifies kernel size within the conformer convolution sublayer. This can be either
+                a single int (applies to all blocks uniformly) or a list of integeres, in which case each value applies to
                 the corresponding block starting from lowest up to n_layer. Note that values<=0 will insert a transformer
-                block (instead of conformer). Example: conv_kernel_size=[5, 3, 0] will configure three blocks as follows: 
+                block (instead of conformer). Example: conv_kernel_size=[5, 3, 0] will configure three blocks as follows:
                 conformer(size 5)->conformer(size 3)->transformer
-            is_causal (bool, optional): if True, the convolution kernel within the convolution sublayer will be applied to the left 
-                of current slot, as opposed to symmetrically. In this setting, even-sized kernel sizes are allowed. 
-            mlp_type (str, optional): Can be "mlp" or "swiglu" - type of FFN within conformer block. 
+            is_causal (bool, optional): if True, the convolution kernel within the convolution sublayer will be applied to the left
+                of current slot, as opposed to symmetrically. In this setting, even-sized kernel sizes are allowed.
+            mlp_type (str, optional): Can be "mlp" or "swiglu" - type of FFN within conformer block.
             use_pruning (bool, optional): When the input tensor has context less than the configured context_length, it will
                 be padded. The leading padding can be pruned to reduce unneccessary computation if value of the earlier
                 indices are not needed. Defaults to True.
@@ -85,8 +85,8 @@ class PatchTSTFMConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.patch_loss_windowing = patch_loss_windowing
         self.n_patch = (
-            (context_length - d_patch) // self.patch_stride + 1 
-            if self.patch_stride is not None 
+            (context_length - d_patch) // self.patch_stride + 1
+            if self.patch_stride is not None
             else int(context_length // d_patch)
         )
         self.d_model = d_model

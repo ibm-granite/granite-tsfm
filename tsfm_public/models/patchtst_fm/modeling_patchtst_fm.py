@@ -100,7 +100,11 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         self.pos_embed = LearnedPositionalEmbedding(d_model=config.d_model, max_len=config.n_patch, type="add")
         assert config.d_model % config.n_head == 0, "[QuantileDecoder] d_model must be divisible by n_head"
         self.is_causal = False if not hasattr(self.config, "is_causal") else self.config.is_causal
-        if self.config.patch_stride is not None and (self.config.patch_stride != self.config.d_patch) and config.patch_loss_windowing is None:
+        if (
+            self.config.patch_stride is not None
+            and (self.config.patch_stride != self.config.d_patch)
+            and config.patch_loss_windowing is None
+        ):
             raise ValueError("Windowing type must be specified with overlapping patch striding.")
 
         # Select block type based on configuration
@@ -115,17 +119,17 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
                 raise ValueError(f"Invalid convolution block type {config.block_type}")
 
         # Create blocks
-        self.max_kernel_size = 0   # will stay 0 for non-conformer models
+        self.max_kernel_size = 0  # will stay 0 for non-conformer models
         if "conformer" in config.block_type:
             kernel_sizes = (
                 config.conv_kernel_size
                 if isinstance(config.conv_kernel_size, list)
                 else [config.conv_kernel_size for _ in range(config.n_layer)]
             )
-            assert (
-                len(kernel_sizes) == config.n_layer
-            ), f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
-            self.max_kernel_size = max(kernel_sizes)  # this is needed for inference pruning 
+            assert len(kernel_sizes) == config.n_layer, (
+                f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
+            )
+            self.max_kernel_size = max(kernel_sizes)  # this is needed for inference pruning
             blst = []
             logmsg = "Stacked blocks: "
             logsep = ""
@@ -191,15 +195,13 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         else:
             self.prehead_norm = None
         self.norm_fn = RevIN(dim=-1, std_min=1e-5, use_sinh=True)
-        
+
         # Patch loss window: shape [1, 1, d_patch], broadcast over [B, N, D]
         if config.patch_loss_windowing is not None:
             w = self._make_patch_window(config.d_patch, config.patch_loss_windowing)
             self.register_buffer("patch_loss_window", w)
 
         self.post_init()
-
-
 
     @staticmethod
     def _make_patch_window(d_patch: int, windowing: str) -> torch.Tensor:
@@ -215,7 +217,6 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             raise ValueError("Uknown patch windowing type", windowing)
         w = w / w.mean()
         return w.view(1, 1, d_patch)
-
 
     def _overlap_add(
         self,
@@ -238,23 +239,22 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         B, _, Q = q_pred.shape
         # Reshape to [B, n_patch, d_patch, Q]
         n_patch = (original_length - d_patch) // stride + 1
-        q_patches = q_pred.reshape(B, n_patch, d_patch, Q)   # [B, N, D, Q]
+        q_patches = q_pred.reshape(B, n_patch, d_patch, Q)  # [B, N, D, Q]
 
         # Window weights [1, 1, d_patch, 1] — same as patch_loss_window but with Q dim
-        win = self.patch_loss_window.squeeze(0).unsqueeze(-1)   # [1, d_patch, 1]
+        win = self.patch_loss_window.squeeze(0).unsqueeze(-1)  # [1, d_patch, 1]
         # win = win.unsqueeze(0)                                   # [1, 1, d_patch, 1]
 
         # accumulate weighted predictions and weight counts
-        accum  = torch.zeros(B, original_length, Q, device=q_pred.device, dtype=q_pred.dtype)
+        accum = torch.zeros(B, original_length, Q, device=q_pred.device, dtype=q_pred.dtype)
         counts = torch.zeros(B, original_length, 1, device=q_pred.device, dtype=q_pred.dtype)
         for i in range(n_patch):
             t_start = i * stride
-            t_end   = t_start + d_patch
-            accum [:, t_start:t_end, :] += q_patches[:, i, :, :] * win  # [B, D, Q]
-            counts[:, t_start:t_end, :] += win                          # [B, D, 1]
+            t_end = t_start + d_patch
+            accum[:, t_start:t_end, :] += q_patches[:, i, :, :] * win  # [B, D, Q]
+            counts[:, t_start:t_end, :] += win  # [B, D, 1]
 
-        return accum / counts.clamp(min=1e-6)   # [B, original_length, Q]
-        
+        return accum / counts.clamp(min=1e-6)  # [B, original_length, Q]
 
     def model_summary(self):
         s = ""
@@ -303,9 +303,13 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         stride = override_patch_stride if override_patch_stride is not None else self.config.patch_stride
         if stride is not None:
             # perform striding
-            x_patch = x_input.unfold(dimension=1, size=self.config.d_patch, step=stride).contiguous()   # [B, n_patch, d_patch]
+            x_patch = x_input.unfold(
+                dimension=1, size=self.config.d_patch, step=stride
+            ).contiguous()  # [B, n_patch, d_patch]
             mask_patch = ts_mask.unfold(dimension=1, size=self.config.d_patch, step=stride).contiguous()
-            pad_patch_mask = pad_mask.unfold(dimension=1, size=self.config.d_patch, step=stride).float().mean(dim=-1).gt(0.9)
+            pad_patch_mask = (
+                pad_mask.unfold(dimension=1, size=self.config.d_patch, step=stride).float().mean(dim=-1).gt(0.9)
+            )
         else:
             # nonstrided branch
             x_patch = x_input.reshape(B, self.config.n_patch, self.config.d_patch)
@@ -318,11 +322,11 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         elif context_length is not None and self.config.use_pruning:
             Tfluff = self.config.context_length - context_length
             if stride is not None:
-                idx = ( 
-                    max((Tfluff - self.config.d_patch) // stride - 
-                        (self.config.d_patch // stride) * 
-                        (self.max_kernel_size // 2), # we account for conv1d kernel edge effect here
-                        0)   
+                idx = max(
+                    (Tfluff - self.config.d_patch) // stride
+                    - (self.config.d_patch // stride)
+                    * (self.max_kernel_size // 2),  # we account for conv1d kernel edge effect here
+                    0,
                 )
             else:
                 idx = Tfluff // self.config.d_patch
@@ -356,19 +360,15 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
 
         loss_mask = (pred_mask & ~pad_mask & ~miss_mask).float()
 
-        if return_loss:   # because if False we save unfolds here
+        if return_loss:  # because if False we save unfolds here
             if stride is not None:
                 # Reindex x_target and loss_mask into strided-patch space [B, n_patch * d_patch]
                 # so they align with q_pred which was produced patch-by-patch.
-                x_target = (
-                    x_target
-                    .unfold(dimension=1, size=self.config.d_patch, step=stride)
-                    .reshape(B, self.config.n_patch * self.config.d_patch)
-                )            
-                loss_mask = (
-                    loss_mask
-                    .unfold(dimension=1, size=self.config.d_patch, step=stride)
-                    .reshape(B, self.config.n_patch*self.config.d_patch)
+                x_target = x_target.unfold(dimension=1, size=self.config.d_patch, step=stride).reshape(
+                    B, self.config.n_patch * self.config.d_patch
+                )
+                loss_mask = loss_mask.unfold(dimension=1, size=self.config.d_patch, step=stride).reshape(
+                    B, self.config.n_patch * self.config.d_patch
                 )
 
         # return here q_pred, loss_mask, and x_target
@@ -380,8 +380,15 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             attentions=all_attn,
         )
 
-    def decode(self, x, mask, t_pad_mask=None, offset: Optional[int] = 0, output_attentions: bool = False,
-               attn_window: Optional[int] = None):
+    def decode(
+        self,
+        x,
+        mask,
+        t_pad_mask=None,
+        offset: Optional[int] = 0,
+        output_attentions: bool = False,
+        attn_window: Optional[int] = None,
+    ):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
         x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
@@ -390,7 +397,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         else:
             pad_attn_mask = None
 
-        if attn_window is not None:            
+        if attn_window is not None:
             # attention band: position (i, j) is blocked when |i - j| > attn_window
             idx = torch.arange(N, device=x.device)
             band = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs() > attn_window  # [N, N] bool
@@ -465,11 +472,14 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
             # weight by patch_loss_window [1, 1, d_patch] then flatten back.
             cfg = self.backbone.config
             win_loss_mask = (
-                loss_mask    # [B, n_patch*d_patch]
-                .reshape(-1, cfg.n_patch, cfg.d_patch)   # [B, n_patch, d_patch]
-                .mul(self.backbone.patch_loss_window)   # broadcast [1,1,d_patch]
-                .reshape(-1, cfg.n_patch * cfg.d_patch)  # [B, n_patch*d_patch]
-            ) if cfg.patch_loss_windowing is not None else loss_mask
+                (
+                    loss_mask.reshape(-1, cfg.n_patch, cfg.d_patch)  # [B, n_patch*d_patch]  # [B, n_patch, d_patch]
+                    .mul(self.backbone.patch_loss_window)  # broadcast [1,1,d_patch]
+                    .reshape(-1, cfg.n_patch * cfg.d_patch)  # [B, n_patch*d_patch]
+                )
+                if cfg.patch_loss_windowing is not None
+                else loss_mask
+            )
             loss = loss * win_loss_mask.unsqueeze(-1)
             loss = loss.sum(dim=1) / torch.clamp(win_loss_mask.sum(dim=1, keepdim=True), min=1)
             loss = loss.sum(dim=-1).mean() / math.sqrt(self.config.num_quantile)
@@ -660,7 +670,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         context_length: int,
         input_pad_mask: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = False,
-        attn_window: Optional[int] = None, 
+        attn_window: Optional[int] = None,
     ) -> tuple[torch.Tensor, Any]:
         # x: batch size x context x features
         # observed_inputs_mask: batch size x context x features
@@ -754,18 +764,20 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 context_length=context,
                 attn_window=attn_window,
             )
-            outputs = model_output.quantile_outputs   # [B*N_ch, strided_T or orig_T, Q]
+            outputs = model_output.quantile_outputs  # [B*N_ch, strided_T or orig_T, Q]
 
         # Perform destriding if applicable
-        if (hasattr(self.backbone.config, "patch_stride") and 
-            self.backbone.config.patch_stride is not None and 
-            self.backbone.config.patch_stride != self.backbone.config.d_patch):
+        if (
+            hasattr(self.backbone.config, "patch_stride")
+            and self.backbone.config.patch_stride is not None
+            and self.backbone.config.patch_stride != self.backbone.config.d_patch
+        ):
             # outputs is in strided-patch space; fold back to original axis
             outputs = self.backbone._overlap_add(
                 outputs,
                 original_length=self.backbone.config.context_length,
                 stride=self.backbone.config.patch_stride,
-            )   # [B*N_ch, context_length, Q]
+            )  # [B*N_ch, context_length, Q]
 
         outputs = outputs.permute(0, 2, 1)
         outputs = self.backbone.norm_fn.inverse_transform(outputs)
@@ -944,20 +956,22 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 override_patch_stride=None,
                 context_length=max_context_length,
             )
-            outputs = model_output.quantile_outputs   # [B*N_ch, strided_T or orig_T, Q]
+            outputs = model_output.quantile_outputs  # [B*N_ch, strided_T or orig_T, Q]
 
         # Perform destriding if applicable
-        if (hasattr(self.backbone.config, "patch_stride") and 
-            self.backbone.config.patch_stride is not None and 
-            self.backbone.config.patch_stride != self.backbone.config.d_patch):
+        if (
+            hasattr(self.backbone.config, "patch_stride")
+            and self.backbone.config.patch_stride is not None
+            and self.backbone.config.patch_stride != self.backbone.config.d_patch
+        ):
             # outputs is in strided-patch space; fold back to original axis
             outputs = self.backbone._overlap_add(
                 outputs,
                 original_length=self.backbone.config.context_length,
                 stride=self.backbone.config.patch_stride,
-            )   # [B*N_ch, context_length, Q]
+            )  # [B*N_ch, context_length, Q]
 
-        outputs = outputs.permute(0, 2, 1)   # [B*N_ch, Q, T]
+        outputs = outputs.permute(0, 2, 1)  # [B*N_ch, Q, T]
         outputs = self.backbone.norm_fn.inverse_transform(outputs)
         outputs = rearrange(outputs, "(B N) Q T -> B Q T N", B=batch_size)
 
