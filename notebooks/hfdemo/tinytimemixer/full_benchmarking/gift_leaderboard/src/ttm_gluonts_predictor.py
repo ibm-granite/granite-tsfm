@@ -13,7 +13,7 @@ import pandas as pd
 import torch
 from gluonts.dataset.split import InputDataset, LabelDataset, TrainingDataset
 from gluonts.itertools import batcher
-from gluonts.model.forecast import QuantileForecast
+from gluonts.model.forecast import QuantileForecast, SampleForecast
 from scipy.stats import norm
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
@@ -125,6 +125,7 @@ class TTMGluonTSPredictor:
         self.insample_forecast = insample_forecast
         self.insample_use_train = insample_use_train
         self.plot_predictions = plot_predictions
+        self.prediction_channel_indices = []
         self.quantile_keys = [
             "0.1",
             "0.2",
@@ -591,6 +592,7 @@ class TTMGluonTSPredictor:
                 dset_train=dset_train_actual,
                 global_scaler=self.scaler,
                 use_train=self.insample_use_train,
+                prediction_channel_indices = self.prediction_channel_indices
             )
 
         if self.train_num_samples <= 10:
@@ -604,6 +606,7 @@ class TTMGluonTSPredictor:
         global_scaler,
         batch_size=128,
         use_train=False,
+        prediction_channel_indices = []
     ):
         if len(dset_valid) == 1:
             dataset = ConcatDataset((dset_train, dset_valid))
@@ -633,11 +636,14 @@ class TTMGluonTSPredictor:
             series_ids.extend(batch["item_id"])
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_true_unscaled = global_scaler.inverse_transform(y_true, series_ids)
+        if len(prediction_channel_indices) > 0:
+            y_true_unscaled = y_true_unscaled[:, :, prediction_channel_indices]
+        
 
         # Get validation predictions
         valid_preds_out = hf_trainer.predict(dataset)
         y_pred = valid_preds_out.predictions[0]
-        y_pred_unscaled = global_scaler.inverse_transform(y_pred, series_ids)
+        y_pred_unscaled = global_scaler.inverse_transform(y_pred, series_ids, prediction_channel_indices)
 
         # Create a pands dataframe
         # Flatten (H, C) into 2D arrays
@@ -919,7 +925,7 @@ class TTMGluonTSPredictor:
 
                     all_quantile_forecasts = self.compute_quantile_forecasts(dataloader, self.quantiles)
 
-                forecast_samples = np.array(all_quantile_forecasts)
+                    forecast_samples = np.array(all_quantile_forecasts)
                 if forecast_samples.shape[-1] == 1:
                     forecast_samples = np.squeeze(forecast_samples, axis=-1)
                 break
@@ -934,14 +940,23 @@ class TTMGluonTSPredictor:
         sample_forecasts = []
         for item, ts in zip(forecast_samples, test_data_input):
             forecast_start_date = ts["start"] + len(ts["target"])
-            sample_forecasts.append(
-                QuantileForecast(
-                    forecast_arrays=item,
-                    start_date=forecast_start_date,
-                    forecast_keys=self.quantile_keys,
-                    item_id=ts["item_id"],
+            if self.insample_forecast:
+                sample_forecasts.append(
+                    QuantileForecast(
+                        forecast_arrays=item,
+                        start_date=forecast_start_date,
+                        forecast_keys=self.quantile_keys,
+                        item_id=ts["item_id"],
+                    )
                 )
-            )
+            else:
+                sample_forecasts.append(
+                    SampleForecast(
+                        samples= np.expand_dims(item, axis=0), #item,
+                        start_date=forecast_start_date,
+                        item_id=ts["item_id"],
+                    )
+                )
 
         if self.plot_predictions:
             # plot random samples
