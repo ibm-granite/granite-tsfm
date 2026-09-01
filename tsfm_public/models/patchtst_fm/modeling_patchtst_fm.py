@@ -985,13 +985,14 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             x_preds.append(x_pred[:, -forecast_length[i] :])
         return x_preds, model_output.hidden_states
 
-    def compile_backbone(self, mode: str = "reduce-overhead", dynamic: Optional[bool] = True):
+    def compile_backbone(self, mode: str = "reduce-overhead", dynamic: Optional[bool] = True, **kwargs):
         """Compile the model backbone for improved inference speed
 
         Args:
             mode (str, optional): Compilation mode, should be one of "default", "reduce-overhead", or "max-autotune". Defaults
                 to "reduce-overhead".
             dynamic (Optional[bool], optional): If True enables support for dynamic shapes. Defaults to True.
+            kwargs (dict): Additional keyword arguments passed to the torch compile call.
 
         Raises:
             ValueError: Raised if mode is an unsupported mode.
@@ -1005,7 +1006,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         if mode not in ("default", "reduce-overhead", "max-autotune"):
             raise ValueError(f"Unknown torch compile method {mode}")
 
-        self.backbone.compile(mode=mode, dynamic=dynamic)
+        self.backbone.compile(mode=mode, dynamic=dynamic, **kwargs)
         return self
 
 
