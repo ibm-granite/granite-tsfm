@@ -393,10 +393,10 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
         x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
-        if t_pad_mask is not None and t_pad_mask.any():
+
+        pad_attn_mask = None
+        if t_pad_mask is not None:
             pad_attn_mask = make_attn_mask(t_pad_mask, t_pad_mask).unsqueeze(1)
-        else:
-            pad_attn_mask = None
 
         if attn_window is not None:
             # attention band: position (i, j) is blocked when |i - j| > attn_window
