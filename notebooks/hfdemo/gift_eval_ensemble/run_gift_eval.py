@@ -1,0 +1,524 @@
+import argparse
+import json
+import logging
+import os
+import time
+import traceback
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from gift_eval_windows import get_gift_ensemble_predictions_df, get_test_window_lengths
+
+
+from dotenv import load_dotenv
+
+from gift_eval.data import Dataset
+from gluonts.ev.metrics import (
+    MAE,
+    MAPE,
+    MASE,
+    MSE,
+    MSIS,
+    ND,
+    NRMSE,
+    RMSE,
+    SMAPE,
+    MeanWeightedSumQuantileLoss,
+)
+from gluonts.model.evaluation import evaluate_forecasts
+from gluonts.model.forecast import QuantileForecast
+from gluonts.time_feature import get_seasonality
+from tqdm import tqdm
+import random
+import torch
+
+logging.getLogger("gluonts.model.predictor").setLevel(logging.ERROR)
+logging.getLogger("gluonts.model.forecast").setLevel(logging.ERROR)
+import warnings
+
+warnings.filterwarnings("ignore")
+
+load_dotenv()
+
+DATASET_PROPERTIES_FILE = Path(__file__).with_name("dataset_properties.json")
+
+CONFIGURATIONS = {}
+CONFIGURATIONS["probability-ensemble-uniform-ibm-tsfm-pt"] = {
+    "model_names": (
+        "patchtst-fm-r1",
+        "granite-patchtst-fm-r1",
+        "flowstate-r1.1",
+        "granite-flowstate-r1.1",
+        "ttm-r3-pt",
+        "granite-patchtst-fm-r2",
+    ),
+    "ensemble": "probability_space_aggregation",
+}
+
+CONFIGURATIONS["probability-ensemble-uniform-ibm-tsfm-granite-pt"] = {
+    "model_names": (
+        "granite-patchtst-fm-r1",
+        "granite-flowstate-r1.1",
+        "granite-ttm-r3",
+        "granite-patchtst-fm-r2",
+    ),
+    "ensemble": "probability_space_aggregation",
+}
+
+QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+pretty_names = {
+    "saugeenday": "saugeen",
+    "temperature_rain_with_missing": "temperature_rain",
+    "kdd_cup_2018_with_missing": "kdd_cup_2018",
+    "car_parts_with_missing": "car_parts",
+}
+
+
+# Define datasets and fallback model
+short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
+all_datasets = list(set(short_datasets.split() + med_long_datasets.split()))
+dataset_properties_map = json.loads(DATASET_PROPERTIES_FILE.read_text())
+
+
+# Auxiliary functions
+def set_seed(seed):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def extract_quantiles_prediction(df):
+    """Extract quantiles predictions and convert them into glutonts compatible format
+    The input df should have fields 'quantiles_0' to 'quantiles_8'
+    """
+    quantiles = []
+    for i in range(9):
+        quantiles.append(df[f"quantile_{i}"])
+
+    stacked_lists = [np.stack(li, axis=0) for li in quantiles]
+    combined = np.stack(stacked_lists, axis=1)
+    quantile_forecasts = [
+        QuantileForecast(
+            forecast_arrays=x,
+            start_date=pd.Period(df["future_start"].iloc[i], freq=df["frequency"].iloc[i]),
+            forecast_keys=[
+                "0.1",
+                "0.2",
+                "0.3",
+                "0.4",
+                "0.5",
+                "0.6",
+                "0.7",
+                "0.8",
+                "0.9",
+            ],
+        )
+        for i, x in enumerate(combined)
+    ]
+    return quantile_forecasts
+
+
+def eval_gift_dataset(dataset, ds_config, df):
+    print(f"Processing {ds_config}")
+    test_data = dataset.test_data
+    L: Any = test_data.prediction_length
+    season_length = get_seasonality(dataset.freq)
+
+    pred_cols = pd.json_normalize(df["final_pred"])
+    df = df.drop(columns=["final_pred"]).join(pred_cols)
+    quantile_forecasts = extract_quantiles_prediction(df)
+
+    metrics = [
+        MSE(forecast_type="mean"),
+        MSE(forecast_type=0.5),
+        MAE(),
+        MASE(),
+        MAPE(),
+        SMAPE(),
+        MSIS(),
+        RMSE(),
+        NRMSE(),
+        ND(),
+        MeanWeightedSumQuantileLoss(quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
+    ]
+
+    results = evaluate_forecasts(
+        forecasts=quantile_forecasts,
+        test_data=test_data,
+        metrics=metrics,
+        axis=None,
+        mask_invalid_label=True,
+        allow_nan_forecast=False,
+        seasonality=season_length,
+    )
+    results.insert(loc=0, column="dataset", value=ds_config)
+    return results
+
+
+def reformatted_metrics_for_leaderboard(row):
+    reformatted = {}
+    # .columns will give the keys, .iloc[0] will get the value for the first (only) row
+    for key in row.columns:
+        if key == "dataset":
+            continue
+        else:
+            reformatted[f"eval_metrics/{key}"] = row.iloc[0][key]
+    return reformatted
+
+
+def append_leaderboard_result(output_path, dataset_config, model_name, metrics, domain, num_variates):
+    row = {
+        "dataset": dataset_config,
+        "model": model_name,
+        **metrics,
+        "domain": domain,
+        "num_variates": num_variates,
+    }
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([row]).to_csv(
+        output_path,
+        mode="a",
+        header=not output_path.exists(),
+        index=False,
+    )
+
+
+def get_processed_datasets(out_name):
+    """Get list of datasets already processed in the output file."""
+    if not os.path.exists(out_name):
+        return set()
+    try:
+        df = pd.read_csv(out_name)
+        if "dataset" in df.columns:
+            return set(df["dataset"].unique())
+    except Exception as e:
+        print(f"Warning: Could not read existing results file: {e}")
+    return set()
+
+
+def log_execution_status(error_log_file, dataset_config, success, execution_time, error_message=""):
+    """Log execution status to error log file."""
+    log_entry = {
+        "dataset_config": dataset_config,
+        "success": success,
+        "execution_time_seconds": execution_time,
+        "error_message": error_message,
+        "timestamp": pd.Timestamp.now().isoformat(),
+    }
+    log_df = pd.DataFrame([log_entry])
+    log_df.to_csv(error_log_file, mode="a", header=not os.path.exists(error_log_file), index=False)
+
+
+DATASET_FAST_FIRST = [
+    "us_births/M",
+    "saugeenday/M",
+    "ett1/W",
+    "ett2/W",
+    "us_births/W",
+    "ett2/D",
+    "ett1/D",
+    "us_births/D",
+    "saugeenday/W",
+    "saugeenday/D",
+    "jena_weather/D",
+    "bizitobs_l2c/H",
+    "bizitobs_application",
+    "solar/W",
+    "M_DENSE/D",
+    "ett2/H",
+    "ett1/H",
+    "bizitobs_l2c/5T",
+    "ett1/15T",
+    "ett2/15T",
+    "SZ_TAXI/H",
+    "covid_deaths",
+    "m4_weekly",
+    "solar/D",
+    "jena_weather/H",
+    "m4_hourly",
+    "hierarchical_sales/W",
+    "kdd_cup_2018_with_missing/D",
+    "hospital",
+    "LOOP_SEATTLE/D",
+    "M_DENSE/H",
+    "hierarchical_sales/D",
+    "jena_weather/10T",
+    "restaurant",
+    "car_parts_with_missing",
+    "bizitobs_service",
+    "electricity/W",
+    "SZ_TAXI/15T",
+    "electricity/D",
+    "bitbrains_rnd/H",
+    "solar/H",
+    "m4_daily",
+    "bitbrains_fast_storage/H",
+    "kdd_cup_2018_with_missing/H",
+    "LOOP_SEATTLE/H",
+    "solar/10T",
+    "electricity/H",
+    "LOOP_SEATTLE/5T",
+    "m4_yearly",
+    "m4_quarterly",
+    "bitbrains_rnd/5T",
+    "electricity/15T",
+    "m4_monthly",
+    "bitbrains_fast_storage/5T",
+    "temperature_rain_with_missing",
+]
+
+def resolve_device(device=None):
+    """Select an available inference device, preserving the CLI's auto order."""
+    if device is None:
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    if device not in {"cuda", "cpu", "mps"}:
+        raise ValueError("device must be cuda, cpu, mps, or None")
+    if device == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable; select device='cpu' or use a CUDA host")
+    if device == "mps" and not torch.backends.mps.is_available():
+        raise ValueError("MPS is unavailable; select device='cpu'")
+    return device
+
+
+def run_evaluation(
+    model_name_config="probability-ensemble-uniform-ibm-tsfm-pt",
+    out_dir="results",
+    out_name="all_results.csv",
+    error_log_name="execution_log.csv",
+    skip_processed=False,
+    patchtst_use_fill_nan=False,
+    save_member_results=False,
+    datasets=None,
+    seed=42,
+    device=None,
+):
+    """Run the reference benchmark and return its CSV path.
+
+    Individual task failures are logged and skipped, as in the original CLI.
+    Resumption skips task names already present in the output CSV.
+    """
+    if model_name_config not in CONFIGURATIONS:
+        raise ValueError(f"Unknown model configuration: {model_name_config}")
+    device = resolve_device(device)
+    set_seed(seed)
+    out_dir = str(Path(out_dir) / model_name_config)
+    os.makedirs(out_dir, exist_ok=True)
+    result_filename = out_name
+    out_name = os.path.join(out_dir, out_name)
+    error_log_file = os.path.join(out_dir, error_log_name)
+
+    from ptm_forecasters import build_gift_ensemble
+
+    CANDIDATE_MODELS = CONFIGURATIONS[model_name_config]["model_names"]
+    if "ensemble" in CONFIGURATIONS[model_name_config].keys():
+        ENSEMBLE = CONFIGURATIONS[model_name_config]["ensemble"]
+    else:
+        ENSEMBLE = "probability_space_aggregation"
+
+    # Get already processed datasets if skip_processed is enabled
+    processed_datasets = get_processed_datasets(out_name) if skip_processed else set()
+    if processed_datasets:
+        print(f"Found {len(processed_datasets)} already processed datasets. Skipping them.")
+
+    argv = []
+    # Sort datasets based on number of samples
+    all_datasets = datasets or DATASET_FAST_FIRST
+    # all_datasets = DATASET_FAST_FIRST[0:1] ## UNCOMMENT TO TEST ONE DATASET
+    for ds_name in tqdm(all_datasets, desc="Processing datasets"):
+        ds_key = ds_name.split("/")[0]
+        terms = ["short", "medium", "long"]
+        for term in terms:
+            if (term == "medium" or term == "long") and ds_name not in med_long_datasets.split():
+                continue
+
+            if "/" in ds_name:
+                ds_key = ds_name.split("/")[0]
+                ds_freq = ds_name.split("/")[1]
+                ds_key = ds_key.lower()
+                ds_key = pretty_names.get(ds_key, ds_key)
+            else:
+                ds_key = ds_name.lower()
+                ds_key = pretty_names.get(ds_key, ds_key)
+                ds_freq = dataset_properties_map[ds_key]["frequency"]
+
+            ds_config = f"{ds_key}/{ds_freq}/{term}"
+
+            # Skip if already processed
+            if ds_config in processed_datasets:
+                print(f"Skipping already processed dataset: {ds_config}")
+                continue
+
+            # Track execution time
+            start_time = time.time()
+
+            try:
+                """
+                Initialize the dataset
+                """
+                to_univariate = (
+                    False if Dataset(name=ds_name, term=term, to_univariate=False).target_dim == 1 else True
+                )
+                dataset = Dataset(name=ds_name, term=term, to_univariate=to_univariate)
+                freq_str = str(dataset.freq)
+                season_length = get_seasonality(freq_str.replace("H", "h")) # Using H throws pandas compatibility warning
+                domain = dataset_properties_map[ds_key]["domain"]
+                num_variates = dataset_properties_map[ds_key]["num_variates"]
+                no_daily = "l2c" in ds_name
+
+                # season_length = get_seasonality(str(dataset.freq))
+                dataset_config = f"{ds_key}/{ds_freq}/{term}"
+
+                """
+                Initialize Ensemble Model
+                """
+                ttm_pred_length = None
+                ttm_context_length = None
+                ### TTM model selection needed parameters: min context_length and max pred_length in the dataset
+                if ("ttm-r3-pt" in CANDIDATE_MODELS) | ("granite-ttm-r3" in CANDIDATE_MODELS):
+                    ttm_context_length, ttm_pred_length = get_test_window_lengths(dataset)
+                    print(
+                        f"TTM model updated with context length {ttm_context_length} and prediction length {ttm_pred_length}"
+                    )
+                ############
+                model_pipeline = build_gift_ensemble(
+                    candidate_models=CANDIDATE_MODELS,
+                    ensemble_method=ENSEMBLE,
+                    freq=freq_str,
+                    domain=domain,
+                    term=term,
+                    no_daily=no_daily,
+                    ttm_context_length=ttm_context_length,
+                    ttm_pred_length=ttm_pred_length,
+                    ttm_scaling_data=(
+                        dataset.test_data.input
+                        if ttm_context_length is not None
+                        else None
+                    ),
+                    device=device,
+                    patchtst_use_fill_nan=patchtst_use_fill_nan,
+                    quantile_levels=QUANTILE_LEVELS,
+                )
+
+                """
+                Run & Evaluate Model's prediction
+                """
+
+                prediction_frames = get_gift_ensemble_predictions_df(
+                    dataset,
+                    model_pipeline,
+                    include_member_forecasts=save_member_results,
+                )
+                if save_member_results:
+                    df, member_frames = prediction_frames
+                else:
+                    df = prediction_frames
+                    member_frames = {}
+                out = eval_gift_dataset(dataset, ds_config, df)
+                result_metrics = reformatted_metrics_for_leaderboard(out)
+                append_leaderboard_result(
+                    out_name,
+                    ds_config,
+                    model_name_config,
+                    result_metrics,
+                    domain,
+                    num_variates,
+                )
+
+                expected_forecasts = len(dataset.test_data)
+                for member_name, member_frame in member_frames.items():
+                    if len(member_frame) != expected_forecasts:
+                        logging.warning(
+                            "Not saving %s metrics for %s: received %d of %d forecasts",
+                            member_name,
+                            ds_config,
+                            len(member_frame),
+                            expected_forecasts,
+                        )
+                        continue
+                    member_out = eval_gift_dataset(dataset, ds_config, member_frame)
+                    member_metrics = reformatted_metrics_for_leaderboard(member_out)
+                    member_output_path = Path(out_dir) / "members" / member_name / result_filename
+                    append_leaderboard_result(
+                        member_output_path,
+                        ds_config,
+                        member_name,
+                        member_metrics,
+                        domain,
+                        num_variates,
+                    )
+
+                # Log success
+                execution_time = time.time() - start_time
+                log_execution_status(error_log_file, ds_config, True, execution_time)
+                print(f"✓ Successfully processed {ds_config} in {execution_time:.2f}s")
+
+            except Exception as e:
+                # Log failure
+                execution_time = time.time() - start_time
+                error_message = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+                log_execution_status(error_log_file, ds_config, False, execution_time, error_message)
+                print(f"✗ Error processing {ds_config}: {type(e).__name__}: {str(e)}")
+                print(f"  Full traceback logged to {error_log_file}")
+                # Continue with next dataset instead of crashing
+                continue
+
+    return Path(out_name)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Evaluation script")
+    parser.add_argument(
+        "--out_dir",
+        type=str,
+        default="results",
+    )
+    parser.add_argument("--out_name", type=str, default="all_results.csv")
+    parser.add_argument("--error_log_name", type=str, default="execution_log.csv")
+    parser.add_argument(
+        "--model_name_config",
+        type=str,
+        default="probability-ensemble-uniform-ibm-tsfm-pt",
+        choices=CONFIGURATIONS,
+        help="Ensemble configuration to evaluate",
+    )
+    parser.add_argument("--skip_processed", action="store_true", help="Skip datasets already in output file")
+    parser.add_argument(
+        "--patchtst-use-fill-nan",
+        action="store_true",
+        default=False,
+        help="Fill NaN values in input series for PatchTST-FM forecasters. Defaults to False.",
+    )
+    parser.add_argument(
+        "--save-member-results",
+        action="store_true",
+        help="Save metrics for each ensemble member without rerunning inference.",
+    )
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=None,
+        help="Dataset names to run, e.g. m_dense/D LOOP_SEATTLE/5T. Defaults to the full dataset list.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default=None,
+                        help="Inference device; defaults to CUDA, then MPS, then CPU")
+    return parser.parse_args(argv)
+
+
+
+if __name__ == "__main__":
+    run_evaluation(**vars(parse_args()))
