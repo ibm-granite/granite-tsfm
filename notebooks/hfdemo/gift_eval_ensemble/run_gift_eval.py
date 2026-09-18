@@ -45,42 +45,37 @@ load_dotenv()
 
 DATASET_PROPERTIES_FILE = Path(__file__).with_name("dataset_properties.json")
 
-CONFIGURATIONS = {}
-CONFIGURATIONS["probability-ensemble-uniform-ibm-tsfm-pt"] = {
-    "model_names": (
-        "patchtst-fm-r1",
-        "granite-patchtst-fm-r1",
-        "flowstate-r1.1",
-        "granite-flowstate-r1.1",
-        "ttm-r3-pt",
-        "granite-patchtst-fm-r2",
-    ),
-    "ensemble": "probability_space_aggregation",
-}
 
-CONFIGURATIONS["probability-ensemble-uniform-ibm-tsfm-granite-pt"] = {
-    "model_names": (
-        "granite-patchtst-fm-r1",
-        "granite-flowstate-r1.1",
-        "granite-ttm-r3",
-        "granite-patchtst-fm-r2",
-    ),
-    "ensemble": "probability_space_aggregation",
-}
+def load_experiment_config(path=None):
+    """Load the adjacent JSON by default, independent of the working directory."""
+    path = Path(path) if path is not None else Path(__file__).with_name("experiment_config.json")
+    config = json.loads(path.read_text())
+    configurations = config["configurations"]
+    if not configurations or config["defaults"]["model_name_config"] not in configurations:
+        raise ValueError("The default model_name_config must name a configured experiment.")
+    for name, recipe in configurations.items():
+        if not recipe.get("model_names"):
+            raise ValueError(f"Experiment {name!r} must specify model_names.")
+        if recipe.get("ensemble") not in ("probability_space_aggregation", "quantile_space_aggregation"):
+            raise ValueError(f"Experiment {name!r} has an unsupported ensemble method.")
+    # Benchmark adapters currently emit this fixed quantile grid.
+    if config["quantile_levels"] != [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        raise ValueError("GIFT-Eval adapters require quantile_levels 0.1 through 0.9 in increments of 0.1.")
+    if not config["terms"] or any(term not in ("short", "medium", "long") for term in config["terms"]):
+        raise ValueError("terms must contain short, medium, or long.")
+    return config
 
-QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
-pretty_names = {
-    "saugeenday": "saugeen",
-    "temperature_rain_with_missing": "temperature_rain",
-    "kdd_cup_2018_with_missing": "kdd_cup_2018",
-    "car_parts_with_missing": "car_parts",
-}
-
+EXPERIMENT_CONFIG = load_experiment_config()
+RUN_DEFAULTS = EXPERIMENT_CONFIG["defaults"]
+CONFIGURATIONS = EXPERIMENT_CONFIG["configurations"]
+QUANTILE_LEVELS = EXPERIMENT_CONFIG["quantile_levels"]
+pretty_names = EXPERIMENT_CONFIG["dataset_aliases"]
+short_datasets = " ".join(EXPERIMENT_CONFIG["datasets"]["short"])
+med_long_datasets = " ".join(EXPERIMENT_CONFIG["datasets"]["medium_long"])
+DATASET_FAST_FIRST = EXPERIMENT_CONFIG["datasets"]["fast_first"]
 
 # Define datasets and fallback model
-short_datasets = "m4_yearly m4_quarterly m4_monthly m4_weekly m4_daily m4_hourly electricity/15T electricity/H electricity/D electricity/W solar/10T solar/H solar/D solar/W hospital covid_deaths us_births/D us_births/M us_births/W saugeenday/D saugeenday/M saugeenday/W temperature_rain_with_missing kdd_cup_2018_with_missing/H kdd_cup_2018_with_missing/D car_parts_with_missing restaurant hierarchical_sales/D hierarchical_sales/W LOOP_SEATTLE/5T LOOP_SEATTLE/H LOOP_SEATTLE/D SZ_TAXI/15T SZ_TAXI/H M_DENSE/H M_DENSE/D ett1/15T ett1/H ett1/D ett1/W ett2/15T ett2/H ett2/D ett2/W jena_weather/10T jena_weather/H jena_weather/D bitbrains_fast_storage/5T bitbrains_fast_storage/H bitbrains_rnd/5T bitbrains_rnd/H bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
-med_long_datasets = "electricity/15T electricity/H solar/10T solar/H kdd_cup_2018_with_missing/H LOOP_SEATTLE/5T LOOP_SEATTLE/H SZ_TAXI/15T M_DENSE/H ett1/15T ett1/H ett2/15T ett2/H jena_weather/10T jena_weather/H bitbrains_fast_storage/5T bitbrains_rnd/5T bizitobs_application bizitobs_service bizitobs_l2c/5T bizitobs_l2c/H"
 all_datasets = list(set(short_datasets.split() + med_long_datasets.split()))
 dataset_properties_map = json.loads(DATASET_PROPERTIES_FILE.read_text())
 
@@ -101,7 +96,7 @@ def extract_quantiles_prediction(df):
     The input df should have fields 'quantiles_0' to 'quantiles_8'
     """
     quantiles = []
-    for i in range(9):
+    for i in range(len(QUANTILE_LEVELS)):
         quantiles.append(df[f"quantile_{i}"])
 
     stacked_lists = [np.stack(li, axis=0) for li in quantiles]
@@ -110,17 +105,7 @@ def extract_quantiles_prediction(df):
         QuantileForecast(
             forecast_arrays=x,
             start_date=pd.Period(df["future_start"].iloc[i], freq=df["frequency"].iloc[i]),
-            forecast_keys=[
-                "0.1",
-                "0.2",
-                "0.3",
-                "0.4",
-                "0.5",
-                "0.6",
-                "0.7",
-                "0.8",
-                "0.9",
-            ],
+            forecast_keys=[str(q) for q in QUANTILE_LEVELS],
         )
         for i, x in enumerate(combined)
     ]
@@ -148,7 +133,7 @@ def eval_gift_dataset(dataset, ds_config, df):
         RMSE(),
         NRMSE(),
         ND(),
-        MeanWeightedSumQuantileLoss(quantile_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
+        MeanWeightedSumQuantileLoss(quantile_levels=QUANTILE_LEVELS),
     ]
 
     results = evaluate_forecasts(
@@ -219,63 +204,6 @@ def log_execution_status(error_log_file, dataset_config, success, execution_time
     log_df.to_csv(error_log_file, mode="a", header=not os.path.exists(error_log_file), index=False)
 
 
-DATASET_FAST_FIRST = [
-    "us_births/M",
-    "saugeenday/M",
-    "ett1/W",
-    "ett2/W",
-    "us_births/W",
-    "ett2/D",
-    "ett1/D",
-    "us_births/D",
-    "saugeenday/W",
-    "saugeenday/D",
-    "jena_weather/D",
-    "bizitobs_l2c/H",
-    "bizitobs_application",
-    "solar/W",
-    "M_DENSE/D",
-    "ett2/H",
-    "ett1/H",
-    "bizitobs_l2c/5T",
-    "ett1/15T",
-    "ett2/15T",
-    "SZ_TAXI/H",
-    "covid_deaths",
-    "m4_weekly",
-    "solar/D",
-    "jena_weather/H",
-    "m4_hourly",
-    "hierarchical_sales/W",
-    "kdd_cup_2018_with_missing/D",
-    "hospital",
-    "LOOP_SEATTLE/D",
-    "M_DENSE/H",
-    "hierarchical_sales/D",
-    "jena_weather/10T",
-    "restaurant",
-    "car_parts_with_missing",
-    "bizitobs_service",
-    "electricity/W",
-    "SZ_TAXI/15T",
-    "electricity/D",
-    "bitbrains_rnd/H",
-    "solar/H",
-    "m4_daily",
-    "bitbrains_fast_storage/H",
-    "kdd_cup_2018_with_missing/H",
-    "LOOP_SEATTLE/H",
-    "solar/10T",
-    "electricity/H",
-    "LOOP_SEATTLE/5T",
-    "m4_yearly",
-    "m4_quarterly",
-    "bitbrains_rnd/5T",
-    "electricity/15T",
-    "m4_monthly",
-    "bitbrains_fast_storage/5T",
-    "temperature_rain_with_missing",
-]
 
 def resolve_device(device=None):
     """Select an available inference device, preserving the CLI's auto order."""
@@ -295,16 +223,16 @@ def resolve_device(device=None):
 
 
 def run_evaluation(
-    model_name_config="probability-ensemble-uniform-ibm-tsfm-pt",
-    out_dir="results",
-    out_name="all_results.csv",
-    error_log_name="execution_log.csv",
-    skip_processed=False,
-    patchtst_use_fill_nan=False,
-    save_member_results=False,
-    datasets=None,
-    seed=42,
-    device=None,
+    model_name_config=RUN_DEFAULTS["model_name_config"],
+    out_dir=RUN_DEFAULTS["out_dir"],
+    out_name=RUN_DEFAULTS["out_name"],
+    error_log_name=RUN_DEFAULTS["error_log_name"],
+    skip_processed=RUN_DEFAULTS["skip_processed"],
+    patchtst_use_fill_nan=RUN_DEFAULTS["patchtst_use_fill_nan"],
+    save_member_results=RUN_DEFAULTS["save_member_results"],
+    datasets=RUN_DEFAULTS["datasets"],
+    seed=RUN_DEFAULTS["seed"],
+    device=RUN_DEFAULTS["device"],
 ):
     """Run the reference benchmark and return its CSV path.
 
@@ -340,7 +268,7 @@ def run_evaluation(
     # all_datasets = DATASET_FAST_FIRST[0:1] ## UNCOMMENT TO TEST ONE DATASET
     for ds_name in tqdm(all_datasets, desc="Processing datasets"):
         ds_key = ds_name.split("/")[0]
-        terms = ["short", "medium", "long"]
+        terms = EXPERIMENT_CONFIG["terms"]
         for term in terms:
             if (term == "medium" or term == "long") and ds_name not in med_long_datasets.split():
                 continue
@@ -484,37 +412,38 @@ def parse_args(argv=None):
     parser.add_argument(
         "--out_dir",
         type=str,
-        default="results",
+        default=RUN_DEFAULTS["out_dir"],
     )
-    parser.add_argument("--out_name", type=str, default="all_results.csv")
-    parser.add_argument("--error_log_name", type=str, default="execution_log.csv")
+    parser.add_argument("--out_name", type=str, default=RUN_DEFAULTS["out_name"])
+    parser.add_argument("--error_log_name", type=str, default=RUN_DEFAULTS["error_log_name"])
     parser.add_argument(
         "--model_name_config",
         type=str,
-        default="probability-ensemble-uniform-ibm-tsfm-pt",
+        default=RUN_DEFAULTS["model_name_config"],
         choices=CONFIGURATIONS,
         help="Ensemble configuration to evaluate",
     )
-    parser.add_argument("--skip_processed", action="store_true", help="Skip datasets already in output file")
+    parser.add_argument("--skip_processed", action="store_true", default=RUN_DEFAULTS["skip_processed"], help="Skip datasets already in output file")
     parser.add_argument(
         "--patchtst-use-fill-nan",
         action="store_true",
-        default=False,
-        help="Fill NaN values in input series for PatchTST-FM forecasters. Defaults to False.",
+        default=RUN_DEFAULTS["patchtst_use_fill_nan"],
+        help="Fill NaN values in input series for PatchTST-FM forecasters. Default comes from experiment_config.json.",
     )
     parser.add_argument(
         "--save-member-results",
         action="store_true",
+        default=RUN_DEFAULTS["save_member_results"],
         help="Save metrics for each ensemble member without rerunning inference.",
     )
     parser.add_argument(
         "--datasets",
         nargs="+",
-        default=None,
+        default=RUN_DEFAULTS["datasets"],
         help="Dataset names to run, e.g. m_dense/D LOOP_SEATTLE/5T. Defaults to the full dataset list.",
     )
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default=None,
+    parser.add_argument("--seed", type=int, default=RUN_DEFAULTS["seed"])
+    parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default=RUN_DEFAULTS["device"],
                         help="Inference device; defaults to CUDA, then MPS, then CPU")
     return parser.parse_args(argv)
 
