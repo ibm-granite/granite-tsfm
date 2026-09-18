@@ -14,6 +14,7 @@ from tsfm_public import (
     PatchTSTFMForPrediction, 
     FlowStateForPrediction, 
     TinyTimeMixerForPrediction,
+    TinyTimeMixerForDecomposedPrediction,
     TimeSeriesForecastingPipeline, 
     get_model,
     TimeSeriesPreprocessor
@@ -48,10 +49,10 @@ class ForecastResult:
 
     Fields:
         predicted: Point predictions - mean (TTM trained with MSE) or median (FlowState/PatchTST-fm/TTM trained with MAE)
-        actuals: Ground truth values (if available, o.w. None)
+        actuals: Observations aligned with the forecast horizon (if available, otherwise None)
         predicted_quantiles: Quantile predictions (if quantile_levels specified), with quantile_levels in metadata
         cutoff_dates: End of context timestamps for each sample
-        metadata: Model configuration and quantile levels
+        metadata: Model configuration, quantile levels, and ensemble aggregation method if applicable
     """
 
     success: bool
@@ -370,7 +371,12 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             
             self.ttm_model_key = model_key
             
-            self.model = TinyTimeMixerForPrediction.from_pretrained(self.model_checkpoint, revision = model_key) 
+            model_class = (
+                TinyTimeMixerForDecomposedPrediction
+                if "-dec-" in model_key
+                else TinyTimeMixerForPrediction
+            )
+            self.model = model_class.from_pretrained(self.model_checkpoint, revision=model_key)
 
         # Store context length and prediction length of TTM model
         self._ttm_model_context_length = self.model.config.context_length
