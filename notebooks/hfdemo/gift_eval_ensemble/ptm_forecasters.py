@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Optional
 
-from tsfm_public.toolkit.forecasters import Forecaster
+from tsfm_public.toolkit.forecasters import Forecaster, ForecastResult
 
 import numpy as np
 import torch
@@ -790,7 +790,6 @@ class FlowstateGiftModelForecaster(Forecaster):
 
 from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleTimeSeriesForecast
 from tsfm_public.toolkit.ensemble_aggregation import (
-    EnsembleResult,
     aggregate_linear_pool,
     aggregate_vincent,
 )
@@ -807,13 +806,13 @@ def _single_member_result(predictions, quantile_levels, weights=None):
     """Return a single member unchanged instead of numerically re-aggregating it."""
     quantiles = np.asarray(predictions)[..., 0]
     median = quantiles[..., quantile_levels.index(0.5)]
-    return EnsembleResult(
+    return ForecastResult(
         success=True,
         message="Single model forecast completed successfully.",
-        method="single_member",
         predicted=median.tolist(),
         predicted_quantiles=quantiles.tolist(),
         metadata={
+            "method": "single_member",
             "quantile_levels": quantile_levels,
             "n_models": 1,
             "weights": None,
