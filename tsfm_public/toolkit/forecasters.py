@@ -382,6 +382,17 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         self._ttm_model_context_length = self.model.config.context_length
         self._ttm_model_prediction_length = self.model.config.prediction_length
 
+        pipeline_context_length = requested_context_length_or_data_length
+        if pipeline_context_length > self._ttm_model_context_length:
+            if id_columns or len(data) != pipeline_context_length:
+                raise ValueError(
+                    "Trimming context to the selected TTM model's native length is supported "
+                    "only for a single series with one context window."
+                )
+            # Retain the forecast cutoff while using only the model's native context.
+            pipeline_context_length = self._ttm_model_context_length
+            data = data.tail(pipeline_context_length)
+
         # validate the data
         assert not data.empty, "Input data is empty"
         assert timestamp_column in data.columns, \
@@ -408,7 +419,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             timestamp_column=timestamp_column,
             target_columns=target_columns,
             max_context_length=self.model.config.context_length,
-            context_length=requested_context_length_or_data_length,
+            context_length=pipeline_context_length,
             prediction_length=self._ttm_model_prediction_length,
             batch_size=batch_size,
             impute_method=None,
