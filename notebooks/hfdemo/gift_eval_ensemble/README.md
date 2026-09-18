@@ -1,6 +1,10 @@
-# GIFT-Eval Ensemble
+# GIFT-Eval ensemble replication
 
 Use Python 3.12 and run the commands below from this directory.
+
+This directory contains the benchmark-only implementation used to reproduce
+GIFT-Eval results. For the minimal public ensemble example, see the parent
+directory's [`probabilistic_ensemble_getting_started.ipynb`](../probabilistic_ensemble_getting_started.ipynb).
 
 ## Environment
 
@@ -46,6 +50,8 @@ the same function.
 Ensembles use uniform probability-space aggregation (linear pooling).
 The benchmark uses GIFT-Eval's generated windows and the reference branch's
 TTM scaling and imputation. There is no selectable TTM scaling mode.
+The TTM revision is selected dynamically by `get_model` from the requested
+context length and prediction length; it is intentionally not pinned.
 
 ## Running
 
