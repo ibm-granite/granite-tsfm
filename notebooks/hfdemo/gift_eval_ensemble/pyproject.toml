@@ -3,6 +3,7 @@ name = "gift-eval-ensemble-replication"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "granite-tsfm",
     "transformers==4.57.6",
     "salesforce-gift-eval @ git+https://github.com/SalesforceAIResearch/gift-eval.git",
     "gluonts~=0.15.1",
@@ -13,6 +14,13 @@ dependencies = [
     "pyarrow==22.0.0",
     "toolz==0.12.1",
 ]
+
+[project.optional-dependencies]
+notebooks = ["jupyterlab", "ipykernel", "ipywidgets"]
+testing = ["pytest"]
+
+[tool.uv.sources]
+granite-tsfm = { path = "../../..", editable = true }
 
 [tool.uv]
 package = false
