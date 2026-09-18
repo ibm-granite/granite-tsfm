@@ -7,12 +7,12 @@ This module provides functions for aggregating multiple forecasting models throu
 """
 
 import logging
-from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, Union, Protocol, runtime_checkable
+from typing import Optional, Union, Protocol, runtime_checkable
 
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
+from tsfm_public.toolkit.forecasters import ForecastResult
 
 logger = logging.getLogger(__name__)
 
@@ -23,27 +23,6 @@ class AggregationMethod(str, Enum):
     PROBABILITY_SPACE = "probability_space"
     QUANTILE_SPACE = "quantile_space"
     IQR_WEIGHTED = "iqr_weighted"
-
-
-@dataclass
-class EnsembleResult:
-    """Result from ensemble aggregation operation.
-
-    Attributes:
-        success: Whether the aggregation completed successfully.
-        message: Human-readable status or error message.
-        method: The aggregation method used.
-        predicted: Point predictions (mean or median) from ensemble.
-        predicted_quantiles: Quantile predictions from ensemble aggregation.
-        metadata: Additional information including quantile_levels, weights, etc.
-    """
-
-    success: bool
-    message: str
-    method: Optional[str] = None
-    predicted: Optional[list[list[list[float]]]] = None
-    predicted_quantiles: Optional[list[list[list[list[float]]]]] = None
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -64,7 +43,7 @@ class ForecastEnsembleFn(Protocol):
         **kwargs: Additional keyword arguments (implementation-specific).
 
     Returns:
-        EnsembleResult with aggregated forecasts.
+        ForecastResult with aggregated forecasts and the aggregation method in metadata.
     """
 
     def __call__(
@@ -73,7 +52,7 @@ class ForecastEnsembleFn(Protocol):
         quantile_levels: list[float],
         weights: Union[np.ndarray, list, None] = None,
         **kwargs,
-    ) -> EnsembleResult: ...
+    ) -> ForecastResult: ...
 
 
 
@@ -84,7 +63,7 @@ def aggregate_linear_pool(
     predictions: np.ndarray,
     quantile_levels: list[float],
     weights: Union[np.ndarray, None]= None,
-) -> EnsembleResult:
+) -> ForecastResult:
     """Function for probability space aggregation.
     
     Concatenates predictions across quantiles and models dimensions,
@@ -101,12 +80,12 @@ def aggregate_linear_pool(
                  Must be non-negative and sum to 1.
         
     Returns:
-        EnsembleResult
+        ForecastResult
     """
     inputsOK, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
 
     if not inputsOK:
-        return EnsembleResult(success=inputsOK, message=msg)
+        return ForecastResult(success=inputsOK, message=msg)
 
     # Get the shape information
     # predictions shape: (..., n_quantiles, n_models)
@@ -178,7 +157,7 @@ def aggregate_vincent(
     quantile_levels: list[float],
     weights: Union[np.ndarray, None] = None,
     aggregation= 'median',
-) -> np.ndarray:
+) -> ForecastResult:
     """Vincentian aggregation of quantiles with isotonic regression.
     
     Performs weighted aggregation across ensemble members for each quantile level,
@@ -197,10 +176,10 @@ def aggregate_vincent(
         aggregation: Aggregation method, either 'median' or 'weighted'.
 
     Returns:
-        EnsembleResult with:
+        ForecastResult with:
             - success: True if aggregation succeeded
             - message: Status message
-            - method: The aggregation method used
+            - metadata["method"]: The aggregation method used
             - predicted: Point predictions, shape (n_samples, prediction_length, n_targets)
             - predicted_quantiles: Aggregated quantiles
             - metadata: Dict with quantile_levels, n_models, weights info
@@ -220,7 +199,7 @@ def aggregate_vincent(
 
 
     if not inputsOK:
-        return EnsembleResult(success=inputsOK, message=msg)
+        return ForecastResult(success=inputsOK, message=msg)
     
     predictions = np.asarray(predictions)
     
@@ -233,10 +212,10 @@ def aggregate_vincent(
     leading_size = np.prod(leading_dims) if leading_dims else 1
 
     if len(quantile_levels) != n_quantiles:
-                return EnsembleResult(
+                return ForecastResult(
                     success=False,
                     message=f"For QUANTILE_SPACE aggregation, quantile_levels length ({len(quantile_levels)}) must match n_quantiles dimension ({n_quantiles})",
-                    method="aggregate_vincent",
+                    metadata={"method": "aggregate_vincent"},
                 )
 
     
@@ -344,7 +323,7 @@ def _validate_ensemble_inputs(ensemble_predictions: Union[np.ndarray, list],
 
 
 def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, method:str, msg:str, n_models:int):
-    """Builds EnsembleResult object from aggregated predictions"""
+    """Builds ForecastResult object from aggregated predictions"""
 
     # Compute point predictions only if 0.5 is in quantile_levels
     predicted_list = None
@@ -356,13 +335,13 @@ def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, met
     # Convert to nested lists
     predicted_quantiles_list = aggregated_predictions.tolist()
     
-    return EnsembleResult(
+    return ForecastResult(
         success=True,
         message=msg,
-        method=method,
         predicted=predicted_list,
         predicted_quantiles=predicted_quantiles_list,
         metadata={
+            "method": method,
             "quantile_levels": quantile_levels,
             "n_models": n_models,
             "weights": weights.tolist() if weights is not None else None,
@@ -377,7 +356,7 @@ def aggregate_iqr_weighted(
     weights: Union[np.ndarray, None] = None,
     temperature: float = 1.0,
     max_weight: Optional[float] = None,
-) -> EnsembleResult:
+) -> ForecastResult:
     """IQR-based inverse-uncertainty weighted aggregation with isotonic regression.
 
     For each model computes IQR = upper_quantile - lower_quantile (closest available
@@ -409,7 +388,7 @@ def aggregate_iqr_weighted(
             under that threshold). When None (default) no capping is applied.
 
     Returns:
-        EnsembleResult
+        ForecastResult
 
     Example:
         >>> predictions = np.random.rand(10, 24, 2, 9, 5)
@@ -423,13 +402,13 @@ def aggregate_iqr_weighted(
         ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights
     )
     if not inputsOK:
-        return EnsembleResult(success=inputsOK, message=msg)
+        return ForecastResult(success=inputsOK, message=msg)
 
     if len(quantile_levels) != predictions.shape[-2]:
-        return EnsembleResult(
+        return ForecastResult(
             success=False,
             message=f"For IQR_WEIGHTED aggregation, quantile_levels length ({len(quantile_levels)}) must match n_quantiles dimension ({predictions.shape[-2]})",
-            method="aggregate_iqr_weighted",
+            metadata={"method": "aggregate_iqr_weighted"},
         )
 
     predictions = np.asarray(predictions, dtype=float)
@@ -443,13 +422,13 @@ def aggregate_iqr_weighted(
     if max_weight is not None:
         min_valid = 1.0 / n_models
         if not (min_valid <= max_weight <= 1.0):
-            return EnsembleResult(
+            return ForecastResult(
                 success=False,
                 message=(
                     f"max_weight must be in [1/n_models, 1] = [{min_valid:.6g}, 1.0], "
                     f"got {max_weight}"
                 ),
-                method="aggregate_iqr_weighted",
+                metadata={"method": "aggregate_iqr_weighted"},
             )
 
     # 1. Identify lower / upper quantile indices for IQR

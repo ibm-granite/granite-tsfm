@@ -68,6 +68,7 @@ class QuantileEnsembleTimeSeriesForecast:
             quantile_levels: list[float],
             ensemble_function: ForecastEnsembleFn = aggregate_linear_pool,
             weights=None,
+            **kwargs
     ):
         self.members = members
         self.quantile_levels = quantile_levels
@@ -84,7 +85,9 @@ class QuantileEnsembleTimeSeriesForecast:
                 `forecast_for_ensemble` call.
 
         Returns:
-            EnsembleResult from the aggregation function.
+            ForecastResult from the aggregation function. The aggregation method is
+            recorded in metadata["method"]. Actuals and cutoff dates are not provided
+            by array-only aggregation functions.
         """
 
         # Collect forecasts from all members
@@ -107,7 +110,4 @@ class QuantileEnsembleTimeSeriesForecast:
             ensemble_predictions, self.quantile_levels, weights=self.weights
         )
 
-        # TODO: transform result to match member __call__() structure
-        # basic_result = ...
-        # return basic_result, result
         return result
