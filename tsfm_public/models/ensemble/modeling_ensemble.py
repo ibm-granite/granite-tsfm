@@ -1,7 +1,14 @@
 
 import logging
+from functools import partial
 
-from tsfm_public.toolkit.forecasters import Forecaster
+from tsfm_public.models.ensemble.configuration_ensemble import ProbabilisticEnsembleConfig
+from tsfm_public.toolkit.forecasters import (
+    Forecaster,
+    PatchTSTFMDataFramePipelineForecaster,
+    FlowStateDataFramePipelineForecaster,
+    TinyTimeMixerDataFramePipelineForecaster,
+)
 from tsfm_public.toolkit.ensemble_aggregation import (
     ForecastEnsembleFn,
     aggregate_linear_pool,
@@ -75,6 +82,35 @@ class QuantileEnsembleTimeSeriesForecast:
         self.ensemble_function = ensemble_function
         self.weights = weights
 
+    @classmethod
+    def from_config(cls, config: ProbabilisticEnsembleConfig, device=None):
+        """Construct pretrained members from a validated ensemble recipe.
+
+        Load the recipe with ``ProbabilisticEnsembleConfig.from_pretrained``.
+        TTM selects its revision at inference time from context and horizon.
+        """
+        config.validate()
+        forecasters = {
+            "patchtst": PatchTSTFMDataFramePipelineForecaster,
+            "flowstate": FlowStateDataFramePipelineForecaster,
+            "ttm": TinyTimeMixerDataFramePipelineForecaster,
+        }
+        ensemble_function = aggregate_linear_pool
+        if config.aggregation_method == "iqr_weighted":
+            ensemble_function = partial(aggregate_iqr_weighted, **config.iqr_weighted_options)
+        members = [
+            forecasters[member["forecaster_type"]](
+                device=device, **{key: value for key, value in member.items() if key != "forecaster_type"}
+            )
+            for member in config.members
+        ]
+        return cls(
+            members=members,
+            quantile_levels=list(config.quantile_levels),
+            ensemble_function=ensemble_function,
+            weights=np.asarray(config.weights) if config.weights is not None else None,
+        )
+
 
     def __call__(self, data, **kwargs):
         """Run all member forecasters and aggregate their predictions.
@@ -92,6 +128,7 @@ class QuantileEnsembleTimeSeriesForecast:
 
         # Collect forecasts from all members
         # Each forecast: (n_samples, pred_len, n_targets, n_quantiles)
+        kwargs.setdefault("quantile_levels", self.quantile_levels)
         forecasts = []
         for memb in self.members:
             try:
