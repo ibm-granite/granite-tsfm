@@ -17,7 +17,7 @@ from tsfm_public.toolkit.ensemble_aggregation import (
 )
 import numpy as np
 
-class QuantileEnsembleTimeSeriesForecast:
+class QuantileEnsembleForecaster:
     """Ensemble forecaster that aggregates predictions from multiple member forecasters.
 
     Iterates over member forecasters, collects their outputs via
@@ -38,14 +38,14 @@ class QuantileEnsembleTimeSeriesForecast:
 
     Example:
         >>> # Default: probability space aggregation
-        >>> ensemble = QuantileEnsembleTimeSeriesForecast(
+        >>> ensemble = QuantileEnsembleForecaster(
         ...     members=[forecaster_a, forecaster_b],
         ...     quantile_levels=[0.1, 0.5, 0.9],
         ... )
 
         >>> # Quantile space aggregation via functools.partial
         >>> from functools import partial
-        >>> ensemble = QuantileEnsembleTimeSeriesForecast(
+        >>> ensemble = QuantileEnsembleForecaster(
         ...     members=[forecaster_a, forecaster_b],
         ...     quantile_levels=[0.1, 0.5, 0.9],
         ...     ensemble_function=partial(
@@ -55,14 +55,14 @@ class QuantileEnsembleTimeSeriesForecast:
         ... )
 
         >>> # Custom aggregation function
-        >>> ensemble = QuantileEnsembleTimeSeriesForecast(
+        >>> ensemble = QuantileEnsembleForecaster(
         ...     members=[forecaster_a, forecaster_b],
         ...     quantile_levels=[0.1, 0.5, 0.9],
         ...     ensemble_function=my_custom_aggregator,
         ... )
 
         >>> # IQR-weighted: confident models (narrower intervals) get higher weight
-        >>> ensemble = QuantileEnsembleTimeSeriesForecast(
+        >>> ensemble = QuantileEnsembleForecaster(
         ...     members=[forecaster_a, forecaster_b],
         ...     quantile_levels=[0.1, 0.5, 0.9],
         ...     ensemble_function=aggregate_iqr_weighted,

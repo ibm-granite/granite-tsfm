@@ -30,7 +30,7 @@ class ForecastEnsembleFn(Protocol):
     """Protocol for ensemble aggregation functions.
 
     Any callable satisfying this signature can be used as an ensemble method
-    in QuantileEnsembleTimeSeriesForecast. Extra arguments can be pre-bound
+    in QuantileEnsembleForecaster. Extra arguments can be pre-bound
     using functools.partial before passing the function in.
 
     Args:

@@ -73,7 +73,7 @@ same smoke-test and full-evaluation workflow through `run_evaluation()`.
 Run the benchmark tests with:
 
 ```bash
-uv run --extra testing pytest test_ptm_forecasters.py
+uv run --extra testing pytest
 ```
 
 Some tests and evaluation runs download model checkpoints.
