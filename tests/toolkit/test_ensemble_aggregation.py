@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleTimeSeriesForecast
+from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 from tsfm_public.toolkit.ensemble_aggregation import (
     aggregate_iqr_weighted,
     aggregate_linear_pool,
@@ -52,7 +52,7 @@ class TestEnsembleForecastResult(unittest.TestCase):
 
     def test_ensemble_returns_shared_result(self):
         member = SimpleNamespace(forecast_for_ensemble=lambda data, **kwargs: self.predictions[..., 0])
-        ensemble = QuantileEnsembleTimeSeriesForecast([member], self.levels)
+        ensemble = QuantileEnsembleForecaster([member], self.levels)
         result = ensemble(None)
         self.assertIsInstance(result, ForecastResult)
         self.assertTrue(result.success)

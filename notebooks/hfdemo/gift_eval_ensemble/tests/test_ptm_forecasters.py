@@ -1,7 +1,7 @@
 """Basic tests of PreTrainedModel forecasters
 
-Run from this directory like this:
-$ uv run pytest test_ptm_forecasters.py
+Run from the parent benchmark directory like this:
+$ uv run --extra testing pytest
 
 """
 
@@ -19,7 +19,7 @@ from ptm_forecasters import (
     _single_member_result,
     build_gift_ensemble,
 )
-from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleTimeSeriesForecast
+from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 
 N_QUANTILES = 9  # [0.1, 0.2, ..., 0.9]
 
@@ -153,7 +153,10 @@ def test_recording_forecaster_only_forwards_series_ids_when_supported():
 
     wrapped = RecordingForecaster("fake", FakeForecaster())
     result = wrapped.forecast_for_ensemble(
-        [[1.0, 2.0]], prediction_length=[2], series_ids=["a"]
+        [[1.0, 2.0]],
+        prediction_length=[2],
+        series_ids=["a"],
+        quantile_levels=[index / 10 for index in range(1, 10)],
     )
 
     assert result.shape == (1, 2, 1, N_QUANTILES)
@@ -264,7 +267,7 @@ _ENSEMBLE_CANDIDATE_MODELS = [
 
 
 def test_build_gift_ensemble_returns_correct_type():
-    """build_gift_ensemble returns a QuantileEnsembleTimeSeriesForecast with the
+    """build_gift_ensemble returns a QuantileEnsembleForecaster with the
     expected number of members and quantile levels."""
     ensemble = build_gift_ensemble(
         candidate_models=_ENSEMBLE_CANDIDATE_MODELS,
@@ -272,7 +275,7 @@ def test_build_gift_ensemble_returns_correct_type():
         freq="H",
     )
 
-    assert isinstance(ensemble, QuantileEnsembleTimeSeriesForecast)
+    assert isinstance(ensemble, QuantileEnsembleForecaster)
     assert len(ensemble.members) == len(_ENSEMBLE_CANDIDATE_MODELS), (
         f"Expected {len(_ENSEMBLE_CANDIDATE_MODELS)} members, got {len(ensemble.members)}"
     )

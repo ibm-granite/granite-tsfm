@@ -1,7 +1,7 @@
 # Copyright contributors to the TSFM project
 #
 
-"""Tests for QuantileEnsembleTimeSeriesForecast."""
+"""Tests for QuantileEnsembleForecaster."""
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from tsfm_public.toolkit.forecasters import (
     FlowStateDataFramePipelineForecaster,
     TinyTimeMixerDataFramePipelineForecaster
 )
-from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleTimeSeriesForecast
+from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 from tsfm_public.toolkit.ensemble_aggregation import aggregate_linear_pool
 
 
@@ -24,7 +24,7 @@ N_QUANTILES = len(DEFAULT_QUANTILE_LEVELS)
 
 
 def test_ensemble_call():
-    """QuantileEnsembleTimeSeriesForecast.__call__ should return a valid ForecastResult."""
+    """QuantileEnsembleForecaster.__call__ should return a valid ForecastResult."""
     # Synthetic sinusoidal data: 91 hourly points, 1 target
     n = 91
     t = np.arange(n)
@@ -37,7 +37,7 @@ def test_ensemble_call():
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    ensemble = QuantileEnsembleTimeSeriesForecast(
+    ensemble = QuantileEnsembleForecaster(
         members=[
             PatchTSTFMDataFramePipelineForecaster(
                 model_checkpoint="ibm-research/patchtst-fm-r1",
@@ -74,7 +74,7 @@ def test_ensemble_call():
 
 
 def test_3model_ensemble():
-    """Run QuantileEnsembleTimeSeriesForecast using PatchTST-FM, FlowState and TTM models"""
+    """Run QuantileEnsembleForecaster using PatchTST-FM, FlowState and TTM models"""
     # Synthetic sinusoidal data: 91 hourly points, 1 target
     n = 91
     t = np.arange(n)
@@ -88,7 +88,7 @@ def test_3model_ensemble():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    ensemble = QuantileEnsembleTimeSeriesForecast(
+    ensemble = QuantileEnsembleForecaster(
         members=[
             PatchTSTFMDataFramePipelineForecaster(
                 model_checkpoint="ibm-granite/granite-timeseries-patchtst-fm-r1",

@@ -71,7 +71,7 @@ class TestEnsembleConfig(unittest.TestCase):
         config.aggregation_method = "unknown"
         with patch.object(modeling, "PatchTSTFMDataFramePipelineForecaster") as loader:
             with self.assertRaises(ValueError):
-                modeling.QuantileEnsembleTimeSeriesForecast.from_config(config)
+                modeling.QuantileEnsembleForecaster.from_config(config)
             loader.assert_not_called()
 
     def test_factory_matches_explicit_construction(self):
@@ -94,7 +94,7 @@ class TestEnsembleConfig(unittest.TestCase):
                 ) as flowstate, patch.object(
                     modeling, "TinyTimeMixerDataFramePipelineForecaster", return_value=members[3]
                 ) as ttm:
-                    configured = modeling.QuantileEnsembleTimeSeriesForecast.from_config(config, device="cpu")
+                    configured = modeling.QuantileEnsembleForecaster.from_config(config, device="cpu")
                 self.assertEqual(configured.members, members)
                 self.assertEqual(patchtst.call_args_list[0].kwargs["model_checkpoint"], config.members[0]["model_checkpoint"])
                 self.assertEqual(patchtst.call_args_list[1].kwargs["model_checkpoint"], config.members[1]["model_checkpoint"])
@@ -105,7 +105,7 @@ class TestEnsembleConfig(unittest.TestCase):
                 function = aggregate_linear_pool if method == "linear_pool" else partial(
                     aggregate_iqr_weighted, **config.iqr_weighted_options
                 )
-                explicit = modeling.QuantileEnsembleTimeSeriesForecast(
+                explicit = modeling.QuantileEnsembleForecaster(
                     members, config.quantile_levels, function, weights=np.asarray(config.weights)
                 )
                 result, expected = configured(None), explicit(None)
