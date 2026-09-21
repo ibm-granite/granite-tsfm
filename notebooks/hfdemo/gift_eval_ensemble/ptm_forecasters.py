@@ -235,6 +235,11 @@ class _TTMContextScaler:
 
     def transform(self, target, item_id):
         target = _impute_ttm_series(target)
+        target_for_stats = target.reshape(1, -1) if target.ndim == 1 else target
+        self.mean[item_id] = target_for_stats.mean(axis=1).reshape(-1, 1)
+        std = target_for_stats.std(axis=1).reshape(-1, 1)
+        std[std == 0] = 1
+        self.std[item_id] = std
         return (target - self.mean[item_id].squeeze()) / self.std[item_id].squeeze()
 
     def inverse_transform(self, forecast, item_id):
@@ -788,7 +793,7 @@ class FlowstateGiftModelForecaster(Forecaster):
 # Ensemble factory
 # ---------------------------------------------------------------------------
 
-from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleTimeSeriesForecast
+from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 from tsfm_public.toolkit.ensemble_aggregation import (
     aggregate_linear_pool,
     aggregate_vincent,
@@ -833,6 +838,7 @@ class RecordingForecaster(Forecaster):
 
     def forecast_for_ensemble(self, *args, **kwargs):
         self.last_forecast = None
+        kwargs.pop("quantile_levels", None)
         if not getattr(self.forecaster, "uses_series_ids", False):
             kwargs.pop("series_ids", None)
         self.last_forecast = np.asarray(
@@ -854,8 +860,8 @@ def build_gift_ensemble(
     device: str = "cpu",
     patchtst_use_fill_nan: bool = False,
     quantile_levels: list[float] = _DEFAULT_QUANTILE_LEVELS,
-) -> QuantileEnsembleTimeSeriesForecast:
-    """Build a QuantileEnsembleTimeSeriesForecast from a list of GIFT-eval model version strings.
+) -> QuantileEnsembleForecaster:
+    """Build a QuantileEnsembleForecaster from a list of GIFT-eval model version strings.
 
     Each model version string is mapped to its forecaster class by prefix:
       - "ttm-*" / "granite-ttm-*"                            → TinyTimeMixerPreTrainedGiftModelForecaster
@@ -885,7 +891,7 @@ def build_gift_ensemble(
             [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
 
     Returns:
-        An initialised QuantileEnsembleTimeSeriesForecast ready to call.
+        An initialised QuantileEnsembleForecaster ready to call.
 
     Raises:
         ValueError: If ensemble_method is not recognised or a model version
@@ -950,7 +956,7 @@ def build_gift_ensemble(
                 f"Skipping model '{model_version}': failed to load with error: {e}"
             )
 
-    return QuantileEnsembleTimeSeriesForecast(
+    return QuantileEnsembleForecaster(
         members=members,
         quantile_levels=quantile_levels,
         ensemble_function=(

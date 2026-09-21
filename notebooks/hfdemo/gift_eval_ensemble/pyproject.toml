@@ -27,3 +27,7 @@ package = false
 override-dependencies = [
     "pandas==2.1.4",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
