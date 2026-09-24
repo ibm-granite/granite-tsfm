@@ -39,7 +39,7 @@ class QuantileEnsembleForecaster:
             corresponding to the n_quantiles dimension produced by each member.
             The aggregated output is returned at these same quantile levels.
         ensemble_function: Aggregation function satisfying the ForecastEnsembleFn
-            protocol. Defaults to aggregate_ensemble_forecasts (probability space).
+            protocol. Defaults to aggregate_linear_pool (probability space).
             Extra arguments can be pre-bound using functools.partial.
         weights: Optional weights for each member model, shape (n_models,).
             Passed directly to ensemble_function.
@@ -51,15 +51,12 @@ class QuantileEnsembleForecaster:
         ...     quantile_levels=[0.1, 0.5, 0.9],
         ... )
 
-        >>> # Quantile space aggregation via functools.partial
-        >>> from functools import partial
+        >>> # Quantile-space aggregation
+        >>> from tsfm_public.toolkit.ensemble_aggregation import aggregate_vincent
         >>> ensemble = QuantileEnsembleForecaster(
         ...     members=[forecaster_a, forecaster_b],
         ...     quantile_levels=[0.1, 0.5, 0.9],
-        ...     ensemble_function=partial(
-        ...         aggregate_ensemble_forecasts,
-        ...         aggregation_method=AggregationMethod.QUANTILE_SPACE,
-        ...     ),
+        ...     ensemble_function=aggregate_vincent,
         ... )
 
         >>> # Custom aggregation function
@@ -157,6 +154,9 @@ class QuantileEnsembleForecaster:
                 logging.warning(
                     f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}"
                 )
+
+        if not forecasts:
+            raise RuntimeError("All ensemble members failed to produce forecasts.")
 
         # Stack into (n_samples, pred_len, n_targets, n_quantiles, n_models)
         ensemble_predictions = np.stack(forecasts, axis=-1)
