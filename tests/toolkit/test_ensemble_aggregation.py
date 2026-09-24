@@ -59,6 +59,18 @@ class TestEnsembleForecastResult(unittest.TestCase):
         self.assertEqual(result.metadata["method"], "aggregate_linear_pool")
         np.testing.assert_allclose(result.predicted, [[[1.0]]])
 
+    def test_ensemble_reports_when_all_members_fail(self):
+        def fail(data, **kwargs):
+            raise ValueError("member failure")
+
+        member = SimpleNamespace(forecast_for_ensemble=fail)
+        ensemble = QuantileEnsembleForecaster([member], self.levels)
+
+        with self.assertRaisesRegex(
+            RuntimeError, "All ensemble members failed to produce forecasts"
+        ):
+            ensemble(None)
+
 
 if __name__ == "__main__":
     unittest.main()
