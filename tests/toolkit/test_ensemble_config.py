@@ -10,8 +10,8 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from tsfm_public.models.ensemble.configuration_ensemble import ProbabilisticEnsembleConfig
 from tsfm_public.models.ensemble import modeling_ensemble as modeling
+from tsfm_public.models.ensemble.configuration_ensemble import ProbabilisticEnsembleConfig
 from tsfm_public.toolkit.ensemble_aggregation import aggregate_iqr_weighted, aggregate_linear_pool
 
 
