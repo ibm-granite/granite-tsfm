@@ -49,11 +49,20 @@ class ForecastResult:
     """Result model for forecasting operations.
 
     Fields:
-        predicted: Point predictions - mean (TTM trained with MSE) or median (FlowState/PatchTST-fm/TTM trained with MAE)
-        actuals: Observations aligned with the forecast horizon (if available, otherwise None)
-        predicted_quantiles: Quantile predictions (if quantile_levels specified), with quantile_levels in metadata
-        cutoff_dates: End of context timestamps for each sample
-        metadata: Model configuration, quantile levels, and ensemble aggregation method if applicable
+        predicted:
+            Point predictions: mean for TTM trained with MSE, or median for
+            FlowState, PatchTST-FM, and TTM trained with MAE.
+        actuals:
+            Observations aligned with the forecast horizon, if available;
+            otherwise None.
+        predicted_quantiles:
+            Quantile predictions, if quantile levels were specified. The
+            corresponding quantile levels are stored in metadata.
+        cutoff_dates:
+            End-of-context timestamps for each sample.
+        metadata:
+            Model configuration, quantile levels, and ensemble aggregation
+            method, if applicable.
     """
 
     success: bool
@@ -552,12 +561,21 @@ def _extract_predictions_and_actuals(
         quantile_levels: Optional list of quantile levels to extract.
 
     Returns:
-        Tuple of (predicted_list, actuals_list, predicted_quantiles_list, error_message):
-            - predicted_list: List of prediction arrays, shape (n_samples, prediction_length, n_targets)
-            - actuals_list: List of actual arrays, shape (n_samples, prediction_length, n_targets)
-            - predicted_quantiles_list: List of quantile arrays, shape (n_samples, prediction_length, n_targets, n_quantiles)
-              or None if quantile_levels is None
-            - error_message: Error message if extraction fails, None otherwise
+        Tuple of (
+            predicted_list,
+            actuals_list,
+            predicted_quantiles_list,
+            error_message,
+        ):
+
+            - predicted_list: Prediction arrays with shape
+            (n_samples, prediction_length, n_targets).
+            - actuals_list: Actual-value arrays with shape
+            (n_samples, prediction_length, n_targets).
+            - predicted_quantiles_list: Quantile arrays with shape
+            (n_samples, prediction_length, n_targets, n_quantiles), or None
+            when quantile_levels is None.
+            - error_message: Error message if extraction fails; otherwise None.
     """
     # Validate columns exist
     for target_col in target_columns:
