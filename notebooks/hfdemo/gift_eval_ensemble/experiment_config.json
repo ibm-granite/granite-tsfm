@@ -183,7 +183,7 @@
     "long"
   ],
   "defaults": {
-    "model_name_config": "probability-ensemble-uniform-ibm-tsfm-pt",
+    "model_name_config": "probability-ensemble-uniform-ibm-tsfm-granite-pt",
     "out_dir": "results",
     "out_name": "all_results.csv",
     "error_log_name": "execution_log.csv",
