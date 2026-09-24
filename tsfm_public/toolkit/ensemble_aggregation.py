@@ -8,11 +8,13 @@ This module provides functions for aggregating multiple forecasting models throu
 
 import logging
 from enum import Enum
-from typing import Optional, Union, Protocol, runtime_checkable
+from typing import Optional, Protocol, Union, runtime_checkable
 
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
+
 from tsfm_public.toolkit.forecasters import ForecastResult
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +84,10 @@ def aggregate_linear_pool(
     Returns:
         ForecastResult
     """
-    inputsOK, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
+    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
 
-    if not inputsOK:
-        return ForecastResult(success=inputsOK, message=msg)
+    if not inputs_ok:
+        return ForecastResult(success=inputs_ok, message=msg)
 
     # Get the shape information
     # predictions shape: (..., n_quantiles, n_models)
@@ -113,7 +115,7 @@ def aggregate_linear_pool(
         assert weights.shape[0] == n_ensembles, \
             f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
         assert np.all(weights >= 0), \
-            f"All weights must be non-negative"
+            "All weights must be non-negative"
         assert np.isclose(weights.sum(), 1.0), \
             f"Weights must sum to 1, got {weights.sum()}"
         
@@ -195,11 +197,11 @@ def aggregate_vincent(
         >>> print(result.predicted_quantiles.shape)  # (10, 24, 2, 9)
     """
 
-    inputsOK, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
+    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
 
 
-    if not inputsOK:
-        return ForecastResult(success=inputsOK, message=msg)
+    if not inputs_ok:
+        return ForecastResult(success=inputs_ok, message=msg)
     
     predictions = np.asarray(predictions)
     
@@ -238,7 +240,7 @@ def aggregate_vincent(
         assert weights.shape[0] == n_ensembles, \
             f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
         assert np.all(weights >= 0), \
-            f"All weights must be non-negative"
+            "All weights must be non-negative"
         assert np.isclose(weights.sum(), 1.0), \
             f"Weights must sum to 1, got {weights.sum()}"
 
@@ -398,11 +400,11 @@ def aggregate_iqr_weighted(
         >>> # With per-model weight cap of 0.4:
         >>> result = aggregate_iqr_weighted(predictions, levels, max_weight=0.4)
     """
-    inputsOK, msg = _validate_ensemble_inputs(
+    inputs_ok, msg = _validate_ensemble_inputs(
         ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights
     )
-    if not inputsOK:
-        return ForecastResult(success=inputsOK, message=msg)
+    if not inputs_ok:
+        return ForecastResult(success=inputs_ok, message=msg)
 
     if len(quantile_levels) != predictions.shape[-2]:
         return ForecastResult(
@@ -535,7 +537,7 @@ def _compute_weighted_quantiles(
     assert weights.shape[0] == n_samples, \
         f"Weights length {weights.shape[0]} must match samples dimension {n_samples}"
     assert np.all(weights >= 0), \
-        f"All weights must be non-negative"
+        "All weights must be non-negative"
     assert np.isclose(weights.sum(), 1.0), \
         f"Weights must sum to 1, got {weights.sum()}"
     
