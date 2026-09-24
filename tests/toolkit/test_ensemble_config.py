@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from functools import partial
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -69,7 +69,8 @@ class TestEnsembleConfig(unittest.TestCase):
     def test_factory_revalidates_mutated_config_before_loading(self):
         config = ProbabilisticEnsembleConfig()
         config.aggregation_method = "unknown"
-        with patch.object(modeling, "PatchTSTFMDataFramePipelineForecaster") as loader:
+        loader = Mock()
+        with patch.dict(modeling.FORECASTER_REGISTRY, {"patchtst": loader}):
             with self.assertRaises(ValueError):
                 modeling.QuantileEnsembleForecaster.from_config(config)
             loader.assert_not_called()
@@ -87,14 +88,14 @@ class TestEnsembleConfig(unittest.TestCase):
                         return (offset + np.asarray(quantile_levels)).reshape(1, 1, 1, -1)
                     return SimpleNamespace(forecast_for_ensemble=forecast)
                 members = [member(i) for i in range(4)]
-                with patch.object(
-                    modeling, "PatchTSTFMDataFramePipelineForecaster", side_effect=members[:2]
-                ) as patchtst, patch.object(
-                    modeling, "FlowStateDataFramePipelineForecaster", return_value=members[2]
-                ) as flowstate, patch.object(
-                    modeling, "TinyTimeMixerDataFramePipelineForecaster", return_value=members[3]
-                ) as ttm:
-                    configured = modeling.QuantileEnsembleForecaster.from_config(config, device="cpu")
+                patchtst = Mock(side_effect=members[:2])
+                flowstate = Mock(return_value=members[2])
+                ttm = Mock(return_value=members[3])
+                registry = {"patchtst": patchtst, "flowstate": flowstate, "ttm": ttm}
+                with patch.dict(modeling.FORECASTER_REGISTRY, registry, clear=True):
+                    configured = modeling.QuantileEnsembleForecaster.from_config(
+                        config, device="cpu"
+                    )
                 self.assertEqual(configured.members, members)
                 self.assertEqual(patchtst.call_args_list[0].kwargs["model_checkpoint"], config.members[0]["model_checkpoint"])
                 self.assertEqual(patchtst.call_args_list[1].kwargs["model_checkpoint"], config.members[1]["model_checkpoint"])
@@ -113,6 +114,25 @@ class TestEnsembleConfig(unittest.TestCase):
                 np.testing.assert_allclose(result.predicted_quantiles, expected.predicted_quantiles)
                 np.testing.assert_allclose(result.predicted, expected.predicted)
                 self.assertEqual(result.metadata, expected.metadata)
+
+    def test_from_pretrained_loads_recipe_then_constructs_members(self):
+        config = ProbabilisticEnsembleConfig()
+        with patch.object(
+            modeling.ProbabilisticEnsembleConfig,
+            "from_pretrained",
+            return_value=config,
+        ) as load_config, patch.object(
+            modeling.QuantileEnsembleForecaster,
+            "from_config",
+            return_value="ensemble",
+        ) as from_config:
+            result = modeling.QuantileEnsembleForecaster.from_pretrained(
+                "org/recipe", device="cpu", revision="test-revision"
+            )
+
+        self.assertEqual(result, "ensemble")
+        load_config.assert_called_once_with("org/recipe", revision="test-revision")
+        from_config.assert_called_once_with(config, device="cpu")
 
 
 if __name__ == "__main__":
