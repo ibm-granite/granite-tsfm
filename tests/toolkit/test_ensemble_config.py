@@ -97,11 +97,13 @@ class TestEnsembleConfig(unittest.TestCase):
                         config, device="cpu"
                     )
                 self.assertEqual(configured.members, members)
-                self.assertEqual(patchtst.call_args_list[0].kwargs["model_checkpoint"], config.members[0]["model_checkpoint"])
-                self.assertEqual(patchtst.call_args_list[1].kwargs["model_checkpoint"], config.members[1]["model_checkpoint"])
+                self.assertEqual(patchtst.call_args_list[0].kwargs["model_checkpoint"], 
+                                 config.members[0]["model_checkpoint"])
+                self.assertEqual(patchtst.call_args_list[1].kwargs["model_checkpoint"], 
+                                 config.members[1]["model_checkpoint"])
                 flowstate.assert_called_once_with(
-                    device="cpu", model_checkpoint=config.members[2]["model_checkpoint"], model_revision="r1.1"
-                )
+                    device="cpu", model_checkpoint=config.members[2]["model_checkpoint"], 
+                    model_revision="r1.1")
                 ttm.assert_called_once_with(device="cpu", model_checkpoint=config.members[3]["model_checkpoint"])
                 function = aggregate_linear_pool if method == "linear_pool" else partial(
                     aggregate_iqr_weighted, **config.iqr_weighted_options

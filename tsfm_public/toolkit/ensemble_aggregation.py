@@ -84,7 +84,8 @@ def aggregate_linear_pool(
     Returns:
         ForecastResult
     """
-    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
+    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, 
+                                               quantile_levels=quantile_levels, weights=weights)
 
     if not inputs_ok:
         return ForecastResult(success=inputs_ok, message=msg)
@@ -105,7 +106,8 @@ def aggregate_linear_pool(
         # np.quantile expects quantiles in [0, 1] range
         aggregated_predictions = np.quantile(concatenated, quantile_levels, axis=-1)
         
-        # Transpose to get shape (..., len(quantile_levels)) because np.quantile returns shape (len(quantile_levels), ...)
+        # Transpose to get shape (..., len(quantile_levels)) because np.quantile
+        # returns shape (len(quantile_levels), ...)
         aggregated_predictions = np.moveaxis(aggregated_predictions, 0, -1)
         
     else:
@@ -197,7 +199,8 @@ def aggregate_vincent(
         >>> print(result.predicted_quantiles.shape)  # (10, 24, 2, 9)
     """
 
-    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights)
+    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, 
+                                               quantile_levels=quantile_levels, weights=weights)
 
 
     if not inputs_ok:
@@ -214,19 +217,23 @@ def aggregate_vincent(
     leading_size = np.prod(leading_dims) if leading_dims else 1
 
     if len(quantile_levels) != n_quantiles:
-                return ForecastResult(
-                    success=False,
-                    message=f"For QUANTILE_SPACE aggregation, quantile_levels length ({len(quantile_levels)}) must match n_quantiles dimension ({n_quantiles})",
-                    metadata={"method": "aggregate_vincent"},
-                )
-
+        return ForecastResult(
+            success=False,
+            message=(
+                "For QUANTILE_SPACE aggregation, quantile_levels length "
+                f"({len(quantile_levels)}) must match n_quantiles dimension "
+                f"({n_quantiles})"
+            ),
+            metadata={"method": "aggregate_vincent"},
+        )
     
     # 1. Sort the predictions along the quantile dimension (-2) based on increasing order of quantile levels
     # Get the sorting indices for quantile_levels
     sorted_indices = np.argsort(quantile_levels)
     sorted_quantile_levels = np.array(quantile_levels)[sorted_indices]
     
-    # Apply sorting to the quantile dimension (-2), quantile_levels should indicate the quantiles of predictions dimension -2.
+    # Apply sorting to the quantile dimension (-2), quantile_levels should 
+    # indicate the quantiles of predictions dimension -2.
     sorted_predictions = np.take(predictions, sorted_indices, axis=-2)
     
     if weights is None:
@@ -250,7 +257,8 @@ def aggregate_vincent(
                 sorted_predictions_flat, weights, [0.5]
             )[...,0] #leading_size x n_quantiles
         else: #default is weighted mean
-            ensemble_aggregation = np.sum(sorted_predictions_flat*weights[np.newaxis,:], axis=-1)/np.sum(weights[np.newaxis,:], axis=-1) #leading_size x n_quantiles
+            ensemble_aggregation = np.sum(sorted_predictions_flat*weights[np.newaxis,:], 
+                                          axis=-1)/np.sum(weights[np.newaxis,:], axis=-1) #leading_size x n_quantiles
 
     # 3. Apply IsotonicRegression across the quantile dimension (now -1 after median aggregation)
     # median_predictions shape: (..., n_quantiles)
@@ -299,8 +307,11 @@ def _validate_ensemble_inputs(ensemble_predictions: Union[np.ndarray, list],
         
         # Validate shape: (n_samples, prediction_length, n_targets, n_quantiles, n_models)
         if predictions.ndim != 5:
-            return False, f"Expected 5D array with shape (n_samples, prediction_length, n_targets, n_quantiles, n_models), got {predictions.ndim}D array",
-        
+            return False, (
+                "Expected 5D array with shape "
+                "(n_samples, prediction_length, n_targets, n_quantiles, n_models), "
+                f"got {predictions.ndim}D array"
+            )        
         n_samples, pred_len, n_targets, n_quantiles, n_models = predictions.shape
         
         # Validate quantile levels
@@ -409,7 +420,11 @@ def aggregate_iqr_weighted(
     if len(quantile_levels) != predictions.shape[-2]:
         return ForecastResult(
             success=False,
-            message=f"For IQR_WEIGHTED aggregation, quantile_levels length ({len(quantile_levels)}) must match n_quantiles dimension ({predictions.shape[-2]})",
+            message=(
+                "For IQR_WEIGHTED aggregation, quantile_levels length "
+                f"({len(quantile_levels)}) must match n_quantiles dimension "
+                f"({predictions.shape[-2]})"
+            ),
             metadata={"method": "aggregate_iqr_weighted"},
         )
 
