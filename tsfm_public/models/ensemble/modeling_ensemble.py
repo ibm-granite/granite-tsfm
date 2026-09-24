@@ -17,6 +17,14 @@ from tsfm_public.toolkit.ensemble_aggregation import (
 )
 import numpy as np
 
+
+FORECASTER_REGISTRY = {
+    "patchtst": PatchTSTFMDataFramePipelineForecaster,
+    "flowstate": FlowStateDataFramePipelineForecaster,
+    "ttm": TinyTimeMixerDataFramePipelineForecaster,
+}
+
+
 class QuantileEnsembleForecaster:
     """Ensemble forecaster that aggregates predictions from multiple member forecasters.
 
@@ -90,16 +98,11 @@ class QuantileEnsembleForecaster:
         TTM selects its revision at inference time from context and horizon.
         """
         config.validate()
-        forecasters = {
-            "patchtst": PatchTSTFMDataFramePipelineForecaster,
-            "flowstate": FlowStateDataFramePipelineForecaster,
-            "ttm": TinyTimeMixerDataFramePipelineForecaster,
-        }
         ensemble_function = aggregate_linear_pool
         if config.aggregation_method == "iqr_weighted":
             ensemble_function = partial(aggregate_iqr_weighted, **config.iqr_weighted_options)
         members = [
-            forecasters[member["forecaster_type"]](
+            FORECASTER_REGISTRY[member["forecaster_type"]](
                 device=device, **{key: value for key, value in member.items() if key != "forecaster_type"}
             )
             for member in config.members
@@ -110,6 +113,22 @@ class QuantileEnsembleForecaster:
             ensemble_function=ensemble_function,
             weights=np.asarray(config.weights) if config.weights is not None else None,
         )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, device=None, **kwargs):
+        """Load an ensemble recipe and construct its pretrained members.
+
+        Args:
+            pretrained_model_name_or_path: Local directory or Hugging Face Hub
+                repository containing the ensemble ``config.json``.
+            device: Inference device passed to each member forecaster.
+            **kwargs: Additional arguments forwarded to
+                :meth:`ProbabilisticEnsembleConfig.from_pretrained`.
+        """
+        config = ProbabilisticEnsembleConfig.from_pretrained(
+            pretrained_model_name_or_path, **kwargs
+        )
+        return cls.from_config(config, device=device)
 
 
     def __call__(self, data, **kwargs):
