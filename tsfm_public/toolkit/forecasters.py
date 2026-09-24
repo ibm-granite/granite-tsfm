@@ -3,6 +3,7 @@ High level classes for making forecasts. Motivated by need to support ensembles.
 """
 import logging
 import torch
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -80,7 +81,7 @@ class DataFramePipelineForecaster(Forecaster):
 
     The model is loaded once at construction time. Use:
       - __call__ to get the raw forecast DataFrame
-      - forecast_in_ForecastResult for a structured ForecastResult
+      - forecast_in_forecast_result for a structured ForecastResult
       - forecast_for_ensemble for the quantile array used by ensemble aggregation
     """
 
@@ -153,7 +154,7 @@ class DataFramePipelineForecaster(Forecaster):
 
         return fpipe(data)
 
-    def forecast_in_ForecastResult(
+    def forecast_in_forecast_result(
         self,
         data: pd.DataFrame,
         timestamp_column: str,
@@ -254,7 +255,7 @@ class DataFramePipelineForecaster(Forecaster):
         Returns:
             np.ndarray of shape (n_samples, prediction_length, n_targets, n_quantiles).
         """
-        result = self.forecast_in_ForecastResult(
+        result = self.forecast_in_forecast_result(
             data=data,
             timestamp_column=timestamp_column,
             target_columns=target_columns,
@@ -442,7 +443,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         return forecast
 
 
-    def forecast_in_ForecastResult(self, data, 
+    def forecast_in_forecast_result(self, data,
                                    timestamp_column, 
                                    target_columns,
                                    prediction_length, 
@@ -516,7 +517,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                                    use_get_model:bool = True
     ) -> np.array:
 
-        forecast = self.forecast_in_ForecastResult(
+        forecast = self.forecast_in_forecast_result(
             data=data,
             timestamp_column=timestamp_column,
             target_columns=target_columns,
