@@ -794,14 +794,18 @@ class FlowstateGiftModelForecaster(Forecaster):
 # ---------------------------------------------------------------------------
 
 from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
+import functools
+
 from tsfm_public.toolkit.ensemble_aggregation import (
     aggregate_linear_pool,
     aggregate_vincent,
+    aggregate_iqr_weighted,
 )
 
 _ENSEMBLE_FUNCTIONS = {
     "probability_space_aggregation": aggregate_linear_pool,
     "quantile_space_aggregation":    aggregate_vincent,
+    "iqr_weighted":                  aggregate_iqr_weighted,
 }
 
 _DEFAULT_QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -860,6 +864,8 @@ def build_gift_ensemble(
     device: str = "cpu",
     patchtst_use_fill_nan: bool = False,
     quantile_levels: list[float] = _DEFAULT_QUANTILE_LEVELS,
+    iqr_temperature: float = 1.0,
+    iqr_max_weight: Optional[float] = None,
 ) -> QuantileEnsembleForecaster:
     """Build a QuantileEnsembleForecaster from a list of GIFT-eval model version strings.
 
@@ -874,6 +880,7 @@ def build_gift_ensemble(
         ensemble_method: Aggregation method. One of:
             - "probability_space_aggregation" → aggregate_linear_pool (default)
             - "quantile_space_aggregation"    → aggregate_vincent
+            - "iqr_weighted"                 → aggregate_iqr_weighted
         freq: Frequency string forwarded to FlowState / TTM forecasters (e.g. "H", "D").
             Defaults to None.
         domain: Domain string forwarded to FlowState forecaster. Defaults to None.
@@ -889,6 +896,10 @@ def build_gift_ensemble(
             PatchTST-FM forecasters. Defaults to False.
         quantile_levels: Quantile levels for the ensemble output. Defaults to
             [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
+        iqr_temperature: Softmax temperature for IQR-weighted aggregation. Only used
+            when ensemble_method is "iqr_weighted". Defaults to 1.0.
+        iqr_max_weight: Optional weight cap per model for IQR-weighted aggregation.
+            Only used when ensemble_method is "iqr_weighted". Defaults to None (no cap).
 
     Returns:
         An initialised QuantileEnsembleForecaster ready to call.
@@ -915,6 +926,12 @@ def build_gift_ensemble(
             f"Choose from: {list(_ENSEMBLE_FUNCTIONS.keys())}"
         )
     ensemble_function = _ENSEMBLE_FUNCTIONS[ensemble_method]
+    if ensemble_method == "iqr_weighted":
+        ensemble_function = functools.partial(
+            aggregate_iqr_weighted,
+            temperature=iqr_temperature,
+            max_weight=iqr_max_weight,
+        )
 
     members = []
     for model_version in candidate_models:
