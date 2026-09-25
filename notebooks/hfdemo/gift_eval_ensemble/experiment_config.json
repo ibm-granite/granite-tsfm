@@ -1,5 +1,16 @@
 {
   "configurations": {
+    "iqr-weighted-ensemble-ibm-tsfm-granite-pt": {
+      "model_names": [
+        "granite-patchtst-fm-r1",
+        "granite-flowstate-r1.1",
+        "granite-ttm-r3",
+        "granite-patchtst-fm-r2"
+      ],
+      "ensemble": "iqr_weighted",
+      "iqr_temperature": 1.0,
+      "iqr_max_weight": null
+    },
     "probability-ensemble-uniform-ibm-tsfm-pt": {
       "model_names": [
         "patchtst-fm-r1",
