@@ -1,6 +1,7 @@
 """
 High level classes for making forecasts. Motivated by need to support ensembles.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -84,7 +85,6 @@ class ForecastResult:
     metadata: dict = field(default_factory=dict)
 
 
-
 class DataFramePipelineForecaster(Forecaster):
     """Forecasts from  PreTrained model using TimeSeriesForecastingPipeline.
 
@@ -106,9 +106,7 @@ class DataFramePipelineForecaster(Forecaster):
             device: Inference device. If None, uses CUDA if available, else CPU.
         """
         self.model = model
-        self.device = device if device is not None else (
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.device = device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
 
     def __call__(
         self,
@@ -141,11 +139,9 @@ class DataFramePipelineForecaster(Forecaster):
         context_length = context_length if context_length is not None else self.model.config.context_length
 
         assert not data.empty, "Input data is empty"
-        assert timestamp_column in data.columns, \
-            f"Timestamp column '{timestamp_column}' not found in data"
+        assert timestamp_column in data.columns, f"Timestamp column '{timestamp_column}' not found in data"
         for col in target_columns:
-            assert col in data.columns, \
-                f"Target column '{col}' not found in data"
+            assert col in data.columns, f"Target column '{col}' not found in data"
 
         fpipe = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -203,10 +199,8 @@ class DataFramePipelineForecaster(Forecaster):
             batch_size=batch_size,
         )
 
-        predicted_list, actuals_list, predicted_quantiles_list, error_msg = (
-            _extract_predictions_and_actuals(
-                forecast, target_columns, quantile_levels=quantile_levels
-            )
+        predicted_list, actuals_list, predicted_quantiles_list, error_msg = _extract_predictions_and_actuals(
+            forecast, target_columns, quantile_levels=quantile_levels
         )
 
         if error_msg:
@@ -275,69 +269,59 @@ class DataFramePipelineForecaster(Forecaster):
             batch_size=batch_size,
         )
         return np.array(result.predicted_quantiles)
-         
-
-
 
 
 class PatchTSTFMDataFramePipelineForecaster(DataFramePipelineForecaster):
-
-    def __init__(self, 
-                 model_checkpoint:str="ibm-research/patchtst-fm-r1",
-                 device:str = None):
+    def __init__(self, model_checkpoint: str = "ibm-research/patchtst-fm-r1", device: str = None):
         model = PatchTSTFMForPrediction.from_pretrained(model_checkpoint)
         super().__init__(model=model, device=device)
 
 
 class FlowStateDataFramePipelineForecaster(DataFramePipelineForecaster):
-
-    def __init__(self,
-                 model_checkpoint:str="ibm-granite/granite-timeseries-flowstate-r1",
-                 model_revision="r1.1",
-                 device:str = None,
-                 scale_factor:float=1,
-                 batch_first:bool = True):
-
+    def __init__(
+        self,
+        model_checkpoint: str = "ibm-granite/granite-timeseries-flowstate-r1",
+        model_revision="r1.1",
+        device: str = None,
+        scale_factor: float = 1,
+        batch_first: bool = True,
+    ):
         model = FlowStateForPrediction.from_pretrained(
-            model_checkpoint, 
-            batch_first=batch_first, 
-            scale_factor=scale_factor, 
-            revision=model_revision
+            model_checkpoint, batch_first=batch_first, scale_factor=scale_factor, revision=model_revision
         )
         super().__init__(model=model, device=device)
-        
 
 
 class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
-
-    def __init__(self,
-                 model_checkpoint:str="ibm-granite/granite-timeseries-ttm-r3",
-                 model_revision:str=None,
-                 device:str=None):
-
+    def __init__(
+        self,
+        model_checkpoint: str = "ibm-granite/granite-timeseries-ttm-r3",
+        model_revision: str = None,
+        device: str = None,
+    ):
         self.model_checkpoint = model_checkpoint
         self._ttm_model_key = model_revision
 
         if model_revision:
             model = TinyTimeMixerForPrediction.from_pretrained(model_checkpoint, revision=model_revision)
         else:
-            model=None
+            model = None
 
-        super().__init__(model=model,
-                         device=device)
+        super().__init__(model=model, device=device)
 
-    def __call__(self, 
-                 data: pd.DataFrame, 
-                 timestamp_column: str, 
-                 target_columns: List[str], 
-                 prediction_length: int, 
-                 context_length: Optional[int] = None, 
-                 id_columns: List[str] = [], 
-                 quantile_levels: List[float] = DEFAULT_QUANTILE_LEVELS, 
-                 batch_size: int = 64,
-                 scaling:bool=False,
-                 scaler_type:str="standard",
-                 use_get_model:bool = True,
+    def __call__(
+        self,
+        data: pd.DataFrame,
+        timestamp_column: str,
+        target_columns: List[str],
+        prediction_length: int,
+        context_length: Optional[int] = None,
+        id_columns: List[str] = [],
+        quantile_levels: List[float] = DEFAULT_QUANTILE_LEVELS,
+        batch_size: int = 64,
+        scaling: bool = False,
+        scaler_type: str = "standard",
+        use_get_model: bool = True,
     ) -> pd.DataFrame:
         """Run inference and return the raw forecast DataFrame.
 
@@ -352,7 +336,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             quantile_levels: Quantile levels for probabilistic forecasting.
                 Default: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
             batch_size: Inference batch size. Default: 64.
-            scaling: 
+            scaling:
             scaler_type:
             use_get_model:
 
@@ -367,25 +351,22 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             requested_context_length_or_data_length = context_length
 
         if use_get_model:
-            model_key = get_model(model_path=self.model_checkpoint, 
-                              model_name="ttm", 
-                              context_length = requested_context_length_or_data_length, 
-                              prediction_length=prediction_length,
-                              return_model_key=True)
+            model_key = get_model(
+                model_path=self.model_checkpoint,
+                model_name="ttm",
+                context_length=requested_context_length_or_data_length,
+                prediction_length=prediction_length,
+                return_model_key=True,
+            )
 
             if self._ttm_model_key:
                 if model_key != self._ttm_model_key:
                     msg = f"TTM model key changed from {self._ttm_model_key} to {model_key}"
                     logging.info(msg)
 
-            
             self.ttm_model_key = model_key
-            
-            model_class = (
-                TinyTimeMixerForDecomposedPrediction
-                if "-dec-" in model_key
-                else TinyTimeMixerForPrediction
-            )
+
+            model_class = TinyTimeMixerForDecomposedPrediction if "-dec-" in model_key else TinyTimeMixerForPrediction
             self.model = model_class.from_pretrained(self.model_checkpoint, revision=model_key)
 
         # Store context length and prediction length of TTM model
@@ -405,11 +386,9 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
 
         # validate the data
         assert not data.empty, "Input data is empty"
-        assert timestamp_column in data.columns, \
-            f"Timestamp column '{timestamp_column}' not found in data"
+        assert timestamp_column in data.columns, f"Timestamp column '{timestamp_column}' not found in data"
         for col in target_columns:
-            assert col in data.columns, \
-                f"Target column '{col}' not found in data"
+            assert col in data.columns, f"Target column '{col}' not found in data"
 
         # Setup preprocessor
         tsp = TimeSeriesPreprocessor(
@@ -421,7 +400,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             scaler_type=scaler_type,
         )
         tsp.train(data)
-
 
         fpipe = TimeSeriesForecastingPipeline(
             model=self.model,
@@ -438,7 +416,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             feature_extractor=tsp,
         )
 
-        forecast:pd.DataFrame = fpipe(data)
+        forecast: pd.DataFrame = fpipe(data)
 
         # trim forecasts to requested prediction_length
         if self._ttm_model_prediction_length > prediction_length:
@@ -447,24 +425,23 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                     value = row[col]
                     # shorten value to the requested prediction_length
                     forecast.at[idx, col] = value[:prediction_length]
-             
 
         return forecast
 
-
-    def forecast_in_forecast_result(self, data,
-                                   timestamp_column, 
-                                   target_columns,
-                                   prediction_length, 
-                                   context_length = None, 
-                                   id_columns = [], 
-                                   quantile_levels = DEFAULT_QUANTILE_LEVELS, 
-                                   batch_size = 64,
-                                   scaling:bool=False,
-                                   scaler_type:str="standard",
-                                   use_get_model:bool = True
+    def forecast_in_forecast_result(
+        self,
+        data,
+        timestamp_column,
+        target_columns,
+        prediction_length,
+        context_length=None,
+        id_columns=[],
+        quantile_levels=DEFAULT_QUANTILE_LEVELS,
+        batch_size=64,
+        scaling: bool = False,
+        scaler_type: str = "standard",
+        use_get_model: bool = True,
     ) -> ForecastResult:
-
         forecast = self.__call__(
             data=data,
             timestamp_column=timestamp_column,
@@ -476,13 +453,11 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             batch_size=batch_size,
             scaling=scaling,
             scaler_type=scaler_type,
-            use_get_model=use_get_model
+            use_get_model=use_get_model,
         )
 
-        predicted_list, actuals_list, predicted_quantiles_list, error_msg = (
-            _extract_predictions_and_actuals(
-                forecast, target_columns, quantile_levels=quantile_levels
-            )
+        predicted_list, actuals_list, predicted_quantiles_list, error_msg = _extract_predictions_and_actuals(
+            forecast, target_columns, quantile_levels=quantile_levels
         )
 
         if error_msg:
@@ -512,20 +487,20 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             },
         )
 
-
-    def forecast_for_ensemble(self, data, 
-                                   timestamp_column, 
-                                   target_columns,
-                                   prediction_length, 
-                                   context_length = None, 
-                                   id_columns = [], 
-                                   quantile_levels = DEFAULT_QUANTILE_LEVELS, 
-                                   batch_size = 64,
-                                   scaling:bool=False,
-                                   scaler_type:str="standard",
-                                   use_get_model:bool = True
+    def forecast_for_ensemble(
+        self,
+        data,
+        timestamp_column,
+        target_columns,
+        prediction_length,
+        context_length=None,
+        id_columns=[],
+        quantile_levels=DEFAULT_QUANTILE_LEVELS,
+        batch_size=64,
+        scaling: bool = False,
+        scaler_type: str = "standard",
+        use_get_model: bool = True,
     ) -> np.array:
-
         forecast = self.forecast_in_forecast_result(
             data=data,
             timestamp_column=timestamp_column,
@@ -537,12 +512,10 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             batch_size=batch_size,
             scaling=scaling,
             scaler_type=scaler_type,
-            use_get_model=use_get_model
+            use_get_model=use_get_model,
         )
 
         return np.array(forecast.predicted_quantiles)
-
-
 
 
 def _extract_predictions_and_actuals(
@@ -598,19 +571,12 @@ def _extract_predictions_and_actuals(
     # Extract predictions: shape (n_targets, n_samples, prediction_length)
     # Then transpose to (n_samples, prediction_length, n_targets)
     predicted_array = np.array(
-        [
-            np.stack(z)
-            for z in forecast[[f"{tc}_prediction" for tc in target_columns]].values
-        ]
-    ).transpose(
-        0, 2, 1
-    )  # (n_targets, n_samples, pred_len) -> (n_samples, pred_len, n_targets)
+        [np.stack(z) for z in forecast[[f"{tc}_prediction" for tc in target_columns]].values]
+    ).transpose(0, 2, 1)  # (n_targets, n_samples, pred_len) -> (n_samples, pred_len, n_targets)
 
     # Extract actuals: shape (n_targets, n_samples, prediction_length)
     # Then transpose to (n_samples, prediction_length, n_targets)
-    actuals_array = np.array(
-        [np.stack(z) for z in forecast[[tc for tc in target_columns]].values]
-    ).transpose(
+    actuals_array = np.array([np.stack(z) for z in forecast[list(target_columns)].values]).transpose(
         0, 2, 1
     )  # (n_targets, n_samples, pred_len) -> (n_samples, pred_len, n_targets)
 
@@ -636,13 +602,9 @@ def _extract_predictions_and_actuals(
                         f"Quantile column '{q_col}' not found in forecast output",
                     )
                 # q_array = np.array([np.stack(z) for z in forecast[[q_col]].values]).squeeze()
-                q_array = np.array(
-                    [np.stack(z) for z in forecast[q_col].values]
-                )  # n_samples x prediction_lenght
+                q_array = np.array([np.stack(z) for z in forecast[q_col].values])  # n_samples x prediction_lenght
                 target_quantiles.append(q_array)  # (n_samples, prediction_length)
-            quantile_arrays.append(
-                np.stack(target_quantiles, axis=-1)
-            )  # (n_samples, prediction_length, n_quantiles)
+            quantile_arrays.append(np.stack(target_quantiles, axis=-1))  # (n_samples, prediction_length, n_quantiles)
 
         # Stack targets: (n_targets, n_samples, prediction_length, n_quantiles)
         # Transpose to: (n_samples, prediction_length, n_targets, n_quantiles)

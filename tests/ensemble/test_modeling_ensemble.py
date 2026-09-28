@@ -7,15 +7,15 @@ import numpy as np
 import pandas as pd
 import torch
 
-from tsfm_public.toolkit.forecasters import (
-    DEFAULT_QUANTILE_LEVELS,
-    ForecastResult,
-    PatchTSTFMDataFramePipelineForecaster,
-    FlowStateDataFramePipelineForecaster,
-    TinyTimeMixerDataFramePipelineForecaster
-)
 from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 from tsfm_public.toolkit.ensemble_aggregation import aggregate_linear_pool
+from tsfm_public.toolkit.forecasters import (
+    DEFAULT_QUANTILE_LEVELS,
+    FlowStateDataFramePipelineForecaster,
+    ForecastResult,
+    PatchTSTFMDataFramePipelineForecaster,
+    TinyTimeMixerDataFramePipelineForecaster,
+)
 
 
 PREDICTION_LENGTH = 24
@@ -71,8 +71,6 @@ def test_ensemble_call():
     assert np.array(result.predicted).shape == (2, PREDICTION_LENGTH, 1)
 
 
-
-
 def test_3model_ensemble():
     """Run QuantileEnsembleForecaster using PatchTST-FM, FlowState and TTM models"""
     # Synthetic sinusoidal data: 91 hourly points, 1 target
@@ -95,13 +93,11 @@ def test_3model_ensemble():
                 device=device,
             ),
             FlowStateDataFramePipelineForecaster(
-                model_checkpoint="ibm-granite/granite-timeseries-flowstate-r1",
-                device = device
+                model_checkpoint="ibm-granite/granite-timeseries-flowstate-r1", device=device
             ),
             TinyTimeMixerDataFramePipelineForecaster(
-                model_checkpoint="ibm-granite/granite-timeseries-ttm-r3",
-                device = device
-            )
+                model_checkpoint="ibm-granite/granite-timeseries-ttm-r3", device=device
+            ),
         ],
         quantile_levels=DEFAULT_QUANTILE_LEVELS,
         ensemble_function=aggregate_linear_pool,

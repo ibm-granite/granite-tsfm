@@ -2,20 +2,18 @@ import argparse
 import json
 import logging
 import os
+import random
 import time
 import traceback
+import warnings
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
-
-from gift_eval_windows import get_gift_ensemble_predictions_df, get_test_window_lengths
-
-
+import torch
 from dotenv import load_dotenv
-
 from gift_eval.data import Dataset
+from gift_eval_windows import get_gift_ensemble_predictions_df, get_test_window_lengths
 from gluonts.ev.metrics import (
     MAE,
     MAPE,
@@ -32,13 +30,10 @@ from gluonts.model.evaluation import evaluate_forecasts
 from gluonts.model.forecast import QuantileForecast
 from gluonts.time_feature import get_seasonality
 from tqdm import tqdm
-import random
-import torch
+
 
 logging.getLogger("gluonts.model.predictor").setLevel(logging.ERROR)
 logging.getLogger("gluonts.model.forecast").setLevel(logging.ERROR)
-import warnings
-
 warnings.filterwarnings("ignore")
 
 load_dotenv()
@@ -56,7 +51,11 @@ def load_experiment_config(path=None):
     for name, recipe in configurations.items():
         if not recipe.get("model_names"):
             raise ValueError(f"Experiment {name!r} must specify model_names.")
-        if recipe.get("ensemble") not in ("probability_space_aggregation", "quantile_space_aggregation", "iqr_weighted"):
+        if recipe.get("ensemble") not in (
+            "probability_space_aggregation",
+            "quantile_space_aggregation",
+            "iqr_weighted",
+        ):
             raise ValueError(f"Experiment {name!r} has an unsupported ensemble method.")
     # Benchmark adapters currently emit this fixed quantile grid.
     if config["quantile_levels"] != [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
@@ -115,7 +114,6 @@ def extract_quantiles_prediction(df):
 def eval_gift_dataset(dataset, ds_config, df):
     print(f"Processing {ds_config}")
     test_data = dataset.test_data
-    L: Any = test_data.prediction_length
     season_length = get_seasonality(dataset.freq)
 
     pred_cols = pd.json_normalize(df["final_pred"])
@@ -204,7 +202,6 @@ def log_execution_status(error_log_file, dataset_config, success, execution_time
     log_df.to_csv(error_log_file, mode="a", header=not os.path.exists(error_log_file), index=False)
 
 
-
 def resolve_device(device=None):
     """Select an available inference device, preserving the CLI's auto order."""
     if device is None:
@@ -264,7 +261,6 @@ def run_evaluation(
     if processed_datasets:
         print(f"Found {len(processed_datasets)} already processed datasets. Skipping them.")
 
-    argv = []
     # Sort datasets based on number of samples
     all_datasets = datasets or DATASET_FAST_FIRST
     # all_datasets = DATASET_FAST_FIRST[0:1] ## UNCOMMENT TO TEST ONE DATASET
@@ -304,13 +300,9 @@ def run_evaluation(
                 )
                 dataset = Dataset(name=ds_name, term=term, to_univariate=to_univariate)
                 freq_str = str(dataset.freq)
-                season_length = get_seasonality(freq_str.replace("H", "h")) # Using H throws pandas compatibility warning
                 domain = dataset_properties_map[ds_key]["domain"]
                 num_variates = dataset_properties_map[ds_key]["num_variates"]
                 no_daily = "l2c" in ds_name
-
-                # season_length = get_seasonality(str(dataset.freq))
-                dataset_config = f"{ds_key}/{ds_freq}/{term}"
 
                 """
                 Initialize Ensemble Model
@@ -333,11 +325,7 @@ def run_evaluation(
                     no_daily=no_daily,
                     ttm_context_length=ttm_context_length,
                     ttm_pred_length=ttm_pred_length,
-                    ttm_scaling_data=(
-                        dataset.test_data.input
-                        if ttm_context_length is not None
-                        else None
-                    ),
+                    ttm_scaling_data=(dataset.test_data.input if ttm_context_length is not None else None),
                     device=device,
                     patchtst_use_fill_nan=patchtst_use_fill_nan,
                     quantile_levels=QUANTILE_LEVELS,
@@ -427,7 +415,12 @@ def parse_args(argv=None):
         choices=CONFIGURATIONS,
         help="Ensemble configuration to evaluate",
     )
-    parser.add_argument("--skip_processed", action="store_true", default=RUN_DEFAULTS["skip_processed"], help="Skip datasets already in output file")
+    parser.add_argument(
+        "--skip_processed",
+        action="store_true",
+        default=RUN_DEFAULTS["skip_processed"],
+        help="Skip datasets already in output file",
+    )
     parser.add_argument(
         "--patchtst-use-fill-nan",
         action="store_true",
@@ -447,10 +440,13 @@ def parse_args(argv=None):
         help="Dataset names to run, e.g. m_dense/D LOOP_SEATTLE/5T. Defaults to the full dataset list.",
     )
     parser.add_argument("--seed", type=int, default=RUN_DEFAULTS["seed"])
-    parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default=RUN_DEFAULTS["device"],
-                        help="Inference device; defaults to CUDA, then MPS, then CPU")
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu", "mps"],
+        default=RUN_DEFAULTS["device"],
+        help="Inference device; defaults to CUDA, then MPS, then CPU",
+    )
     return parser.parse_args(argv)
-
 
 
 if __name__ == "__main__":

@@ -7,8 +7,7 @@ def _forecast_row(sample_idx, quantile_array, quantile_levels, label_entry):
     prediction_length = len(label_entry["target"])
     forecast = {
         f"quantile_{quantile_index}": [
-            quantile_array[:, step, :, quantile_index].squeeze()
-            for step in range(prediction_length)
+            quantile_array[:, step, :, quantile_index].squeeze() for step in range(prediction_length)
         ]
         for quantile_index in range(len(quantile_levels))
     }
@@ -36,9 +35,7 @@ def get_gift_ensemble_predictions_df(dataset, model_pipeline, include_member_for
         output = model_pipeline([data], **model_kwargs)
         quantile_levels = output.metadata["quantile_levels"]
         quantile_array = np.asarray(output.predicted_quantiles)
-        results.append(
-            _forecast_row(sample_idx, quantile_array, quantile_levels, label_entry)
-        )
+        results.append(_forecast_row(sample_idx, quantile_array, quantile_levels, label_entry))
         if include_member_forecasts:
             for member in model_pipeline.members:
                 member_forecast = getattr(member, "last_forecast", None)
@@ -56,10 +53,7 @@ def get_gift_ensemble_predictions_df(dataset, model_pipeline, include_member_for
 
     ensemble_frame = pd.DataFrame(results)
     if include_member_forecasts:
-        return ensemble_frame, {
-            member_name: pd.DataFrame(rows)
-            for member_name, rows in member_results.items()
-        }
+        return ensemble_frame, {member_name: pd.DataFrame(rows) for member_name, rows in member_results.items()}
     return ensemble_frame
 
 
@@ -71,15 +65,9 @@ def get_test_window_lengths(dataset):
     for input_entry, label_entry in zip(test_data.input, test_data.label):
         context_length = len(input_entry["target"])
         prediction_length = len(label_entry["target"])
-        min_context_length = (
-            context_length
-            if min_context_length is None
-            else min(min_context_length, context_length)
-        )
+        min_context_length = context_length if min_context_length is None else min(min_context_length, context_length)
         max_prediction_length = (
-            prediction_length
-            if max_prediction_length is None
-            else max(max_prediction_length, prediction_length)
+            prediction_length if max_prediction_length is None else max(max_prediction_length, prediction_length)
         )
 
     if min_context_length is None or max_prediction_length is None:

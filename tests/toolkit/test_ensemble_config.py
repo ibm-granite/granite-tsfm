@@ -83,30 +83,35 @@ class TestEnsembleConfig(unittest.TestCase):
                     quantile_levels=[0.1, 0.5, 0.9],
                     weights=[0.4, 0.3, 0.2, 0.1],
                 )
+
                 def member(offset):
                     def forecast(data, quantile_levels):
                         return (offset + np.asarray(quantile_levels)).reshape(1, 1, 1, -1)
+
                     return SimpleNamespace(forecast_for_ensemble=forecast)
+
                 members = [member(i) for i in range(4)]
                 patchtst = Mock(side_effect=members[:2])
                 flowstate = Mock(return_value=members[2])
                 ttm = Mock(return_value=members[3])
                 registry = {"patchtst": patchtst, "flowstate": flowstate, "ttm": ttm}
                 with patch.dict(modeling.FORECASTER_REGISTRY, registry, clear=True):
-                    configured = modeling.QuantileEnsembleForecaster.from_config(
-                        config, device="cpu"
-                    )
+                    configured = modeling.QuantileEnsembleForecaster.from_config(config, device="cpu")
                 self.assertEqual(configured.members, members)
-                self.assertEqual(patchtst.call_args_list[0].kwargs["model_checkpoint"], 
-                                 config.members[0]["model_checkpoint"])
-                self.assertEqual(patchtst.call_args_list[1].kwargs["model_checkpoint"], 
-                                 config.members[1]["model_checkpoint"])
+                self.assertEqual(
+                    patchtst.call_args_list[0].kwargs["model_checkpoint"], config.members[0]["model_checkpoint"]
+                )
+                self.assertEqual(
+                    patchtst.call_args_list[1].kwargs["model_checkpoint"], config.members[1]["model_checkpoint"]
+                )
                 flowstate.assert_called_once_with(
-                    device="cpu", model_checkpoint=config.members[2]["model_checkpoint"], 
-                    model_revision="r1.1")
+                    device="cpu", model_checkpoint=config.members[2]["model_checkpoint"], model_revision="r1.1"
+                )
                 ttm.assert_called_once_with(device="cpu", model_checkpoint=config.members[3]["model_checkpoint"])
-                function = aggregate_linear_pool if method == "linear_pool" else partial(
-                    aggregate_iqr_weighted, **config.iqr_weighted_options
+                function = (
+                    aggregate_linear_pool
+                    if method == "linear_pool"
+                    else partial(aggregate_iqr_weighted, **config.iqr_weighted_options)
                 )
                 explicit = modeling.QuantileEnsembleForecaster(
                     members, config.quantile_levels, function, weights=np.asarray(config.weights)
@@ -119,15 +124,18 @@ class TestEnsembleConfig(unittest.TestCase):
 
     def test_from_pretrained_loads_recipe_then_constructs_members(self):
         config = ProbabilisticEnsembleConfig()
-        with patch.object(
-            modeling.ProbabilisticEnsembleConfig,
-            "from_pretrained",
-            return_value=config,
-        ) as load_config, patch.object(
-            modeling.QuantileEnsembleForecaster,
-            "from_config",
-            return_value="ensemble",
-        ) as from_config:
+        with (
+            patch.object(
+                modeling.ProbabilisticEnsembleConfig,
+                "from_pretrained",
+                return_value=config,
+            ) as load_config,
+            patch.object(
+                modeling.QuantileEnsembleForecaster,
+                "from_config",
+                return_value="ensemble",
+            ) as from_config,
+        ):
             result = modeling.QuantileEnsembleForecaster.from_pretrained(
                 "org/recipe", device="cpu", revision="test-revision"
             )

@@ -66,9 +66,7 @@ class TestEnsembleForecastResult(unittest.TestCase):
         member = SimpleNamespace(forecast_for_ensemble=fail)
         ensemble = QuantileEnsembleForecaster([member], self.levels)
 
-        with self.assertRaisesRegex(
-            RuntimeError, "All ensemble members failed to produce forecasts"
-        ):
+        with self.assertRaisesRegex(RuntimeError, "All ensemble members failed to produce forecasts"):
             ensemble(None)
 
 

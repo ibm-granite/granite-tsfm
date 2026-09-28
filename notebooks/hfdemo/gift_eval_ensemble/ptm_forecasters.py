@@ -1,44 +1,57 @@
 """Implementations of Forecaster class using pre-trained models directly as for gift-eval submission"""
 
+import functools
 import logging
 import os
 from typing import Optional
-
-from tsfm_public.toolkit.forecasters import Forecaster, ForecastResult
 
 import numpy as np
 import torch
 from gluonts.transform.feature import LastValueImputation
 from scipy import interpolate
 
-from tsfm_public import PatchTSTFMConfig, PatchTSTFMForPrediction
-from tsfm_public import TinyTimeMixerForPrediction
-from tsfm_public import FlowStateForPrediction
+from tsfm_public import FlowStateForPrediction, PatchTSTFMConfig, PatchTSTFMForPrediction, TinyTimeMixerForPrediction
+from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
+from tsfm_public.toolkit.ensemble_aggregation import (
+    aggregate_iqr_weighted,
+    aggregate_linear_pool,
+    aggregate_vincent,
+)
+from tsfm_public.toolkit.forecasters import Forecaster, ForecastResult
 from tsfm_public.toolkit.get_model import (
     TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT,
     get_model,
 )
 from tsfm_public.toolkit.time_series_preprocessor import DEFAULT_FREQUENCY_MAPPING
+
+
 # TTM_LOW_RESOLUTION_MODELS_MAX_CONTEXT and get_model are used by
 
-class PatchTSTFMGiftModelForecaster(Forecaster):
 
+class PatchTSTFMGiftModelForecaster(Forecaster):
     _PATCHTST_MODELS = {
-        "patchtst-fm-r1":           {"model_checkpoint": "ibm-research/patchtst-fm-r1",                          "max_context_length": 8192},
-        "granite-patchtst-fm-r1":   {"model_checkpoint": "ibm-granite/granite-timeseries-patchtst-fm-r1",        "max_context_length": 8192},
-        "granite-patchtst-fm-r2":   {"model_checkpoint": "ibm-granite/granite-timeseries-patchtst-fm-r2",        "max_context_length": 8192}
+        "patchtst-fm-r1": {"model_checkpoint": "ibm-research/patchtst-fm-r1", "max_context_length": 8192},
+        "granite-patchtst-fm-r1": {
+            "model_checkpoint": "ibm-granite/granite-timeseries-patchtst-fm-r1",
+            "max_context_length": 8192,
+        },
+        "granite-patchtst-fm-r2": {
+            "model_checkpoint": "ibm-granite/granite-timeseries-patchtst-fm-r2",
+            "max_context_length": 8192,
+        },
     }
 
-    def __init__(self, model_version: str = "patchtst-fm-r1", device: str = "cuda", use_fill_nan = False):
-
+    def __init__(self, model_version: str = "patchtst-fm-r1", device: str = "cuda", use_fill_nan=False):
         self.device = device
         self.uses_variable_length_input = model_version == "granite-patchtst-fm-r2"
 
-        model_checkpoint = self._PATCHTST_MODELS[model_version]['model_checkpoint']
+        model_checkpoint = self._PATCHTST_MODELS[model_version]["model_checkpoint"]
         token = os.environ.get("HF_TOKEN")
         config = PatchTSTFMConfig.from_pretrained(model_checkpoint, token=token)
         self.model = PatchTSTFMForPrediction.from_pretrained(
-            model_checkpoint, config=config, token=token,
+            model_checkpoint,
+            config=config,
+            token=token,
         ).to(device)
 
         # self.model = PatchTSTFMForPrediction.from_pretrained(model_checkpoint, device_map=device)
@@ -48,7 +61,6 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
         self.quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         self.ix_median = 4
         self.use_fill_nan = use_fill_nan
-
 
     def _fill_nan(self, seq, min_len=65):
         # pad when shorter than min_len
@@ -83,11 +95,9 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
         nanfree = np.where(np.isfinite(seq), seq, f(inds))
         return nanfree
 
-    def __call__(self, 
-                 data: list[list[int | float]], 
-                 prediction_length: list[int], 
-                 enforce_only_positive = True
-    ) ->dict:
+    def __call__(
+        self, data: list[list[int | float]], prediction_length: list[int], enforce_only_positive=True
+    ) -> dict:
         """
         Args:
             data: list[list[int|float]], a list of time-series sequences (each sequence is a list of numbers)
@@ -101,13 +111,12 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
         assert (
             len(data) == len(prediction_length) and len(data) > 0
         ), "data and prediction_length must have the same length and not empty"
-        
+
         self.model.eval()
         output = []
-        
+
         # Process each series independently
         for i, (series, pred_len) in enumerate(zip(data, prediction_length)):
-
             all_non_negative = np.nanmin(series) >= 0
 
             # NaN treatment Following: https://github.com/ibm-granite/granite-tsfm/blob/412573aa1e618311be4e69b0a8c61f4eb847f538/notebooks/hfdemo/patchtst_fm/patchtst_fm_predictor.py#L44
@@ -130,21 +139,19 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
                 past_values = [series]
             else:
                 past_values = series.unsqueeze(0) if series.ndim == 1 else series
-            
 
             # Call forecast_with_patchtst for this series
             try:
                 with torch.no_grad():
                     model_outputs = self.model(
-                            past_values=past_values,
-                            prediction_length=pred_len,
-                            quantile_levels=self.quantile_levels,
-                        )
-                
+                        past_values=past_values,
+                        prediction_length=pred_len,
+                        quantile_levels=self.quantile_levels,
+                    )
+
             except Exception as e:
                 raise RuntimeError(f"PatchTST-fm forecasting failed for series {i}: {str(e)}")
-            
-            
+
             if self.uses_variable_length_input:
                 pred_quantiles = model_outputs.quantile_outputs[0].detach().cpu().numpy()
             else:
@@ -155,40 +162,34 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
             # predicted shape: (n_samples, prediction_length, n_targets)
             # Extract median forecast for the last sample, first (and only) target
             forecast_i = {
-                "median": [pred_quantiles[self.ix_median,t].squeeze() for t in range(pred_len)],
+                "median": [pred_quantiles[self.ix_median, t].squeeze() for t in range(pred_len)],
                 "quantile_levels": [str(q) for q in self.quantile_levels],
             }
             if enforce_only_positive & all_non_negative:
-                forecast_i['median'] = [max(x, 0) for x in forecast_i['median']]
-            
+                forecast_i["median"] = [max(x, 0) for x in forecast_i["median"]]
+
             # Extract quantiles
             for q_idx in range(len(self.quantile_levels)):
                 # predicted_quantiles shape: (n_samples, prediction_length, n_targets, n_quantiles)
-                forecast_i[f"quantile_{q_idx}"] = [
-                    pred_quantiles[q_idx,t].squeeze()
-                    for t in range(pred_len)
-                ]
+                forecast_i[f"quantile_{q_idx}"] = [pred_quantiles[q_idx, t].squeeze() for t in range(pred_len)]
 
                 if enforce_only_positive & all_non_negative:
                     forecast_i[f"quantile_{q_idx}"] = [max(x, 0) for x in forecast_i[f"quantile_{q_idx}"]]
             output.append(forecast_i)
-        
+
         return output
 
-
-    def forecast_for_ensemble(self,
-                 data: list[list[int | float]],
-                 prediction_length: list[int],
-                 enforce_only_positive = True
+    def forecast_for_ensemble(
+        self, data: list[list[int | float]], prediction_length: list[int], enforce_only_positive=True
     ) -> np.ndarray:
         """Returns forecast array of shape (n_samples, prediction_length, n_targets, n_quantiles).
 
         n_targets is 1 since each series is univariate.
         n_samples matches the number of series in data.
         """
-        forecast = self.__call__(data=data,
-                                 prediction_length=prediction_length,
-                                 enforce_only_positive=enforce_only_positive)
+        forecast = self.__call__(
+            data=data, prediction_length=prediction_length, enforce_only_positive=enforce_only_positive
+        )
 
         n_quantiles = len(self.quantile_levels)
         series_arrays = []
@@ -203,10 +204,6 @@ class PatchTSTFMGiftModelForecaster(Forecaster):
 
         # Concatenate across series -> (n_samples, pred_len, n_targets=1, n_quantiles)
         return np.concatenate(series_arrays, axis=0)
-         
-
-
-
 
 
 def _impute_ttm_series(target):
@@ -242,7 +239,6 @@ class _TTMContextScaler:
 
 
 class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
-
     # TTM model selection constants
     _TTM_MAX_FORECAST_HORIZON = 720
     _TTM_MIN_FORECAST_HORIZON = 16
@@ -365,11 +361,20 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
 
     uses_series_ids = True
 
-    def __init__(self, model_version: str = "ttm-r3-pt", device="cuda", use_get_gift_model=False, context_length = None, prediction_length = None, freq='oov', term='None', scaling_data=None):
-
+    def __init__(
+        self,
+        model_version: str = "ttm-r3-pt",
+        device="cuda",
+        use_get_gift_model=False,
+        context_length=None,
+        prediction_length=None,
+        freq="oov",
+        term="None",
+        scaling_data=None,
+    ):
         self.quantile_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         self.ix_median = 4
-        model_checkpoint = self._TTM_MODELS[model_version]['model_checkpoint']
+        model_checkpoint = self._TTM_MODELS[model_version]["model_checkpoint"]
 
         if use_get_gift_model:
             self.model = self._get_gift_ttm_model(
@@ -400,11 +405,12 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
         normalized_freq = self._RESOLUTION_MAP.get(self.freq, "oov")
         return DEFAULT_FREQUENCY_MAPPING.get(normalized_freq, DEFAULT_FREQUENCY_MAPPING["oov"])
 
-    def __call__(self, 
-                 data: list[list[int | float]], 
-                 prediction_length: list[int], 
-                 enforce_only_positive = False,
-                 series_ids = None,
+    def __call__(
+        self,
+        data: list[list[int | float]],
+        prediction_length: list[int],
+        enforce_only_positive=False,
+        series_ids=None,
     ):
         """
         Args:
@@ -421,13 +427,12 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
         ), "data and prediction_length must have the same length and not empty"
         if self.scaler is not None and (series_ids is None or len(series_ids) != len(data)):
             raise ValueError("series_ids must identify every series when TTM scaling is enabled")
-        
+
         self.model.eval()
         output = []
-        
+
         # Process each series independently
         for i, (series, pred_len) in enumerate(zip(data, prediction_length)):
-
             all_non_negative = np.nanmin(series) >= 0
 
             series = np.asarray(series, dtype=float)
@@ -436,7 +441,7 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
             else:
                 series = _impute_ttm_series(series)
 
-            series = series[-self.max_context_length:]
+            series = series[-self.max_context_length :]
             padding_length = self.max_context_length - len(series)
             past_values = np.pad(series, (padding_length, 0))
             observed_mask = np.pad(
@@ -449,19 +454,16 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
                 "past_observed_mask": torch.from_numpy(observed_mask).reshape(1, -1, 1).to(self.device),
             }
             if getattr(self.model.config, "resolution_prefix_tuning", False):
-                model_inputs["freq_token"] = torch.tensor(
-                    [self._frequency_token()], device=self.device
-                )
-            
+                model_inputs["freq_token"] = torch.tensor([self._frequency_token()], device=self.device)
+
             #
             try:
                 with torch.no_grad():
                     model_outputs = self.model(**model_inputs)
-                
+
             except Exception as e:
                 raise RuntimeError(f"TTM forecasting failed for series {i}: {str(e)}")
-            
-            
+
             pred_quantiles = model_outputs.quantile_outputs.detach().cpu().numpy()
             if self.scaler is not None:
                 pred_quantiles = self.scaler.inverse_transform(pred_quantiles, series_ids[i])
@@ -471,44 +473,42 @@ class TinyTimeMixerPreTrainedGiftModelForecaster(Forecaster):
             # predicted shape: (n_samples, prediction_length, n_targets)
             # Extract median forecast for the last sample, first (and only) target
             forecast_i = {
-                "median": [pred_quantiles[:,self.ix_median,t].squeeze() for t in range(pred_len)],
+                "median": [pred_quantiles[:, self.ix_median, t].squeeze() for t in range(pred_len)],
                 "quantile_levels": [str(q) for q in self.quantile_levels],
             }
             if enforce_only_positive & all_non_negative:
-                forecast_i['median'] = [max(x, 0) for x in forecast_i['median']]
-            
+                forecast_i["median"] = [max(x, 0) for x in forecast_i["median"]]
+
             # Extract quantiles
             for q_idx in range(len(self.quantile_levels)):
                 # predicted_quantiles shape: (n_samples, prediction_length, n_targets, n_quantiles)
-                forecast_i[f"quantile_{q_idx}"] = [
-                    pred_quantiles[:,q_idx,t].squeeze()
-                    for t in range(pred_len)
-                ]
+                forecast_i[f"quantile_{q_idx}"] = [pred_quantiles[:, q_idx, t].squeeze() for t in range(pred_len)]
 
                 if enforce_only_positive & all_non_negative:
                     forecast_i[f"quantile_{q_idx}"] = [max(x, 0) for x in forecast_i[f"quantile_{q_idx}"]]
-            
-            
+
             output.append(forecast_i)
-        
+
         return output
 
-
-    def forecast_for_ensemble(self,
-                              data: list[list[int | float]],
-                              prediction_length: list[int],
-                              enforce_only_positive = False,
-                              series_ids = None,
+    def forecast_for_ensemble(
+        self,
+        data: list[list[int | float]],
+        prediction_length: list[int],
+        enforce_only_positive=False,
+        series_ids=None,
     ) -> np.ndarray:
         """Returns forecast array of shape (n_samples, prediction_length, n_targets, n_quantiles).
 
         n_targets is 1 since each series is univariate.
         n_samples matches the number of series in data.
         """
-        forecast = self.__call__(data=data,
-                                 prediction_length=prediction_length,
-                                 enforce_only_positive=enforce_only_positive,
-                                 series_ids=series_ids)
+        forecast = self.__call__(
+            data=data,
+            prediction_length=prediction_length,
+            enforce_only_positive=enforce_only_positive,
+            series_ids=series_ids,
+        )
 
         n_quantiles = len(self.quantile_levels)
         series_arrays = []
@@ -530,10 +530,21 @@ class FlowstateGiftModelForecaster(Forecaster):
 
     _BASE_SEASON = 24.0
     _FLOWSTATE_MODELS = {
-        "granite-flowstate-r1":   {"model_checkpoint": "ibm-granite/granite-timeseries-flowstate-r1", "max_context_length": 2048},
-        "flowstate-r1":           {"model_checkpoint": "ibm-research/flowstate", "max_context_length": 2048},
-        "flowstate-r1.1":         {"model_checkpoint": "ibm-research/flowstate", "max_context_length": 4096, "revision": "r1.1"},
-        "granite-flowstate-r1.1": {"model_checkpoint": "ibm-granite/granite-timeseries-flowstate-r1", "max_context_length": 4096, "revision": "r1.1"},
+        "granite-flowstate-r1": {
+            "model_checkpoint": "ibm-granite/granite-timeseries-flowstate-r1",
+            "max_context_length": 2048,
+        },
+        "flowstate-r1": {"model_checkpoint": "ibm-research/flowstate", "max_context_length": 2048},
+        "flowstate-r1.1": {
+            "model_checkpoint": "ibm-research/flowstate",
+            "max_context_length": 4096,
+            "revision": "r1.1",
+        },
+        "granite-flowstate-r1.1": {
+            "model_checkpoint": "ibm-granite/granite-timeseries-flowstate-r1",
+            "max_context_length": 4096,
+            "revision": "r1.1",
+        },
     }
 
     def __init__(
@@ -608,6 +619,7 @@ class FlowstateGiftModelForecaster(Forecaster):
             seq = np.concatenate([np.ones(min_len - len(seq)) * seq[0], seq])
         # Interpolate interior NaNs
         from scipy import interpolate
+
         inds = np.arange(seq.shape[0])
         good = np.where(np.isfinite(seq))
         f = interpolate.interp1d(inds[good], seq[good], bounds_error=False)
@@ -687,9 +699,9 @@ class FlowstateGiftModelForecaster(Forecaster):
         ), "data and prediction_length must have the same length and not empty"
 
         # Resolve call-time overrides vs instance defaults
-        freq_str  = freq_str  if freq_str  is not None else self.freq
-        domain    = domain    if domain    is not None else self.domain
-        no_daily  = no_daily  if no_daily  is not None else self.no_daily
+        freq_str = freq_str if freq_str is not None else self.freq
+        domain = domain if domain is not None else self.domain
+        no_daily = no_daily if no_daily is not None else self.no_daily
 
         if freq_str is not None:
             scale_factor = self._get_fixed_factor(freq_str, domain=domain, no_daily=no_daily)
@@ -736,9 +748,7 @@ class FlowstateGiftModelForecaster(Forecaster):
                 forecast_i["median"] = [max(x, 0) for x in forecast_i["median"]]
 
             for q_idx in range(len(self.quantile_levels)):
-                forecast_i[f"quantile_{q_idx}"] = [
-                    pred_quantiles[:, q_idx, t].squeeze() for t in range(pred_len)
-                ]
+                forecast_i[f"quantile_{q_idx}"] = [pred_quantiles[:, q_idx, t].squeeze() for t in range(pred_len)]
                 if enforce_only_positive and all_non_negative:
                     forecast_i[f"quantile_{q_idx}"] = [max(x, 0) for x in forecast_i[f"quantile_{q_idx}"]]
 
@@ -788,19 +798,10 @@ class FlowstateGiftModelForecaster(Forecaster):
 # Ensemble factory
 # ---------------------------------------------------------------------------
 
-from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
-import functools
-
-from tsfm_public.toolkit.ensemble_aggregation import (
-    aggregate_linear_pool,
-    aggregate_vincent,
-    aggregate_iqr_weighted,
-)
-
 _ENSEMBLE_FUNCTIONS = {
     "probability_space_aggregation": aggregate_linear_pool,
-    "quantile_space_aggregation":    aggregate_vincent,
-    "iqr_weighted":                  aggregate_iqr_weighted,
+    "quantile_space_aggregation": aggregate_vincent,
+    "iqr_weighted": aggregate_iqr_weighted,
 }
 
 _DEFAULT_QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -840,9 +841,7 @@ class RecordingForecaster(Forecaster):
         kwargs.pop("quantile_levels", None)
         if not getattr(self.forecaster, "uses_series_ids", False):
             kwargs.pop("series_ids", None)
-        self.last_forecast = np.asarray(
-            self.forecaster.forecast_for_ensemble(*args, **kwargs)
-        )
+        self.last_forecast = np.asarray(self.forecaster.forecast_for_ensemble(*args, **kwargs))
         return self.last_forecast
 
 
@@ -917,8 +916,7 @@ def build_gift_ensemble(
 
     if ensemble_method not in _ENSEMBLE_FUNCTIONS:
         raise ValueError(
-            f"Unknown ensemble_method '{ensemble_method}'. "
-            f"Choose from: {list(_ENSEMBLE_FUNCTIONS.keys())}"
+            f"Unknown ensemble_method '{ensemble_method}'. " f"Choose from: {list(_ENSEMBLE_FUNCTIONS.keys())}"
         )
     ensemble_function = _ENSEMBLE_FUNCTIONS[ensemble_method]
     if ensemble_method == "iqr_weighted":
@@ -938,7 +936,7 @@ def build_gift_ensemble(
                     device=device,
                     use_get_gift_model=True,
                     context_length=ttm_context_length,
-                    prediction_length = ttm_pred_length,
+                    prediction_length=ttm_pred_length,
                     freq=freq,
                     term=term,
                     scaling_data=ttm_scaling_data,
@@ -964,14 +962,10 @@ def build_gift_ensemble(
             else:
                 logging.warning(f"Skipping model '{model_version}', couldn't be loaded")
         except Exception as e:
-            logging.warning(
-                f"Skipping model '{model_version}': failed to load with error: {e}"
-            )
+            logging.warning(f"Skipping model '{model_version}': failed to load with error: {e}")
 
     return QuantileEnsembleForecaster(
         members=members,
         quantile_levels=quantile_levels,
-        ensemble_function=(
-            _single_member_result if len(members) == 1 else ensemble_function
-        ),
+        ensemble_function=(_single_member_result if len(members) == 1 else ensemble_function),
     )

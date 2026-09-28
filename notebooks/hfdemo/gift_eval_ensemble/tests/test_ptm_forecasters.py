@@ -5,21 +5,29 @@ $ uv run --extra testing pytest
 
 """
 
+import tempfile
+import unittest
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pandas as pd
+import run_gift_eval as runner
 import torch
-
+from gift_eval_windows import get_gift_ensemble_predictions_df, get_test_window_lengths
 from ptm_forecasters import (
     FlowstateGiftModelForecaster,
     PatchTSTFMGiftModelForecaster,
     RecordingForecaster,
     TinyTimeMixerPreTrainedGiftModelForecaster,
-    _TTMContextScaler,
     _single_member_result,
+    _TTMContextScaler,
     build_gift_ensemble,
 )
+
 from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
+
 
 N_QUANTILES = 9  # [0.1, 0.2, ..., 0.9]
 
@@ -61,9 +69,11 @@ def get_sample_data_with_nans(n_samples=100, period=24, n_targets=1, nan_indices
         data_with_nans.append(arr.tolist())
     return data_with_nans
 
+
 # ---------------------------------------------------------------------------
 # PatchTSTFMGiftModelForecaster
 # ---------------------------------------------------------------------------
+
 
 def test_patchtstfm_call():
     for model_version in ["patchtst-fm-r1", "granite-patchtst-fm-r1", "granite-patchtst-fm-r2"]:
@@ -92,8 +102,8 @@ def test_patchtstfm_call():
 
 
 def test_patchtstfm_forecast_for_ensemble():
-    for model_version in ["patchtst-fm-r1","granite-patchtst-fm-r1","granite-patchtst-fm-r2"]:
-        forecaster = PatchTSTFMGiftModelForecaster(device="cpu",model_version = model_version)
+    for model_version in ["patchtst-fm-r1", "granite-patchtst-fm-r1", "granite-patchtst-fm-r2"]:
+        forecaster = PatchTSTFMGiftModelForecaster(device="cpu", model_version=model_version)
         n_series = 3
         pred_len = 12
         data = get_sample_data(n_samples=100, period=24, n_targets=n_series)
@@ -102,14 +112,18 @@ def test_patchtstfm_forecast_for_ensemble():
         arr = forecaster.forecast_for_ensemble(data, prediction_length=prediction_length)
 
         assert isinstance(arr, np.ndarray)
-        assert arr.shape == (n_series, pred_len, 1, N_QUANTILES), (
-            f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
-        )
+        assert arr.shape == (
+            n_series,
+            pred_len,
+            1,
+            N_QUANTILES,
+        ), f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
 
 
 # ---------------------------------------------------------------------------
 # TinyTimeMixerPreTrainedGiftModelForecaster
 # ---------------------------------------------------------------------------
+
 
 def test_ttm_leaderboard_preprocessing():
     scaler = _TTMContextScaler(
@@ -118,9 +132,7 @@ def test_ttm_leaderboard_preprocessing():
             {"item_id": "a", "target": np.array([2.0, 4.0, 6.0])},
         ]
     )
-    forecaster = TinyTimeMixerPreTrainedGiftModelForecaster.__new__(
-        TinyTimeMixerPreTrainedGiftModelForecaster
-    )
+    forecaster = TinyTimeMixerPreTrainedGiftModelForecaster.__new__(TinyTimeMixerPreTrainedGiftModelForecaster)
     forecaster.quantile_levels = [index / 10 for index in range(1, 10)]
     forecaster.ix_median = 4
     forecaster.model = FakeTTM()
@@ -171,12 +183,17 @@ def test_single_member_result_preserves_quantiles():
     np.testing.assert_array_equal(result.predicted_quantiles, quantiles)
     np.testing.assert_array_equal(result.predicted, quantiles[..., 4])
 
+
 def test_ttm_call():
     data = get_sample_data(n_samples=100, period=24, n_targets=1)
     pred_len = 20
     context_length = 100
     forecaster = TinyTimeMixerPreTrainedGiftModelForecaster(
-        model_version="ttm-r3-pt", device="cpu", use_get_gift_model=True,context_length=context_length, prediction_length = pred_len
+        model_version="ttm-r3-pt",
+        device="cpu",
+        use_get_gift_model=True,
+        context_length=context_length,
+        prediction_length=pred_len,
     )
     fcast = forecaster(data, prediction_length=[pred_len])
 
@@ -188,31 +205,38 @@ def test_ttm_call():
 
 
 def test_ttm_forecast_for_ensemble():
-    
     n_series = 3
     pred_len = 12
     data = get_sample_data(n_samples=100, period=24, n_targets=n_series)
     prediction_length = [pred_len] * n_series
     context_length = 100
 
-    forecaster = TinyTimeMixerPreTrainedGiftModelForecaster(model_version="ttm-r3-pt", device="cpu", use_get_gift_model=True,context_length=context_length, prediction_length = pred_len)
+    forecaster = TinyTimeMixerPreTrainedGiftModelForecaster(
+        model_version="ttm-r3-pt",
+        device="cpu",
+        use_get_gift_model=True,
+        context_length=context_length,
+        prediction_length=pred_len,
+    )
     arr = forecaster.forecast_for_ensemble(data, prediction_length=prediction_length)
 
     assert isinstance(arr, np.ndarray)
-    assert arr.shape == (n_series, pred_len, 1, N_QUANTILES), (
-        f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
-    )
+    assert arr.shape == (
+        n_series,
+        pred_len,
+        1,
+        N_QUANTILES,
+    ), f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
 
 
 # ---------------------------------------------------------------------------
 # FlowstateGiftModelForecaster
 # ---------------------------------------------------------------------------
 
+
 def test_flowstate_call():
-    for model_version in ["flowstate-r1.1","granite-flowstate-r1.1"]:
-        forecaster = FlowstateGiftModelForecaster(
-            model_version=model_version, device="cpu"
-        )
+    for model_version in ["flowstate-r1.1", "granite-flowstate-r1.1"]:
+        forecaster = FlowstateGiftModelForecaster(model_version=model_version, device="cpu")
         data = get_sample_data(n_samples=100, period=24, n_targets=1)
         fcast = forecaster(data, prediction_length=[20])
 
@@ -225,10 +249,8 @@ def test_flowstate_call():
 
 def test_flowstate_call_with_freq():
     """Verify that passing freq_str at call time (override) works."""
-    for model_version in ["flowstate-r1.1","granite-flowstate-r1.1"]:
-        forecaster = FlowstateGiftModelForecaster(
-            model_version=model_version, device="cpu", freq="H"
-        )
+    for model_version in ["flowstate-r1.1", "granite-flowstate-r1.1"]:
+        forecaster = FlowstateGiftModelForecaster(model_version=model_version, device="cpu", freq="H")
         data = get_sample_data(n_samples=100, period=24, n_targets=1)
         # Override with a different freq at call time
         fcast = forecaster(data, prediction_length=[20], freq_str="D")
@@ -238,10 +260,8 @@ def test_flowstate_call_with_freq():
 
 
 def test_flowstate_forecast_for_ensemble():
-    for model_version in ["flowstate-r1.1","granite-flowstate-r1.1"]:
-        forecaster = FlowstateGiftModelForecaster(
-            model_version=model_version, device="cpu"
-        )
+    for model_version in ["flowstate-r1.1", "granite-flowstate-r1.1"]:
+        forecaster = FlowstateGiftModelForecaster(model_version=model_version, device="cpu")
         n_series = 3
         pred_len = 12
         data = get_sample_data(n_samples=100, period=24, n_targets=n_series)
@@ -250,9 +270,12 @@ def test_flowstate_forecast_for_ensemble():
         arr = forecaster.forecast_for_ensemble(data, prediction_length=prediction_length)
 
         assert isinstance(arr, np.ndarray)
-        assert arr.shape == (n_series, pred_len, 1, N_QUANTILES), (
-            f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
-        )
+        assert arr.shape == (
+            n_series,
+            pred_len,
+            1,
+            N_QUANTILES,
+        ), f"Expected ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {arr.shape}"
 
 
 # ---------------------------------------------------------------------------
@@ -275,9 +298,9 @@ def test_build_gift_ensemble_returns_correct_type():
     )
 
     assert isinstance(ensemble, QuantileEnsembleForecaster)
-    assert len(ensemble.members) == len(_ENSEMBLE_CANDIDATE_MODELS), (
-        f"Expected {len(_ENSEMBLE_CANDIDATE_MODELS)} members, got {len(ensemble.members)}"
-    )
+    assert len(ensemble.members) == len(
+        _ENSEMBLE_CANDIDATE_MODELS
+    ), f"Expected {len(_ENSEMBLE_CANDIDATE_MODELS)} members, got {len(ensemble.members)}"
     assert ensemble.quantile_levels == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 
@@ -291,12 +314,10 @@ def test_build_gift_ensemble_patchtst_use_fill_nan():
             patchtst_use_fill_nan=use_fill_nan,
         )
 
-        patchtst_member = next(
-            m for m in ensemble.members if "patchtst" in m.model_name
-        )
-        assert patchtst_member.forecaster.use_fill_nan is use_fill_nan, (
-            f"Expected use_fill_nan={use_fill_nan}, got {patchtst_member.forecaster.use_fill_nan}"
-        )
+        patchtst_member = next(m for m in ensemble.members if "patchtst" in m.model_name)
+        assert (
+            patchtst_member.forecaster.use_fill_nan is use_fill_nan
+        ), f"Expected use_fill_nan={use_fill_nan}, got {patchtst_member.forecaster.use_fill_nan}"
 
 
 def test_build_gift_ensemble_call():
@@ -315,25 +336,18 @@ def test_build_gift_ensemble_call():
 
     result = ensemble(data, prediction_length=prediction_length)
     assert result is not None
-    assert np.array(result.predicted).shape == (n_series, pred_len, 1), (
-        f"Expected predicted shape ({n_series}, {pred_len}, 1), got {np.array(result.predicted).shape}"
-    )
-    assert np.array(result.predicted_quantiles).shape == (n_series, pred_len, 1, N_QUANTILES), (
-        f"Expected quantiles shape ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {np.array(result.predicted_quantiles).shape}"
-    )
+    assert np.array(result.predicted).shape == (
+        n_series,
+        pred_len,
+        1,
+    ), f"Expected predicted shape ({n_series}, {pred_len}, 1), got {np.array(result.predicted).shape}"
+    assert (
+        np.array(result.predicted_quantiles).shape == (n_series, pred_len, 1, N_QUANTILES)
+    ), f"Expected quantiles shape ({n_series}, {pred_len}, 1, {N_QUANTILES}), got {np.array(result.predicted_quantiles).shape}"
     assert not np.any(np.isnan(np.array(result.predicted))), "predicted (median) must not contain NaNs"
 
 
 # GIFT-Eval window generation tests (no model downloads).
-import unittest
-from types import SimpleNamespace
-
-import numpy as np
-import pandas as pd
-
-from gift_eval_windows import get_gift_ensemble_predictions_df, get_test_window_lengths
-
-
 class FakeTestData:
     def __init__(self, inputs, labels):
         self.input = inputs
@@ -432,16 +446,14 @@ class RunGiftEvalTest(unittest.TestCase):
         self.assertEqual(len(member_frames["model-a"]), 1)
 
 
-
-
 class EvaluationInterfaceTest(unittest.TestCase):
     """Check the shared notebook/CLI entry point without model downloads."""
 
     def test_device_selection_and_cli(self):
-        from unittest.mock import patch
-        import run_gift_eval as runner
-        with patch.object(runner.torch.cuda, "is_available", return_value=False), \
-             patch.object(runner.torch.backends.mps, "is_available", return_value=False):
+        with (
+            patch.object(runner.torch.cuda, "is_available", return_value=False),
+            patch.object(runner.torch.backends.mps, "is_available", return_value=False),
+        ):
             self.assertEqual(runner.resolve_device(), "cpu")
             self.assertEqual(runner.resolve_device("cpu"), "cpu")
             with self.assertRaisesRegex(ValueError, "CUDA is unavailable"):
@@ -454,25 +466,37 @@ class EvaluationInterfaceTest(unittest.TestCase):
             runner.resolve_device("invalid")
 
     def test_callable_results_members_and_resume(self):
-        import tempfile
-        from pathlib import Path
-        from unittest.mock import MagicMock, patch
-        import run_gift_eval as runner
         dataset = SimpleNamespace(target_dim=1, freq="M", test_data=[object()])
         metrics = pd.DataFrame([{"dataset": "us_births/M/short", "MSE[mean]": 1.0}])
         fake_adapters = SimpleNamespace(build_gift_ensemble=MagicMock())
-        with tempfile.TemporaryDirectory() as directory, \
-             patch.dict(runner.CONFIGURATIONS, {"test-single-member": {
-                 "model_names": ("granite-patchtst-fm-r2",),
-                 "ensemble": "probability_space_aggregation"}}), \
-             patch.dict("sys.modules", {"ptm_forecasters": fake_adapters}), \
-             patch.object(runner, "Dataset", return_value=dataset), \
-             patch.object(runner, "get_gift_ensemble_predictions_df",
-                          return_value=(pd.DataFrame(), {"fake-member": pd.DataFrame([{}])})), \
-             patch.object(runner, "eval_gift_dataset", return_value=metrics):
-            settings = dict(model_name_config="test-single-member", datasets=["us_births/M"],
-                            out_dir=directory, device="cpu", save_member_results=True,
-                            patchtst_use_fill_nan=True)
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                runner.CONFIGURATIONS,
+                {
+                    "test-single-member": {
+                        "model_names": ("granite-patchtst-fm-r2",),
+                        "ensemble": "probability_space_aggregation",
+                    }
+                },
+            ),
+            patch.dict("sys.modules", {"ptm_forecasters": fake_adapters}),
+            patch.object(runner, "Dataset", return_value=dataset),
+            patch.object(
+                runner,
+                "get_gift_ensemble_predictions_df",
+                return_value=(pd.DataFrame(), {"fake-member": pd.DataFrame([{}])}),
+            ),
+            patch.object(runner, "eval_gift_dataset", return_value=metrics),
+        ):
+            settings = {
+                "model_name_config": "test-single-member",
+                "datasets": ["us_births/M"],
+                "out_dir": directory,
+                "device": "cpu",
+                "save_member_results": True,
+                "patchtst_use_fill_nan": True,
+            }
             result = runner.run_evaluation(**settings)
             self.assertEqual(result, Path(directory) / "test-single-member/all_results.csv")
             self.assertEqual(len(pd.read_csv(result)), 1)
@@ -488,22 +512,24 @@ class EvaluationInterfaceTest(unittest.TestCase):
 
 class PatchTSTSourceTest(unittest.TestCase):
     def test_all_versions_use_package_classes_and_keep_input_modes(self):
-        from unittest.mock import MagicMock, patch
         from ptm_forecasters import PatchTSTFMGiftModelForecaster
+
         for version in PatchTSTFMGiftModelForecaster._PATCHTST_MODELS:
             model = MagicMock()
             model.config.context_length = 8192
-            with patch("ptm_forecasters.PatchTSTFMConfig") as config_cls, \
-                 patch("ptm_forecasters.PatchTSTFMForPrediction") as model_cls, \
-                 patch.dict("os.environ", {"HF_TOKEN": "test-token"}):
+            with (
+                patch("ptm_forecasters.PatchTSTFMConfig") as config_cls,
+                patch("ptm_forecasters.PatchTSTFMForPrediction") as model_cls,
+                patch.dict("os.environ", {"HF_TOKEN": "test-token"}),
+            ):
                 model_cls.from_pretrained.return_value.to.return_value = model
                 adapter = PatchTSTFMGiftModelForecaster(model_version=version, device="cpu")
                 checkpoint = adapter._PATCHTST_MODELS[version]["model_checkpoint"]
                 config_cls.from_pretrained.assert_called_once_with(checkpoint, token="test-token")
                 model_cls.from_pretrained.assert_called_once_with(
-                    checkpoint, config=config_cls.from_pretrained.return_value, token="test-token")
+                    checkpoint, config=config_cls.from_pretrained.return_value, token="test-token"
+                )
                 model_cls.from_pretrained.return_value.to.assert_called_once_with("cpu")
                 self.assertIs(adapter.model, model)
-                self.assertEqual(adapter.uses_variable_length_input,
-                                 version == "granite-patchtst-fm-r2")
+                self.assertEqual(adapter.uses_variable_length_input, version == "granite-patchtst-fm-r2")
                 model.eval.assert_called_once()

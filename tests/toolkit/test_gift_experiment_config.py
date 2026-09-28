@@ -13,7 +13,9 @@ from pathlib import Path
 BENCHMARK = Path(__file__).resolve().parents[2] / "notebooks/hfdemo/gift_eval_ensemble"
 runner_path = BENCHMARK / "run_gift_eval.py"
 tree = ast.parse(runner_path.read_text())
-function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "load_experiment_config")
+function = next(
+    node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "load_experiment_config"
+)
 namespace = {"json": json, "Path": Path, "__file__": str(runner_path)}
 exec(compile(ast.Module(body=[function], type_ignores=[]), str(runner_path), "exec"), namespace)
 load_experiment_config = namespace["load_experiment_config"]
@@ -35,9 +37,11 @@ class TestGiftExperimentConfig(unittest.TestCase):
     def test_callable_and_cli_share_config_defaults(self):
         # Isolate definitions so this test needs no benchmark runtime dependencies.
         tree = ast.parse((BENCHMARK / "run_gift_eval.py").read_text())
-        functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in (
-            "run_evaluation", "parse_args"
-        )]
+        functions = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name in ("run_evaluation", "parse_args")
+        ]
         namespace = {
             "argparse": argparse,
             "RUN_DEFAULTS": self.config["defaults"],
@@ -48,9 +52,17 @@ class TestGiftExperimentConfig(unittest.TestCase):
         defaults = {name: arg.default for name, arg in signature.parameters.items()}
         self.assertEqual(defaults, self.config["defaults"])
         self.assertEqual(vars(namespace["parse_args"]([])), self.config["defaults"])
-        overrides = namespace["parse_args"]([
-            "--seed", "7", "--datasets", "us_births/M", "--device", "cpu", "--skip_processed",
-        ])
+        overrides = namespace["parse_args"](
+            [
+                "--seed",
+                "7",
+                "--datasets",
+                "us_births/M",
+                "--device",
+                "cpu",
+                "--skip_processed",
+            ]
+        )
         self.assertEqual(overrides.seed, 7)
         self.assertEqual(overrides.datasets, ["us_births/M"])
         self.assertEqual(overrides.device, "cpu")

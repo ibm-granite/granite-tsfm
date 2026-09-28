@@ -57,20 +57,16 @@ class ForecastEnsembleFn(Protocol):
     ) -> ForecastResult: ...
 
 
-
-
-
-
 def aggregate_linear_pool(
     predictions: np.ndarray,
     quantile_levels: list[float],
-    weights: Union[np.ndarray, None]= None,
+    weights: Union[np.ndarray, None] = None,
 ) -> ForecastResult:
     """Function for probability space aggregation.
-    
+
     Concatenates predictions across quantiles and models dimensions,
     then computes target quantiles.
-    
+
     Args:
         predictions: Predictions array with shape (..., n_quantiles, n_ensembles)
                      where ... represents any number of leading dimensions
@@ -80,12 +76,13 @@ def aggregate_linear_pool(
         weights: Optional 1D array of shape (n_ensembles,) for model weighting.
                  If None, uniform (unweighted) aggregation is used.
                  Must be non-negative and sum to 1.
-        
+
     Returns:
         ForecastResult
     """
-    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, 
-                                               quantile_levels=quantile_levels, weights=weights)
+    inputs_ok, msg = _validate_ensemble_inputs(
+        ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights
+    )
 
     if not inputs_ok:
         return ForecastResult(success=inputs_ok, message=msg)
@@ -95,32 +92,31 @@ def aggregate_linear_pool(
     original_shape = predictions.shape
     n_quantiles = original_shape[-2]
     n_ensembles = original_shape[-1]
-    
+
     # Reshape to combine the last two dimensions (quantiles and ensembles)
     # New shape: (..., n_quantiles * n_ensembles)
     leading_dims = original_shape[:-2]
-    concatenated = predictions.reshape(*leading_dims, n_quantiles * n_ensembles) #linear pooling
-    
+    concatenated = predictions.reshape(*leading_dims, n_quantiles * n_ensembles)  # linear pooling
+
     if weights is None:
         # Compute the specified quantiles along the concatenated dimension
         # np.quantile expects quantiles in [0, 1] range
         aggregated_predictions = np.quantile(concatenated, quantile_levels, axis=-1)
-        
+
         # Transpose to get shape (..., len(quantile_levels)) because np.quantile
         # returns shape (len(quantile_levels), ...)
         aggregated_predictions = np.moveaxis(aggregated_predictions, 0, -1)
-        
+
     else:
         # Weighted quantile computation
-        
+
         # Validate weights
-        assert weights.shape[0] == n_ensembles, \
-            f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
-        assert np.all(weights >= 0), \
-            "All weights must be non-negative"
-        assert np.isclose(weights.sum(), 1.0), \
-            f"Weights must sum to 1, got {weights.sum()}"
-        
+        assert (
+            weights.shape[0] == n_ensembles
+        ), f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
+        assert np.all(weights >= 0), "All weights must be non-negative"
+        assert np.isclose(weights.sum(), 1.0), f"Weights must sum to 1, got {weights.sum()}"
+
         # Flatten leading dimensions to 2D for easier processing
         # Shape: (prod(leading_dims), n_quantiles * n_ensembles)
         leading_size = int(np.prod(leading_dims)) if leading_dims else 1
@@ -136,37 +132,35 @@ def aggregate_linear_pool(
         # concatenated_flat shape: (leading_size, n_quantiles * n_ensembles)
         # weights_normalized shape: (n_quantiles * n_ensembles,)
         # Result shape: (leading_size, len(quantile_levels))
-        aggregated_predictions = _compute_weighted_quantiles(
-            concatenated_flat, expanded_weights, quantile_levels
-        )
-        
+        aggregated_predictions = _compute_weighted_quantiles(concatenated_flat, expanded_weights, quantile_levels)
+
         # Reshape back to original leading dimensions
         # Shape: (*leading_dims, len(quantile_levels))
         aggregated_predictions = aggregated_predictions.reshape(*leading_dims, len(quantile_levels))
 
-
-    result = _build_ensemble_result(aggregated_predictions=aggregated_predictions,
-                quantile_levels=quantile_levels, weights=weights,
-                method="aggregate_linear_pool",
-                msg = "Ensembling completed successfully.",
-                n_models=n_ensembles)
+    result = _build_ensemble_result(
+        aggregated_predictions=aggregated_predictions,
+        quantile_levels=quantile_levels,
+        weights=weights,
+        method="aggregate_linear_pool",
+        msg="Ensembling completed successfully.",
+        n_models=n_ensembles,
+    )
 
     return result
-
-
 
 
 def aggregate_vincent(
     predictions: np.ndarray,
     quantile_levels: list[float],
     weights: Union[np.ndarray, None] = None,
-    aggregation= 'median',
+    aggregation="median",
 ) -> ForecastResult:
     """Vincentian aggregation of quantiles with isotonic regression.
-    
+
     Performs weighted aggregation across ensemble members for each quantile level,
     then applies isotonic regression to ensure monotonicity.
-    
+
     Args:
         predictions: Predictions from multiple models.
             Shape: (n_samples, prediction_length, n_targets, n_quantiles, n_models)
@@ -199,15 +193,15 @@ def aggregate_vincent(
         >>> print(result.predicted_quantiles.shape)  # (10, 24, 2, 9)
     """
 
-    inputs_ok, msg = _validate_ensemble_inputs(ensemble_predictions=predictions, 
-                                               quantile_levels=quantile_levels, weights=weights)
-
+    inputs_ok, msg = _validate_ensemble_inputs(
+        ensemble_predictions=predictions, quantile_levels=quantile_levels, weights=weights
+    )
 
     if not inputs_ok:
         return ForecastResult(success=inputs_ok, message=msg)
-    
+
     predictions = np.asarray(predictions)
-    
+
     # Get the shape information
     # predictions shape: (..., n_quantiles, n_ensembles)
     original_shape = predictions.shape
@@ -226,116 +220,119 @@ def aggregate_vincent(
             ),
             metadata={"method": "aggregate_vincent"},
         )
-    
+
     # 1. Sort the predictions along the quantile dimension (-2) based on increasing order of quantile levels
     # Get the sorting indices for quantile_levels
     sorted_indices = np.argsort(quantile_levels)
     sorted_quantile_levels = np.array(quantile_levels)[sorted_indices]
-    
-    # Apply sorting to the quantile dimension (-2), quantile_levels should 
+
+    # Apply sorting to the quantile dimension (-2), quantile_levels should
     # indicate the quantiles of predictions dimension -2.
     sorted_predictions = np.take(predictions, sorted_indices, axis=-2)
-    
+
     if weights is None:
         # 2. Perform aggregation in the ensembles dimension (-1)
-        if aggregation == 'median':
-            ensemble_aggregation = np.median(sorted_predictions, axis=-1) #leading_dim , n_quantiles
-        else: #default is mean
-            ensemble_aggregation = np.mean(sorted_predictions, axis=-1) #leading_dim , n_quantiles
+        if aggregation == "median":
+            ensemble_aggregation = np.median(sorted_predictions, axis=-1)  # leading_dim , n_quantiles
+        else:  # default is mean
+            ensemble_aggregation = np.mean(sorted_predictions, axis=-1)  # leading_dim , n_quantiles
     else:
         # Validate weights
-        assert weights.shape[0] == n_ensembles, \
-            f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
-        assert np.all(weights >= 0), \
-            "All weights must be non-negative"
-        assert np.isclose(weights.sum(), 1.0), \
-            f"Weights must sum to 1, got {weights.sum()}"
+        assert (
+            weights.shape[0] == n_ensembles
+        ), f"Weights dimension {weights.shape[0]} must match n_models {n_ensembles}"
+        assert np.all(weights >= 0), "All weights must be non-negative"
+        assert np.isclose(weights.sum(), 1.0), f"Weights must sum to 1, got {weights.sum()}"
 
-        sorted_predictions_flat = sorted_predictions.reshape(leading_size*n_quantiles, n_ensembles)
-        if aggregation == 'median':
-            ensemble_aggregation = _compute_weighted_quantiles(
-                sorted_predictions_flat, weights, [0.5]
-            )[...,0] #leading_size x n_quantiles
-        else: #default is weighted mean
-            ensemble_aggregation = np.sum(sorted_predictions_flat*weights[np.newaxis,:], 
-                                          axis=-1)/np.sum(weights[np.newaxis,:], axis=-1) #leading_size x n_quantiles
+        sorted_predictions_flat = sorted_predictions.reshape(leading_size * n_quantiles, n_ensembles)
+        if aggregation == "median":
+            ensemble_aggregation = _compute_weighted_quantiles(sorted_predictions_flat, weights, [0.5])[
+                ..., 0
+            ]  # leading_size x n_quantiles
+        else:  # default is weighted mean
+            ensemble_aggregation = np.sum(sorted_predictions_flat * weights[np.newaxis, :], axis=-1) / np.sum(
+                weights[np.newaxis, :], axis=-1
+            )  # leading_size x n_quantiles
 
     # 3. Apply IsotonicRegression across the quantile dimension (now -1 after median aggregation)
     # median_predictions shape: (..., n_quantiles)
-    
+
     # Reshape to 2D for easier processing: (batch_size, n_quantiles)
     # batch_size = np.prod(leading_dims) if leading_dims else 1
     ensemble_aggregation = ensemble_aggregation.reshape(leading_size, n_quantiles)
-    
+
     # Apply isotonic regression only to non-monotonic rows
     # Vectorized monotonicity check for all rows
     is_monotonic = np.all(ensemble_aggregation[:, 1:] >= ensemble_aggregation[:, :-1], axis=1)
     non_monotonic_indices = np.where(~is_monotonic)[0]
-    
+
     # Start with a copy of the original predictions
     isotonic_predictions = np.copy(ensemble_aggregation)
-    
+
     # Only apply isotonic regression to non-monotonic rows
     if len(non_monotonic_indices) > 0:
         ir: IsotonicRegression = IsotonicRegression(increasing=True)
         for i in non_monotonic_indices:
             isotonic_predictions[i] = ir.fit_transform(sorted_quantile_levels, ensemble_aggregation[i])
-    
+
     # Reshape back to original leading dimensions
     aggregated_predictions = isotonic_predictions.reshape(*leading_dims, n_quantiles)
 
-    result = _build_ensemble_result(aggregated_predictions=aggregated_predictions,
-                quantile_levels=quantile_levels, weights=weights,
-                method="aggregate_vincent",
-                msg = "Ensembling completed successfully.",
-                n_models=n_ensembles)
+    result = _build_ensemble_result(
+        aggregated_predictions=aggregated_predictions,
+        quantile_levels=quantile_levels,
+        weights=weights,
+        method="aggregate_vincent",
+        msg="Ensembling completed successfully.",
+        n_models=n_ensembles,
+    )
 
     return result
 
 
+def _validate_ensemble_inputs(
+    ensemble_predictions: Union[np.ndarray, list],
+    quantile_levels: list[float],
+    weights: Union[np.ndarray, list, None] = None,
+) -> tuple[bool, str]:
+    """Validates ensemble inputs
 
-def _validate_ensemble_inputs(ensemble_predictions: Union[np.ndarray, list],
-                              quantile_levels: list[float],
-                              weights: Union[np.ndarray, list, None] = None) -> tuple[bool, str]:
-        """Validates ensemble inputs
-        
-        returns tuple (bool, str) where bool indiates validation and str contains error message
-        """
+    returns tuple (bool, str) where bool indiates validation and str contains error message
+    """
 
-        # Convert to numpy array
-        predictions = np.asarray(ensemble_predictions)
-        
-        # Validate shape: (n_samples, prediction_length, n_targets, n_quantiles, n_models)
-        if predictions.ndim != 5:
-            return False, (
-                "Expected 5D array with shape "
-                "(n_samples, prediction_length, n_targets, n_quantiles, n_models), "
-                f"got {predictions.ndim}D array"
-            )        
-        n_samples, pred_len, n_targets, n_quantiles, n_models = predictions.shape
-        
-        # Validate quantile levels
-        if not quantile_levels:
-            return False, "quantile_levels cannot be empty" 
-        
-        if not all(0 <= q <= 1 for q in quantile_levels):
-            return False, "All quantile levels must be in [0, 1]"
-        
-        # Validate weights if provided
-        if weights is not None:
-            weights = np.asarray(weights)
-            # Weights must be 1D with shape (n_models,)
-            if weights.ndim != 1:
-                return False, f"Weights must be 1D array, got {weights.ndim}D array with shape {weights.shape}"
-                
-            if weights.shape[0] != n_models:
-                return False,f"Weights must have length {n_models} (n_models), got {weights.shape[0]}"
+    # Convert to numpy array
+    predictions = np.asarray(ensemble_predictions)
 
-        return True, "Ensemble input validation succeeded."
+    # Validate shape: (n_samples, prediction_length, n_targets, n_quantiles, n_models)
+    if predictions.ndim != 5:
+        return False, (
+            "Expected 5D array with shape "
+            "(n_samples, prediction_length, n_targets, n_quantiles, n_models), "
+            f"got {predictions.ndim}D array"
+        )
+    n_samples, pred_len, n_targets, n_quantiles, n_models = predictions.shape
+
+    # Validate quantile levels
+    if not quantile_levels:
+        return False, "quantile_levels cannot be empty"
+
+    if not all(0 <= q <= 1 for q in quantile_levels):
+        return False, "All quantile levels must be in [0, 1]"
+
+    # Validate weights if provided
+    if weights is not None:
+        weights = np.asarray(weights)
+        # Weights must be 1D with shape (n_models,)
+        if weights.ndim != 1:
+            return False, f"Weights must be 1D array, got {weights.ndim}D array with shape {weights.shape}"
+
+        if weights.shape[0] != n_models:
+            return False, f"Weights must have length {n_models} (n_models), got {weights.shape[0]}"
+
+    return True, "Ensemble input validation succeeded."
 
 
-
-def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, method:str, msg:str, n_models:int):
+def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, method: str, msg: str, n_models: int):
     """Builds ForecastResult object from aggregated predictions"""
 
     # Compute point predictions only if 0.5 is in quantile_levels
@@ -344,10 +341,10 @@ def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, met
         median_idx = quantile_levels.index(0.5)
         predicted = aggregated_predictions[..., median_idx]
         predicted_list = predicted.tolist()
-    
+
     # Convert to nested lists
     predicted_quantiles_list = aggregated_predictions.tolist()
-    
+
     return ForecastResult(
         success=True,
         message=msg,
@@ -358,9 +355,8 @@ def _build_ensemble_result(aggregated_predictions, quantile_levels, weights, met
             "quantile_levels": quantile_levels,
             "n_models": n_models,
             "weights": weights.tolist() if weights is not None else None,
-        }
+        },
     )
-
 
 
 def aggregate_iqr_weighted(
@@ -441,10 +437,7 @@ def aggregate_iqr_weighted(
         if not (min_valid <= max_weight <= 1.0):
             return ForecastResult(
                 success=False,
-                message=(
-                    f"max_weight must be in [1/n_models, 1] = [{min_valid:.6g}, 1.0], "
-                    f"got {max_weight}"
-                ),
+                message=(f"max_weight must be in [1/n_models, 1] = [{min_valid:.6g}, 1.0], " f"got {max_weight}"),
                 metadata={"method": "aggregate_iqr_weighted"},
             )
 
@@ -476,13 +469,13 @@ def aggregate_iqr_weighted(
     # Iterative weight capping: redistribute excess from over-limit models to uncapped ones.
     # Models with weight=0 (excluded via prior) never receive redistributed excess.
     if max_weight is not None:
-        participating = (softmax_weights > 0).astype(float)          # (..., n_models)
+        participating = (softmax_weights > 0).astype(float)  # (..., n_models)
         for _ in range(n_models):
             over_mask = softmax_weights > max_weight
             if not over_mask.any():
                 break
             excess = np.clip(softmax_weights - max_weight, 0.0, None)
-            total_excess = excess.sum(axis=-1, keepdims=True)        # (..., 1)
+            total_excess = excess.sum(axis=-1, keepdims=True)  # (..., 1)
             softmax_weights = np.where(over_mask, max_weight, softmax_weights)
             uncapped = participating * (softmax_weights < max_weight).astype(float)
             uncapped_sum = (softmax_weights * uncapped).sum(axis=-1, keepdims=True)
@@ -490,7 +483,7 @@ def aggregate_iqr_weighted(
             softmax_weights = softmax_weights + softmax_weights * uncapped * (total_excess / uncapped_sum)
 
     # 4. Weighted mean across models for every quantile level
-    w = softmax_weights[..., np.newaxis, :]        # (*leading, 1, n_models)
+    w = softmax_weights[..., np.newaxis, :]  # (*leading, 1, n_models)
     ensemble_aggregation = (predictions * w).sum(axis=-1)  # (*leading, n_quantiles)
 
     # 5. Isotonic regression to enforce quantile monotonicity
@@ -525,20 +518,20 @@ def _compute_weighted_quantiles(
     quantile_levels: list[float],
 ) -> np.ndarray:
     """Compute weighted quantiles for a 2D array.
-    
+
     Computes weighted quantiles across the samples dimension (axis=-1)
     independently for each row in the first dimension.
-    
+
     Args:
         samples: 2D array of shape (n_rows, n_samples) where quantiles are
                  computed across n_samples for each row independently
         weights: 1D array of shape (n_samples,) containing normalized weights
                  Must sum to 1.
         quantile_levels: List of quantile levels to compute, values in [0, 1]
-        
+
     Returns:
         np.ndarray: Weighted quantiles with shape (n_rows, len(quantile_levels))
-        
+
     Example:
         >>> samples = np.array([[1, 2, 3, 4], [5, 6, 7, 8]])  # 2 rows, 4 samples each
         >>> weights = np.array([0.1, 0.2, 0.4, 0.3])  # weights for 4 samples
@@ -547,36 +540,33 @@ def _compute_weighted_quantiles(
     """
     n_rows = samples.shape[0]
     n_samples = samples.shape[1]
-    
+
     # Validate inputs
-    assert weights.shape[0] == n_samples, \
-        f"Weights length {weights.shape[0]} must match samples dimension {n_samples}"
-    assert np.all(weights >= 0), \
-        "All weights must be non-negative"
-    assert np.isclose(weights.sum(), 1.0), \
-        f"Weights must sum to 1, got {weights.sum()}"
-    
+    assert weights.shape[0] == n_samples, f"Weights length {weights.shape[0]} must match samples dimension {n_samples}"
+    assert np.all(weights >= 0), "All weights must be non-negative"
+    assert np.isclose(weights.sum(), 1.0), f"Weights must sum to 1, got {weights.sum()}"
+
     # Sort values along samples axis (independently for each row)
     sorted_indices = np.argsort(samples, axis=-1)  # Shape: (n_rows, n_samples)
     sorted_values = np.take_along_axis(samples, sorted_indices, axis=-1)  # Shape: (n_rows, n_samples)
-    
+
     # Reorder weights according to sorted values
     sorted_weights = np.take(weights, sorted_indices)  # Shape: (n_rows, n_samples)
-    
+
     # Compute cumulative sum of sorted weights
     cumsum_weights = np.cumsum(sorted_weights, axis=-1)  # Shape: (n_rows, n_samples)
-    
+
     # Find indices where cumulative weight >= each target quantile level
     indices = np.zeros((n_rows, len(quantile_levels)), dtype=int)
     weighted_quantiles = np.empty((n_rows, len(quantile_levels)))
-    
+
     # For each row, find weighted quantiles across samples
     for i in range(n_rows):
         # Find insertion points for each quantile level in cumulative weights
-        indices[i, :] = np.searchsorted(cumsum_weights[i], quantile_levels, side='right')
+        indices[i, :] = np.searchsorted(cumsum_weights[i], quantile_levels, side="right")
         # Clip indices to valid range to avoid out-of-bounds (safety check)
         indices[i, :] = np.clip(indices[i, :], 0, n_samples - 1)
         # Extract weighted quantile values at the found indices
         weighted_quantiles[i, :] = sorted_values[i, indices[i, :]]
-    
+
     return weighted_quantiles
