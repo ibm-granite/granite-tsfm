@@ -129,10 +129,9 @@ def test_ttm_leaderboard_preprocessing():
     forecaster.freq = "D"
     forecaster.scaler = scaler
 
-    # A later rolling window must not alter normalization at this origin.
-    scaler.mean["a"][:] = 10000
-    scaler.std["a"][:] = 1000
-    result = forecaster([[2.0, 4.0, 6.0]], [2], series_ids=["a"])
+    # Use the statistics stored during initialization rather than recomputing
+    # them from this earlier rolling window.
+    result = forecaster([[1.0, 2.0, 3.0]], [2], series_ids=["a"])
 
     np.testing.assert_array_equal(
         forecaster.model.inputs["past_observed_mask"].numpy().reshape(-1),
@@ -140,7 +139,7 @@ def test_ttm_leaderboard_preprocessing():
     )
     np.testing.assert_allclose(
         forecaster.model.inputs["past_values"].numpy().reshape(-1),
-        [0.0, -1.2247449, 0.0, 1.2247449],
+        [0.0, -1.8371173, -1.2247449, -0.6123724],
     )
     assert forecaster.model.inputs["freq_token"].item() == 8
     np.testing.assert_allclose(result[0]["median"], [4.0 + np.std([2.0, 4.0, 6.0])] * 2)
