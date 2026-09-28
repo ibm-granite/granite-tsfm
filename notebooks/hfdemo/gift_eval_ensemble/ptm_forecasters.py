@@ -217,7 +217,7 @@ def _impute_ttm_series(target):
 
 
 class _TTMContextScaler:
-    """Match the per-item rolling normalization used by the TTM leaderboard."""
+    """Match the stored per-item normalization used by the submitted leaderboard."""
 
     def __init__(self, data):
         self.mean = {}
@@ -235,11 +235,6 @@ class _TTMContextScaler:
 
     def transform(self, target, item_id):
         target = _impute_ttm_series(target)
-        target_for_stats = target.reshape(1, -1) if target.ndim == 1 else target
-        self.mean[item_id] = target_for_stats.mean(axis=1).reshape(-1, 1)
-        std = target_for_stats.std(axis=1).reshape(-1, 1)
-        std[std == 0] = 1
-        self.std[item_id] = std
         return (target - self.mean[item_id].squeeze()) / self.std[item_id].squeeze()
 
     def inverse_transform(self, forecast, item_id):
