@@ -1,4 +1,3 @@
-
 import logging
 from functools import partial
 
@@ -75,12 +74,12 @@ class QuantileEnsembleForecaster:
     """
 
     def __init__(
-            self,
-            members: list[Forecaster],
-            quantile_levels: list[float],
-            ensemble_function: ForecastEnsembleFn = aggregate_linear_pool,
-            weights=None,
-            **kwargs
+        self,
+        members: list[Forecaster],
+        quantile_levels: list[float],
+        ensemble_function: ForecastEnsembleFn = aggregate_linear_pool,
+        weights=None,
+        **kwargs,
     ):
         self.members = members
         self.quantile_levels = quantile_levels
@@ -122,11 +121,8 @@ class QuantileEnsembleForecaster:
             **kwargs: Additional arguments forwarded to
                 :meth:`ProbabilisticEnsembleConfig.from_pretrained`.
         """
-        config = ProbabilisticEnsembleConfig.from_pretrained(
-            pretrained_model_name_or_path, **kwargs
-        )
+        config = ProbabilisticEnsembleConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls.from_config(config, device=device)
-
 
     def __call__(self, data, **kwargs):
         """Run all member forecasters and aggregate their predictions.
@@ -151,9 +147,7 @@ class QuantileEnsembleForecaster:
                 fcast = memb.forecast_for_ensemble(data, **kwargs)
                 forecasts.append(np.asarray(fcast))
             except Exception as e:
-                logging.warning(
-                    f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}"
-                )
+                logging.warning(f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}")
 
         if not forecasts:
             raise RuntimeError("All ensemble members failed to produce forecasts.")
@@ -162,8 +156,6 @@ class QuantileEnsembleForecaster:
         ensemble_predictions = np.stack(forecasts, axis=-1)
 
         # Aggregate using the provided ensemble function
-        result = self.ensemble_function(
-            ensemble_predictions, self.quantile_levels, weights=self.weights
-        )
+        result = self.ensemble_function(ensemble_predictions, self.quantile_levels, weights=self.weights)
 
         return result
