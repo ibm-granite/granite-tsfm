@@ -56,7 +56,7 @@ def load_experiment_config(path=None):
     for name, recipe in configurations.items():
         if not recipe.get("model_names"):
             raise ValueError(f"Experiment {name!r} must specify model_names.")
-        if recipe.get("ensemble") not in ("probability_space_aggregation", "quantile_space_aggregation"):
+        if recipe.get("ensemble") not in ("probability_space_aggregation", "quantile_space_aggregation", "iqr_weighted"):
             raise ValueError(f"Experiment {name!r} has an unsupported ensemble method.")
     # Benchmark adapters currently emit this fixed quantile grid.
     if config["quantile_levels"] != [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
@@ -256,6 +256,8 @@ def run_evaluation(
         ENSEMBLE = CONFIGURATIONS[model_name_config]["ensemble"]
     else:
         ENSEMBLE = "probability_space_aggregation"
+    IQR_TEMPERATURE = CONFIGURATIONS[model_name_config].get("iqr_temperature", 1.0)
+    IQR_MAX_WEIGHT = CONFIGURATIONS[model_name_config].get("iqr_max_weight", None)
 
     # Get already processed datasets if skip_processed is enabled
     processed_datasets = get_processed_datasets(out_name) if skip_processed else set()
@@ -339,6 +341,8 @@ def run_evaluation(
                     device=device,
                     patchtst_use_fill_nan=patchtst_use_fill_nan,
                     quantile_levels=QUANTILE_LEVELS,
+                    iqr_temperature=IQR_TEMPERATURE,
+                    iqr_max_weight=IQR_MAX_WEIGHT,
                 )
 
                 """
