@@ -1,7 +1,7 @@
 """Basic tests of PreTrainedModel forecasters
 
-Run from the parent benchmark directory like this:
-$ uv run --extra testing pytest
+Run from the repository root with the benchmark requirements installed:
+$ PYTHONPATH=notebooks/hfdemo/gift_eval_ensemble .venv/bin/python -m pytest -q notebooks/hfdemo/gift_eval_ensemble/tests
 
 """
 

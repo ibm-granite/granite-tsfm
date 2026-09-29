@@ -272,8 +272,13 @@ class DataFramePipelineForecaster(Forecaster):
 
 
 class PatchTSTFMDataFramePipelineForecaster(DataFramePipelineForecaster):
-    def __init__(self, model_checkpoint: str = "ibm-research/patchtst-fm-r1", device: str = None):
-        model = PatchTSTFMForPrediction.from_pretrained(model_checkpoint)
+    def __init__(
+        self,
+        model_checkpoint: str = "ibm-granite/granite-timeseries-patchtst-fm-r2",
+        device: str = None,
+        **kwargs,
+    ):
+        model = PatchTSTFMForPrediction.from_pretrained(model_checkpoint, **kwargs)
         super().__init__(model=model, device=device)
 
 
@@ -281,7 +286,7 @@ class FlowStateDataFramePipelineForecaster(DataFramePipelineForecaster):
     def __init__(
         self,
         model_checkpoint: str = "ibm-granite/granite-timeseries-flowstate-r1",
-        model_revision="r1.1",
+        model_revision: Optional[str] = "r1.1",
         device: str = None,
         scale_factor: float = 1,
         batch_first: bool = True,
@@ -302,6 +307,8 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         self.model_checkpoint = model_checkpoint
         self._ttm_model_key = model_revision
 
+        # Without an explicit revision, defer loading until __call__ knows the
+        # requested context and prediction lengths and can select a TTM revision.
         if model_revision:
             model = TinyTimeMixerForPrediction.from_pretrained(model_checkpoint, revision=model_revision)
         else:
@@ -331,14 +338,18 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             target_columns: List of target column names to forecast.
             prediction_length: Number of future timesteps to forecast.
             context_length: Number of historical timesteps to use as context.
-                If None, defaults to the model's own context length.
+                If None, uses the number of rows in data to select a TTM revision.
             id_columns: Columns identifying distinct time series. Default: [].
             quantile_levels: Quantile levels for probabilistic forecasting.
                 Default: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].
             batch_size: Inference batch size. Default: 64.
             scaling:
             scaler_type:
-            use_get_model:
+            use_get_model: If True (default), select and load a TTM revision for
+                the requested context and prediction lengths on each call, even if
+                model_revision was supplied at construction. If False, use the
+                revision already loaded at construction; this requires an explicit
+                model_revision.
 
         Returns:
             pd.DataFrame with forecast results from TimeSeriesForecastingPipeline.
