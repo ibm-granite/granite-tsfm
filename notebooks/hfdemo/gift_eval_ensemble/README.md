@@ -6,17 +6,20 @@ results on GIFT-Eval. For a minimal introduction to the public ensemble API, see
 
 ## Environment
 
-Use Python 3.12 and run these commands from this directory:
+Use Python 3.12 and run these commands from the Granite TSFM repository root:
 
 ```bash
-uv venv --python 3.12 --seed
-uv sync --extra notebooks --extra testing
+uv sync --python 3.12 --locked --extra dev
+uv pip install --python .venv/bin/python git+https://github.com/SalesforceAIResearch/gift-eval.git
+uv pip check --python .venv/bin/python
 export GIFT_EVAL=/path/to/downloaded/gift-eval
 ```
 
-The uv project installs the repository checkout in editable mode together with
-the benchmark dependencies. It retains pandas 2.1.4 through an explicit override
-for compatibility with the replication environment.
+The root project provides Granite TSFM and the notebook and test dependencies.
+Install GIFT-Eval from its repository into that environment; its dependencies
+are installed with it.
+Run the commands below with `.venv/bin/python` so uv does not resync the root
+environment and remove those additional packages.
 
 ## Configurations
 
@@ -40,18 +43,18 @@ Both configurations use uniform probability-space aggregation (linear pooling).
 Run a small smoke test before the full evaluation:
 
 ```bash
-uv run python run_gift_eval.py \
+.venv/bin/python notebooks/hfdemo/gift_eval_ensemble/run_gift_eval.py \
   --model_name_config probability-ensemble-uniform-ibm-tsfm-pt \
   --datasets us_births/M \
-  --out_dir replication_runs/smoke
+  --out_dir notebooks/hfdemo/gift_eval_ensemble/replication_runs/smoke
 ```
 
 Omit `--datasets` to run all configured datasets:
 
 ```bash
-uv run python run_gift_eval.py \
+.venv/bin/python notebooks/hfdemo/gift_eval_ensemble/run_gift_eval.py \
   --model_name_config probability-ensemble-uniform-ibm-tsfm-pt \
-  --out_dir replication_runs/full
+  --out_dir notebooks/hfdemo/gift_eval_ensemble/replication_runs/full
 ```
 
 The runner automatically selects CUDA when available, followed by MPS and CPU.
@@ -69,11 +72,16 @@ output directory after changing the configuration, preprocessing, or environment
 
 [`granite_ensemble_gift_eval.ipynb`](granite_ensemble_gift_eval.ipynb) provides the
 same smoke-test and full-evaluation workflow through `run_evaluation()`.
+Select the root `.venv` as its kernel. If it is not listed, register it with:
+
+```bash
+.venv/bin/python -m ipykernel install --user --name granite-gift-eval --display-name "Granite GIFT-Eval"
+```
 
 Run the benchmark tests with:
 
 ```bash
-uv run --extra testing pytest
+PYTHONPATH=notebooks/hfdemo/gift_eval_ensemble .venv/bin/python -m pytest -q notebooks/hfdemo/gift_eval_ensemble/tests
 ```
 
 Some tests and evaluation runs download model checkpoints.

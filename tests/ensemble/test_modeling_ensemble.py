@@ -3,6 +3,8 @@
 
 """Tests for QuantileEnsembleForecaster."""
 
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import torch
@@ -21,6 +23,14 @@ from tsfm_public.toolkit.forecasters import (
 PREDICTION_LENGTH = 24
 CONTEXT_LENGTH = 90
 N_QUANTILES = len(DEFAULT_QUANTILE_LEVELS)
+
+
+def test_patchtst_forecaster_default_and_load_options():
+    with patch("tsfm_public.toolkit.forecasters.PatchTSTFMForPrediction.from_pretrained") as load:
+        member = PatchTSTFMDataFramePipelineForecaster(device="cpu", local_files_only=True)
+
+    load.assert_called_once_with("ibm-granite/granite-timeseries-patchtst-fm-r2", local_files_only=True)
+    assert member.model is load.return_value
 
 
 def test_ensemble_call():
