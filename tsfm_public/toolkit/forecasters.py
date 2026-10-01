@@ -305,11 +305,11 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         device: str = None,
     ):
         self.model_checkpoint = model_checkpoint
-        self._ttm_model_key = model_revision
+        self.model_revision = model_revision
 
         # Without an explicit revision, defer loading until __call__ knows the
         # requested context and prediction lengths and can select a TTM revision.
-        if model_revision:
+        if model_revision is not None:
             model = TinyTimeMixerForPrediction.from_pretrained(model_checkpoint, revision=model_revision)
         else:
             model = None
@@ -328,9 +328,11 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         batch_size: int = 64,
         scaling: bool = False,
         scaler_type: str = "standard",
-        use_get_model: bool = True,
     ) -> pd.DataFrame:
         """Run inference and return the raw forecast DataFrame.
+
+        Uses the model_revision supplied at construction when specified. Otherwise,
+        selects a TTM revision for the requested lengths on each call.
 
         Args:
             data: DataFrame containing time series data.
@@ -345,11 +347,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             batch_size: Inference batch size. Default: 64.
             scaling:
             scaler_type:
-            use_get_model: If True (default), select and load a TTM revision for
-                the requested context and prediction lengths on each call, even if
-                model_revision was supplied at construction. If False, use the
-                revision already loaded at construction; this requires an explicit
-                model_revision.
 
         Returns:
             pd.DataFrame with forecast results from TimeSeriesForecastingPipeline.
@@ -361,7 +358,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         else:
             requested_context_length_or_data_length = context_length
 
-        if use_get_model:
+        if self.model_revision is None:
             model_key = get_model(
                 model_path=self.model_checkpoint,
                 model_name="ttm",
@@ -369,11 +366,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                 prediction_length=prediction_length,
                 return_model_key=True,
             )
-
-            if self._ttm_model_key:
-                if model_key != self._ttm_model_key:
-                    msg = f"TTM model key changed from {self._ttm_model_key} to {model_key}"
-                    logging.info(msg)
 
             self.ttm_model_key = model_key
 
@@ -451,7 +443,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         batch_size=64,
         scaling: bool = False,
         scaler_type: str = "standard",
-        use_get_model: bool = True,
     ) -> ForecastResult:
         forecast = self.__call__(
             data=data,
@@ -464,7 +455,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             batch_size=batch_size,
             scaling=scaling,
             scaler_type=scaler_type,
-            use_get_model=use_get_model,
         )
 
         predicted_list, actuals_list, predicted_quantiles_list, error_msg = _extract_predictions_and_actuals(
@@ -510,7 +500,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         batch_size=64,
         scaling: bool = False,
         scaler_type: str = "standard",
-        use_get_model: bool = True,
     ) -> np.array:
         forecast = self.forecast_in_forecast_result(
             data=data,
@@ -523,7 +512,6 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             batch_size=batch_size,
             scaling=scaling,
             scaler_type=scaler_type,
-            use_get_model=use_get_model,
         )
 
         return np.array(forecast.predicted_quantiles)
