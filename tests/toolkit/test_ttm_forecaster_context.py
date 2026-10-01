@@ -18,15 +18,50 @@ class TestTTMForecasterContext(unittest.TestCase):
                 "target": np.arange(4096, dtype=float),
             }
         )
-        self.member = TinyTimeMixerDataFramePipelineForecaster(device="cpu")
-        self.member.model = SimpleNamespace(config=SimpleNamespace(context_length=2048, prediction_length=96))
+        model = SimpleNamespace(config=SimpleNamespace(context_length=2048, prediction_length=96))
+        with patch("tsfm_public.toolkit.forecasters.TinyTimeMixerForPrediction.from_pretrained", return_value=model):
+            self.member = TinyTimeMixerDataFramePipelineForecaster(model_revision="main", device="cpu")
+
+    def test_explicit_main_revision_is_loaded_once_and_preserved(self):
+        model = self.member.model
+        with (
+            patch(
+                "tsfm_public.toolkit.forecasters.TinyTimeMixerForPrediction.from_pretrained", return_value=model
+            ) as load,
+            patch("tsfm_public.toolkit.forecasters.get_model") as select,
+            patch("tsfm_public.toolkit.forecasters.TimeSeriesPreprocessor"),
+            patch("tsfm_public.toolkit.forecasters.TimeSeriesForecastingPipeline"),
+        ):
+            member = TinyTimeMixerDataFramePipelineForecaster(model_revision="main", device="cpu")
+            for context_length in [512, 1024]:
+                member(self.data.tail(context_length), "timestamp", ["target"], 96, context_length=context_length)
+            load.assert_called_once_with(member.model_checkpoint, revision="main")
+            select.assert_not_called()
+            self.assertIs(member.model, model)
+
+    def test_automatic_selection_runs_for_each_requested_context(self):
+        with (
+            patch(
+                "tsfm_public.toolkit.forecasters.TinyTimeMixerForPrediction.from_pretrained",
+                return_value=self.member.model,
+            ) as load,
+            patch("tsfm_public.toolkit.forecasters.get_model", side_effect=["512-96", "1024-96"]) as select,
+            patch("tsfm_public.toolkit.forecasters.TimeSeriesPreprocessor"),
+            patch("tsfm_public.toolkit.forecasters.TimeSeriesForecastingPipeline"),
+        ):
+            member = TinyTimeMixerDataFramePipelineForecaster(device="cpu")
+            load.assert_not_called()
+            for context_length in [512, 1024]:
+                member(self.data.tail(context_length), "timestamp", ["target"], 96, context_length=context_length)
+            self.assertEqual([call.kwargs["context_length"] for call in select.call_args_list], [512, 1024])
+            self.assertEqual([call.kwargs["revision"] for call in load.call_args_list], ["512-96", "1024-96"])
 
     def test_long_single_window_keeps_native_context_and_cutoff(self):
         with (
             patch("tsfm_public.toolkit.forecasters.TimeSeriesPreprocessor"),
             patch("tsfm_public.toolkit.forecasters.TimeSeriesForecastingPipeline") as pipeline,
         ):
-            self.member(self.data, "timestamp", ["target"], 96, context_length=4096, use_get_model=False)
+            self.member(self.data, "timestamp", ["target"], 96, context_length=4096)
             self.assertEqual(pipeline.call_args.kwargs["context_length"], 2048)
             passed_data = pipeline.return_value.call_args.args[0]
             pd.testing.assert_frame_equal(passed_data, self.data.tail(2048))
@@ -39,7 +74,7 @@ class TestTTMForecasterContext(unittest.TestCase):
             patch("tsfm_public.toolkit.forecasters.TimeSeriesPreprocessor"),
             patch("tsfm_public.toolkit.forecasters.TimeSeriesForecastingPipeline") as pipeline,
         ):
-            self.member(data, "timestamp", ["target"], 96, context_length=512, use_get_model=False)
+            self.member(data, "timestamp", ["target"], 96, context_length=512)
             self.assertEqual(pipeline.call_args.kwargs["context_length"], 512)
             pd.testing.assert_frame_equal(pipeline.return_value.call_args.args[0], data)
 
@@ -54,7 +89,6 @@ class TestTTMForecasterContext(unittest.TestCase):
                         96,
                         context_length=4096,
                         id_columns=ids,
-                        use_get_model=False,
                     )
 
 
