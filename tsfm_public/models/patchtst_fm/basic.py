@@ -371,7 +371,7 @@ class ConformerBlock(nn.Module):
         self.attn = Attention(d_model, num_heads, qkv_bias=qkv_bias, attn_drop=dropout, proj_drop=dropout)
 
         self.norm_conv = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
-        self.conv_block_type == "default"
+        # ??? self.conv_block_type == "default"
         # Depthwise convolution
         if not is_causal:
             self.conv = nn.Sequential(
