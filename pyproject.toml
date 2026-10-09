@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=78.1.1", "wheel", "Cython", "setuptools-scm>=8.0"]
+requires = ["setuptools>=78.1.1", "Cython", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "granite-tsfm"
@@ -16,7 +17,6 @@ classifiers = [
 ]
 dependencies = [
     "transformers[torch]>=4.57.6,<6",
-    "datasets",
     "deprecated",
     "urllib3>=1.26.19", # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
@@ -27,19 +27,16 @@ dependencies = [
     "einops>=0.7",
 ]
 
-# test commit
-[tool.setuptools]
-packages = ["tsfm_public", "tsfmhfdemos"]
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*", "services*"]
 
 [project.optional-dependencies]
-
-
 all = ["granite-tsfm[notebooks,testing,dev]"]
 
 notebooks = [
     "jupyter",
     "matplotlib",
-    "datasets",
     "ipywidgets",
     "plotly",
     "kaleido",
@@ -47,7 +44,7 @@ notebooks = [
 ]
 testing = [
     "pytest",
-    "pytest-coverage",
+    "pytest-cov",
     "granite-tsfm[notebooks]",
     "parameterized",
     "pydantic>1,<3",
