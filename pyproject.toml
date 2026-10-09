@@ -5,18 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "granite-tsfm"
 requires-python = ">=3.11,<3.14"
-# version = "0.0.1"
 dynamic = ["version"]
 authors = [{ name = "IBM" }]
 description = "Public notebooks and utilities for TSFM"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: Apache Software License",
 ]
+
 dependencies = [
     "transformers[torch]>=4.57.6,<6",
+    "datasets",
     "deprecated",
     "urllib3>=1.26.19", # see https://github.com/urllib3/urllib3/security/advisories/GHSA-34jh-p97f-mpxf
     "numpy<3",
@@ -27,9 +28,13 @@ dependencies = [
     "einops>=0.7",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ibm-granite/granite-tsfm"
+Repository = "https://github.com/ibm-granite/granite-tsfm"
+
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["tests*", "services*", "notebooks*"]
+exclude = ["tests*", "services*", "notebooks*", "scripts*", "agentic*"]
 
 [project.optional-dependencies]
 all = ["granite-tsfm[notebooks,testing,dev]"]
@@ -61,10 +66,7 @@ demos = [
     "plotly",
     "streamlit-aggrid",
     "kaleido",
-    "toml",
 ]
-# ###################################################
-
 
 [tool.setuptools_scm]
 version_file = "tsfm_public/_version.py"
