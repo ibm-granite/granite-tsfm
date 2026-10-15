@@ -78,12 +78,12 @@ class BaseDFDataset(torch.utils.data.Dataset):
         assert context_length > 0, f"context_length must be positive, received: {context_length}"
 
         if timestamp_column:
-            assert timestamp_column in list(
-                data_df.columns
-            ), f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
-            assert (
-                timestamp_column not in x_cols
-            ), f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            assert timestamp_column in list(data_df.columns), (
+                f"{timestamp_column} is not in the list of data column names provided {data_df.columns}"
+            )
+            assert timestamp_column not in x_cols, (
+                f"{timestamp_column} can not be used as a timestamp column as it also appears in provided collection:{x_cols}."
+            )
 
         self.data_df = data_df
         self.datetime_col = timestamp_column
@@ -494,7 +494,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             or impute_method == ImputeMethod.LINEAR.value
             or impute_method == ImputeMethod.FILL.value
         ):
-            raise ValueError(f"Unknown impute_method {self.impute_method}.")
+            raise ValueError(f"Unknown impute_method {impute_method}.")
 
         if max_context_length is None:
             max_context_length = context_length
