@@ -371,20 +371,19 @@ class ConformerBlock(nn.Module):
         self.attn = Attention(d_model, num_heads, qkv_bias=qkv_bias, attn_drop=dropout, proj_drop=dropout)
 
         self.norm_conv = norm_layer(d_model, elementwise_affine=True, eps=1e-6)
-        self.conv_block_type == "default"
+        # self.conv_block_type == "default"
         # Depthwise convolution
         if not is_causal:
             self.conv = nn.Sequential(
-                # nn.Conv1d(
                 nn.Conv2d(
                     d_model,
                     d_model,
-                    # kernel_size=conv_kernel_size,
+                    # kernel_size=(conv_kernel_size, 1),
+                    # padding=(conv_kernel_size // 2, 0),
                     kernel_size=(1, conv_kernel_size),
                     padding=(0, conv_kernel_size // 2),
                     dilation=(1, 1),
                     stride=(1, 1),
-                    # padding=conv_kernel_size // 2,
                     groups=d_model,  # Depthwise
                 ),
                 nn.GELU(),
@@ -446,6 +445,7 @@ class ConformerBlock(nn.Module):
             else:
                 # Conv1d expects (B, C, N)
                 x = x.transpose(1, 2).unsqueeze(2)
+                x = x.contiguous()
                 x = self.conv(x).squeeze(2)
                 x = x.transpose(1, 2)
             if not self.sublayer_gating:
