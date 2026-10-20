@@ -804,8 +804,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # x_i: time x num_channels
         # context is full window of input to backbone
         # old_context + forecast = context
-        # context_provided = len(x[0])
-        max_context_length = max(context_length)
+
         for i, (x_i, observed_inputs_mask_i, c_i, f_i) in enumerate(
             zip(x, observed_inputs_mask, context_length, forecast_length)
         ):
@@ -917,8 +916,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         time_index = torch.stack(time_index, dim=0)
         ts_ends = torch.stack(ts_ends, dim=0)
 
-        # to do -- need to consider forecast length in this calculation
-        # max_context_length = min(context_provided + forecast_length, context_length)
         max_context_length = max(sample_lengths)
 
         # assert(False)
