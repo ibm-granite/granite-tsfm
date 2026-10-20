@@ -130,9 +130,9 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
                 if isinstance(config.conv_kernel_size, list)
                 else [config.conv_kernel_size for _ in range(config.n_layer)]
             )
-            assert len(kernel_sizes) == config.n_layer, (
-                f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
-            )
+            assert (
+                len(kernel_sizes) == config.n_layer
+            ), f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
             self.max_kernel_size = max(kernel_sizes)  # this is needed for inference pruning
             blst = []
             logmsg = "Stacked blocks: "
@@ -557,7 +557,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                   or list of tensors for variable-length inputs
                 - hidden_states: Optional transformer hidden states if output_hidden_states=True
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         forecast_len = prediction_length if prediction_length else self.config.prediction_length
         list_input = isinstance(past_values, list)
 
