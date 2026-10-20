@@ -112,7 +112,6 @@ class PatchTSTFMEvalPredictor:
                             prediction_length=self.prediction_length,
                             quantile_levels=self.quantile_levels,
                         )
-                        torch.cuda.synchronize()
                     pred_quantiles = [
                         (x.squeeze(-1) if input_ndim == 1 else x).cpu().numpy() for x in model_outputs.quantile_outputs
                     ]
