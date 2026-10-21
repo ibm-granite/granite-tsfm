@@ -494,7 +494,7 @@ class ForecastDFDataset(BaseConcatDFDataset):
             or impute_method == ImputeMethod.LINEAR.value
             or impute_method == ImputeMethod.FILL.value
         ):
-            raise ValueError(f"Unknown impute_method {self.impute_method}.")
+            raise ValueError(f"Unknown impute_method {impute_method}.")
 
         if max_context_length is None:
             max_context_length = context_length
