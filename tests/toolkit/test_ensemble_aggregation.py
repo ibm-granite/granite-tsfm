@@ -29,6 +29,8 @@ class TestEnsembleForecastResult(unittest.TestCase):
                 self.assertTrue(result.success)
                 np.testing.assert_allclose(result.predicted, [[[1.0]]])
                 np.testing.assert_allclose(result.predicted_quantiles, [[[[0.0, 1.0, 2.0]]]])
+                self.assertIs(result.prediction_outputs, result.predicted)
+                self.assertIs(result.quantile_outputs, result.predicted_quantiles)
                 self.assertEqual(result.metadata["method"], aggregate.__name__)
                 self.assertEqual(result.metadata["quantile_levels"], self.levels)
                 self.assertEqual(result.metadata["n_models"], 2)
@@ -42,6 +44,19 @@ class TestEnsembleForecastResult(unittest.TestCase):
                 self.assertIsInstance(result, ForecastResult)
                 self.assertFalse(result.success)
                 self.assertIsNone(result.predicted)
+                self.assertIsNone(result.prediction_outputs)
+                self.assertIsNone(result.quantile_outputs)
+
+    def test_output_aliases_share_storage(self):
+        result = ForecastResult(success=True, message="ok")
+        result.prediction_outputs = [[[1.0]]]
+        result.quantile_outputs = [[[[0.0, 1.0, 2.0]]]]
+        self.assertIs(result.prediction_outputs, result.predicted)
+        self.assertIs(result.quantile_outputs, result.predicted_quantiles)
+        result.predicted = [[[2.0]]]
+        result.predicted_quantiles = None
+        self.assertEqual(result.prediction_outputs, [[[2.0]]])
+        self.assertIsNone(result.quantile_outputs)
 
     def test_method_is_preserved_on_aggregation_specific_failures(self):
         for aggregate in (aggregate_vincent, aggregate_iqr_weighted):
