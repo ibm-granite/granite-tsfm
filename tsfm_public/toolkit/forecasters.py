@@ -48,6 +48,11 @@ class Forecaster(ABC):
 class ForecastResult:
     """Result model for forecasting operations.
 
+    Use ``prediction_outputs`` for point forecasts and ``quantile_outputs``
+    for quantile forecasts, matching the model output attribute names. These
+    writable aliases preserve the existing constructor and serialized fields
+    ``predicted`` and ``predicted_quantiles``. Values remain nested lists.
+
     Fields:
         predicted:
             Point predictions: mean for TTM trained with MSE, or median for
@@ -82,6 +87,24 @@ class ForecastResult:
     # End of context timestamps for each sample, shape: (n_samples,)
 
     metadata: dict = field(default_factory=dict)
+
+    @property
+    def prediction_outputs(self) -> Optional[List[List[List[float]]]]:
+        """Point forecasts, shape (n_samples, prediction_length, n_targets)."""
+        return self.predicted
+
+    @prediction_outputs.setter
+    def prediction_outputs(self, value: Optional[List[List[List[float]]]]) -> None:
+        self.predicted = value
+
+    @property
+    def quantile_outputs(self) -> Optional[List[List[List[List[float]]]]]:
+        """Quantile forecasts, shape (n_samples, prediction_length, n_targets, n_quantiles)."""
+        return self.predicted_quantiles
+
+    @quantile_outputs.setter
+    def quantile_outputs(self, value: Optional[List[List[List[List[float]]]]]) -> None:
+        self.predicted_quantiles = value
 
 
 
