@@ -205,11 +205,6 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             w = self._make_patch_window(config.d_patch, config.patch_loss_windowing)
             self.register_buffer("patch_loss_window", w)
 
-        # Patch loss window: shape [1, 1, d_patch], broadcast over [B, N, D]
-        if config.patch_loss_windowing is not None:
-            w = self._make_patch_window(config.d_patch, config.patch_loss_windowing)
-            self.register_buffer("patch_loss_window", w)
-
         self.post_init()
 
     @staticmethod
