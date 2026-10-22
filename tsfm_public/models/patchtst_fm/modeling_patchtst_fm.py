@@ -130,9 +130,9 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
                 if isinstance(config.conv_kernel_size, list)
                 else [config.conv_kernel_size for _ in range(config.n_layer)]
             )
-            assert len(kernel_sizes) == config.n_layer, (
-                f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
-            )
+            assert (
+                len(kernel_sizes) == config.n_layer
+            ), f"Supplied list is convo sizes has {len(kernel_sizes)} elements but we need {config.n_layer}"
             self.max_kernel_size = max(kernel_sizes)  # this is needed for inference pruning
             blst = []
             logmsg = "Stacked blocks: "
