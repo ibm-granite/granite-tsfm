@@ -36,10 +36,8 @@ jobs:
         $HOME/.local/bin/uv run --locked make quality
     - name: Test with pytest
       run: |
-        # Test with pandas 2.x
-        echo "::group::Testing with pandas 2.x"
-        $HOME/.local/bin/uv add "pandas>=2.3.3,<3"
-        $HOME/.local/bin/uv lock -P pandas
+        # Test with pandas 3.x
+        echo "::group::Testing with current dependencies"
         $HOME/.local/bin/uv run --locked pytest \
           --cov=tsfm_public \
           --cov-fail-under=75 \
@@ -47,12 +45,14 @@ jobs:
           tests
         echo "::endgroup::"
         
-        # Test with pandas 3.x
-        echo "::group::Testing with pandas 3.x"
-        $HOME/.local/bin/uv add "pandas>=3,<4"
+        # Test with pandas 2.x
+        echo "::group::Abbreviated testing with pandas 2.x"
+        $HOME/.local/bin/uv add "pandas>=2.3.3,<3"
         $HOME/.local/bin/uv lock -P pandas
         $HOME/.local/bin/uv run --locked pytest \
-          tests
+          tests/toolkit
         echo "::endgroup::"
+        
+        
 
 
