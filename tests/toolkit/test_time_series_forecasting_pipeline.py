@@ -182,9 +182,9 @@ def test_models_parameters_in_forecasting_pipeline(random_sine_wave_data, model_
 
     if param == "quantile_levels":
         num_quantiles = len(test_param["quantile_levels"])
-        assert (
-            forecasts.shape[1] == 1 + 2 * len(target_columns) + len(target_columns) * num_quantiles
-        ), f"Number of expetect columns does not match. Received: {forecasts.shape[1]} Expected {1 + 2 * len(target_columns) + len(target_columns) * num_quantiles}"
+        assert forecasts.shape[1] == 1 + 2 * len(target_columns) + len(target_columns) * num_quantiles, (
+            f"Number of expetect columns does not match. Received: {forecasts.shape[1]} Expected {1 + 2 * len(target_columns) + len(target_columns) * num_quantiles}"
+        )
 
 
 def test_forecasting_pipeline_defaults():
@@ -431,7 +431,7 @@ def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_base_model, e
     )
 
     # if we have inverse scaled mean should be larger
-    assert forecasts["HUFL_prediction"].mean().mean() > 10
+    assert forecasts["HUFL_prediction"].apply(lambda x: x.mean()).mean() > 10
 
 
 def test_frequency_token(ttm_dummy_model, etth_data):
