@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from torch._dynamo.eval_frame import OptimizedModule
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput, logging
 
@@ -33,8 +34,11 @@ class LearnedPositionalEmbedding(nn.Module):
         self.embedding = nn.Embedding(max_len, d_model)
         self.type = type
 
-    def forward(self, x, offset: Optional[int] = 0):
-        positions = torch.arange(start=offset, end=x.size(-2) + offset, device=x.device).unsqueeze(0)
+    def forward(self, x):
+        start = self.embedding.weight.shape[0] - x.size(-2)
+        end = self.embedding.weight.shape[0]
+        positions = torch.arange(start=start, end=end, device=x.device).unsqueeze(0)
+
         pe = self.embedding(positions)
         if x.ndim == 4:
             pe = pe.unsqueeze(1)
@@ -201,6 +205,11 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             w = self._make_patch_window(config.d_patch, config.patch_loss_windowing)
             self.register_buffer("patch_loss_window", w)
 
+        # Patch loss window: shape [1, 1, d_patch], broadcast over [B, N, D]
+        if config.patch_loss_windowing is not None:
+            w = self._make_patch_window(config.d_patch, config.patch_loss_windowing)
+            self.register_buffer("patch_loss_window", w)
+
         self.post_init()
 
     @staticmethod
@@ -281,7 +290,6 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         return_dict: Optional[bool] = None,
         context_length: Optional[int] = None,
         override_patch_stride: Optional[int] = None,
-        attn_window: Optional[int] = None,
         # **kwargs,
     ) -> PatchTSTFMModelOutput:
         x = inputs  # .to(self.device)
@@ -317,6 +325,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             pad_patch_mask = pad_mask.reshape(B, self.config.n_patch, self.config.d_patch).float().mean(dim=-1).gt(0.9)
 
         # determine the earliest index where the padding ends
+        # self.config.use_pruning=True  # don't always use pruning
         if context_length == self.config.context_length:
             idx = 0
         elif context_length is not None and self.config.use_pruning:
@@ -337,12 +346,10 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             idx = 0
 
         q_pred, q_raw, all_attn = self.decode_func(
-            x=x_patch,
-            mask=mask_patch,
+            x_patch,
+            mask_patch,
             t_pad_mask=pad_patch_mask,
             output_attentions=output_attentions,
-            offset=idx,
-            attn_window=attn_window,
         )
         q_pred = q_pred.permute(0, 2, 3, 1)  # q_pred is now [B, N, D, Q+1]
 
@@ -385,29 +392,16 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         x,
         mask,
         t_pad_mask=None,
-        offset: Optional[int] = 0,
         output_attentions: bool = False,
-        attn_window: Optional[int] = None,
     ):
         B, N, D = x.shape
         # x = self.in_layer(torch.cat([x, t, 1 - mask], dim=-1))
         x = self.in_layer(torch.cat([x, ~mask], dim=-1))  # B x n_patch X d_model
-        if t_pad_mask is not None and t_pad_mask.any():
+        pad_attn_mask = None
+        if t_pad_mask is not None:  # and t_pad_mask.any():
             pad_attn_mask = make_attn_mask(t_pad_mask, t_pad_mask).unsqueeze(1)
-        else:
-            pad_attn_mask = None
 
-        if attn_window is not None:
-            # attention band: position (i, j) is blocked when |i - j| > attn_window
-            idx = torch.arange(N, device=x.device)
-            band = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs() > attn_window  # [N, N] bool
-            band_mask = torch.zeros(N, N, device=x.device, dtype=torch.float32)
-            band_mask.masked_fill_(band, float("-inf"))
-            band_mask = band_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, N, N] — broadcasts over B and heads
-            # Combine with padding mask
-            pad_attn_mask = band_mask if pad_attn_mask is None else pad_attn_mask + band_mask
-
-        x = self.pos_embed(x, offset=offset)  # bs x num_patches x 2*seq_len
+        x = self.pos_embed(x)  # bs x num_patches x 2*seq_len
 
         all_attn = [] if output_attentions else None
         for block in self.blocks:
@@ -519,7 +513,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-        attn_window: Optional[int] = None,
     ) -> PatchTSTFMPredictionOutput | Tuple:
         """Forward pass for time series forecasting with PatchTST-FM model.
 
@@ -562,7 +555,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                   or list of tensors for variable-length inputs
                 - hidden_states: Optional transformer hidden states if output_hidden_states=True
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         forecast_len = prediction_length if prediction_length else self.config.prediction_length
         list_input = isinstance(past_values, list)
 
@@ -611,7 +604,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 input_pad_mask=pad_mask,
                 context_length=cl,
                 output_hidden_states=output_hidden_states,
-                attn_window=attn_window,
             )
             forecast_samples = forecast_samples[:, :, :forecast_len]
 
@@ -669,7 +661,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         context_length: int,
         input_pad_mask: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = False,
-        attn_window: Optional[int] = None,
     ) -> tuple[torch.Tensor, Any]:
         # x: batch size x context x features
         # observed_inputs_mask: batch size x context x features
@@ -720,11 +711,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             # just pass
 
             inputs = x_in
-            # inputs.append(x_in)
-            # pred_mask.append(pred_mask_i)
-            # pad_mask.append(pad_mask_i)
-            # miss_mask.append(miss_mask_i)
-            # time_index.append(time_index_i)
             ts_ends = (0, sample_len)
 
         elif sample_len < self.config.context_length:
@@ -736,7 +722,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             pred_mask = F.pad(pred_mask, (0, 0, left_pad, 0), mode="constant", value=False)
             pad_mask = F.pad(pad_mask, (0, 0, left_pad, 0), mode="constant", value=True)
             miss_mask = F.pad(miss_mask, (0, 0, left_pad, 0), mode="constant", value=False)
-            # time_index = F.pad(time_index, (left_pad, 0), mode="constant", value=-1)
 
             ts_ends = (left_pad, left_pad + sample_len)
         else:  # sample_len > self.config.context_length
@@ -761,7 +746,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 override_patch_stride=None,
                 context_length=context,
-                attn_window=attn_window,
             )
             outputs = model_output.quantile_outputs  # [B*N_ch, strided_T or orig_T, Q]
 
@@ -818,7 +802,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         # x_i: time x num_channels
         # context is full window of input to backbone
         # old_context + forecast = context
-        max_context_length = max(context_length)
+
         for i, (x_i, observed_inputs_mask_i, c_i, f_i) in enumerate(
             zip(x, observed_inputs_mask, context_length, forecast_length)
         ):
@@ -872,14 +856,6 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 pad = x_in_mean.unsqueeze(dim=0).repeat((left_pad, 1))
                 inputs.append(torch.cat((pad, x_in)))  # append left_pad + sample_len = context_len, num_channels
 
-                # inputs.append(
-                #     F.pad(
-                #         x_in,
-                #         (left_pad, 0),
-                #         mode="constant",
-                #         value=x_in.nanmean(dim=0).item(),
-                #     )
-                # )
                 pred_mask.append(F.pad(pred_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
                 pad_mask.append(F.pad(pad_mask_i, (0, 0, left_pad, 0), mode="constant", value=True))
                 miss_mask.append(F.pad(miss_mask_i, (0, 0, left_pad, 0), mode="constant", value=False))
@@ -938,6 +914,9 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
         time_index = torch.stack(time_index, dim=0)
         ts_ends = torch.stack(ts_ends, dim=0)
 
+        max_context_length = max(sample_lengths)
+
+        # assert(False)
         # we are B T N, but backbone wants (B N) T
         inputs = rearrange(inputs, "B T N -> (B N) T")
         pred_mask = rearrange(pred_mask, "B T N -> (B N) T")
@@ -966,6 +945,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             # outputs is in strided-patch space; fold back to original axis
             outputs = self.backbone._overlap_add(
                 outputs,
+                # original_length=max_context_length,
                 original_length=self.backbone.config.context_length,
                 stride=self.backbone.config.patch_stride,
             )  # [B*N_ch, context_length, Q]
@@ -983,6 +963,30 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
                 x_pred = F.interpolate(outputs[i].unsqueeze(1), size=sample_lengths[i], mode="linear").squeeze(1)
             x_preds.append(x_pred[:, -forecast_length[i] :])
         return x_preds, model_output.hidden_states
+
+    def compile_backbone(self, mode: str = "reduce-overhead", dynamic: Optional[bool] = True, **kwargs):
+        """Compile the model backbone for improved inference speed
+
+        Args:
+            mode (str, optional): Compilation mode, should be one of "default", "reduce-overhead", or "max-autotune". Defaults
+                to "reduce-overhead".
+            dynamic (Optional[bool], optional): If True enables support for dynamic shapes. Defaults to True.
+            kwargs (dict): Additional keyword arguments passed to the torch compile call.
+
+        Raises:
+            ValueError: Raised if mode is an unsupported mode.
+
+        Returns:
+            self
+        """
+        if isinstance(self.backbone, OptimizedModule):
+            return self
+
+        if mode not in ("default", "reduce-overhead", "max-autotune"):
+            raise ValueError(f"Unknown torch compile method {mode}")
+
+        self.backbone.compile(mode=mode, dynamic=dynamic, **kwargs)
+        return self
 
 
 def get_autocast_context(device):
