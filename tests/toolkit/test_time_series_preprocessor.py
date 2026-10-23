@@ -189,8 +189,8 @@ def test_time_series_preprocessor_inv_scales_lists(ts_data):
 
     out_inv = tsp.inverse_scale_targets(out)
 
-    assert out_inv["value1"].mean()[0] == df["value1"].mean()
-    assert out_inv["value2"].mean()[0] == df["value2"].mean()
+    assert out_inv["value1"].apply(lambda x: np.mean(x)).mean() == df["value1"].mean()
+    assert out_inv["value2"].apply(lambda x: np.mean(x)).mean() == df["value2"].mean()
 
 
 def test_time_series_preprocessor_power_inv_scales_lists(ts_data):
@@ -221,8 +221,8 @@ def test_time_series_preprocessor_power_inv_scales_lists(ts_data):
     out_inv = tsp.inverse_scale_targets(out)
     out_inv = tsp.inverse_scale_targets(out_inv, suffix="_prediction")
 
-    np.testing.assert_allclose(out_inv["value1"].mean()[0], df["value1"].mean())
-    np.testing.assert_allclose(out_inv["value2"].mean()[0], df["value2"].mean())
+    np.testing.assert_allclose(out_inv["value1"].apply(lambda x: np.mean(x)).mean(), df["value1"].mean())
+    np.testing.assert_allclose(out_inv["value2"].apply(lambda x: np.mean(x)).mean(), df["value2"].mean())
 
 
 def test_extend_time_series(ts_data):
