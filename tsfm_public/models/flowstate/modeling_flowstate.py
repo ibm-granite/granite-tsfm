@@ -87,17 +87,33 @@ class FlowStateCausalRevIN(nn.Module):
         self.eps = eps
         self.missing = with_missing
 
-    def forward(self, x, mode: str):
+    def forward(self, x, mode: str, mean=None, std=None):
+        """
+        :param x: input tensor
+        :param mode: one of "norm" (compute statistics from x and normalize), "denorm" (denormalize
+            using the provided statistics), or "transform" (normalize using the provided statistics)
+        :param mean: statistics mean, required for modes "denorm" and "transform"
+        :param std: statistics standard deviation, required for modes "denorm" and "transform"
+        :return: tuple (x, mean, std). The module holds no state; the caller is responsible for
+            routing mean and std to subsequent calls.
+        """
         if mode == "norm":
-            self._get_statistics(x)
-            x = self._normalize(x)
+            mean, std = self._get_statistics(x)
+            x = self._normalize(x, mean, std)
         elif mode == "denorm":
-            x = self._denormalize(x)
+            self._check_statistics(mean, std, mode)
+            x = self._denormalize(x, mean, std)
         elif mode == "transform":
-            x = self._normalize(x)
+            self._check_statistics(mean, std, mode)
+            x = self._normalize(x, mean, std)
         else:
             raise NotImplementedError
-        return x
+        return x, mean, std
+
+    @staticmethod
+    def _check_statistics(mean, std, mode):
+        if mean is None or std is None:
+            raise ValueError(f"`mean` and `std` must be provided for mode '{mode}'.")
 
     def _get_statistics(self, x):
         if self.missing:
@@ -105,35 +121,32 @@ class FlowStateCausalRevIN(nn.Module):
             n = torch.where(n == 0, 1.0, n)
         else:
             n = torch.arange(1, x.shape[1] + 1, device=x.device).unsqueeze(-1)
-        self.mean = (torch.cumsum(x, dim=1) / n).detach()
+        mean = (torch.cumsum(x, dim=1) / n).detach()
         mask = 1.0 if not self.missing else 1 - x[:, :, 1:]
-        self.stdev = torch.sqrt(torch.clamp(torch.cumsum(((x - self.mean) * mask) ** 2, 1) / n, min=self.eps)).detach()
+        std = torch.sqrt(torch.clamp(torch.cumsum(((x - mean) * mask) ** 2, 1) / n, min=self.eps)).detach()
         if self.missing:
-            self.mean = self.mean[..., :-1]
-            self.stdev = self.stdev[..., :-1]
+            mean = mean[..., :-1]
+            std = std[..., :-1]
+        return mean, std
 
-    def set_statistics(self, mean, stdev):
-        self.mean = mean
-        self.stdev = stdev
-
-    def _normalize(self, x):
+    def _normalize(self, x, mean, std):
         if x.ndim == 4:
-            self.stdev = self.stdev[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-            self.mean = self.mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-        if x.shape[-1] == self.mean.shape[-1] + 1:  # with missing and not target
-            x[..., :-1] = (x[..., :-1] - self.mean) / self.stdev
+            std = std[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+            mean = mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+        if x.shape[-1] == mean.shape[-1] + 1:  # with missing and not target
+            x[..., :-1] = (x[..., :-1] - mean) / std
             # apply mask again after normalization
             x[..., :-1] *= 1 - x[..., -1].unsqueeze(-1)
         else:
-            x = (x - self.mean) / self.stdev
+            x = (x - mean) / std
         return x
 
-    def _denormalize(self, x):
-        self.stdev = self.stdev[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-        self.mean = self.mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+    def _denormalize(self, x, mean, std):
+        std = std[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+        mean = mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
         if x.ndim == 5:  # quantile predictions
-            return x * self.stdev.unsqueeze(-2) + self.mean.unsqueeze(-2)
-        x = x * self.stdev
+            return x * std.unsqueeze(-2) + mean.unsqueeze(-2)
+        x = x * std
 
         return x
 
@@ -703,7 +716,8 @@ class FlowStateModel(FlowStatePreTrainedModel):
                 time_first_past_values = torch.cat((time_first_past_values, apdx), dim=0)
 
         # Normalize the inputs
-        time_first_past_values = self.norm(time_first_past_values.transpose(0, 1), "norm").transpose(0, 1)
+        time_first_past_values, mean, std = self.norm(time_first_past_values.transpose(0, 1), "norm")
+        time_first_past_values = time_first_past_values.transpose(0, 1)
 
         # Emebd the inputs
         encoder_inputs = self.embed(time_first_past_values)
@@ -725,7 +739,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
             encoder_output = FlowStateDecoderOutput(*decoder_output)
 
         # denorm during evaluation
-        pred = self.norm(decoder_output.last_hidden_state, "denorm")
+        pred, _, _ = self.norm(decoder_output.last_hidden_state, "denorm", mean=mean, std=std)
 
         if not return_dict:
             return tuple(
