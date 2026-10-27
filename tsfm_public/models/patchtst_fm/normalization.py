@@ -10,37 +10,36 @@ class RevIN(nn.Module):
         self.max_val = max_val
         self.use_sinh = use_sinh
 
-    def fit_transform(self, x, mask=None):
+    def fit_transform(
+        self, x: torch.Tensor, mask: torch.Tensor = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         with torch.autocast(device_type="cuda", enabled=False):
-            self._get_statistics(x, mask)
-            return self.transform(x)
+            mean, std = self.get_statistics(x, mask)
+            return self.transform(x, mean=mean, std=std), mean, std
 
-    def transform(self, x):
+    def transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type="cuda", enabled=False):
-            x = (x - self.mean) / self.std
+            x = (x - mean) / std
             if self.use_sinh:
                 x = torch.asinh(x)
             return x
 
-    def inverse_transform(self, x):
+    def inverse_transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type="cuda", enabled=False):
             if self.use_sinh:
                 x = torch.sinh(x)
-            if x.ndim != self.mean.ndim:
-                x = x * self.std.unsqueeze(1) + self.mean.unsqueeze(1)
+            if x.ndim != mean.ndim:
+                x = x * std.unsqueeze(1) + mean.unsqueeze(1)
             else:
-                x = x * self.std + self.mean
+                x = x * std + mean
 
             return x
 
-    def get_statistics(self):
-        return self.mean, self.std
-
-    def _get_statistics(self, x, mask=None):
+    def get_statistics(self, x: torch.Tensor, mask: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         if mask is None:
-            self.mean = x.mean(dim=self.dim, keepdim=True)
-            std = x.std(dim=self.dim, keepdim=True)
-            self.std = torch.where(std > self.std_min, std, torch.ones_like(std))
+            x_mean = x.mean(dim=self.dim, keepdim=True)
+            x_std = x.std(dim=self.dim, keepdim=True)
+            x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
         else:
             mask = mask.bool()
             unmask = (~mask).float()
@@ -49,8 +48,7 @@ class RevIN(nn.Module):
             x_std = (((x - x_mean) * unmask) ** 2).sum(dim=self.dim, keepdim=True) / count
             x_std = x_std.sqrt()
             x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
-            self.mean = x_mean
-            self.std = x_std
+        return x_mean, x_std
 
 
 class CausalRevIN(nn.Module):
