@@ -351,7 +351,7 @@ class FlowStateS5Block(nn.Module):
 
         return kernel, B_bar
 
-    def apply_ssm_kern_ff(self, Bu_elements, kernel):
+    def apply_ssm_kern_ff(self, Bu_elements, kernel, min_context=None):
         """Compute the LxBxH output of discretized SSM given an LxBxH input.
         Args:
         Bu_elements (float32): projected input sequence of features (L, B, H)
@@ -365,18 +365,21 @@ class FlowStateS5Block(nn.Module):
         buff = torch.fft.fft(Bu_elements, n=2 * l, dim=0)
         o = torch.fft.ifft(kff * buff, n=2 * l, dim=0)[:l]
 
-        if self.last and self.config.min_context == Bu_elements.shape[0]:  # only last hidden state will be used
+        if min_context is None:
+            min_context = self.config.min_context
+        if self.last and min_context == Bu_elements.shape[0]:  # only last hidden state will be used
             return o[-1].unsqueeze(0)
         elif self.last:
-            return o[min(self.config.min_context, o.shape[0]) - 1 :]
+            return o[min(min_context, o.shape[0]) - 1 :]
         else:
             return o
 
-    def forward(self, input_sequences: torch.Tensor, scale_factor: torch.Tensor):
+    def forward(self, input_sequences: torch.Tensor, scale_factor: torch.Tensor, min_context=None):
         """Computes LxBxH output sequence of an S5 layer given LxBxH input sequence.
         Args:
         params: tuple of the continuous time SSM parameters
         input_sequences: batch of input feature sequences (L, B ,H)
+        min_context: index from which outputs are kept in the last layer; defaults to `config.min_context`
         Returns:
         Batch of S5 layer output sequences (L, B, H)"""
 
@@ -386,9 +389,11 @@ class FlowStateS5Block(nn.Module):
             + torch.einsum("bnm,lbm->lbn", B_bar.imag, input_sequences) * 1.0j
         )
 
-        xs = self.apply_ssm_kern_ff(Bu_elements, kernel)
+        if min_context is None:
+            min_context = self.config.min_context
+        xs = self.apply_ssm_kern_ff(Bu_elements, kernel, min_context=min_context)
         if self.last:
-            input_sequences = input_sequences[min(self.config.min_context, input_sequences.shape[0]) - 1 :]
+            input_sequences = input_sequences[min(min_context, input_sequences.shape[0]) - 1 :]
         # Compute SSM output sequence
         xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r, xs.real) + torch.einsum(
             "hn,...bn->...bh", self.C_tilde_i, -xs.imag
@@ -433,12 +438,14 @@ class FlowStateS5Layer(nn.Module):
             self.out = nn.Linear(n, n)
         self.norm = nn.LayerNorm(n)
 
-    def forward(self, x, scale_factor):
+    def forward(self, x, scale_factor, min_context=None):
+        if min_context is None:
+            min_context = self.config.min_context
         skip = (
-            x if (not self.last or x.ndim == 2) else x[min(self.config.min_context, x.shape[0]) - 1 :]
+            x if (not self.last or x.ndim == 2) else x[min(min_context, x.shape[0]) - 1 :]
         )  # last layer doesn't need MLP on all timesteps
         # SSM
-        x = self.ssm(x, scale_factor)
+        x = self.ssm(x, scale_factor, min_context=min_context)
 
         # self gated MLP
         if self.config.mlp_type == "transformer":
@@ -503,6 +510,7 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
         self,
         encoder_inputs: torch.Tensor,
         scale_factor: Optional[float] = 1.0,
+        min_context: Optional[int] = None,
     ) -> Union[Tuple, FlowStateEncoderOutput]:
         r"""
         Args:
@@ -510,6 +518,8 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
                 Context values of the time series.
                 For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
                 it is greater than 1.
+            min_context (`int`, *optional*):
+                Index from which the last layer keeps outputs. Defaults to `config.min_context`.
 
         Returns:
             `torch.FloatTensor` of shape `(1, batch_size, encoder_state_dim)`
@@ -522,7 +532,7 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
 
         # Encoder
         for _, lay in enumerate(self.layers):
-            output = lay(output, scale_factor=scale_factor)
+            output = lay(output, scale_factor=scale_factor, min_context=min_context)
             all_hidden_states.append(output)
 
         return FlowStateEncoderOutput(last_hidden_state=output, hidden_states=all_hidden_states)
@@ -662,6 +672,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
         scale_factor: Optional[float] = None,
         batch_first: Optional[bool] = None,
         mask_n: Optional[int] = None,
+        min_context: Optional[int] = None,
     ) -> FlowStateModelOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -677,6 +688,9 @@ class FlowStateModel(FlowStatePreTrainedModel):
         mask_n (`int`, *optional*):
             When contiguous patch masking (CPM) is used during prediction, the `mask_n` indicates how many
             elements of `past_values` should be treated as unknown.
+        min_context (`int`, *optional*):
+            Index from which the encoder's last layer keeps outputs (the context length from which to start
+            predicting when `mask_n > 0`). Defaults to `config.min_context`.
 
         Returns:
             FlowStateModelOutput: The final denormalized prediction of FlowState.
@@ -723,7 +737,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
         encoder_inputs = self.embed(time_first_past_values)
 
         # Execute encoder
-        encoder_output = self.encoder(encoder_inputs, scale_factor=scale_factor)
+        encoder_output = self.encoder(encoder_inputs, scale_factor=scale_factor, min_context=min_context)
 
         if isinstance(encoder_output, tuple):
             encoder_output = FlowStateEncoderOutput(*encoder_output)
@@ -930,10 +944,8 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             past_values = past_values[:, start_idx:, ...]
 
         past_values = past_values[:, -max_context:]
-        if mask_n > 0:
-            self.model.config.min_context = past_values.shape[1]  # min context from which to start predicting
-        else:
-            self.model.config.min_context = 0
+        # min context from which to start predicting
+        min_context = past_values.shape[1] if mask_n > 0 else 0
         # past_values: tensor [batch_size x seq_length x num_input_channels], or [seq_length x batch_size x num_input_channels]
         model_output = self.model(
             past_values,
@@ -941,6 +953,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             batch_first=True,
             scale_factor=scale_factor,
             mask_n=mask_n,
+            min_context=min_context,
         )
         if isinstance(model_output, tuple):
             model_output = FlowStateModelOutput(*model_output)
