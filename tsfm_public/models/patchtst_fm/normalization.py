@@ -44,8 +44,8 @@ class RevIN(nn.Module):
             mask = mask.bool()
             unmask = (~mask).float()
             count = unmask.sum(dim=self.dim, keepdim=True).clamp(min=1)  # avoid division by zero
-            x_mean = (x * unmask).sum(dim=self.dim, keepdim=True) / count
-            x_std = (((x - x_mean) * unmask) ** 2).sum(dim=self.dim, keepdim=True) / count
+            x_mean = (x * unmask).nansum(dim=self.dim, keepdim=True) / count
+            x_std = (((x - x_mean) * unmask) ** 2).nansum(dim=self.dim, keepdim=True) / count
             x_std = x_std.sqrt()
             x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
         return x_mean, x_std
