@@ -10,47 +10,45 @@ class RevIN(nn.Module):
         self.max_val = max_val
         self.use_sinh = use_sinh
 
-    def fit_transform(self, x, mask=None):
+    def fit_transform(
+        self, x: torch.Tensor, mask: torch.Tensor = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         with torch.autocast(device_type="cuda", enabled=False):
-            self._get_statistics(x, mask)
-            return self.transform(x)
+            mean, std = self.get_statistics(x, mask)
+            return self.transform(x, mean=mean, std=std), mean, std
 
-    def transform(self, x):
+    def transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type="cuda", enabled=False):
-            x = (x - self.mean) / self.std
+            x = (x - mean) / std
             if self.use_sinh:
                 x = torch.asinh(x)
             return x
 
-    def inverse_transform(self, x):
+    def inverse_transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         with torch.autocast(device_type="cuda", enabled=False):
             if self.use_sinh:
                 x = torch.sinh(x)
-            if x.ndim != self.mean.ndim:
-                x = x * self.std.unsqueeze(1) + self.mean.unsqueeze(1)
+            if x.ndim != mean.ndim:
+                x = x * std.unsqueeze(1) + mean.unsqueeze(1)
             else:
-                x = x * self.std + self.mean
+                x = x * std + mean
 
             return x
 
-    def get_statistics(self):
-        return self.mean, self.std
-
-    def _get_statistics(self, x, mask=None):
+    def get_statistics(self, x: torch.Tensor, mask: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         if mask is None:
-            self.mean = x.mean(dim=self.dim, keepdim=True)
-            std = x.std(dim=self.dim, keepdim=True)
-            self.std = torch.where(std > self.std_min, std, torch.ones_like(std))
+            x_mean = x.mean(dim=self.dim, keepdim=True)
+            x_std = x.std(dim=self.dim, keepdim=True)
+            x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
         else:
             mask = mask.bool()
             unmask = (~mask).float()
             count = unmask.sum(dim=self.dim, keepdim=True).clamp(min=1)  # avoid division by zero
-            x_mean = (x * unmask).sum(dim=self.dim, keepdim=True) / count
-            x_std = (((x - x_mean) * unmask) ** 2).sum(dim=self.dim, keepdim=True) / count
+            x_mean = (x * unmask).nansum(dim=self.dim, keepdim=True) / count
+            x_std = (((x - x_mean) * unmask) ** 2).nansum(dim=self.dim, keepdim=True) / count
             x_std = x_std.sqrt()
             x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
-            self.mean = x_mean
-            self.std = x_std
+        return x_mean, x_std
 
 
 class CausalRevIN(nn.Module):
@@ -66,35 +64,31 @@ class CausalRevIN(nn.Module):
         self.std_min = std_min
         self.max_val = max_val
 
-    def fit_transform(self, x, mask=None):
-        self._get_statistics(x, mask)
-        return self.transform(x)
+    def fit_transform(
+        self, x: torch.Tensor, mask: torch.Tensor = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        mean, std = self.get_statistics(x, mask)
+        return self.transform(x, mean=mean, std=std), mean, std
 
-    def transform(self, x):
-        return torch.clamp((x - self.mean) / self.std, min=-self.max_val, max=self.max_val)
+    def transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+        return torch.clamp((x - mean) / std, min=-self.max_val, max=self.max_val)
 
-    def inverse_transform(self, x):
+    def inverse_transform(self, x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         if x.ndim == 2:
-            return x * self.std + self.mean
+            return x * std + mean
         elif x.ndim == 3:
-            return x * self.std.unsqueeze(-1) + self.mean.unsqueeze(-1)
+            return x * std.unsqueeze(-1) + mean.unsqueeze(-1)
         else:
             raise ValueError(f"Invalid input dimension: {x.shape}")
 
-    def get_statistics(self):
-        return self.mean, self.std
-
-    def _get_statistics(self, x, mask=None):
+    def get_statistics(self, x: torch.Tensor, mask: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         if mask is not None:
             n = torch.cumsum(1 - mask.float(), dim=1)
             n = torch.where(n == 0, 1.0, n)
         else:
             n = torch.arange(1, x.shape[1] + 1, device=x.device)
-        self.mean = (torch.cumsum(x, dim=1) / n).detach()
+        x_mean = (torch.cumsum(x, dim=1) / n).detach()
         mask = 1 - mask.float() if mask is not None else 1
-        self.std = torch.sqrt(torch.cumsum(((x - self.mean) * mask) ** 2, 1) / n).detach()
-        self.std = torch.where(self.std > self.std_min, self.std, torch.ones_like(self.std))
-
-    def set_statistics(self, mean, std):
-        self.mean = mean
-        self.std = std
+        x_std = torch.sqrt(torch.cumsum(((x - x_mean) * mask) ** 2, 1) / n).detach()
+        x_std = torch.where(x_std > self.std_min, x_std, torch.ones_like(x_std))
+        return x_mean, x_std

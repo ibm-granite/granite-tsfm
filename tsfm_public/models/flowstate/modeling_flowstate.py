@@ -87,17 +87,33 @@ class FlowStateCausalRevIN(nn.Module):
         self.eps = eps
         self.missing = with_missing
 
-    def forward(self, x, mode: str):
+    def forward(self, x, mode: str, mean=None, std=None):
+        """
+        :param x: input tensor
+        :param mode: one of "norm" (compute statistics from x and normalize), "denorm" (denormalize
+            using the provided statistics), or "transform" (normalize using the provided statistics)
+        :param mean: statistics mean, required for modes "denorm" and "transform"
+        :param std: statistics standard deviation, required for modes "denorm" and "transform"
+        :return: tuple (x, mean, std). The module holds no state; the caller is responsible for
+            routing mean and std to subsequent calls.
+        """
         if mode == "norm":
-            self._get_statistics(x)
-            x = self._normalize(x)
+            mean, std = self._get_statistics(x)
+            x = self._normalize(x, mean, std)
         elif mode == "denorm":
-            x = self._denormalize(x)
+            self._check_statistics(mean, std, mode)
+            x = self._denormalize(x, mean, std)
         elif mode == "transform":
-            x = self._normalize(x)
+            self._check_statistics(mean, std, mode)
+            x = self._normalize(x, mean, std)
         else:
             raise NotImplementedError
-        return x
+        return x, mean, std
+
+    @staticmethod
+    def _check_statistics(mean, std, mode):
+        if mean is None or std is None:
+            raise ValueError(f"`mean` and `std` must be provided for mode '{mode}'.")
 
     def _get_statistics(self, x):
         if self.missing:
@@ -105,35 +121,32 @@ class FlowStateCausalRevIN(nn.Module):
             n = torch.where(n == 0, 1.0, n)
         else:
             n = torch.arange(1, x.shape[1] + 1, device=x.device).unsqueeze(-1)
-        self.mean = (torch.cumsum(x, dim=1) / n).detach()
+        mean = (torch.cumsum(x, dim=1) / n).detach()
         mask = 1.0 if not self.missing else 1 - x[:, :, 1:]
-        self.stdev = torch.sqrt(torch.clamp(torch.cumsum(((x - self.mean) * mask) ** 2, 1) / n, min=self.eps)).detach()
+        std = torch.sqrt(torch.clamp(torch.cumsum(((x - mean) * mask) ** 2, 1) / n, min=self.eps)).detach()
         if self.missing:
-            self.mean = self.mean[..., :-1]
-            self.stdev = self.stdev[..., :-1]
+            mean = mean[..., :-1]
+            std = std[..., :-1]
+        return mean, std
 
-    def set_statistics(self, mean, stdev):
-        self.mean = mean
-        self.stdev = stdev
-
-    def _normalize(self, x):
+    def _normalize(self, x, mean, std):
         if x.ndim == 4:
-            self.stdev = self.stdev[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-            self.mean = self.mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-        if x.shape[-1] == self.mean.shape[-1] + 1:  # with missing and not target
-            x[..., :-1] = (x[..., :-1] - self.mean) / self.stdev
+            std = std[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+            mean = mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+        if x.shape[-1] == mean.shape[-1] + 1:  # with missing and not target
+            x[..., :-1] = (x[..., :-1] - mean) / std
             # apply mask again after normalization
             x[..., :-1] *= 1 - x[..., -1].unsqueeze(-1)
         else:
-            x = (x - self.mean) / self.stdev
+            x = (x - mean) / std
         return x
 
-    def _denormalize(self, x):
-        self.stdev = self.stdev[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
-        self.mean = self.mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+    def _denormalize(self, x, mean, std):
+        std = std[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
+        mean = mean[:, -x.shape[0] :].transpose(0, 1).unsqueeze(2)
         if x.ndim == 5:  # quantile predictions
-            return x * self.stdev.unsqueeze(-2) + self.mean.unsqueeze(-2)
-        x = x * self.stdev
+            return x * std.unsqueeze(-2) + mean.unsqueeze(-2)
+        x = x * std
 
         return x
 
@@ -338,7 +351,7 @@ class FlowStateS5Block(nn.Module):
 
         return kernel, B_bar
 
-    def apply_ssm_kern_ff(self, Bu_elements, kernel):
+    def apply_ssm_kern_ff(self, Bu_elements, kernel, min_context=None):
         """Compute the LxBxH output of discretized SSM given an LxBxH input.
         Args:
         Bu_elements (float32): projected input sequence of features (L, B, H)
@@ -352,18 +365,21 @@ class FlowStateS5Block(nn.Module):
         buff = torch.fft.fft(Bu_elements, n=2 * l, dim=0)
         o = torch.fft.ifft(kff * buff, n=2 * l, dim=0)[:l]
 
-        if self.last and self.config.min_context == Bu_elements.shape[0]:  # only last hidden state will be used
+        if min_context is None:
+            min_context = self.config.min_context
+        if self.last and min_context == Bu_elements.shape[0]:  # only last hidden state will be used
             return o[-1].unsqueeze(0)
         elif self.last:
-            return o[min(self.config.min_context, o.shape[0]) - 1 :]
+            return o[min(min_context, o.shape[0]) - 1 :]
         else:
             return o
 
-    def forward(self, input_sequences: torch.Tensor, scale_factor: torch.Tensor):
+    def forward(self, input_sequences: torch.Tensor, scale_factor: torch.Tensor, min_context=None):
         """Computes LxBxH output sequence of an S5 layer given LxBxH input sequence.
         Args:
         params: tuple of the continuous time SSM parameters
         input_sequences: batch of input feature sequences (L, B ,H)
+        min_context: index from which outputs are kept in the last layer; defaults to `config.min_context`
         Returns:
         Batch of S5 layer output sequences (L, B, H)"""
 
@@ -373,9 +389,11 @@ class FlowStateS5Block(nn.Module):
             + torch.einsum("bnm,lbm->lbn", B_bar.imag, input_sequences) * 1.0j
         )
 
-        xs = self.apply_ssm_kern_ff(Bu_elements, kernel)
+        if min_context is None:
+            min_context = self.config.min_context
+        xs = self.apply_ssm_kern_ff(Bu_elements, kernel, min_context=min_context)
         if self.last:
-            input_sequences = input_sequences[min(self.config.min_context, input_sequences.shape[0]) - 1 :]
+            input_sequences = input_sequences[min(min_context, input_sequences.shape[0]) - 1 :]
         # Compute SSM output sequence
         xs = torch.einsum("hn,...bn->...bh", self.C_tilde_r, xs.real) + torch.einsum(
             "hn,...bn->...bh", self.C_tilde_i, -xs.imag
@@ -420,12 +438,14 @@ class FlowStateS5Layer(nn.Module):
             self.out = nn.Linear(n, n)
         self.norm = nn.LayerNorm(n)
 
-    def forward(self, x, scale_factor):
+    def forward(self, x, scale_factor, min_context=None):
+        if min_context is None:
+            min_context = self.config.min_context
         skip = (
-            x if (not self.last or x.ndim == 2) else x[min(self.config.min_context, x.shape[0]) - 1 :]
+            x if (not self.last or x.ndim == 2) else x[min(min_context, x.shape[0]) - 1 :]
         )  # last layer doesn't need MLP on all timesteps
         # SSM
-        x = self.ssm(x, scale_factor)
+        x = self.ssm(x, scale_factor, min_context=min_context)
 
         # self gated MLP
         if self.config.mlp_type == "transformer":
@@ -490,6 +510,7 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
         self,
         encoder_inputs: torch.Tensor,
         scale_factor: Optional[float] = 1.0,
+        min_context: Optional[int] = None,
     ) -> Union[Tuple, FlowStateEncoderOutput]:
         r"""
         Args:
@@ -497,6 +518,8 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
                 Context values of the time series.
                 For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
                 it is greater than 1.
+            min_context (`int`, *optional*):
+                Index from which the last layer keeps outputs. Defaults to `config.min_context`.
 
         Returns:
             `torch.FloatTensor` of shape `(1, batch_size, encoder_state_dim)`
@@ -509,7 +532,7 @@ class FlowStateEncoder(FlowStatePreTrainedModel):
 
         # Encoder
         for _, lay in enumerate(self.layers):
-            output = lay(output, scale_factor=scale_factor)
+            output = lay(output, scale_factor=scale_factor, min_context=min_context)
             all_hidden_states.append(output)
 
         return FlowStateEncoderOutput(last_hidden_state=output, hidden_states=all_hidden_states)
@@ -649,6 +672,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
         scale_factor: Optional[float] = None,
         batch_first: Optional[bool] = None,
         mask_n: Optional[int] = None,
+        min_context: Optional[int] = None,
     ) -> FlowStateModelOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -664,6 +688,9 @@ class FlowStateModel(FlowStatePreTrainedModel):
         mask_n (`int`, *optional*):
             When contiguous patch masking (CPM) is used during prediction, the `mask_n` indicates how many
             elements of `past_values` should be treated as unknown.
+        min_context (`int`, *optional*):
+            Index from which the encoder's last layer keeps outputs (the context length from which to start
+            predicting when `mask_n > 0`). Defaults to `config.min_context`.
 
         Returns:
             FlowStateModelOutput: The final denormalized prediction of FlowState.
@@ -703,13 +730,14 @@ class FlowStateModel(FlowStatePreTrainedModel):
                 time_first_past_values = torch.cat((time_first_past_values, apdx), dim=0)
 
         # Normalize the inputs
-        time_first_past_values = self.norm(time_first_past_values.transpose(0, 1), "norm").transpose(0, 1)
+        time_first_past_values, mean, std = self.norm(time_first_past_values.transpose(0, 1), "norm")
+        time_first_past_values = time_first_past_values.transpose(0, 1)
 
         # Emebd the inputs
         encoder_inputs = self.embed(time_first_past_values)
 
         # Execute encoder
-        encoder_output = self.encoder(encoder_inputs, scale_factor=scale_factor)
+        encoder_output = self.encoder(encoder_inputs, scale_factor=scale_factor, min_context=min_context)
 
         if isinstance(encoder_output, tuple):
             encoder_output = FlowStateEncoderOutput(*encoder_output)
@@ -725,7 +753,7 @@ class FlowStateModel(FlowStatePreTrainedModel):
             encoder_output = FlowStateDecoderOutput(*decoder_output)
 
         # denorm during evaluation
-        pred = self.norm(decoder_output.last_hidden_state, "denorm")
+        pred, _, _ = self.norm(decoder_output.last_hidden_state, "denorm", mean=mean, std=std)
 
         if not return_dict:
             return tuple(
@@ -916,10 +944,8 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             past_values = past_values[:, start_idx:, ...]
 
         past_values = past_values[:, -max_context:]
-        if mask_n > 0:
-            self.model.config.min_context = past_values.shape[1]  # min context from which to start predicting
-        else:
-            self.model.config.min_context = 0
+        # min context from which to start predicting
+        min_context = past_values.shape[1] if mask_n > 0 else 0
         # past_values: tensor [batch_size x seq_length x num_input_channels], or [seq_length x batch_size x num_input_channels]
         model_output = self.model(
             past_values,
@@ -927,6 +953,7 @@ class FlowStateForPrediction(FlowStatePreTrainedModel):
             batch_first=True,
             scale_factor=scale_factor,
             mask_n=mask_n,
+            min_context=min_context,
         )
         if isinstance(model_output, tuple):
             model_output = FlowStateModelOutput(*model_output)

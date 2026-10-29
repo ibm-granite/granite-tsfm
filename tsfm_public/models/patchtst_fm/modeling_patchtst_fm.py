@@ -77,6 +77,8 @@ class PatchTSTFMModelOutput(ModelOutput):
     normed_target: Optional[torch.Tensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     quantile_outputs: Optional[torch.FloatTensor] = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
     # List of (B, num_heads, N, N) weight tensors, one per layer.
     # Only populated when output_attentions=True is passed to forward().
     attentions: Optional[List[torch.FloatTensor]] = None
@@ -305,7 +307,7 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
         B, T = x.shape
         ts_mask = pred_mask | pad_mask | miss_mask
 
-        x_target = self.norm_fn.fit_transform(x, mask=ts_mask)
+        x_target, x_mean, x_std = self.norm_fn.fit_transform(x, mask=ts_mask)
         x_input = torch.where(ts_mask, torch.zeros_like(x_target), x_target)
 
         stride = override_patch_stride if override_patch_stride is not None else self.config.patch_stride
@@ -384,6 +386,8 @@ class PatchTSTFMModel(PatchTSTFMPreTrainedModel):
             quantile_outputs=q_pred,
             loss_mask=loss_mask,
             hidden_states=hidden_states,
+            loc=x_mean,
+            scale=x_std,
             attentions=all_attn,
         )
 
@@ -480,7 +484,7 @@ class PatchTSTFMForPretraining(PatchTSTFMPreTrainedModel):
             loss = None
 
         x_pred = q_pred.permute(0, 2, 1)  # [B, Q, T]
-        x_pred = self.backbone.norm_fn.inverse_transform(x_pred)
+        x_pred = self.backbone.norm_fn.inverse_transform(x_pred, mean=model_outputs.loc, std=model_outputs.scale)
 
         return PatchTSTFMPretrainingOutput(
             quantile_outputs=x_pred, loss=loss, hidden_states=model_outputs.hidden_states
@@ -763,7 +767,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             )  # [B*N_ch, context_length, Q]
 
         outputs = outputs.permute(0, 2, 1)
-        outputs = self.backbone.norm_fn.inverse_transform(outputs)
+        outputs = self.backbone.norm_fn.inverse_transform(outputs, mean=model_output.loc, std=model_output.scale)
         outputs = rearrange(outputs, "(B N) Q T -> B Q T N", B=batch_size)
 
         # sample_length <= self.config.context_length
@@ -951,7 +955,7 @@ class PatchTSTFMForPrediction(PatchTSTFMPreTrainedModel):
             )  # [B*N_ch, context_length, Q]
 
         outputs = outputs.permute(0, 2, 1)  # [B*N_ch, Q, T]
-        outputs = self.backbone.norm_fn.inverse_transform(outputs)
+        outputs = self.backbone.norm_fn.inverse_transform(outputs, mean=model_output.loc, std=model_output.scale)
         outputs = rearrange(outputs, "(B N) Q T -> B Q T N", B=batch_size)
 
         x_preds = []
