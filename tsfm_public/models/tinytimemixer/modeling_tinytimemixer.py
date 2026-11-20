@@ -2358,6 +2358,8 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
                     nn.Linear(self.d_model, self.d_model),
                 )
 
+    # disable compilation; complex operations not supported in torch < 2.16
+    @torch.compiler.disable
     def forward(self, x, raw_input, patch_mask=None):
         """
         Args:
