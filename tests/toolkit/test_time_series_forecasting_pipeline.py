@@ -431,7 +431,7 @@ def test_forecasting_pipeline_forecasts_with_preprocessor(patchtst_base_model, e
     )
 
     # if we have inverse scaled mean should be larger
-    assert forecasts["HUFL_prediction"].mean().mean() > 10
+    assert forecasts["HUFL_prediction"].apply(lambda x: x.mean()).mean() > 10
 
 
 def test_frequency_token(ttm_dummy_model, etth_data):

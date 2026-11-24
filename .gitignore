@@ -145,3 +145,4 @@ agentic/mcp/config.yaml
 
 ccc*
 results*
+tests/models/flowstate/test_values.pt
