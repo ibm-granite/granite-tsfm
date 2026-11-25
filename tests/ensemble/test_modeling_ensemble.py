@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
-import torch
 import pytest
+import torch
 
 from tsfm_public.models.ensemble.modeling_ensemble import QuantileEnsembleForecaster
 from tsfm_public.toolkit.ensemble_aggregation import aggregate_linear_pool
@@ -133,7 +133,6 @@ def test_3model_ensemble():
     assert np.array(result.predicted).shape == (2, PREDICTION_LENGTH, 1)
 
 
-
 def test_warn_on_nan_forecasts():
     """QuantileEnsembleForecaster warns when dropping an ensemble member due to NA forecasts. See issue 558."""
 
@@ -141,7 +140,7 @@ def test_warn_on_nan_forecasts():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
 
-    with pytest.warns(UserWarning, match = "Some members did not produce forecasts"):
+    with pytest.warns(UserWarning, match="Some members did not produce forecasts"):
         r = ens(df, timestamp_column="timestamp", target_columns=["y"], context_length=512, prediction_length=1)
 
     assert r.success

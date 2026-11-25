@@ -1,7 +1,6 @@
 import logging
 import warnings
 from functools import partial
-from copy import deepcopy
 
 import numpy as np
 
@@ -17,6 +16,7 @@ from tsfm_public.toolkit.forecasters import (
     PatchTSTFMDataFramePipelineForecaster,
     TinyTimeMixerDataFramePipelineForecaster,
 )
+
 
 logging.captureWarnings(True)
 
@@ -160,15 +160,15 @@ class QuantileEnsembleForecaster:
 
         # Stack into (n_samples, pred_len, n_targets, n_quantiles, n_models)
         ensemble_predictions = np.stack(forecasts, axis=-1)
-        
+
         # Aggregate using the provided ensemble function
         result = self.ensemble_function(ensemble_predictions, self.quantile_levels, weights=self.weights)
 
         # Add membership_list to metadata
         result.metadata["ensemble_members"] = membership_list
-        #meta = deepcopy(result.metadata)
-        #meta["ensemble_members"] = membership_list
-        #result.metadata = meta
+        # meta = deepcopy(result.metadata)
+        # meta["ensemble_members"] = membership_list
+        # result.metadata = meta
 
         # update result message in case a member has been dropped
         if len(membership_list) < len(self.members):

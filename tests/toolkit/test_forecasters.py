@@ -8,20 +8,21 @@ import pandas as pd
 import pytest
 import torch
 
+from tsfm_public.models.tinytimemixer import TinyTimeMixerForDecomposedPrediction
 from tsfm_public.toolkit.forecasters import (
     DEFAULT_QUANTILE_LEVELS,
-    PatchTSTFMDataFramePipelineForecaster,
     FlowStateDataFramePipelineForecaster,
+    ForecastHasNA,
+    PatchTSTFMDataFramePipelineForecaster,
     TinyTimeMixerDataFramePipelineForecaster,
-    ForecastHasNA
 )
 
-from tsfm_public.models.tinytimemixer import TinyTimeMixerForDecomposedPrediction
 
 MODEL_CHECKPOINT = "ibm-research/patchtst-fm-r1"
 PREDICTION_LENGTH = 24
 CONTEXT_LENGTH = 90
 N_QUANTILES = len(DEFAULT_QUANTILE_LEVELS)
+
 
 @pytest.fixture(scope="module")
 def forecaster():
@@ -47,9 +48,9 @@ def ts_data():
     )
 
 
-def _calc_num_cutoffs(data_length:int, context_length:int):
+def _calc_num_cutoffs(data_length: int, context_length: int):
     """Calcs number of forecast cutoffs aka rolling windows.
-    
+
     When data_length exceeds context_length, TimeSeriesForecastingPipeline
     computes rolling forecasts using historical values of size context_length
     for as many windows as possible given the data.
@@ -58,7 +59,6 @@ def _calc_num_cutoffs(data_length:int, context_length:int):
     So in those cases the Max() function is needed to calc the number of cutoffs.
     """
     return max(data_length - context_length + 1, 1)
-
 
 
 def test_call_returns_dataframe(forecaster, ts_data):
@@ -70,7 +70,7 @@ def test_call_returns_dataframe(forecaster, ts_data):
         prediction_length=PREDICTION_LENGTH,
         context_length=CONTEXT_LENGTH,
     )
-    
+
     assert isinstance(forecast, pd.DataFrame)
     assert "timestamp" in forecast.columns
     assert "target" in forecast.columns
@@ -80,8 +80,7 @@ def test_call_returns_dataframe(forecaster, ts_data):
         assert f"target_prediction_q{q}" in forecast.columns
 
     # 91 rows with context_length=90 produces 2 samples
-    assert len(forecast) == _calc_num_cutoffs(data_length=ts_data.shape[0], 
-                                              context_length=CONTEXT_LENGTH)
+    assert len(forecast) == _calc_num_cutoffs(data_length=ts_data.shape[0], context_length=CONTEXT_LENGTH)
 
 
 def test_forecast_in_ForecastResult(forecaster, ts_data, type_str="patchtst_fm"):
@@ -97,7 +96,6 @@ def test_forecast_in_ForecastResult(forecaster, ts_data, type_str="patchtst_fm")
     assert result.success
     # predicted: (n_samples=2, pred_len=24, n_targets=1)
     assert result.predicted is not None
-
 
     num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0], context_length=CONTEXT_LENGTH)
     assert len(result.predicted) == num_cutoffs
@@ -134,13 +132,12 @@ def test_forecast_for_ensemble(forecaster, ts_data):
     )
 
     assert isinstance(arr, np.ndarray)
-    num_cutoffs = _calc_num_cutoffs(data_length = ts_data.shape[0], 
-                                    context_length=CONTEXT_LENGTH)
+    num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0], context_length=CONTEXT_LENGTH)
     assert arr.shape == (num_cutoffs, PREDICTION_LENGTH, 1, N_QUANTILES)
 
 
-
 """Testing FlowState Dataframe Forecaster"""
+
 
 @pytest.fixture(scope="module")
 def FSforecaster():
@@ -148,19 +145,21 @@ def FSforecaster():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return FlowStateDataFramePipelineForecaster(device=device)
 
+
 def test_fs_call_returns_dataframe(FSforecaster, ts_data):
     """__call__ on FlowStateDataFramePipelineForecaster should return a forecast DataFrame."""
     test_call_returns_dataframe(FSforecaster, ts_data)
 
 
 def test_fs_forecast_in_ForecastResult(FSforecaster, ts_data):
-    test_forecast_in_ForecastResult(FSforecaster,ts_data, type_str="flowstate")
+    test_forecast_in_ForecastResult(FSforecaster, ts_data, type_str="flowstate")
+
 
 def test_fs_forecast_for_ensemble(FSforecaster, ts_data):
     test_forecast_for_ensemble(FSforecaster, ts_data)
 
-def test_fs_forecaster_pred_lens(FSforecaster, ts_data):
 
+def test_fs_forecaster_pred_lens(FSforecaster, ts_data):
     forecast80_10 = FSforecaster(
         data=ts_data,
         timestamp_column="timestamp",
@@ -169,12 +168,10 @@ def test_fs_forecaster_pred_lens(FSforecaster, ts_data):
         context_length=80,
     )
 
-    num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0],
-                                    context_length=80)
+    num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0], context_length=80)
 
     assert forecast80_10.shape[0] == num_cutoffs, "returned data frame has expected number of rows"
     assert len(forecast80_10.target_prediction[0]) == 10, "length of prediction should match expected value"
-
 
     forecast80_30 = FSforecaster(
         data=ts_data,
@@ -184,38 +181,40 @@ def test_fs_forecaster_pred_lens(FSforecaster, ts_data):
         context_length=80,
     )
 
-    num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0],
-                                    context_length=80)
+    num_cutoffs = _calc_num_cutoffs(data_length=ts_data.shape[0], context_length=80)
 
     assert forecast80_30.shape[0] == num_cutoffs
     assert len(forecast80_30.target_prediction[0]) == 30
 
 
-
 """Testing TTM DataFrame Forecaster"""
+
+
 @pytest.fixture(scope="module")
 def TTMforecaster():
     """Load model once for all tests in this module."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     return TinyTimeMixerDataFramePipelineForecaster(device=device, model_revision="90-30-dec-90-r3")
 
+
 def test_ttm_call_returns_dataframe(TTMforecaster, ts_data):
     """__call__ on TinyTimeMixerDataFramePipelineForecaster should return a forecast DataFrame."""
     test_call_returns_dataframe(TTMforecaster, ts_data)
 
+
 def test_ttm_forecast_in_ForecastResult(TTMforecaster, ts_data):
-    test_forecast_in_ForecastResult(TTMforecaster,ts_data, type_str="tinytimemixer")
+    test_forecast_in_ForecastResult(TTMforecaster, ts_data, type_str="tinytimemixer")
+
 
 def test_ttm_forecast_for_ensemble(TTMforecaster, ts_data):
     test_forecast_for_ensemble(TTMforecaster, ts_data)
 
 
 def test_ttm_forecaster_different_col_names(TTMforecaster, ts_data):
-
     df = ts_data
 
     # change the column names
-    df.rename(columns={"timestamp": "ts", "target":"tgt"}, inplace=True)
+    df.rename(columns={"timestamp": "ts", "target": "tgt"}, inplace=True)
 
     pred_len = 10
     result = TTMforecaster(df, timestamp_column="ts", target_columns=["tgt"], prediction_length=pred_len)
@@ -234,30 +233,37 @@ def test_ttm_forecaster_loads_decomp_model():
 def test_ttm_issue558examples():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
-    
+
     TTMforecaster768 = TinyTimeMixerDataFramePipelineForecaster(model_revision="768-48-dec-512-r3", device="cpu")
 
-    with pytest.warns(UserWarning, match = "NA"):
-        r = TTMforecaster768(df,target_columns=["y"],timestamp_column="timestamp", context_length=512, prediction_length=1)
+    with pytest.warns(UserWarning, match="NA"):
+        r = TTMforecaster768(
+            df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+        )
         assert isinstance(r, pd.DataFrame)
 
     TTMforecaster156 = TinyTimeMixerDataFramePipelineForecaster(model_revision="156-16-dec-52-r3", device="cpu")
-    r156 = TTMforecaster156(df,target_columns=["y"],timestamp_column="timestamp", context_length=512, prediction_length=1)
+    r156 = TTMforecaster156(
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
     assert isinstance(r156, pd.DataFrame)
 
     TTMforecaster512 = TinyTimeMixerDataFramePipelineForecaster(model_revision="512-30-dec-90-r3", device="cpu")
-    r512 = TTMforecaster512(df,target_columns=["y"],timestamp_column="timestamp", context_length=512, prediction_length=1)
+    r512 = TTMforecaster512(
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
     assert isinstance(r512, pd.DataFrame)
 
 
 def test_ttm_issue558_v2():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
-    # why does this not work? Should be same as TTMforecaster156 above 
+    # why does this not work? Should be same as TTMforecaster156 above
     defaultTTMforecaster = TinyTimeMixerDataFramePipelineForecaster(device="cpu")
-    rdef = defaultTTMforecaster(df,target_columns=["y"],timestamp_column="timestamp", context_length=512, prediction_length=1)
+    rdef = defaultTTMforecaster(
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
     assert isinstance(rdef, pd.DataFrame)
-
 
 
 """Forecaster error handling tests
@@ -272,6 +278,7 @@ PatchTST-FM and FlowState do not seem to generate NaN in the forecast.
 In case they do, their error handling behaviour should also be tested here.
 """
 
+
 def test_ttm_nans():
     """Handling nan forecasts in TTMforecaster"""
 
@@ -279,35 +286,25 @@ def test_ttm_nans():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
 
-    # Forecaster object 
-    forecaster = TinyTimeMixerDataFramePipelineForecaster(
-        model_revision="768-48-dec-512-r3", device="cpu")
+    # Forecaster object
+    forecaster = TinyTimeMixerDataFramePipelineForecaster(model_revision="768-48-dec-512-r3", device="cpu")
 
     # __call__ method
     with pytest.warns(expected_warning=UserWarning, match="NA"):
         call_result = forecaster(
-            df,target_columns=["y"],timestamp_column="timestamp",
-            context_length=512, prediction_length=1)
+            df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+        )
         assert isinstance(call_result, pd.DataFrame)
-
 
     # forecast_in_forecast_result() method
     fifr_result = forecaster.forecast_in_forecast_result(
-        df,target_columns=["y"],timestamp_column="timestamp",
-        context_length=512, prediction_length=1)
-    assert fifr_result.success == False
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
+    assert not fifr_result.success
     assert "NA" in fifr_result.message
 
     # forecast_for_ensemble() method
     with pytest.raises(ForecastHasNA):
-        f4e_result = forecaster.forecast_for_ensemble(
-            df, target_columns=["y"], timestamp_column="timestamp",
-             context_length=512, prediction_length=1 )
-        
-
-
-
-
-
-
-
+        forecaster.forecast_for_ensemble(
+            df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+        )
