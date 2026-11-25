@@ -2358,8 +2358,15 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
                     nn.Linear(self.d_model, self.d_model),
                 )
 
-    # disable compilation; complex operations not supported in torch < 2.16
+    # disable compilation for fft function; complex operations not supported in torch < 2.16
+    @staticmethod
     @torch.compiler.disable
+    def _fft(raw_input) -> torch.Tensor:
+        # FFT: [B, F, C] where F = S//2 + 1
+        fft = torch.fft.rfft(raw_input, dim=1)
+        mag = fft.abs()  # [B, F, C]
+        return mag
+
     def forward(self, x, raw_input, patch_mask=None):
         """
         Args:
@@ -2376,8 +2383,9 @@ class TinyTimeMixerAddFFTPatches(nn.Module):
         B, S, C = raw_input.shape
 
         # FFT: [B, F, C] where F = S//2 + 1
-        fft = torch.fft.rfft(raw_input, dim=1)
-        mag = fft.abs()  # [B, F, C]
+        # fft = torch.fft.rfft(raw_input, dim=1)
+        # mag = fft.abs()  # [B, F, C]
+        mag = TinyTimeMixerAddFFTPatches._fft(raw_input)
 
         # Keep backward compatibility by default (fft_ignore_dc=False)
         if self.fft_ignore_dc:
