@@ -6,7 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Optional
-
+import warnings
 import numpy as np
 import pandas as pd
 import torch
@@ -45,6 +45,13 @@ class Forecaster(ABC):
         """Returns the forecast info as ndarray needed for ensembling"""
 
 
+class ForecastHasNA(ValueError):
+    """Raised when a forecast produces NA values."""
+    
+
+
+
+
 @dataclass
 class ForecastResult:
     """Result model for forecasting operations.
@@ -55,6 +62,10 @@ class ForecastResult:
     ``predicted`` and ``predicted_quantiles``. Values remain nested lists.
 
     Fields:
+        success:
+            Flag for whether forecasting was successful.
+        message:
+            Summary of forecasting process.
         predicted:
             Point predictions: mean for TTM trained with MSE, or median for
             FlowState, PatchTST-FM, and TTM trained with MAE.
@@ -158,6 +169,8 @@ class DataFramePipelineForecaster(Forecaster):
 
         Returns:
             pd.DataFrame with forecast results from TimeSeriesForecastingPipeline.
+        Raises:
+            UserWarning in case of nan values in the forecast.
         """
         context_length = context_length if context_length is not None else self.model.config.context_length
 
@@ -180,7 +193,18 @@ class DataFramePipelineForecaster(Forecaster):
             quantile_levels=quantile_levels,
         )
 
-        return fpipe(data)
+        fcast = fpipe(data)
+
+        # check for NA values in the forecast
+        if _prediction_columns_have_na(fcast):
+            self._prediction_columns_have_na = True
+            msg = "Forecast contains NA values."
+            warnings.warn(msg)
+        else:
+            self._prediction_columns_have_na = False
+
+
+        return fcast
 
     def forecast_in_forecast_result(
         self,
@@ -233,7 +257,7 @@ class DataFramePipelineForecaster(Forecaster):
         if timestamp_column in forecast.columns:
             cutoff_dates = forecast[timestamp_column].astype(str).tolist()
 
-        return ForecastResult(
+        result = ForecastResult(
             success=True,
             message="Forecasting completed successfully",
             predicted=predicted_list,
@@ -252,6 +276,13 @@ class DataFramePipelineForecaster(Forecaster):
                 "batch_size": batch_size,
             },
         )
+
+        # update result in case forecasts contain NA values
+        if self._prediction_columns_have_na:
+            result.success = False
+            result.message = "Forecasts contained NA values."
+
+        return result
 
     def forecast_for_ensemble(
         self,
@@ -280,6 +311,8 @@ class DataFramePipelineForecaster(Forecaster):
 
         Returns:
             np.ndarray of shape (n_samples, prediction_length, n_targets, n_quantiles).
+        Raises:
+            ForecastHasNA exception
         """
         result = self.forecast_in_forecast_result(
             data=data,
@@ -291,6 +324,10 @@ class DataFramePipelineForecaster(Forecaster):
             quantile_levels=quantile_levels,
             batch_size=batch_size,
         )
+
+        if self._prediction_columns_have_na:
+            raise ForecastHasNA()
+
         return np.array(result.predicted_quantiles)
 
 
@@ -333,7 +370,12 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         # Without an explicit revision, defer loading until __call__ knows the
         # requested context and prediction lengths and can select a TTM revision.
         if model_revision is not None:
-            model = TinyTimeMixerForPrediction.from_pretrained(model_checkpoint, revision=model_revision)
+            model_class = TinyTimeMixerForDecomposedPrediction if "-dec-" in model_revision else TinyTimeMixerForPrediction
+            pred_len = _get_ttm_pred_len(model_revision)  
+            model = model_class.from_pretrained(
+                self.model_checkpoint, 
+                revision=model_revision,
+                prediction_filter_length=pred_len) # model class worked better w this arg
         else:
             model = None
 
@@ -388,13 +430,14 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                 context_length=requested_context_length_or_data_length,
                 prediction_length=prediction_length,
                 return_model_key=True,
+                prefer_known_mappings=False
             )
 
             self.ttm_model_key = model_key
 
             model_class = TinyTimeMixerForDecomposedPrediction if "-dec-" in model_key else TinyTimeMixerForPrediction
-            self.model = model_class.from_pretrained(self.model_checkpoint, revision=model_key)
-
+            self.model = model_class.from_pretrained(self.model_checkpoint, revision=model_key, prediction_filter_length=prediction_length)
+        
         # Store context length and prediction length of TTM model
         self._ttm_model_context_length = self.model.config.context_length
         self._ttm_model_prediction_length = self.model.config.prediction_length
@@ -452,7 +495,16 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                     # shorten value to the requested prediction_length
                     forecast.at[idx, col] = value[:prediction_length]
 
+        # check for NA values in the forecast
+        if _prediction_columns_have_na(forecast):
+            self._prediction_columns_have_na = True
+            msg = "Forecast contains NA values."
+            warnings.warn(msg)
+        else:
+            self._prediction_columns_have_na = False
+        
         return forecast
+
 
     def forecast_in_forecast_result(
         self,
@@ -491,7 +543,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
         if timestamp_column in forecast.columns:
             cutoff_dates = forecast[timestamp_column].astype(str).tolist()
 
-        return ForecastResult(
+        result = ForecastResult(
             success=True,
             message="Forecasting completed successfully",
             predicted=predicted_list,
@@ -500,6 +552,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             cutoff_dates=cutoff_dates,
             metadata={
                 "model_checkpoint": self.model.name_or_path,
+                "model_revision" : self.model_revision,
                 "model_type": str(self.model.__class__),
                 "context_length": context_length,
                 "prediction_length": prediction_length,
@@ -510,6 +563,13 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
                 "batch_size": batch_size,
             },
         )
+
+        # update result in case forecasts contain NA values
+        if self._prediction_columns_have_na:
+            result.success = False
+            result.message = "Forecasts contained NA values."
+
+        return result
 
     def forecast_for_ensemble(
         self,
@@ -536,6 +596,9 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             scaling=scaling,
             scaler_type=scaler_type,
         )
+
+        if self._prediction_columns_have_na:
+            raise ForecastHasNA()
 
         return np.array(forecast.predicted_quantiles)
 
@@ -634,3 +697,27 @@ def _extract_predictions_and_actuals(
         predicted_quantiles_list = quantiles_array.tolist()
 
     return predicted_list, actuals_list, predicted_quantiles_list, None
+
+
+def _prediction_columns_have_na(df) -> bool:
+    """Checks for na values in dataframe columns that contain "prediction" in
+    the name. Returns on first found value.  In case df cell is a list, looks
+    inside the list."""
+
+    # "prediction" cols in df
+    columns = [name for name in df.columns if "prediction" in name]
+
+    for col in columns:
+        series = df[col]
+        if series.isna().any():
+            return True
+        if series.dtype == object and series.map(lambda v: isinstance(v, (list, tuple, np.ndarray))).any():
+            # handles case where df cell is a list
+            if series.map(lambda v: np.isnan(np.asarray(v, dtype=float)).any()).any():
+                return True
+    return False
+
+def _get_ttm_pred_len(model_revision:str) -> int:
+    """Extract the prediction length from a TTM model revision"""
+    parts = model_revision.split(sep="-")
+    return int(parts[1])
