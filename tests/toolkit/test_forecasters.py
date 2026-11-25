@@ -231,7 +231,7 @@ def test_ttm_forecaster_loads_decomp_model():
     assert isinstance(TTMforecaster.model, TinyTimeMixerForDecomposedPrediction)
 
 
-def test_ttm_issue518examples():
+def test_ttm_issue558examples():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
     
@@ -250,7 +250,7 @@ def test_ttm_issue518examples():
     assert isinstance(r512, pd.DataFrame)
 
 
-def test_ttm_issue518_v2():
+def test_ttm_issue558_v2():
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
     # why does this not work? Should be same as TTMforecaster156 above 
@@ -304,7 +304,6 @@ def test_ttm_nans():
             df, target_columns=["y"], timestamp_column="timestamp",
              context_length=512, prediction_length=1 )
         
-
 
 
 
