@@ -370,10 +370,10 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             model_class = (
                 TinyTimeMixerForDecomposedPrediction if "-dec-" in model_revision else TinyTimeMixerForPrediction
             )
-            pred_len = _get_ttm_pred_len(model_revision)
             model = model_class.from_pretrained(
-                self.model_checkpoint, revision=model_revision, prediction_filter_length=pred_len
-            )  # model class worked better w this arg
+                self.model_checkpoint,
+                revision=model_revision,
+            )
         else:
             model = None
 
@@ -434,9 +434,7 @@ class TinyTimeMixerDataFramePipelineForecaster(DataFramePipelineForecaster):
             self.ttm_model_key = model_key
 
             model_class = TinyTimeMixerForDecomposedPrediction if "-dec-" in model_key else TinyTimeMixerForPrediction
-            self.model = model_class.from_pretrained(
-                self.model_checkpoint, revision=model_key, prediction_filter_length=prediction_length
-            )
+            self.model = model_class.from_pretrained(self.model_checkpoint, revision=model_key)
 
         # Store context length and prediction length of TTM model
         self._ttm_model_context_length = self.model.config.context_length
@@ -715,9 +713,3 @@ def _prediction_columns_have_na(df) -> bool:
             if series.map(lambda v: np.isnan(np.asarray(v, dtype=float)).any()).any():
                 return True
     return False
-
-
-def _get_ttm_pred_len(model_revision: str) -> int:
-    """Extract the prediction length from a TTM model revision"""
-    parts = model_revision.split(sep="-")
-    return int(parts[1])
