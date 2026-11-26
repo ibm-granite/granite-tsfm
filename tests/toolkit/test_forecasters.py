@@ -256,14 +256,25 @@ def test_ttm_issue558examples():
 
 
 def test_ttm_issue558_v2():
+    """Default TTM Forecaster should produce forecasts"""
     t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
     df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
-    # why does this not work? Should be same as TTMforecaster156 above
+
     defaultTTMforecaster = TinyTimeMixerDataFramePipelineForecaster(device="cpu")
     rdef = defaultTTMforecaster(
         df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
     )
     assert isinstance(rdef, pd.DataFrame)
+
+    fifr_result = defaultTTMforecaster.forecast_in_forecast_result(
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
+    assert fifr_result.success
+
+    f4e_result = defaultTTMforecaster.forecast_for_ensemble(
+        df, target_columns=["y"], timestamp_column="timestamp", context_length=512, prediction_length=1
+    )
+    assert f4e_result is not None
 
 
 """Forecaster error handling tests
