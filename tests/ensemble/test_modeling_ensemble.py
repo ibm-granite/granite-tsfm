@@ -168,3 +168,30 @@ def test_issue558_nan_forecasts():
     assert r.success
     assert r.metadata["n_models"] == 3, "TTM gives NA forecasts and should be dropped"
     assert len(r.metadata["ensemble_members"]) == 3
+
+
+def test_nans_plus_weights_errors():
+    """Ensemble raises RuntimeException when weights are provided and a member is dropped."""
+
+    # Ensemble creation
+    this_device = "cpu"
+    # TTM forecaster that gives nan forecasts
+    TTMforecaster768 = TinyTimeMixerDataFramePipelineForecaster(model_revision="768-48-dec-512-r3", device=this_device)
+    # PatchTST-FM forecaster
+    PTSTforecaster = PatchTSTFMDataFramePipelineForecaster(device=this_device)
+    # FlowState forecaster
+    FSforecaster = FlowStateDataFramePipelineForecaster(device=this_device)
+    # Ensemble with weights.
+    ens = QuantileEnsembleForecaster(
+        members=[TTMforecaster768, PTSTforecaster, FSforecaster],
+        weights=[0.2, 0.4, 0.4],
+        quantile_levels=DEFAULT_QUANTILE_LEVELS,
+    )
+
+    # sample data
+    t = pd.date_range("2026-01-01", periods=512, freq="30min", tz="UTC")
+    df = pd.DataFrame({"timestamp": t, "y": -9 + 0.4 * np.sin(np.arange(512) * 2 * np.pi / 48)})
+
+    # ensemble emits an error rather than  re-computing weights
+    with pytest.raises(RuntimeError, match="weights"):
+        ens(df, timestamp_column="timestamp", target_columns=["y"], context_length=512, prediction_length=1)

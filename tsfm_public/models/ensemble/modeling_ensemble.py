@@ -154,6 +154,11 @@ class QuantileEnsembleForecaster:
             except Exception as e:
                 msg = f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}"
                 warnings.warn(msg)
+                if self.weights is not None:
+                    raise RuntimeError(
+                        f"Member {memb.__class__.__name__} failed and was dropped; "
+                        "number of members differs from the number of weights."
+                    ) from e
 
         if not forecasts:
             raise RuntimeError("All ensemble members failed to produce forecasts.")
