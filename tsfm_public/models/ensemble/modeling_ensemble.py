@@ -1,4 +1,5 @@
 import logging
+import warnings
 from functools import partial
 
 import numpy as np
@@ -16,6 +17,8 @@ from tsfm_public.toolkit.forecasters import (
     TinyTimeMixerDataFramePipelineForecaster,
 )
 
+
+logging.captureWarnings(True)
 
 FORECASTER_REGISTRY = {
     "patchtst": PatchTSTFMDataFramePipelineForecaster,
@@ -142,12 +145,20 @@ class QuantileEnsembleForecaster:
         # Each forecast: (n_samples, pred_len, n_targets, n_quantiles)
         kwargs.setdefault("quantile_levels", self.quantile_levels)
         forecasts = []
+        membership_list = []
         for memb in self.members:
             try:
                 fcast = memb.forecast_for_ensemble(data, **kwargs)
                 forecasts.append(np.asarray(fcast))
+                membership_list.append(memb.__class__.__name__)
             except Exception as e:
-                logging.warning(f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}")
+                msg = f"Skipping member {memb.__class__.__name__}: inference failed with error: {e}"
+                warnings.warn(msg)
+                if self.weights is not None:
+                    raise RuntimeError(
+                        f"Member {memb.__class__.__name__} failed and was dropped; "
+                        "number of members differs from the number of weights."
+                    ) from e
 
         if not forecasts:
             raise RuntimeError("All ensemble members failed to produce forecasts.")
@@ -157,5 +168,17 @@ class QuantileEnsembleForecaster:
 
         # Aggregate using the provided ensemble function
         result = self.ensemble_function(ensemble_predictions, self.quantile_levels, weights=self.weights)
+
+        # Add membership_list to metadata
+        result.metadata["ensemble_members"] = membership_list
+        # meta = deepcopy(result.metadata)
+        # meta["ensemble_members"] = membership_list
+        # result.metadata = meta
+
+        # update result message in case a member has been dropped
+        if len(membership_list) < len(self.members):
+            msg = f"Some members did not produce forecasts so ensemble used {len(membership_list)} members. See metadata."
+            result.message = msg
+            warnings.warn(msg)
 
         return result
